@@ -23,10 +23,6 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.0"..<"602.0.0"),
-        .package(
-            url: "https://github.com/1amageek/fdb-swift-bindings.git",
-            branch: "feature/directory-layer"
-        ),
     ],
     targets: [
         .target(name: "Core", dependencies: ["CoreMacros"]),
