@@ -45,7 +45,7 @@
 /// - If user defines `id` field: uses that type and default value
 /// - If user omits `id` field: macro adds `var id: String = ULID().ulidString`
 /// - `id` is NOT included in the generated initializer
-@attached(member, names: named(id), named(persistableType), named(allFields), named(indexDescriptors), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys))
+@attached(member, names: named(id), named(persistableType), named(allFields), named(indexDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys))
 @attached(extension, conformances: Persistable, Codable, Sendable)
 public macro Persistable() = #externalMacro(module: "CoreMacros", type: "PersistableMacro")
 
@@ -59,7 +59,7 @@ public macro Persistable() = #externalMacro(module: "CoreMacros", type: "Persist
 /// }
 /// // persistableType = "User"
 /// ```
-@attached(member, names: named(id), named(persistableType), named(allFields), named(indexDescriptors), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys))
+@attached(member, names: named(id), named(persistableType), named(allFields), named(indexDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys))
 @attached(extension, conformances: Persistable, Codable, Sendable)
 public macro Persistable(type: String) = #externalMacro(module: "CoreMacros", type: "PersistableMacro")
 
@@ -183,21 +183,8 @@ public enum DirectoryLayer: String, Sendable, Codable {
     case partition = "partition"
 }
 
-/// Field reference for dynamic directory paths
-///
-/// Used in #Directory macro to reference record fields.
-///
-/// **Example**:
-/// ```swift
-/// #Directory<Order>("tenants", Field(\.tenantID), "orders")
-/// ```
-public struct Field<T, V> {
-    public let keyPath: KeyPath<T, V>
-
-    public init(_ keyPath: KeyPath<T, V>) {
-        self.keyPath = keyPath
-    }
-}
+// Note: Field<Root> is defined in DirectoryPathElement.swift
+// It conforms to DirectoryPathElement protocol for type-safe directory paths.
 
 // MARK: - @Transient Macro
 

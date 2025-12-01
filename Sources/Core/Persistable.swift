@@ -99,6 +99,41 @@ public protocol Persistable: Sendable, Codable {
     /// ```
     static var indexDescriptors: [IndexDescriptor] { get }
 
+    // MARK: - Directory Metadata
+
+    /// Directory path components for FDB storage
+    ///
+    /// Generated from `#Directory<T>` macro declarations.
+    /// Contains a mix of static `Path` and dynamic `Field` components.
+    ///
+    /// **Example**:
+    /// ```swift
+    /// #Directory<User>("app", "users")
+    /// // → [Path("app"), Path("users")]
+    ///
+    /// #Directory<Order>("tenants", Field(\.tenantID), "orders")
+    /// // → [Path("tenants"), Field(\.tenantID), Path("orders")]
+    /// ```
+    ///
+    /// **Default**: Returns `[Path(persistableType)]` if not specified via macro.
+    static var directoryPathComponents: [any DirectoryPathElement] { get }
+
+    /// Directory layer type for FDB storage
+    ///
+    /// Generated from `#Directory<T>` macro's `layer:` parameter.
+    ///
+    /// **Example**:
+    /// ```swift
+    /// #Directory<User>("app", "users")
+    /// // → .default
+    ///
+    /// #Directory<Order>("tenants", Field(\.tenantID), "orders", layer: .partition)
+    /// // → .partition
+    /// ```
+    ///
+    /// **Default**: `.default` if not specified via macro.
+    static var directoryLayer: DirectoryLayer { get }
+
     /// Get field number for a field name (for Protobuf serialization)
     ///
     /// Used by serialization layers that require stable field numbering.
@@ -182,6 +217,19 @@ public protocol Persistable: Sendable, Codable {
 public extension Persistable {
     /// Default implementation returns empty array (no indexes)
     static var indexDescriptors: [IndexDescriptor] { [] }
+
+    /// Default implementation uses persistableType as single path component
+    ///
+    /// If `#Directory` macro is not used, defaults to `[Path(persistableType)]`.
+    /// For example, `User` type → directory path `["User"]`.
+    static var directoryPathComponents: [any DirectoryPathElement] {
+        [Path(persistableType)]
+    }
+
+    /// Default implementation returns `.default` layer
+    ///
+    /// If `#Directory` macro is not used, defaults to `.default` layer.
+    static var directoryLayer: DirectoryLayer { .default }
 
     /// Default implementation returns nil (no field numbers)
     static func fieldNumber(for fieldName: String) -> Int? { nil }

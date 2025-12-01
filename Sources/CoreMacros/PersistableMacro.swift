@@ -274,6 +274,54 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             }
         }
 
+        // Extract #Directory macro call and parse path components
+        var directoryPathComponents: [String] = []  // Generated code strings: Path("x") or Field(\Type.y)
+        var directoryLayerValue: String = ".default"  // Default layer
+
+        for member in structDecl.memberBlock.members {
+            if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
+               macroDecl.macroName.text == "Directory" {
+
+                for arg in macroDecl.arguments {
+                    // Check if this is the "layer:" labeled argument
+                    if let label = arg.label, label.text == "layer" {
+                        // Extract layer value (e.g., .partition, .default)
+                        if let memberAccess = arg.expression.as(MemberAccessExprSyntax.self) {
+                            directoryLayerValue = ".\(memberAccess.declName.baseName.text)"
+                        }
+                        continue
+                    }
+
+                    let expr = arg.expression
+
+                    // Check if it's a string literal → Path("value")
+                    if let stringLiteral = expr.as(StringLiteralExprSyntax.self),
+                       let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
+                        let pathValue = segment.content.text
+                        directoryPathComponents.append("Path(\"\(pathValue)\")")
+                        continue
+                    }
+
+                    // Check if it's Field(\.propertyName)
+                    if let functionCall = expr.as(FunctionCallExprSyntax.self) {
+                        // Check for Field(...) pattern
+                        let calledExpr = functionCall.calledExpression.description.trimmingCharacters(in: .whitespaces)
+                        if calledExpr == "Field" {
+                            if let firstArg = functionCall.arguments.first,
+                               let keyPathExpr = firstArg.expression.as(KeyPathExprSyntax.self),
+                               let component = keyPathExpr.components.first,
+                               let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
+                                let fieldName = property.declName.baseName.text
+                                directoryPathComponents.append("Field(\\.\(fieldName))")
+                            }
+                        }
+                    }
+                }
+                // Only process the first #Directory declaration
+                break
+            }
+        }
+
         var decls: [DeclSyntax] = []
 
         // Generate `id` field if not user-defined
@@ -309,6 +357,20 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             public static var indexDescriptors: [IndexDescriptor] { \(raw: indexDescriptorsArray) }
             """
         decls.append(indexDescriptorsDecl)
+
+        // Generate directoryPathComponents property (only if #Directory was specified)
+        if !directoryPathComponents.isEmpty {
+            let componentsArray = "[\(directoryPathComponents.joined(separator: ", "))]"
+            let directoryPathDecl: DeclSyntax = """
+                public static var directoryPathComponents: [any DirectoryPathElement] { \(raw: componentsArray) }
+                """
+            decls.append(directoryPathDecl)
+
+            let directoryLayerDecl: DeclSyntax = """
+                public static var directoryLayer: Core.DirectoryLayer { \(raw: directoryLayerValue) }
+                """
+            decls.append(directoryLayerDecl)
+        }
 
         // Generate fieldNumber method (excludes transient fields)
         var fieldNumberCases: [String] = []
