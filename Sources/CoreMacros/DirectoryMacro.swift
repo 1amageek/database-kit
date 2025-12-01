@@ -16,7 +16,7 @@ import SwiftDiagnostics
 /// - Field expression: `Field(\.accountID)`, `Field(\.channelID)` (dynamic partition keys)
 ///
 /// **Layer**: The layer parameter specifies the directory type:
-/// - `.recordStore` (default): Standard RecordStore directory
+/// - `.default` (default): Default directory
 /// - `.partition`: Multi-tenant partition (requires at least one Field in path)
 /// - Custom: `"my_custom_format_v2"`
 ///
@@ -24,7 +24,7 @@ import SwiftDiagnostics
 /// ```swift
 /// @Recordable
 /// struct User {
-///     #Directory<User>(["app", "users"], layer: .recordStore)
+///     #Directory<User>(["app", "users"], layer: .default)
 ///     #PrimaryKey<User>([\.userID])
 ///
 ///     var userID: Int64

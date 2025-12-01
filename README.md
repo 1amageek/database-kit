@@ -14,7 +14,7 @@ DatabaseKit provides the foundational types for defining persistable data models
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/anthropics/database-kit.git", from: "1.0.0")
+    .package(url: "https://github.com/1amageek/database-kit.git", from: "1.0.0")
 ]
 ```
 
@@ -38,6 +38,7 @@ import Core
 
 @Persistable
 struct User {
+    #Directory<User>("app", "users")
     #Index<User>([\.email], unique: true)
     #Index<User>([\.createdAt])
 
@@ -46,6 +47,56 @@ struct User {
     var createdAt: Date
 }
 ```
+
+## Directory Macro
+
+The `#Directory` macro defines the storage path for persistable types. It supports both static paths and dynamic multi-tenant partitioning.
+
+### Basic Usage
+
+```swift
+#Directory<User>("app", "users")
+```
+
+### Multi-tenant Partitioning
+
+Use `Field(\.property)` to create dynamic path segments based on record fields:
+
+```swift
+@Persistable
+struct Order {
+    #Directory<Order>("tenants", Field(\.accountID), "orders", layer: .partition)
+    #PrimaryKey<Order>([\.orderID])
+
+    var orderID: Int64
+    var accountID: String  // Partition key
+}
+```
+
+### Multi-level Partitioning
+
+```swift
+@Persistable
+struct Message {
+    #Directory<Message>(
+        "tenants", Field(\.accountID),
+        "channels", Field(\.channelID),
+        "messages",
+        layer: .partition
+    )
+
+    var messageID: Int64
+    var accountID: String  // First partition key
+    var channelID: String  // Second partition key
+}
+```
+
+### Directory Layer Types
+
+| Layer | Description |
+|-------|-------------|
+| `.default` | Default directory |
+| `.partition` | Multi-tenant partition (requires at least one Field in path) |
 
 ## Extensible Architecture
 
@@ -236,8 +287,41 @@ let decoded = try ProtobufDecoder().decode(User.self, from: data)
 
 ## Related Packages
 
-- **[DatabaseFramework](../database-framework)**: Server-side implementation with FoundationDB support
-- Implements `IndexKindMaintainable` protocol for actual index maintenance
+### [DatabaseFramework](https://github.com/1amageek/database-framework)
+
+Server-side database operations powered by FoundationDB. DatabaseFramework implements the index maintenance logic for index types defined in DatabaseKit.
+
+**Key Features:**
+- **FDBContainer**: SwiftData-like container management
+- **FDBContext**: Change tracking and batch operations
+- **Index Maintainers**: Concrete implementations for all index types
+- **Schema Versioning**: Online index building and migrations
+
+**Architecture:**
+- **Index Type Definition** (IndexKind in DatabaseKit): Platform-independent metadata
+- **Index Maintenance** (IndexKindMaintainable in DatabaseFramework): Server-side implementation
+
+**Server Modules:**
+| Module | Description |
+|--------|-------------|
+| `DatabaseEngine` | Container, context, and index maintainer protocol |
+| `ScalarIndex` | VALUE index implementation |
+| `VectorIndex` | HNSW and flat vector search |
+| `FullTextIndex` | Inverted index for text search |
+| `SpatialIndex` | S2/Geohash spatial indexing |
+| `RankIndex` | Skip-list based rankings |
+| `GraphIndex` | Adjacency list traversal |
+| `AggregationIndex` | COUNT, SUM, MIN, MAX, AVG operations |
+| `VersionIndex` | Version history with versionstamps |
+
+**Platform Support (Server):**
+| Platform | Minimum Version |
+|----------|-----------------|
+| macOS | 15.0+ |
+| Linux | Swift 6.2+ |
+| Windows | Swift 6.2+ |
+
+> Note: iOS/watchOS/tvOS/visionOS are not supported due to FoundationDB requirements.
 
 ## License
 

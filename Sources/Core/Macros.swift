@@ -170,14 +170,14 @@ public macro Index<T: Persistable>(
 /// This macro validates the directory path syntax. The actual directory
 /// functionality is provided by FDBRuntime.
 @freestanding(declaration)
-public macro Directory<T>(_ elements: Any..., layer: DirectoryLayer = .recordStore) = #externalMacro(module: "CoreMacros", type: "DirectoryMacro")
+public macro Directory<T>(_ elements: Any..., layer: DirectoryLayer = .default) = #externalMacro(module: "CoreMacros", type: "DirectoryMacro")
 
 /// Directory layer type
 ///
 /// Used by #Directory macro to specify the directory layer type.
 public enum DirectoryLayer: String, Sendable, Codable {
-    /// Standard RecordStore directory (default)
-    case recordStore = "record_store"
+    /// Default directory
+    case `default` = "default"
 
     /// Multi-tenant partition (requires at least one Field in path)
     case partition = "partition"
