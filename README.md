@@ -29,6 +29,7 @@ dependencies: [
 | `Rank` | RankIndexKind for leaderboards |
 | `Permuted` | PermutedIndexKind for alternative field orderings |
 | `Graph` | AdjacencyIndexKind for graph relationships |
+| `Triple` | TripleIndexKind for RDF/knowledge graph triples |
 | `DatabaseKit` | All-in-one re-export (individual imports recommended) |
 
 ## Quick Start
@@ -141,6 +142,60 @@ VectorIndexKind(...)   // Vector similarity search
 FullTextIndexKind(...) // Full-text search
 SpatialIndexKind(...)  // Geospatial queries
 RankIndexKind()        // Leaderboard rankings
+TripleIndexKind(...)   // RDF triple indexes (SPO/POS/OSP)
+```
+
+### TripleIndexKind (RDF/Knowledge Graph)
+
+The `TripleIndexKind` enables efficient storage and querying of RDF-style triples (Subject-Predicate-Object) using three index orderings:
+
+```swift
+import Triple
+
+@Persistable
+struct Statement {
+    var subject: String    // e.g., "Engineer"
+    var predicate: String  // e.g., "rdfs:subClassOf"
+    var object: String     // e.g., "Employee"
+
+    #Index<Statement>(type: TripleIndexKind(
+        subject: \.subject,
+        predicate: \.predicate,
+        object: \.object
+    ))
+}
+```
+
+**Index Structure:**
+| Index | Key Order | Query Pattern |
+|-------|-----------|---------------|
+| SPO | Subject → Predicate → Object | S??, SP?, SPO |
+| POS | Predicate → Object → Subject | ?P?, ?PO |
+| OSP | Object → Subject → Predicate | ??O |
+
+**Combining with VectorIndex for semantic search:**
+
+```swift
+@Persistable
+struct SemanticStatement {
+    var subject: String
+    var predicate: String
+    var predicateEmbedding: [Float]  // Vector representation
+    var object: String
+
+    // Structural queries (SPO/POS/OSP)
+    #Index<SemanticStatement>(type: TripleIndexKind(
+        subject: \.subject,
+        predicate: \.predicate,
+        object: \.object
+    ))
+
+    // Semantic similarity search on predicates
+    #Index<SemanticStatement>(
+        [\.predicateEmbedding],
+        type: VectorIndexKind(dimensions: 384, metric: .cosine)
+    )
+}
 ```
 
 ## Creating Custom Index Kinds
@@ -311,6 +366,7 @@ Server-side database operations powered by FoundationDB. DatabaseFramework imple
 | `SpatialIndex` | S2/Geohash spatial indexing |
 | `RankIndex` | Skip-list based rankings |
 | `GraphIndex` | Adjacency list traversal |
+| `TripleIndex` | RDF triple store with SPO/POS/OSP indexes |
 | `AggregationIndex` | COUNT, SUM, MIN, MAX, AVG operations |
 | `VersionIndex` | Version history with versionstamps |
 

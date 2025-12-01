@@ -19,6 +19,7 @@ let package = Package(
         .library(name: "Rank", targets: ["Rank"]),
         .library(name: "Permuted", targets: ["Permuted"]),
         .library(name: "Graph", targets: ["Graph"]),
+        .library(name: "Triple", targets: ["Triple"]),
         .library(name: "DatabaseKit", targets: ["DatabaseKit"]),
     ],
     dependencies: [
@@ -40,9 +41,10 @@ let package = Package(
         .target(name: "Rank", dependencies: ["Core"]),
         .target(name: "Permuted", dependencies: ["Core"]),
         .target(name: "Graph", dependencies: ["Core"]),
+        .target(name: "Triple", dependencies: ["Core"]),
         .target(
             name: "DatabaseKit",
-            dependencies: ["Core", "Vector", "FullText", "Spatial", "Rank", "Permuted", "Graph"]
+            dependencies: ["Core", "Vector", "FullText", "Spatial", "Rank", "Permuted", "Graph", "Triple"]
         ),
         .testTarget(name: "CoreTests", dependencies: ["Core"]),
     ],
