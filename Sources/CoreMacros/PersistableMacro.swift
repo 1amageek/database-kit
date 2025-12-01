@@ -1,0 +1,646 @@
+import SwiftCompilerPlugin
+import SwiftSyntax
+import SwiftSyntaxBuilder
+import SwiftSyntaxMacros
+import SwiftDiagnostics
+
+/// @Persistable macro implementation
+///
+/// Generates Persistable protocol conformance with metadata methods and ID management.
+///
+/// **Supports all layers**:
+/// - RecordLayer (RDB): Structured records with indexes
+/// - DocumentLayer (DocumentDB): Flexible documents
+/// - GraphLayer (GraphDB): Define nodes with relationships
+///
+/// **Generated code includes**:
+/// - `var id: String = ULID().ulidString` (if not user-defined)
+/// - `static var persistableType: String`
+/// - `static var allFields: [String]`
+/// - `static var indexDescriptors: [IndexDescriptor]`
+/// - `static func fieldNumber(for fieldName: String) -> Int?`
+/// - `static func enumMetadata(for fieldName: String) -> EnumMetadata?`
+/// - `init(...)` (without `id` parameter)
+///
+/// **ID Behavior**:
+/// - If user defines `id` field: uses that type and default value
+/// - If user omits `id` field: macro adds `var id: String = ULID().ulidString`
+/// - `id` is NOT included in the generated initializer
+///
+/// **Usage**:
+/// ```swift
+/// @Persistable
+/// struct User {
+///     #Index<User>([\.email], unique: true)
+///
+///     var email: String
+///     var name: String
+/// }
+/// ```
+///
+/// **With custom type name**:
+/// ```swift
+/// @Persistable(type: "User")
+/// struct Member {
+///     var name: String
+/// }
+/// ```
+public struct PersistableMacro: MemberMacro, ExtensionMacro {
+    public static func expansion(
+        of node: AttributeSyntax,
+        providingMembersOf declaration: some DeclGroupSyntax,
+        conformingTo protocols: [TypeSyntax],
+        in context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
+        // Extract struct name
+        guard let structDecl = declaration.as(StructDeclSyntax.self) else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: MacroExpansionErrorMessage("@Persistable can only be applied to structs")
+                )
+            ])
+        }
+
+        let structName = structDecl.name.text
+
+        // Extract custom type name from macro argument if provided
+        let typeName: String
+        if let arguments = node.arguments,
+           let labeledList = arguments.as(LabeledExprListSyntax.self),
+           let firstArg = labeledList.first,
+           firstArg.label?.text == "type",
+           let stringLiteral = firstArg.expression.as(StringLiteralExprSyntax.self),
+           let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
+            typeName = segment.content.text
+        } else {
+            typeName = structName
+        }
+
+        // Check if user defined `id` field
+        var hasUserDefinedId = false
+        var userIdHasDefault = false
+        var userIdBinding: PatternBindingSyntax?
+
+        // Extract all stored properties (fields)
+        var allFields: [String] = []
+        var fieldInfos: [(name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)] = []
+        var fieldNumber = 1
+
+        for member in structDecl.memberBlock.members {
+            if let varDecl = member.decl.as(VariableDeclSyntax.self) {
+                let isVar = varDecl.bindingSpecifier.text == "var"
+                let isLet = varDecl.bindingSpecifier.text == "let"
+
+                // Check if field has @Transient attribute
+                let isTransient = varDecl.attributes.contains { attr in
+                    if case .attribute(let attrSyntax) = attr {
+                        return attrSyntax.attributeName.description.trimmingCharacters(in: .whitespaces) == "Transient"
+                    }
+                    return false
+                }
+
+                if isVar || isLet {
+                    for binding in varDecl.bindings {
+                        if let pattern = binding.pattern.as(IdentifierPatternSyntax.self) {
+                            let fieldName = pattern.identifier.text
+                            let fieldType = binding.typeAnnotation?.type.description.trimmingCharacters(in: .whitespaces) ?? "Any"
+                            let hasDefault = binding.initializer != nil
+                            let defaultValue = binding.initializer?.value.description.trimmingCharacters(in: .whitespaces)
+
+                            if fieldName == "id" {
+                                hasUserDefinedId = true
+                                userIdHasDefault = hasDefault
+                                userIdBinding = binding
+                            }
+
+                            // Only add non-transient fields to allFields
+                            if !isTransient {
+                                allFields.append(fieldName)
+                            }
+                            fieldInfos.append((name: fieldName, type: fieldType, hasDefault: hasDefault, defaultValue: defaultValue, isTransient: isTransient))
+                            fieldNumber += 1
+                        }
+                    }
+                }
+            }
+        }
+
+        // Validate: User-defined id MUST have a default value
+        // Because id is excluded from the generated initializer
+        if hasUserDefinedId && !userIdHasDefault {
+            let diagnosticNode: Syntax
+            if let binding = userIdBinding {
+                diagnosticNode = Syntax(binding)
+            } else {
+                diagnosticNode = Syntax(node)
+            }
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: diagnosticNode,
+                    message: MacroExpansionErrorMessage(
+                        "User-defined 'id' field must have a default value. " +
+                        "The generated initializer does not include 'id' parameter. " +
+                        "Example: var id: UUID = UUID() or var id: Int64 = Int64(Date().timeIntervalSince1970 * 1000)"
+                    )
+                )
+            ])
+        }
+
+        // Extract #Index macro calls and generate IndexDescriptors
+        // Also collect all keyPath strings for fieldName(for:) generation
+        var indexDescriptors: [String] = []
+        var allIndexKeyPaths: Set<String> = []  // Collect all keyPaths for fieldName generation
+
+        for member in structDecl.memberBlock.members {
+            if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
+               macroDecl.macroName.text == "Index" {
+
+                // Extract KeyPaths (first argument)
+                var keyPaths: [String] = []
+                var keyPathLabels: [(label: String, path: String)] = []  // For type-embedded KeyPaths
+                var indexKindExpr: String?
+                var indexKindName: String?
+                var isUnique = false
+                var indexName: String?
+
+                // Determine if this is Form 1 (keyPaths array) or Form 2 (type-only)
+                let isForm2 = macroDecl.arguments.first?.label?.text == "type"
+
+                for arg in macroDecl.arguments {
+                    // Form 1: First argument is KeyPaths array
+                    if arg.label == nil {
+                        if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
+                            for element in arrayExpr.elements {
+                                if let keyPathExpr = element.expression.as(KeyPathExprSyntax.self) {
+                                    // Extract ALL components from the KeyPath (supports nested fields)
+                                    // e.g., \.address.city → "address.city"
+                                    var pathComponents: [String] = []
+                                    for component in keyPathExpr.components {
+                                        if let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
+                                            pathComponents.append(property.declName.baseName.text)
+                                        }
+                                    }
+                                    if !pathComponents.isEmpty {
+                                        // Join with dot for nested paths: ["address", "city"] → "address.city"
+                                        let keyPathString = pathComponents.joined(separator: ".")
+                                        keyPaths.append(keyPathString)
+                                        allIndexKeyPaths.insert(keyPathString)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // "type:" argument
+                    else if let label = arg.label, label.text == "type" {
+                        if let funcCall = arg.expression.as(FunctionCallExprSyntax.self) {
+                            // Extract IndexKind name (e.g., "AdjacencyIndexKind")
+                            indexKindName = funcCall.calledExpression.description.trimmingCharacters(in: .whitespaces)
+
+                            // Form 2: Extract KeyPaths from function arguments
+                            if isForm2 {
+                                var modifiedArgs: [String] = []
+                                for funcArg in funcCall.arguments {
+                                    if let keyPathExpr = funcArg.expression.as(KeyPathExprSyntax.self) {
+                                        // Extract KeyPath components
+                                        var pathComponents: [String] = []
+                                        for component in keyPathExpr.components {
+                                            if let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
+                                                pathComponents.append(property.declName.baseName.text)
+                                            }
+                                        }
+                                        if !pathComponents.isEmpty {
+                                            let keyPathString = pathComponents.joined(separator: ".")
+                                            let labelName = funcArg.label?.text ?? ""
+                                            keyPathLabels.append((label: labelName, path: keyPathString))
+                                            keyPaths.append(keyPathString)
+                                            allIndexKeyPaths.insert(keyPathString)
+                                            // Convert KeyPath to string for IndexKind: source: \.source → sourceField: "source"
+                                            modifiedArgs.append("\(labelName)Field: \"\(keyPathString)\"")
+                                        }
+                                    } else {
+                                        // Non-KeyPath argument (e.g., bidirectional: true)
+                                        modifiedArgs.append(funcArg.description.trimmingCharacters(in: .whitespaces))
+                                    }
+                                }
+                                // Reconstruct IndexKind with string field names
+                                indexKindExpr = "\(indexKindName!)(\(modifiedArgs.joined(separator: ", ")))"
+                            } else {
+                                indexKindExpr = arg.expression.description.trimmingCharacters(in: .whitespaces)
+                            }
+                        } else {
+                            indexKindExpr = arg.expression.description.trimmingCharacters(in: .whitespaces)
+                        }
+                    }
+                    // "unique:" argument
+                    else if let label = arg.label, label.text == "unique" {
+                        if let boolExpr = arg.expression.as(BooleanLiteralExprSyntax.self) {
+                            isUnique = boolExpr.literal.text == "true"
+                        }
+                    }
+                    // "name:" argument
+                    else if let label = arg.label, label.text == "name" {
+                        if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self),
+                           let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
+                            indexName = segment.content.text
+                        }
+                    }
+                }
+
+                guard !keyPaths.isEmpty else { continue }
+
+                // Generate index name if not provided
+                // Format: {TypeName}_{field1}_{field2}...
+                // Replace dots with underscores for nested paths: "address.city" → "address_city"
+                let flattenedKeyPaths = keyPaths.map { $0.replacingOccurrences(of: ".", with: "_") }
+                let finalIndexName = indexName ?? "\(typeName)_\(flattenedKeyPaths.joined(separator: "_"))"
+
+                // Generate IndexDescriptor initialization with KeyPaths
+                // e.g., [\User.email, \User.address.city]
+                let keyPathsLiterals = keyPaths.map { "\\\(structName).\($0)" }.joined(separator: ", ")
+                let kindInit = indexKindExpr ?? "ScalarIndexKind()"
+                let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
+
+                let descriptorInit = """
+                    IndexDescriptor(
+                        name: "\(finalIndexName)",
+                        keyPaths: [\(keyPathsLiterals)],
+                        kind: \(kindInit),
+                        commonOptions: \(optionsInit)
+                    )
+                """
+
+                indexDescriptors.append(descriptorInit)
+            }
+        }
+
+        var decls: [DeclSyntax] = []
+
+        // Generate `id` field if not user-defined
+        if !hasUserDefinedId {
+            let idDecl: DeclSyntax = """
+                public var id: String = ULID().ulidString
+                """
+            decls.append(idDecl)
+
+            // Add id to allFields at the beginning
+            allFields.insert("id", at: 0)
+            fieldInfos.insert((name: "id", type: "String", hasDefault: true, defaultValue: "ULID().ulidString", isTransient: false), at: 0)
+        }
+
+        // Generate persistableType property
+        let persistableTypeDecl: DeclSyntax = """
+            public static var persistableType: String { "\(raw: typeName)" }
+            """
+        decls.append(persistableTypeDecl)
+
+        // Generate allFields property
+        let allFieldsArray = "[\(allFields.map { "\"\($0)\"" }.joined(separator: ", "))]"
+        let allFieldsDecl: DeclSyntax = """
+            public static var allFields: [String] { \(raw: allFieldsArray) }
+            """
+        decls.append(allFieldsDecl)
+
+        // Generate indexDescriptors property
+        let indexDescriptorsArray = indexDescriptors.isEmpty
+            ? "[]"
+            : "[\n            \(indexDescriptors.joined(separator: ",\n            "))\n        ]"
+        let indexDescriptorsDecl: DeclSyntax = """
+            public static var indexDescriptors: [IndexDescriptor] { \(raw: indexDescriptorsArray) }
+            """
+        decls.append(indexDescriptorsDecl)
+
+        // Generate fieldNumber method (excludes transient fields)
+        var fieldNumberCases: [String] = []
+        var persistedFieldIndex = 0
+        for fieldInfo in fieldInfos {
+            if !fieldInfo.isTransient {
+                persistedFieldIndex += 1
+                fieldNumberCases.append("case \"\(fieldInfo.name)\": return \(persistedFieldIndex)")
+            }
+        }
+        let fieldNumberBody = fieldNumberCases.isEmpty
+            ? "return nil"
+            : """
+            switch fieldName {
+                    \(fieldNumberCases.joined(separator: "\n        "))
+                    default: return nil
+                }
+            """
+        let fieldNumberDecl: DeclSyntax = """
+            public static func fieldNumber(for fieldName: String) -> Int? {
+                \(raw: fieldNumberBody)
+            }
+            """
+        decls.append(fieldNumberDecl)
+
+        // Generate enumMetadata method (default implementation: returns nil)
+        let enumMetadataDecl: DeclSyntax = """
+            public static func enumMetadata(for fieldName: String) -> EnumMetadata? {
+                return nil
+            }
+            """
+        decls.append(enumMetadataDecl)
+
+        // Generate subscript for @dynamicMemberLookup (excludes transient fields)
+        var subscriptCases: [String] = []
+        for fieldInfo in fieldInfos {
+            if !fieldInfo.isTransient {
+                subscriptCases.append("case \"\(fieldInfo.name)\": return self.\(fieldInfo.name)")
+            }
+        }
+        let subscriptBody = subscriptCases.isEmpty
+            ? "return nil"
+            : """
+            switch member {
+                    \(subscriptCases.joined(separator: "\n        "))
+                    default: return nil
+                }
+            """
+        let subscriptDecl: DeclSyntax = """
+            public subscript(dynamicMember member: String) -> (any Sendable)? {
+                \(raw: subscriptBody)
+            }
+            """
+        decls.append(subscriptDecl)
+
+        // Generate fieldName(for:) methods for KeyPath → String conversion
+        // Include top-level fields and all indexed keyPaths (including nested)
+        // Excludes transient fields
+        var fieldNameCases: [String] = []
+
+        // Add top-level fields (excludes transient)
+        for fieldInfo in fieldInfos {
+            if !fieldInfo.isTransient {
+                fieldNameCases.append("if keyPath == \\\(structName).\(fieldInfo.name) { return \"\(fieldInfo.name)\" }")
+            }
+        }
+
+        // Add nested keyPaths from #Index declarations
+        for keyPathStr in allIndexKeyPaths.sorted() {
+            // Skip top-level fields (already added)
+            if !keyPathStr.contains(".") { continue }
+            fieldNameCases.append("if keyPath == \\\(structName).\(keyPathStr) { return \"\(keyPathStr)\" }")
+        }
+
+        let fieldNameBody = fieldNameCases.joined(separator: "\n        ")
+
+        let fieldNameDecl: DeclSyntax = """
+            public static func fieldName<Value>(for keyPath: KeyPath<\(raw: structName), Value>) -> String {
+                \(raw: fieldNameBody)
+                return "\\(keyPath)"
+            }
+            """
+        decls.append(fieldNameDecl)
+
+        // Generate PartialKeyPath version
+        let partialFieldNameDecl: DeclSyntax = """
+            public static func fieldName(for keyPath: PartialKeyPath<\(raw: structName)>) -> String {
+                \(raw: fieldNameBody)
+                return "\\(keyPath)"
+            }
+            """
+        decls.append(partialFieldNameDecl)
+
+        // Generate AnyKeyPath version (for type-erased usage)
+        let anyFieldNameDecl: DeclSyntax = """
+            public static func fieldName(for keyPath: AnyKeyPath) -> String {
+                if let partialKeyPath = keyPath as? PartialKeyPath<\(raw: structName)> {
+                    return fieldName(for: partialKeyPath)
+                }
+                return "\\(keyPath)"
+            }
+            """
+        decls.append(anyFieldNameDecl)
+
+        // Generate init without `id` parameter and transient fields
+        // Only include fields that are NOT `id` and NOT @Transient
+        let initParams = fieldInfos
+            .filter { $0.name != "id" && !$0.isTransient }
+            .map { info -> String in
+                if info.hasDefault, let defaultValue = info.defaultValue {
+                    return "\(info.name): \(info.type) = \(defaultValue)"
+                } else {
+                    return "\(info.name): \(info.type)"
+                }
+            }
+            .joined(separator: ", ")
+
+        let initAssignments = fieldInfos
+            .filter { $0.name != "id" && !$0.isTransient }
+            .map { "self.\($0.name) = \($0.name)" }
+            .joined(separator: "\n        ")
+
+        if !initAssignments.isEmpty {
+            let initDecl: DeclSyntax = """
+                public init(\(raw: initParams)) {
+                    \(raw: initAssignments)
+                }
+                """
+            decls.append(initDecl)
+        } else {
+            // No fields other than id
+            let initDecl: DeclSyntax = """
+                public init() {}
+                """
+            decls.append(initDecl)
+        }
+
+        // Generate CodingKeys enum if there are @Transient fields
+        // This excludes transient fields from Codable serialization
+        let hasTransientFields = fieldInfos.contains { $0.isTransient }
+        if hasTransientFields {
+            let codingKeyCases = fieldInfos
+                .filter { !$0.isTransient }
+                .map { "case \($0.name)" }
+                .joined(separator: "\n            ")
+
+            let codingKeysDecl: DeclSyntax = """
+                private enum CodingKeys: String, CodingKey {
+                    \(raw: codingKeyCases)
+                }
+                """
+            decls.append(codingKeysDecl)
+        }
+
+        return decls
+    }
+
+    public static func expansion(
+        of node: AttributeSyntax,
+        attachedTo declaration: some DeclGroupSyntax,
+        providingExtensionsOf type: some TypeSyntaxProtocol,
+        conformingTo protocols: [TypeSyntax],
+        in context: some MacroExpansionContext
+    ) throws -> [ExtensionDeclSyntax] {
+        // Generate conformance extension (Persistable, Codable, Sendable)
+        let conformanceExt: DeclSyntax = """
+            extension \(type.trimmed): Persistable, Codable, Sendable {}
+            """
+
+        if let extensionDecl = conformanceExt.as(ExtensionDeclSyntax.self) {
+            return [extensionDecl]
+        }
+
+        return []
+    }
+}
+
+/// Index macro
+///
+/// **Usage**:
+/// ```swift
+/// // Form 1: Explicit KeyPaths array
+/// #Index<User>([\.email], type: ScalarIndexKind(), unique: true)
+/// #Index<User>([\.country, \.city], type: ScalarIndexKind())
+///
+/// // Form 2: KeyPaths embedded in type parameter
+/// #Index<Edge>(type: AdjacencyIndexKind(source: \.source, target: \.target))
+/// ```
+///
+/// This is a marker macro. Validation is performed, but no code is generated.
+/// The @Persistable macro detects #Index calls and generates IndexDescriptor array.
+public struct IndexMacro: DeclarationMacro {
+    public static func expansion(
+        of node: some FreestandingMacroExpansionSyntax,
+        in context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
+        // Validate generic type parameter
+        guard let genericClause = node.genericArgumentClause,
+              let _ = genericClause.arguments.first else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: MacroExpansionErrorMessage("#Index requires a type parameter (e.g., #Index<User>)")
+                )
+            ])
+        }
+
+        // Check if this is Form 1 (keyPaths array) or Form 2 (type-only)
+        guard let firstArg = node.arguments.first else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: MacroExpansionErrorMessage("#Index requires either keyPaths array or type parameter")
+                )
+            ])
+        }
+
+        // Form 1: First argument is an array of KeyPaths
+        if firstArg.label == nil {
+            guard let _ = firstArg.expression.as(ArrayExprSyntax.self) else {
+                throw DiagnosticsError(diagnostics: [
+                    Diagnostic(
+                        node: Syntax(firstArg.expression),
+                        message: MacroExpansionErrorMessage("Index fields must be specified as an array of KeyPaths (e.g., [\\.$email])")
+                    )
+                ])
+            }
+        }
+        // Form 2: First argument is "type:" label
+        else if firstArg.label?.text == "type" {
+            // Validate that it's a function call expression (IndexKind initializer)
+            guard let _ = firstArg.expression.as(FunctionCallExprSyntax.self) else {
+                throw DiagnosticsError(diagnostics: [
+                    Diagnostic(
+                        node: Syntax(firstArg.expression),
+                        message: MacroExpansionErrorMessage("type parameter must be an IndexKind initializer (e.g., AdjacencyIndexKind(...))")
+                    )
+                ])
+            }
+        } else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(firstArg),
+                    message: MacroExpansionErrorMessage("#Index requires either keyPaths array or type parameter")
+                )
+            ])
+        }
+
+        // Marker macro - no code generation
+        return []
+    }
+}
+
+/// @Transient macro implementation
+///
+/// Marker macro that excludes a property from persistence.
+/// The actual exclusion logic is in @Persistable macro which detects @Transient.
+///
+/// **Usage**:
+/// ```swift
+/// @Persistable
+/// struct User {
+///     var email: String
+///
+///     @Transient
+///     var cachedData: Data?  // Excluded from persistence
+/// }
+/// ```
+public struct TransientMacro: PeerMacro {
+    public static func expansion(
+        of node: AttributeSyntax,
+        providingPeersOf declaration: some DeclSyntaxProtocol,
+        in context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
+        // Validate that @Transient is applied to a variable declaration
+        guard let varDecl = declaration.as(VariableDeclSyntax.self) else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: MacroExpansionErrorMessage("@Transient can only be applied to properties")
+                )
+            ])
+        }
+
+        // Validate that the property has a default value
+        for binding in varDecl.bindings {
+            if binding.initializer == nil {
+                // Check if it's an optional type (which implicitly has nil default)
+                if let typeAnnotation = binding.typeAnnotation,
+                   typeAnnotation.type.is(OptionalTypeSyntax.self) ||
+                   typeAnnotation.type.is(ImplicitlyUnwrappedOptionalTypeSyntax.self) {
+                    // Optional types are OK without explicit initializer
+                    continue
+                }
+
+                throw DiagnosticsError(diagnostics: [
+                    Diagnostic(
+                        node: Syntax(binding),
+                        message: MacroExpansionErrorMessage(
+                            "@Transient property must have a default value. " +
+                            "It is excluded from the generated initializer."
+                        )
+                    )
+                ])
+            }
+        }
+
+        // Marker macro - no code generation
+        return []
+    }
+}
+
+/// Compiler plugin entry point
+@main
+struct FDBModelMacrosPlugin: CompilerPlugin {
+    let providingMacros: [Macro.Type] = [
+        PersistableMacro.self,
+        IndexMacro.self,
+        DirectoryMacro.self,
+        TransientMacro.self,
+    ]
+}
+
+/// Error message helper
+struct MacroExpansionErrorMessage: DiagnosticMessage {
+    let message: String
+    let diagnosticID: MessageID
+    let severity: DiagnosticSeverity
+
+    init(_ message: String) {
+        self.message = message
+        self.diagnosticID = MessageID(domain: "FDBModelMacros", id: message)
+        self.severity = .error
+    }
+}
