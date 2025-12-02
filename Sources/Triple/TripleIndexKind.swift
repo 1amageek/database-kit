@@ -39,13 +39,26 @@ import Core
 /// - SPO: S??, SP?, SPO queries
 /// - POS: ?P?, ?PO queries
 /// - OSP: ??O queries
-public struct TripleIndexKind: IndexKind {
-    public static let identifier: String = "triple"
-    public static let subspaceStructure: SubspaceStructure = .hierarchical
+public struct TripleIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "triple" }
+    public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
     public let subjectField: String
     public let predicateField: String
     public let objectField: String
+
+    /// All field names for IndexKind protocol
+    public var fieldNames: [String] {
+        [subjectField, predicateField, objectField]
+    }
+
+    /// Default index name: "{TypeName}_triple_{subject}_{predicate}_{object}"
+    public var indexName: String {
+        let s = subjectField.replacingOccurrences(of: ".", with: "_")
+        let p = predicateField.replacingOccurrences(of: ".", with: "_")
+        let o = objectField.replacingOccurrences(of: ".", with: "_")
+        return "\(Root.persistableType)_triple_\(s)_\(p)_\(o)"
+    }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
         guard types.count >= 3 else {
@@ -55,18 +68,30 @@ public struct TripleIndexKind: IndexKind {
                 actual: types.count
             )
         }
-        let fieldNames = ["subject", "predicate", "object"]
+        let names = ["subject", "predicate", "object"]
         for (index, type) in types.prefix(3).enumerated() {
             guard TypeValidation.isComparable(type) else {
                 throw IndexTypeValidationError.unsupportedType(
                     index: identifier,
                     type: type,
-                    reason: "\(fieldNames[index]) field must be Comparable"
+                    reason: "\(names[index]) field must be Comparable"
                 )
             }
         }
     }
 
+    /// Initialize with KeyPaths
+    public init(
+        subject: PartialKeyPath<Root>,
+        predicate: PartialKeyPath<Root>,
+        object: PartialKeyPath<Root>
+    ) {
+        self.subjectField = Root.fieldName(for: subject)
+        self.predicateField = Root.fieldName(for: predicate)
+        self.objectField = Root.fieldName(for: object)
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
     public init(
         subjectField: String,
         predicateField: String,
@@ -75,14 +100,6 @@ public struct TripleIndexKind: IndexKind {
         self.subjectField = subjectField
         self.predicateField = predicateField
         self.objectField = objectField
-    }
-
-    public init<T>(
-        subject: KeyPath<T, some Any>,
-        predicate: KeyPath<T, some Any>,
-        object: KeyPath<T, some Any>
-    ) {
-        fatalError("This initializer is for macro expansion only. Use init(subjectField:predicateField:objectField:) at runtime.")
     }
 }
 

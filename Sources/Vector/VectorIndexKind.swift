@@ -61,12 +61,15 @@ public enum VectorMetric: String, Sendable, Codable, Hashable {
 /// **Design Principle**: Separation of concerns
 /// - Model defines **what** to index (dimensions, metric)
 /// - Runtime selects **how** to index (algorithm: flat/HNSW/IVF via AlgorithmConfiguration)
-public struct VectorIndexKind: IndexKind {
+public struct VectorIndexKind<Root: Persistable>: IndexKind {
     /// Identifier: "vector"
-    public static let identifier = "vector"
+    public static var identifier: String { "vector" }
 
     /// Subspace structure: hierarchical (HNSW graph, IVF clusters)
-    public static let subspaceStructure = SubspaceStructure.hierarchical
+    public static var subspaceStructure: SubspaceStructure { .hierarchical }
+
+    /// Field name for the vector field
+    public let fieldNames: [String]
 
     /// Vector dimensions (e.g., 384 for MiniLM, 768 for BERT, 1536 for OpenAI)
     public let dimensions: Int
@@ -74,9 +77,16 @@ public struct VectorIndexKind: IndexKind {
     /// Distance metric
     public let metric: VectorMetric
 
-    /// Initialize vector index kind
+    /// Default index name: "{TypeName}_vector_{field}"
+    public var indexName: String {
+        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        return "\(Root.persistableType)_vector_\(flattenedNames.joined(separator: "_"))"
+    }
+
+    /// Initialize with KeyPath
     ///
     /// **Model-level configuration**: Only data structure properties
+    /// - embedding: KeyPath to the vector field
     /// - dimensions: Vector size (must match embedding model)
     /// - metric: Distance calculation method
     ///
@@ -84,10 +94,20 @@ public struct VectorIndexKind: IndexKind {
     /// - Algorithm is runtime configuration (via AlgorithmConfiguration)
     ///
     /// - Parameters:
+    ///   - embedding: KeyPath to the vector field
     ///   - dimensions: Vector dimensions (must be positive)
     ///   - metric: Distance metric (default: cosine)
-    public init(dimensions: Int, metric: VectorMetric = .cosine) {
+    public init(embedding: PartialKeyPath<Root>, dimensions: Int, metric: VectorMetric = .cosine) {
         precondition(dimensions > 0, "Vector dimensions must be positive")
+        self.fieldNames = [Root.fieldName(for: embedding)]
+        self.dimensions = dimensions
+        self.metric = metric
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(fieldNames: [String], dimensions: Int, metric: VectorMetric = .cosine) {
+        precondition(dimensions > 0, "Vector dimensions must be positive")
+        self.fieldNames = fieldNames
         self.dimensions = dimensions
         self.metric = metric
     }
@@ -110,11 +130,12 @@ public struct VectorIndexKind: IndexKind {
 extension VectorIndexKind {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(Self.identifier)
+        hasher.combine(fieldNames)
         hasher.combine(dimensions)
         hasher.combine(metric)
     }
 
     public static func == (lhs: VectorIndexKind, rhs: VectorIndexKind) -> Bool {
-        return lhs.dimensions == rhs.dimensions && lhs.metric == rhs.metric
+        return lhs.fieldNames == rhs.fieldNames && lhs.dimensions == rhs.dimensions && lhs.metric == rhs.metric
     }
 }

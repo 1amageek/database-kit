@@ -69,12 +69,15 @@ public enum TokenizationStrategy: String, Sendable, Codable, Hashable {
 ///     var body: String
 /// }
 /// ```
-public struct FullTextIndexKind: IndexKind {
+public struct FullTextIndexKind<Root: Persistable>: IndexKind {
     /// Identifier: "fulltext"
-    public static let identifier = "fulltext"
+    public static var identifier: String { "fulltext" }
 
     /// Subspace structure: hierarchical (inverted index)
-    public static let subspaceStructure = SubspaceStructure.hierarchical
+    public static var subspaceStructure: SubspaceStructure { .hierarchical }
+
+    /// Field names for this index
+    public let fieldNames: [String]
 
     /// Tokenization strategy
     public let tokenizer: TokenizationStrategy
@@ -88,19 +91,43 @@ public struct FullTextIndexKind: IndexKind {
     /// Minimum term length to index
     public let minTermLength: Int
 
-    /// Initialize full-text index kind
+    /// Default index name: "{TypeName}_fulltext_{fields}"
+    public var indexName: String {
+        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        return "\(Root.persistableType)_fulltext_\(flattenedNames.joined(separator: "_"))"
+    }
+
+    /// Initialize with KeyPaths
     ///
     /// - Parameters:
+    ///   - fields: KeyPaths to text fields to index
     ///   - tokenizer: Tokenization strategy (default: .simple)
     ///   - storePositions: Whether to store term positions (default: true)
     ///   - ngramSize: N-gram size for ngram tokenizer (default: 3)
     ///   - minTermLength: Minimum term length to index (default: 2)
     public init(
+        fields: [PartialKeyPath<Root>],
         tokenizer: TokenizationStrategy = .simple,
         storePositions: Bool = true,
         ngramSize: Int = 3,
         minTermLength: Int = 2
     ) {
+        self.fieldNames = fields.map { Root.fieldName(for: $0) }
+        self.tokenizer = tokenizer
+        self.storePositions = storePositions
+        self.ngramSize = ngramSize
+        self.minTermLength = minTermLength
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(
+        fieldNames: [String],
+        tokenizer: TokenizationStrategy = .simple,
+        storePositions: Bool = true,
+        ngramSize: Int = 3,
+        minTermLength: Int = 2
+    ) {
+        self.fieldNames = fieldNames
         self.tokenizer = tokenizer
         self.storePositions = storePositions
         self.ngramSize = ngramSize
@@ -120,6 +147,7 @@ public struct FullTextIndexKind: IndexKind {
 extension FullTextIndexKind {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(Self.identifier)
+        hasher.combine(fieldNames)
         hasher.combine(tokenizer)
         hasher.combine(storePositions)
         hasher.combine(ngramSize)
@@ -127,7 +155,8 @@ extension FullTextIndexKind {
     }
 
     public static func == (lhs: FullTextIndexKind, rhs: FullTextIndexKind) -> Bool {
-        return lhs.tokenizer == rhs.tokenizer &&
+        return lhs.fieldNames == rhs.fieldNames &&
+            lhs.tokenizer == rhs.tokenizer &&
             lhs.storePositions == rhs.storePositions &&
             lhs.ngramSize == rhs.ngramSize &&
             lhs.minTermLength == rhs.minTermLength

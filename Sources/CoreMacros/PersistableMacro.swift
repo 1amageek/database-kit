@@ -31,7 +31,7 @@ import SwiftDiagnostics
 /// ```swift
 /// @Persistable
 /// struct User {
-///     #Index<User>([\.email], unique: true)
+///     #Index<User>(ScalarIndexKind(fields: [\.email]), unique: true)
 ///
 ///     var email: String
 ///     var name: String
@@ -156,79 +156,46 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
                macroDecl.macroName.text == "Index" {
 
-                // Extract KeyPaths (first argument)
+                // New format: #Index<T>(IndexKind(...), unique: Bool, name: String?)
+                // First unlabeled argument is the IndexKind expression
                 var keyPaths: [String] = []
-                var keyPathLabels: [(label: String, path: String)] = []  // For type-embedded KeyPaths
                 var indexKindExpr: String?
                 var indexKindName: String?
                 var isUnique = false
                 var indexName: String?
 
-                // Determine if this is Form 1 (keyPaths array) or Form 2 (type-only)
-                let isForm2 = macroDecl.arguments.first?.label?.text == "type"
-
                 for arg in macroDecl.arguments {
-                    // Form 1: First argument is KeyPaths array
+                    // First unlabeled argument: IndexKind expression (e.g., ScalarIndexKind(fields: [\.email]))
                     if arg.label == nil {
-                        if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
-                            for element in arrayExpr.elements {
-                                if let keyPathExpr = element.expression.as(KeyPathExprSyntax.self) {
-                                    // Extract ALL components from the KeyPath (supports nested fields)
-                                    // e.g., \.address.city → "address.city"
-                                    var pathComponents: [String] = []
-                                    for component in keyPathExpr.components {
-                                        if let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
-                                            pathComponents.append(property.declName.baseName.text)
+                        if let funcCall = arg.expression.as(FunctionCallExprSyntax.self) {
+                            // Extract IndexKind name (e.g., "ScalarIndexKind")
+                            indexKindName = funcCall.calledExpression.description.trimmingCharacters(in: .whitespaces)
+
+                            // Extract KeyPaths from all function arguments
+                            for funcArg in funcCall.arguments {
+                                // Check if argument is an array of KeyPaths (e.g., fields: [\.email, \.name])
+                                if let arrayExpr = funcArg.expression.as(ArrayExprSyntax.self) {
+                                    for element in arrayExpr.elements {
+                                        if let keyPathExpr = element.expression.as(KeyPathExprSyntax.self) {
+                                            let keyPathString = extractKeyPathString(from: keyPathExpr)
+                                            if !keyPathString.isEmpty {
+                                                keyPaths.append(keyPathString)
+                                                allIndexKeyPaths.insert(keyPathString)
+                                            }
                                         }
                                     }
-                                    if !pathComponents.isEmpty {
-                                        // Join with dot for nested paths: ["address", "city"] → "address.city"
-                                        let keyPathString = pathComponents.joined(separator: ".")
+                                }
+                                // Check if argument is a single KeyPath (e.g., value: \.price)
+                                else if let keyPathExpr = funcArg.expression.as(KeyPathExprSyntax.self) {
+                                    let keyPathString = extractKeyPathString(from: keyPathExpr)
+                                    if !keyPathString.isEmpty {
                                         keyPaths.append(keyPathString)
                                         allIndexKeyPaths.insert(keyPathString)
                                     }
                                 }
                             }
-                        }
-                    }
-                    // "type:" argument
-                    else if let label = arg.label, label.text == "type" {
-                        if let funcCall = arg.expression.as(FunctionCallExprSyntax.self) {
-                            // Extract IndexKind name (e.g., "AdjacencyIndexKind")
-                            indexKindName = funcCall.calledExpression.description.trimmingCharacters(in: .whitespaces)
 
-                            // Form 2: Extract KeyPaths from function arguments
-                            if isForm2 {
-                                var modifiedArgs: [String] = []
-                                for funcArg in funcCall.arguments {
-                                    if let keyPathExpr = funcArg.expression.as(KeyPathExprSyntax.self) {
-                                        // Extract KeyPath components
-                                        var pathComponents: [String] = []
-                                        for component in keyPathExpr.components {
-                                            if let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
-                                                pathComponents.append(property.declName.baseName.text)
-                                            }
-                                        }
-                                        if !pathComponents.isEmpty {
-                                            let keyPathString = pathComponents.joined(separator: ".")
-                                            let labelName = funcArg.label?.text ?? ""
-                                            keyPathLabels.append((label: labelName, path: keyPathString))
-                                            keyPaths.append(keyPathString)
-                                            allIndexKeyPaths.insert(keyPathString)
-                                            // Convert KeyPath to string for IndexKind: source: \.source → sourceField: "source"
-                                            modifiedArgs.append("\(labelName)Field: \"\(keyPathString)\"")
-                                        }
-                                    } else {
-                                        // Non-KeyPath argument (e.g., bidirectional: true)
-                                        modifiedArgs.append(funcArg.description.trimmingCharacters(in: .whitespaces))
-                                    }
-                                }
-                                // Reconstruct IndexKind with string field names
-                                indexKindExpr = "\(indexKindName!)(\(modifiedArgs.joined(separator: ", ")))"
-                            } else {
-                                indexKindExpr = arg.expression.description.trimmingCharacters(in: .whitespaces)
-                            }
-                        } else {
+                            // Store the original expression as-is
                             indexKindExpr = arg.expression.description.trimmingCharacters(in: .whitespaces)
                         }
                     }
@@ -250,15 +217,23 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 guard !keyPaths.isEmpty else { continue }
 
                 // Generate index name if not provided
-                // Format: {TypeName}_{field1}_{field2}...
-                // Replace dots with underscores for nested paths: "address.city" → "address_city"
-                let flattenedKeyPaths = keyPaths.map { $0.replacingOccurrences(of: ".", with: "_") }
-                let finalIndexName = indexName ?? "\(typeName)_\(flattenedKeyPaths.joined(separator: "_"))"
+                // Use IndexKind-specific naming patterns
+                let finalIndexName: String
+                if let customName = indexName {
+                    finalIndexName = customName
+                } else {
+                    let flattenedKeyPaths = keyPaths.map { $0.replacingOccurrences(of: ".", with: "_") }
+                    finalIndexName = generateIndexName(
+                        typeName: typeName,
+                        indexKindName: indexKindName ?? "scalar",
+                        fieldNames: flattenedKeyPaths
+                    )
+                }
 
                 // Generate IndexDescriptor initialization with KeyPaths
                 // e.g., [\User.email, \User.address.city]
                 let keyPathsLiterals = keyPaths.map { "\\\(structName).\($0)" }.joined(separator: ", ")
-                let kindInit = indexKindExpr ?? "ScalarIndexKind()"
+                let kindInit = indexKindExpr ?? "ScalarIndexKind(fieldNames: [])"
                 let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
 
                 let descriptorInit = """
@@ -552,12 +527,11 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 ///
 /// **Usage**:
 /// ```swift
-/// // Form 1: Explicit KeyPaths array
-/// #Index<User>([\.email], type: ScalarIndexKind(), unique: true)
-/// #Index<User>([\.country, \.city], type: ScalarIndexKind())
-///
-/// // Form 2: KeyPaths embedded in type parameter
-/// #Index<Edge>(type: AdjacencyIndexKind(source: \.source, target: \.target))
+/// // IndexKind with KeyPaths in constructor
+/// #Index<Product>(ScalarIndexKind(fields: [\.email]), unique: true)
+/// #Index<Product>(ScalarIndexKind(fields: [\.category, \.price]))
+/// #Index<Product>(CountIndexKind(groupBy: [\.category]))
+/// #Index<Product>(SumIndexKind(groupBy: [\.category], value: \.price))
 /// ```
 ///
 /// This is a marker macro. Validation is performed, but no code is generated.
@@ -573,48 +547,36 @@ public struct IndexMacro: DeclarationMacro {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: MacroExpansionErrorMessage("#Index requires a type parameter (e.g., #Index<User>)")
+                    message: MacroExpansionErrorMessage("#Index requires a type parameter (e.g., #Index<Product>)")
                 )
             ])
         }
 
-        // Check if this is Form 1 (keyPaths array) or Form 2 (type-only)
+        // First argument must be an IndexKind expression (unlabeled)
         guard let firstArg = node.arguments.first else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: MacroExpansionErrorMessage("#Index requires either keyPaths array or type parameter")
+                    message: MacroExpansionErrorMessage("#Index requires an IndexKind (e.g., ScalarIndexKind(fields: [\\.email]))")
                 )
             ])
         }
 
-        // Form 1: First argument is an array of KeyPaths
-        if firstArg.label == nil {
-            guard let _ = firstArg.expression.as(ArrayExprSyntax.self) else {
-                throw DiagnosticsError(diagnostics: [
-                    Diagnostic(
-                        node: Syntax(firstArg.expression),
-                        message: MacroExpansionErrorMessage("Index fields must be specified as an array of KeyPaths (e.g., [\\.$email])")
-                    )
-                ])
-            }
-        }
-        // Form 2: First argument is "type:" label
-        else if firstArg.label?.text == "type" {
-            // Validate that it's a function call expression (IndexKind initializer)
-            guard let _ = firstArg.expression.as(FunctionCallExprSyntax.self) else {
-                throw DiagnosticsError(diagnostics: [
-                    Diagnostic(
-                        node: Syntax(firstArg.expression),
-                        message: MacroExpansionErrorMessage("type parameter must be an IndexKind initializer (e.g., AdjacencyIndexKind(...))")
-                    )
-                ])
-            }
-        } else {
+        // Validate that first argument is unlabeled and is a function call (IndexKind initializer)
+        guard firstArg.label == nil else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(firstArg),
-                    message: MacroExpansionErrorMessage("#Index requires either keyPaths array or type parameter")
+                    message: MacroExpansionErrorMessage("First argument must be an IndexKind (e.g., ScalarIndexKind(fields: [\\.email]))")
+                )
+            ])
+        }
+
+        guard let _ = firstArg.expression.as(FunctionCallExprSyntax.self) else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(firstArg.expression),
+                    message: MacroExpansionErrorMessage("First argument must be an IndexKind initializer (e.g., ScalarIndexKind(fields: [\\.email]))")
                 )
             ])
         }
@@ -680,6 +642,89 @@ public struct TransientMacro: PeerMacro {
 
         // Marker macro - no code generation
         return []
+    }
+}
+
+// MARK: - Helper Functions
+
+/// Extracts field name string from KeyPath expression
+/// e.g., \.email → "email", \.address.city → "address.city"
+private func extractKeyPathString(from keyPathExpr: KeyPathExprSyntax) -> String {
+    var pathComponents: [String] = []
+    for component in keyPathExpr.components {
+        if let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
+            pathComponents.append(property.declName.baseName.text)
+        }
+    }
+    return pathComponents.joined(separator: ".")
+}
+
+/// Generates index name based on IndexKind type and field names
+/// Mirrors the indexName computed property in each IndexKind implementation
+private func generateIndexName(typeName: String, indexKindName: String, fieldNames: [String]) -> String {
+    // Remove generic parameter if present (e.g., "ScalarIndexKind<Product>" → "ScalarIndexKind")
+    let kindBaseName = indexKindName.components(separatedBy: "<").first ?? indexKindName
+
+    switch kindBaseName {
+    case "ScalarIndexKind":
+        // Format: {TypeName}_{field1}_{field2}
+        return "\(typeName)_\(fieldNames.joined(separator: "_"))"
+
+    case "CountIndexKind":
+        // Format: {TypeName}_count_{field1}_{field2}
+        return "\(typeName)_count_\(fieldNames.joined(separator: "_"))"
+
+    case "SumIndexKind":
+        // Format: {TypeName}_sum_{groupFields}__{valueField}
+        // Last field is the value field
+        if fieldNames.count > 1 {
+            let groupFields = Array(fieldNames.dropLast())
+            let valueField = fieldNames.last!
+            return "\(typeName)_sum_\(groupFields.joined(separator: "_"))__\(valueField)"
+        }
+        return "\(typeName)_sum_\(fieldNames.joined(separator: "_"))"
+
+    case "MinIndexKind":
+        // Format: {TypeName}_min_{groupFields}__{valueField}
+        if fieldNames.count > 1 {
+            let groupFields = Array(fieldNames.dropLast())
+            let valueField = fieldNames.last!
+            return "\(typeName)_min_\(groupFields.joined(separator: "_"))__\(valueField)"
+        }
+        return "\(typeName)_min_\(fieldNames.joined(separator: "_"))"
+
+    case "MaxIndexKind":
+        // Format: {TypeName}_max_{groupFields}__{valueField}
+        if fieldNames.count > 1 {
+            let groupFields = Array(fieldNames.dropLast())
+            let valueField = fieldNames.last!
+            return "\(typeName)_max_\(groupFields.joined(separator: "_"))__\(valueField)"
+        }
+        return "\(typeName)_max_\(fieldNames.joined(separator: "_"))"
+
+    case "AverageIndexKind":
+        // Format: {TypeName}_avg_{groupFields}__{valueField}
+        if fieldNames.count > 1 {
+            let groupFields = Array(fieldNames.dropLast())
+            let valueField = fieldNames.last!
+            return "\(typeName)_avg_\(groupFields.joined(separator: "_"))__\(valueField)"
+        }
+        return "\(typeName)_avg_\(fieldNames.joined(separator: "_"))"
+
+    case "VersionIndexKind":
+        // Format: {TypeName}_version_{field}
+        return "\(typeName)_version_\(fieldNames.joined(separator: "_"))"
+
+    default:
+        // Default pattern for custom/third-party IndexKinds
+        // Format: {TypeName}_{kindIdentifier}_{fields}
+        let kindIdentifier = kindBaseName
+            .replacingOccurrences(of: "IndexKind", with: "")
+            .lowercased()
+        if kindIdentifier.isEmpty {
+            return "\(typeName)_\(fieldNames.joined(separator: "_"))"
+        }
+        return "\(typeName)_\(kindIdentifier)_\(fieldNames.joined(separator: "_"))"
     }
 }
 

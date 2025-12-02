@@ -49,12 +49,15 @@ public enum SpatialEncoding: String, Sendable, Codable, Hashable {
 ///     var longitude: Double
 /// }
 /// ```
-public struct SpatialIndexKind: IndexKind {
+public struct SpatialIndexKind<Root: Persistable>: IndexKind {
     /// Identifier: "spatial"
-    public static let identifier = "spatial"
+    public static var identifier: String { "spatial" }
 
     /// Subspace structure: flat
-    public static let subspaceStructure = SubspaceStructure.flat
+    public static var subspaceStructure: SubspaceStructure { .flat }
+
+    /// Field names for this index (lat/lon or x/y/z)
+    public let fieldNames: [String]
 
     /// Spatial encoding scheme
     public let encoding: SpatialEncoding
@@ -64,12 +67,33 @@ public struct SpatialIndexKind: IndexKind {
     /// - Morton: 0-30 for 2D, 0-20 for 3D
     public let level: Int
 
-    /// Initialize spatial index kind
+    /// Default index name: "{TypeName}_spatial_{fields}"
+    public var indexName: String {
+        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        return "\(Root.persistableType)_spatial_\(flattenedNames.joined(separator: "_"))"
+    }
+
+    /// Initialize with KeyPaths for 2D coordinates (lat/lon)
     ///
     /// - Parameters:
-    ///   - encoding: Spatial encoding scheme
-    ///   - level: Precision level
-    public init(encoding: SpatialEncoding = .s2, level: Int = 15) {
+    ///   - latitude: KeyPath to latitude field
+    ///   - longitude: KeyPath to longitude field
+    ///   - encoding: Spatial encoding scheme (default: .s2)
+    ///   - level: Precision level (default: 15)
+    public init(
+        latitude: PartialKeyPath<Root>,
+        longitude: PartialKeyPath<Root>,
+        encoding: SpatialEncoding = .s2,
+        level: Int = 15
+    ) {
+        self.fieldNames = [Root.fieldName(for: latitude), Root.fieldName(for: longitude)]
+        self.encoding = encoding
+        self.level = level
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(fieldNames: [String], encoding: SpatialEncoding = .s2, level: Int = 15) {
+        self.fieldNames = fieldNames
         self.encoding = encoding
         self.level = level
     }
@@ -87,12 +111,13 @@ public struct SpatialIndexKind: IndexKind {
 extension SpatialIndexKind {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(Self.identifier)
+        hasher.combine(fieldNames)
         hasher.combine(encoding)
         hasher.combine(level)
     }
 
     public static func == (lhs: SpatialIndexKind, rhs: SpatialIndexKind) -> Bool {
-        return lhs.encoding == rhs.encoding && lhs.level == rhs.level
+        return lhs.fieldNames == rhs.fieldNames && lhs.encoding == rhs.encoding && lhs.level == rhs.level
     }
 }
 

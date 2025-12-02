@@ -42,16 +42,16 @@ import Core
 /// - Find all outgoing edges from a node: scan [I]/adj/<label>/<source>/
 /// - Find all incoming edges to a node: scan [I]/adj_in/<label>/<target>/
 /// - Find specific edge: get [I]/adj/<label>/<source>/<target>
-public struct AdjacencyIndexKind: IndexKind {
+public struct AdjacencyIndexKind<Root: Persistable>: IndexKind {
     /// Unique identifier for this index kind
-    public static let identifier: String = "adjacency"
+    public static var identifier: String { "adjacency" }
 
     /// Subspace structure type
     ///
     /// Uses hierarchical structure for organized graph traversal:
     /// - Outgoing: [label]/[source]/[target]
     /// - Incoming: [label]/[target]/[source]
-    public static let subspaceStructure: SubspaceStructure = .hierarchical
+    public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
     /// Source node field name (e.g., "source", "fromNodeID")
     public let sourceField: String
@@ -70,6 +70,26 @@ public struct AdjacencyIndexKind: IndexKind {
     ///
     /// This enables efficient bidirectional traversal but doubles write cost.
     public let bidirectional: Bool
+
+    /// All field names for IndexKind protocol
+    public var fieldNames: [String] {
+        var fields = [sourceField, targetField]
+        if let label = labelField {
+            fields.append(label)
+        }
+        return fields
+    }
+
+    /// Default index name: "{TypeName}_adjacency_{source}_{target}"
+    public var indexName: String {
+        let s = sourceField.replacingOccurrences(of: ".", with: "_")
+        let t = targetField.replacingOccurrences(of: ".", with: "_")
+        if let label = labelField {
+            let l = label.replacingOccurrences(of: ".", with: "_")
+            return "\(Root.persistableType)_adjacency_\(s)_\(t)_\(l)"
+        }
+        return "\(Root.persistableType)_adjacency_\(s)_\(t)"
+    }
 
     /// Validate that the indexed fields are appropriate for adjacency index
     ///
@@ -97,9 +117,26 @@ public struct AdjacencyIndexKind: IndexKind {
         }
     }
 
-    /// Initialize with field names (runtime use, Codable-compatible)
+    /// Initialize with KeyPaths
     ///
-    /// This initializer is called by the macro-expanded code with string field names.
+    /// - Parameters:
+    ///   - source: KeyPath to source node ID field
+    ///   - target: KeyPath to target node ID field
+    ///   - label: KeyPath to edge label field (optional)
+    ///   - bidirectional: Whether to create incoming index (default: false)
+    public init(
+        source: PartialKeyPath<Root>,
+        target: PartialKeyPath<Root>,
+        label: PartialKeyPath<Root>? = nil,
+        bidirectional: Bool = false
+    ) {
+        self.sourceField = Root.fieldName(for: source)
+        self.targetField = Root.fieldName(for: target)
+        self.labelField = label.map { Root.fieldName(for: $0) }
+        self.bidirectional = bidirectional
+    }
+
+    /// Initialize with field names (for Codable reconstruction)
     ///
     /// - Parameters:
     ///   - sourceField: Name of the source node ID field
@@ -116,40 +153,6 @@ public struct AdjacencyIndexKind: IndexKind {
         self.targetField = targetField
         self.labelField = labelField
         self.bidirectional = bidirectional
-    }
-
-    /// Initialize with KeyPaths (macro expansion only)
-    ///
-    /// This initializer is used in the #Index macro. The macro extracts the
-    /// KeyPath information and converts it to the string-based initializer.
-    ///
-    /// **Usage**:
-    /// ```swift
-    /// #Index<Edge>(type: AdjacencyIndexKind(
-    ///     source: \.source,
-    ///     target: \.target,
-    ///     label: \.label,
-    ///     bidirectional: true
-    /// ))
-    /// ```
-    ///
-    /// **Macro expansion**:
-    /// The macro converts this to:
-    /// ```swift
-    /// AdjacencyIndexKind(
-    ///     sourceField: "source",
-    ///     targetField: "target",
-    ///     labelField: "label",
-    ///     bidirectional: true
-    /// )
-    /// ```
-    public init<T>(
-        source: KeyPath<T, some Any>,
-        target: KeyPath<T, some Any>,
-        label: KeyPath<T, some Any>? = nil,
-        bidirectional: Bool = false
-    ) {
-        fatalError("This initializer is for macro expansion only. Use init(sourceField:targetField:labelField:bidirectional:) at runtime.")
     }
 }
 

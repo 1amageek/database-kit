@@ -44,13 +44,13 @@ struct ModelMacroValidationTests {
     /// Test IndexKind types can be created
     @Test("IndexKind types can be instantiated")
     func indexKindInstantiation() throws {
-        // Verify that all built-in IndexKinds can be created
-        _ = ScalarIndexKind()
-        _ = CountIndexKind()
-        _ = SumIndexKind()
-        _ = MinIndexKind()
-        _ = MaxIndexKind()
-        _ = VersionIndexKind()
+        // Verify that all built-in IndexKinds can be created with proper generic parameters
+        _ = ScalarIndexKind<SimpleUser>(fields: [\.email])
+        _ = CountIndexKind<OrderedIndexProduct>(groupBy: [\.category])
+        _ = SumIndexKind<OrderedIndexProduct>(groupBy: [\.category], value: \.price)
+        _ = MinIndexKind<OrderedIndexProduct>(groupBy: [\.category], value: \.price)
+        _ = MaxIndexKind<OrderedIndexProduct>(groupBy: [\.category], value: \.price)
+        _ = VersionIndexKind<SimpleUser>(field: \.email)
 
         // All should succeed without throwing
     }
@@ -77,9 +77,9 @@ struct ModelMacroValidationTests {
 
 @Persistable
 struct OrderedIndexProduct {
-    #Index<OrderedIndexProduct>([\.category], type: ScalarIndexKind())
-    #Index<OrderedIndexProduct>([\.price], type: ScalarIndexKind())
-    #Index<OrderedIndexProduct>([\.name], type: ScalarIndexKind())
+    #Index<OrderedIndexProduct>(ScalarIndexKind<OrderedIndexProduct>(fields: [\.category]))
+    #Index<OrderedIndexProduct>(ScalarIndexKind<OrderedIndexProduct>(fields: [\.price]))
+    #Index<OrderedIndexProduct>(ScalarIndexKind<OrderedIndexProduct>(fields: [\.name]))
 
     var category: String
     var price: Double

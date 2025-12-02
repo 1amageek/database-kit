@@ -14,27 +14,48 @@ public typealias TimeInterval = Double
 
 /// Standard VALUE index for sorting and range queries
 ///
-/// This is the default index kind used by the #Index macro when no type is specified.
-///
 /// **Usage**:
 /// ```swift
 /// @Persistable
-/// struct User {
-///     #Index<User>([\.email], type: ScalarIndexKind(), unique: true)
-///     var email: String
+/// struct Product {
+///     #Index(type: ScalarIndexKind<Product>(fields: [\.category, \.price]))
+///     var category: String
+///     var price: Int
 /// }
 /// ```
 ///
-/// **Key Structure**: `[indexSubspace][fieldValue][primaryKey] = ''`
+/// **Key Structure**: `[indexSubspace][field1Value][field2Value]...[primaryKey] = ''`
 ///
 /// **Supports**:
 /// - Exact match queries
-/// - Range queries
+/// - Range queries (WHERE price >= 100)
 /// - Prefix queries
+/// - Composite indexes
 /// - Unique constraints
-public struct ScalarIndexKind: IndexKind {
-    public static let identifier = "scalar"
-    public static let subspaceStructure = SubspaceStructure.flat
+public struct ScalarIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "scalar" }
+    public static var subspaceStructure: SubspaceStructure { .flat }
+
+    /// Field names for this index (stored as strings for Codable)
+    public let fieldNames: [String]
+
+    /// Default index name: "{TypeName}_{field1}_{field2}_..."
+    public var indexName: String {
+        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        return "\(Root.persistableType)_\(flattenedNames.joined(separator: "_"))"
+    }
+
+    /// Initialize with KeyPaths (converted to field names internally)
+    ///
+    /// - Parameter fields: KeyPaths to indexed fields
+    public init(fields: [PartialKeyPath<Root>]) {
+        self.fieldNames = fields.map { Root.fieldName(for: $0) }
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(fieldNames: [String]) {
+        self.fieldNames = fieldNames
+    }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
         guard !types.isEmpty else {
@@ -44,7 +65,6 @@ public struct ScalarIndexKind: IndexKind {
                 actual: 0
             )
         }
-        // Validate all fields are Comparable
         for type in types {
             guard TypeValidation.isComparable(type) else {
                 throw IndexTypeValidationError.unsupportedType(
@@ -55,8 +75,6 @@ public struct ScalarIndexKind: IndexKind {
             }
         }
     }
-
-    public init() {}
 }
 
 // MARK: - CountIndexKind
@@ -66,20 +84,43 @@ public struct ScalarIndexKind: IndexKind {
 /// **Usage**:
 /// ```swift
 /// @Persistable
-/// struct User {
-///     #Index<User>([\.city], type: CountIndexKind())
-///     var city: String
+/// struct Order {
+///     #Index(type: CountIndexKind<Order>(groupBy: [\.status, \.type]))
+///     var status: String
+///     var type: String
 /// }
 /// ```
 ///
-/// **Key Structure**: `[indexSubspace][groupKey] = Int64(count)`
+/// **Key Structure**: `[indexSubspace][groupKey1][groupKey2]... = Int64(count)`
 ///
 /// **Supports**:
 /// - Get count by group key
 /// - Atomic increment/decrement on insert/delete
-public struct CountIndexKind: IndexKind {
-    public static let identifier = "count"
-    public static let subspaceStructure = SubspaceStructure.aggregation
+/// - Multiple grouping fields
+public struct CountIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "count" }
+    public static var subspaceStructure: SubspaceStructure { .aggregation }
+
+    /// Field names for grouping (stored as strings for Codable)
+    public let fieldNames: [String]
+
+    /// Default index name: "{TypeName}_count_{field1}_{field2}_..."
+    public var indexName: String {
+        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        return "\(Root.persistableType)_count_\(flattenedNames.joined(separator: "_"))"
+    }
+
+    /// Initialize with KeyPaths (converted to field names internally)
+    ///
+    /// - Parameter groupBy: KeyPaths to grouping fields
+    public init(groupBy: [PartialKeyPath<Root>]) {
+        self.fieldNames = groupBy.map { Root.fieldName(for: $0) }
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(fieldNames: [String]) {
+        self.fieldNames = fieldNames
+    }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
         guard !types.isEmpty else {
@@ -89,7 +130,6 @@ public struct CountIndexKind: IndexKind {
                 actual: 0
             )
         }
-        // Validate all grouping fields are Comparable
         for type in types {
             guard TypeValidation.isComparable(type) else {
                 throw IndexTypeValidationError.unsupportedType(
@@ -100,8 +140,6 @@ public struct CountIndexKind: IndexKind {
             }
         }
     }
-
-    public init() {}
 }
 
 // MARK: - SumIndexKind
@@ -112,21 +150,58 @@ public struct CountIndexKind: IndexKind {
 /// ```swift
 /// @Persistable
 /// struct Order {
-///     #Index<Order>([\.customerId, \.amount], type: SumIndexKind())
+///     #Index(type: SumIndexKind<Order>(groupBy: [\.customerId], value: \.amount))
 ///     var customerId: String
 ///     var amount: Double
 /// }
 /// ```
 ///
-/// **Key Structure**: `[indexSubspace][groupKey] = Double(sum)`
-/// Last field in keyPaths is the value field; preceding fields are grouping keys.
+/// **Key Structure**: `[indexSubspace][groupKey1][groupKey2]... = Double(sum)`
 ///
 /// **Supports**:
 /// - Get sum by group key
 /// - Atomic add/subtract on insert/update/delete
-public struct SumIndexKind: IndexKind {
-    public static let identifier = "sum"
-    public static let subspaceStructure = SubspaceStructure.aggregation
+/// - Multiple grouping fields
+public struct SumIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "sum" }
+    public static var subspaceStructure: SubspaceStructure { .aggregation }
+
+    /// Field names for grouping
+    public let groupByFieldNames: [String]
+
+    /// Field name for the value to sum
+    public let valueFieldName: String
+
+    /// All field names (groupBy + value) for IndexKind protocol
+    public var fieldNames: [String] {
+        groupByFieldNames + [valueFieldName]
+    }
+
+    /// Default index name: "{TypeName}_sum_{groupField1}_{valueField}"
+    public var indexName: String {
+        let groupNames = groupByFieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let valueName = valueFieldName.replacingOccurrences(of: ".", with: "_")
+        if groupNames.isEmpty {
+            return "\(Root.persistableType)_sum_\(valueName)"
+        }
+        return "\(Root.persistableType)_sum_\(groupNames.joined(separator: "_"))_\(valueName)"
+    }
+
+    /// Initialize with KeyPaths
+    ///
+    /// - Parameters:
+    ///   - groupBy: KeyPaths to grouping fields
+    ///   - value: KeyPath to the numeric field to sum
+    public init(groupBy: [PartialKeyPath<Root>], value: PartialKeyPath<Root>) {
+        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
+        self.valueFieldName = Root.fieldName(for: value)
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(groupByFieldNames: [String], valueFieldName: String) {
+        self.groupByFieldNames = groupByFieldNames
+        self.valueFieldName = valueFieldName
+    }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
         guard types.count >= 2 else {
@@ -136,7 +211,6 @@ public struct SumIndexKind: IndexKind {
                 actual: types.count
             )
         }
-        // Validate grouping fields (all but last) are Comparable
         let groupingTypes = types.dropLast()
         for type in groupingTypes {
             guard TypeValidation.isComparable(type) else {
@@ -156,8 +230,6 @@ public struct SumIndexKind: IndexKind {
             )
         }
     }
-
-    public init() {}
 }
 
 // MARK: - MinIndexKind
@@ -168,21 +240,53 @@ public struct SumIndexKind: IndexKind {
 /// ```swift
 /// @Persistable
 /// struct Product {
-///     #Index<Product>([\.category, \.price], type: MinIndexKind())
+///     #Index(type: MinIndexKind<Product>(groupBy: [\.category], value: \.price))
 ///     var category: String
 ///     var price: Double
 /// }
 /// ```
 ///
 /// **Key Structure**: `[indexSubspace][groupKey][value][primaryKey] = ''`
-/// Last field in keyPaths is the value field; preceding fields are grouping keys.
 ///
 /// **Supports**:
 /// - Get minimum value by group key
 /// - Efficient min tracking via sorted storage
-public struct MinIndexKind: IndexKind {
-    public static let identifier = "min"
-    public static let subspaceStructure = SubspaceStructure.flat
+public struct MinIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "min" }
+    public static var subspaceStructure: SubspaceStructure { .flat }
+
+    /// Field names for grouping
+    public let groupByFieldNames: [String]
+
+    /// Field name for the value to track minimum
+    public let valueFieldName: String
+
+    /// All field names (groupBy + value) for IndexKind protocol
+    public var fieldNames: [String] {
+        groupByFieldNames + [valueFieldName]
+    }
+
+    /// Default index name: "{TypeName}_min_{groupField1}_{valueField}"
+    public var indexName: String {
+        let groupNames = groupByFieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let valueName = valueFieldName.replacingOccurrences(of: ".", with: "_")
+        if groupNames.isEmpty {
+            return "\(Root.persistableType)_min_\(valueName)"
+        }
+        return "\(Root.persistableType)_min_\(groupNames.joined(separator: "_"))_\(valueName)"
+    }
+
+    /// Initialize with KeyPaths
+    public init(groupBy: [PartialKeyPath<Root>], value: PartialKeyPath<Root>) {
+        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
+        self.valueFieldName = Root.fieldName(for: value)
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(groupByFieldNames: [String], valueFieldName: String) {
+        self.groupByFieldNames = groupByFieldNames
+        self.valueFieldName = valueFieldName
+    }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
         guard types.count >= 2 else {
@@ -192,7 +296,6 @@ public struct MinIndexKind: IndexKind {
                 actual: types.count
             )
         }
-        // Validate all fields are Comparable (both grouping and value)
         for type in types {
             guard TypeValidation.isComparable(type) else {
                 throw IndexTypeValidationError.unsupportedType(
@@ -203,8 +306,6 @@ public struct MinIndexKind: IndexKind {
             }
         }
     }
-
-    public init() {}
 }
 
 // MARK: - MaxIndexKind
@@ -215,21 +316,53 @@ public struct MinIndexKind: IndexKind {
 /// ```swift
 /// @Persistable
 /// struct Product {
-///     #Index<Product>([\.category, \.price], type: MaxIndexKind())
+///     #Index(type: MaxIndexKind<Product>(groupBy: [\.category], value: \.price))
 ///     var category: String
 ///     var price: Double
 /// }
 /// ```
 ///
 /// **Key Structure**: `[indexSubspace][groupKey][value][primaryKey] = ''`
-/// Last field in keyPaths is the value field; preceding fields are grouping keys.
 ///
 /// **Supports**:
 /// - Get maximum value by group key
 /// - Efficient max tracking via reverse-sorted storage
-public struct MaxIndexKind: IndexKind {
-    public static let identifier = "max"
-    public static let subspaceStructure = SubspaceStructure.flat
+public struct MaxIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "max" }
+    public static var subspaceStructure: SubspaceStructure { .flat }
+
+    /// Field names for grouping
+    public let groupByFieldNames: [String]
+
+    /// Field name for the value to track maximum
+    public let valueFieldName: String
+
+    /// All field names (groupBy + value) for IndexKind protocol
+    public var fieldNames: [String] {
+        groupByFieldNames + [valueFieldName]
+    }
+
+    /// Default index name: "{TypeName}_max_{groupField1}_{valueField}"
+    public var indexName: String {
+        let groupNames = groupByFieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let valueName = valueFieldName.replacingOccurrences(of: ".", with: "_")
+        if groupNames.isEmpty {
+            return "\(Root.persistableType)_max_\(valueName)"
+        }
+        return "\(Root.persistableType)_max_\(groupNames.joined(separator: "_"))_\(valueName)"
+    }
+
+    /// Initialize with KeyPaths
+    public init(groupBy: [PartialKeyPath<Root>], value: PartialKeyPath<Root>) {
+        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
+        self.valueFieldName = Root.fieldName(for: value)
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(groupByFieldNames: [String], valueFieldName: String) {
+        self.groupByFieldNames = groupByFieldNames
+        self.valueFieldName = valueFieldName
+    }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
         guard types.count >= 2 else {
@@ -239,7 +372,6 @@ public struct MaxIndexKind: IndexKind {
                 actual: types.count
             )
         }
-        // Validate all fields are Comparable (both grouping and value)
         for type in types {
             guard TypeValidation.isComparable(type) else {
                 throw IndexTypeValidationError.unsupportedType(
@@ -250,8 +382,6 @@ public struct MaxIndexKind: IndexKind {
             }
         }
     }
-
-    public init() {}
 }
 
 // MARK: - AverageIndexKind
@@ -262,15 +392,15 @@ public struct MaxIndexKind: IndexKind {
 /// ```swift
 /// @Persistable
 /// struct Review {
-///     #Index<Review>([\.productID, \.rating], type: AverageIndexKind())
+///     #Index(type: AverageIndexKind<Review>(groupBy: [\.productID], value: \.rating))
 ///     var productID: Int64
 ///     var rating: Int64  // Rating * 100 (e.g., 4.5 stars = 450)
 /// }
 /// ```
 ///
 /// **Key Structure**:
-/// - `[indexSubspace][groupKey][\"sum\"] = Int64(sum)`
-/// - `[indexSubspace][groupKey][\"count\"] = Int64(count)`
+/// - `[indexSubspace][groupKey]["sum"] = Int64(sum)`
+/// - `[indexSubspace][groupKey]["count"] = Int64(count)`
 ///
 /// **Supports**:
 /// - Get average by group key (average = sum / count)
@@ -279,9 +409,42 @@ public struct MaxIndexKind: IndexKind {
 /// **Important**: Use Int64 for exact arithmetic
 /// - ✅ Multiply by 100 or 1000 for decimal precision
 /// - ❌ Do not use Double/Float (floating-point errors accumulate)
-public struct AverageIndexKind: IndexKind {
-    public static let identifier = "average"
-    public static let subspaceStructure = SubspaceStructure.aggregation
+public struct AverageIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "average" }
+    public static var subspaceStructure: SubspaceStructure { .aggregation }
+
+    /// Field names for grouping
+    public let groupByFieldNames: [String]
+
+    /// Field name for the value to average
+    public let valueFieldName: String
+
+    /// All field names (groupBy + value) for IndexKind protocol
+    public var fieldNames: [String] {
+        groupByFieldNames + [valueFieldName]
+    }
+
+    /// Default index name: "{TypeName}_avg_{groupField1}_{valueField}"
+    public var indexName: String {
+        let groupNames = groupByFieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let valueName = valueFieldName.replacingOccurrences(of: ".", with: "_")
+        if groupNames.isEmpty {
+            return "\(Root.persistableType)_avg_\(valueName)"
+        }
+        return "\(Root.persistableType)_avg_\(groupNames.joined(separator: "_"))_\(valueName)"
+    }
+
+    /// Initialize with KeyPaths
+    public init(groupBy: [PartialKeyPath<Root>], value: PartialKeyPath<Root>) {
+        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
+        self.valueFieldName = Root.fieldName(for: value)
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(groupByFieldNames: [String], valueFieldName: String) {
+        self.groupByFieldNames = groupByFieldNames
+        self.valueFieldName = valueFieldName
+    }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
         guard types.count >= 2 else {
@@ -291,7 +454,6 @@ public struct AverageIndexKind: IndexKind {
                 actual: types.count
             )
         }
-        // Validate grouping fields (all but last) are Comparable
         let groupingTypes = types.dropLast()
         for type in groupingTypes {
             guard TypeValidation.isComparable(type) else {
@@ -311,8 +473,6 @@ public struct AverageIndexKind: IndexKind {
             )
         }
     }
-
-    public init() {}
 }
 
 // MARK: - VersionIndexKind
@@ -340,7 +500,7 @@ public enum VersionHistoryStrategy: Sendable, Hashable, Codable {
 /// ```swift
 /// @Persistable
 /// struct Document {
-///     #Index<Document>([\.id], type: VersionIndexKind(strategy: .keepLast(10)))
+///     #Index(type: VersionIndexKind<Document>(field: \.id, strategy: .keepLast(10)))
 ///     var id: UUID
 ///     var title: String
 ///     var content: String
@@ -354,17 +514,35 @@ public enum VersionHistoryStrategy: Sendable, Hashable, Codable {
 /// - Point-in-time queries
 /// - Rollback to previous versions
 /// - Automatic cleanup based on retention strategy
-public struct VersionIndexKind: IndexKind {
-    public static let identifier = "version"
-    public static let subspaceStructure = SubspaceStructure.hierarchical
+public struct VersionIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "version" }
+    public static var subspaceStructure: SubspaceStructure { .hierarchical }
+
+    /// Field name for version tracking (typically the primary key)
+    public let fieldNames: [String]
 
     /// Version history retention strategy
     public let strategy: VersionHistoryStrategy
 
-    /// Initialize version index kind
+    /// Default index name: "{TypeName}_version_{field}"
+    public var indexName: String {
+        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        return "\(Root.persistableType)_version_\(flattenedNames.joined(separator: "_"))"
+    }
+
+    /// Initialize with KeyPath
     ///
-    /// - Parameter strategy: Version history retention strategy (default: keepAll)
-    public init(strategy: VersionHistoryStrategy = .keepAll) {
+    /// - Parameters:
+    ///   - field: KeyPath to the field for version tracking (typically id)
+    ///   - strategy: Version history retention strategy (default: keepAll)
+    public init(field: PartialKeyPath<Root>, strategy: VersionHistoryStrategy = .keepAll) {
+        self.fieldNames = [Root.fieldName(for: field)]
+        self.strategy = strategy
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(fieldNames: [String], strategy: VersionHistoryStrategy = .keepAll) {
+        self.fieldNames = fieldNames
         self.strategy = strategy
     }
 

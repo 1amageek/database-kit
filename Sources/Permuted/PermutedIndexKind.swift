@@ -148,20 +148,39 @@ public struct Permutation: Sendable, Equatable, Hashable, Codable, CustomStringC
 /// **Query Examples**:
 /// - Base index (country, city, name): Best for queries starting with country
 /// - Permuted index (city, country, name): Best for queries starting with city
-public struct PermutedIndexKind: IndexKind {
+public struct PermutedIndexKind<Root: Persistable>: IndexKind {
     /// Identifier: "permuted"
-    public static let identifier = "permuted"
+    public static var identifier: String { "permuted" }
 
     /// Subspace structure: flat (simple key-value pairs)
-    public static let subspaceStructure = SubspaceStructure.flat
+    public static var subspaceStructure: SubspaceStructure { .flat }
+
+    /// Field names for this index
+    public let fieldNames: [String]
 
     /// The permutation defining field reordering
     public let permutation: Permutation
 
-    /// Initialize permuted index kind
+    /// Default index name: "{TypeName}_permuted_{fields}_{permutation}"
+    public var indexName: String {
+        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let permStr = permutation.indices.map(String.init).joined(separator: "")
+        return "\(Root.persistableType)_permuted_\(flattenedNames.joined(separator: "_"))_\(permStr)"
+    }
+
+    /// Initialize with KeyPaths and permutation
     ///
-    /// - Parameter permutation: The permutation to apply to field ordering
-    public init(permutation: Permutation) {
+    /// - Parameters:
+    ///   - fields: KeyPaths to fields in original order
+    ///   - permutation: The permutation to apply to field ordering
+    public init(fields: [PartialKeyPath<Root>], permutation: Permutation) {
+        self.fieldNames = fields.map { Root.fieldName(for: $0) }
+        self.permutation = permutation
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(fieldNames: [String], permutation: Permutation) {
+        self.fieldNames = fieldNames
         self.permutation = permutation
     }
 
@@ -190,11 +209,12 @@ public struct PermutedIndexKind: IndexKind {
 extension PermutedIndexKind {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(Self.identifier)
+        hasher.combine(fieldNames)
         hasher.combine(permutation)
     }
 
     public static func == (lhs: PermutedIndexKind, rhs: PermutedIndexKind) -> Bool {
-        return lhs.permutation == rhs.permutation
+        return lhs.fieldNames == rhs.fieldNames && lhs.permutation == rhs.permutation
     }
 }
 

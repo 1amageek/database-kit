@@ -82,79 +82,31 @@ public protocol IndexKind: Sendable, Codable, Hashable {
     /// - `.aggregation`: Store aggregated value directly [groupKey] → value
     ///
     /// **Note**: DirectoryLayer usage decision is delegated to execution layer
+    static var subspaceStructure: SubspaceStructure { get }
+
+    /// Default index name for this kind
+    ///
+    /// Generated from the type name and field names.
+    /// Can be overridden by specifying `name:` parameter in #Index macro.
     ///
     /// **Examples**:
-    /// ```swift
-    /// // Scalar
-    /// static var subspaceStructure: SubspaceStructure { .flat }
+    /// - ScalarIndexKind: "Product_category_price"
+    /// - CountIndexKind: "Order_count_status"
+    /// - VectorIndexKind: "Document_vector_embedding"
+    var indexName: String { get }
+
+    /// Field names used by this index
     ///
-    /// // Vector (HNSW)
-    /// static var subspaceStructure: SubspaceStructure { .hierarchical }
-    ///
-    /// // Count
-    /// static var subspaceStructure: SubspaceStructure { .aggregation }
-    /// ```
-    static var subspaceStructure: SubspaceStructure { get }
+    /// Stored as strings for Codable compatibility.
+    /// Order matters for composite indexes.
+    var fieldNames: [String] { get }
 
     /// Validate whether this index kind supports specified types
     ///
     /// **Parameters**:
-    /// - types: Types of indexed fields (array order corresponds to keyPaths)
+    /// - types: Types of indexed fields (array order corresponds to fieldNames)
     ///
     /// **Throws**: IndexTypeValidationError if type not supported
-    ///
-    /// **Implementation guide**:
-    /// 1. Check field count (if necessary)
-    /// 2. Check each field type (use TypeValidation)
-    /// 3. Throw with detailed reason on error
-    ///
-    /// **Examples**:
-    /// ```swift
-    /// // Scalar: Supports all Comparable types
-    /// static func validateTypes(_ types: [Any.Type]) throws {
-    ///     for type in types {
-    ///         guard TypeValidation.isComparable(type) else {
-    ///             throw IndexTypeValidationError.unsupportedType(
-    ///                 index: identifier,
-    ///                 type: type,
-    ///                 reason: "Scalar index requires Comparable types"
-    ///             )
-    ///         }
-    ///     }
-    /// }
-    ///
-    /// // Vector: Single array type field only
-    /// static func validateTypes(_ types: [Any.Type]) throws {
-    ///     guard types.count == 1 else {
-    ///         throw IndexTypeValidationError.invalidTypeCount(
-    ///             index: identifier,
-    ///             expected: 1,
-    ///             actual: types.count
-    ///         )
-    ///     }
-    ///
-    ///     let type = types[0]
-    ///     let supportedTypes: [Any.Type] = [
-    ///         [Float32].self, [Float].self, [Double].self
-    ///     ]
-    ///
-    ///     var isSupported = false
-    ///     for supportedType in supportedTypes {
-    ///         if type == supportedType {
-    ///             isSupported = true
-    ///             break
-    ///         }
-    ///     }
-    ///
-    ///     guard isSupported else {
-    ///         throw IndexTypeValidationError.unsupportedType(
-    ///             index: identifier,
-    ///             type: type,
-    ///             reason: "Vector index requires array of numeric types"
-    ///         )
-    ///     }
-    /// }
-    /// ```
     static func validateTypes(_ types: [Any.Type]) throws
 }
 

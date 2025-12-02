@@ -53,12 +53,15 @@ import Core
 /// - Small (10): More levels, slower writes, faster counts
 /// - Medium (100): Balanced (default)
 /// - Large (1000): Fewer levels, faster writes, slower counts
-public struct RankIndexKind: IndexKind {
+public struct RankIndexKind<Root: Persistable>: IndexKind {
     /// Identifier: "rank"
-    public static let identifier = "rank"
+    public static var identifier: String { "rank" }
 
     /// Subspace structure: hierarchical (Range Tree)
-    public static let subspaceStructure = SubspaceStructure.hierarchical
+    public static var subspaceStructure: SubspaceStructure { .hierarchical }
+
+    /// Field names for this index
+    public let fieldNames: [String]
 
     /// Bucket size for Range Tree
     /// - Controls granularity of count nodes
@@ -66,10 +69,25 @@ public struct RankIndexKind: IndexKind {
     /// - Typical range: 10-1000
     public let bucketSize: Int
 
-    /// Initialize rank index kind
+    /// Default index name: "{TypeName}_rank_{field}"
+    public var indexName: String {
+        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        return "\(Root.persistableType)_rank_\(flattenedNames.joined(separator: "_"))"
+    }
+
+    /// Initialize with KeyPath
     ///
-    /// - Parameter bucketSize: Bucket size for Range Tree (default: 100)
-    public init(bucketSize: Int = 100) {
+    /// - Parameters:
+    ///   - field: KeyPath to the score field
+    ///   - bucketSize: Bucket size for Range Tree (default: 100)
+    public init(field: PartialKeyPath<Root>, bucketSize: Int = 100) {
+        self.fieldNames = [Root.fieldName(for: field)]
+        self.bucketSize = bucketSize
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(fieldNames: [String], bucketSize: Int = 100) {
+        self.fieldNames = fieldNames
         self.bucketSize = bucketSize
     }
 
@@ -91,11 +109,12 @@ public struct RankIndexKind: IndexKind {
 extension RankIndexKind {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(Self.identifier)
+        hasher.combine(fieldNames)
         hasher.combine(bucketSize)
     }
 
     public static func == (lhs: RankIndexKind, rhs: RankIndexKind) -> Bool {
-        return lhs.bucketSize == rhs.bucketSize
+        return lhs.fieldNames == rhs.fieldNames && lhs.bucketSize == rhs.bucketSize
     }
 }
 
