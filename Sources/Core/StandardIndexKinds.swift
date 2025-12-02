@@ -550,3 +550,382 @@ public struct VersionIndexKind<Root: Persistable>: IndexKind {
         // Version index accepts any types
     }
 }
+
+// MARK: - CountUpdatesIndexKind
+
+/// Index for tracking the number of times each record has been updated
+///
+/// **Usage**:
+/// ```swift
+/// @Persistable
+/// struct Document {
+///     #Index(type: CountUpdatesIndexKind<Document>(field: \.id))
+///     var id: String
+///     var content: String
+/// }
+/// ```
+///
+/// **Key Structure**: `[indexSubspace][primaryKey] = Int64(updateCount)`
+///
+/// **Supports**:
+/// - Get update count for a specific record
+/// - Atomic increment on each update
+/// - Query records by update frequency
+///
+/// **Reference**: FDB Record Layer COUNT_UPDATES index type
+public struct CountUpdatesIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "count_updates" }
+    public static var subspaceStructure: SubspaceStructure { .flat }
+
+    /// Field names (typically the primary key field)
+    public let fieldNames: [String]
+
+    /// Default index name: "{TypeName}_updates_{field}"
+    public var indexName: String {
+        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        return "\(Root.persistableType)_updates_\(flattenedNames.joined(separator: "_"))"
+    }
+
+    /// Initialize with KeyPath
+    ///
+    /// - Parameter field: KeyPath to the field (typically the primary key)
+    public init(field: PartialKeyPath<Root>) {
+        self.fieldNames = [Root.fieldName(for: field)]
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(fieldNames: [String]) {
+        self.fieldNames = fieldNames
+    }
+
+    public static func validateTypes(_ types: [Any.Type]) throws {
+        guard !types.isEmpty else {
+            throw IndexTypeValidationError.invalidTypeCount(
+                index: identifier,
+                expected: 1,
+                actual: 0
+            )
+        }
+    }
+}
+
+// MARK: - CountNotNullIndexKind
+
+/// Aggregation index for counting records where a field is not null
+///
+/// **Usage**:
+/// ```swift
+/// @Persistable
+/// struct User {
+///     #Index(type: CountNotNullIndexKind<User>(groupBy: [\.country], value: \.phoneNumber))
+///     var country: String
+///     var phoneNumber: String?
+/// }
+/// ```
+///
+/// **Key Structure**: `[indexSubspace][groupKey1][groupKey2]... = Int64(nonNullCount)`
+///
+/// **Supports**:
+/// - Count non-null values by group key
+/// - Atomic increment/decrement on insert/update/delete
+/// - Efficient null-value analytics
+///
+/// **Reference**: FDB Record Layer COUNT_NOT_NULL index type
+public struct CountNotNullIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "count_not_null" }
+    public static var subspaceStructure: SubspaceStructure { .aggregation }
+
+    /// Field names for grouping
+    public let groupByFieldNames: [String]
+
+    /// Field name to check for null
+    public let valueFieldName: String
+
+    /// All field names (groupBy + value) for IndexKind protocol
+    public var fieldNames: [String] {
+        groupByFieldNames + [valueFieldName]
+    }
+
+    /// Default index name: "{TypeName}_notnull_{groupFields}_{valueField}"
+    public var indexName: String {
+        let groupNames = groupByFieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let valueName = valueFieldName.replacingOccurrences(of: ".", with: "_")
+        if groupNames.isEmpty {
+            return "\(Root.persistableType)_notnull_\(valueName)"
+        }
+        return "\(Root.persistableType)_notnull_\(groupNames.joined(separator: "_"))_\(valueName)"
+    }
+
+    /// Initialize with KeyPaths
+    ///
+    /// - Parameters:
+    ///   - groupBy: KeyPaths to grouping fields
+    ///   - value: KeyPath to the field to check for null
+    public init(groupBy: [PartialKeyPath<Root>], value: PartialKeyPath<Root>) {
+        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
+        self.valueFieldName = Root.fieldName(for: value)
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(groupByFieldNames: [String], valueFieldName: String) {
+        self.groupByFieldNames = groupByFieldNames
+        self.valueFieldName = valueFieldName
+    }
+
+    public static func validateTypes(_ types: [Any.Type]) throws {
+        guard types.count >= 1 else {
+            throw IndexTypeValidationError.invalidTypeCount(
+                index: identifier,
+                expected: 1,
+                actual: 0
+            )
+        }
+        let groupingTypes = types.dropLast()
+        for type in groupingTypes {
+            guard TypeValidation.isComparable(type) else {
+                throw IndexTypeValidationError.unsupportedType(
+                    index: identifier,
+                    type: type,
+                    reason: "CountNotNull index grouping fields must be Comparable"
+                )
+            }
+        }
+    }
+}
+
+// MARK: - BitmapIndexKind
+
+/// Bitmap index for efficient set operations on low-cardinality fields
+///
+/// **Usage**:
+/// ```swift
+/// @Persistable
+/// struct User {
+///     #Index(type: BitmapIndexKind<User>(field: \.status))
+///     var status: String  // e.g., "active", "inactive", "pending"
+/// }
+/// ```
+///
+/// **Key Structure**: Uses Roaring Bitmap compression
+/// ```
+/// Key: [indexSubspace][fieldValue][containerIndex]
+/// Value: Roaring bitmap container (array, bitmap, or run)
+/// ```
+///
+/// **Supports**:
+/// - Fast AND/OR/NOT operations on sets
+/// - Efficient cardinality counting
+/// - Low-cardinality field optimization
+///
+/// **Algorithm**: Roaring Bitmaps
+/// Reference: Lemire et al., "Roaring Bitmaps: Implementation of an Optimized
+/// Software Library", Software: Practice and Experience, 2016
+///
+/// **Best for**:
+/// - Fields with <1000 distinct values
+/// - Queries with multiple AND/OR conditions
+/// - Aggregation queries
+public struct BitmapIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "bitmap" }
+    public static var subspaceStructure: SubspaceStructure { .hierarchical }
+
+    /// Field names for this index
+    public let fieldNames: [String]
+
+    /// Default index name: "{TypeName}_bitmap_{field}"
+    public var indexName: String {
+        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        return "\(Root.persistableType)_bitmap_\(flattenedNames.joined(separator: "_"))"
+    }
+
+    /// Initialize with KeyPath
+    ///
+    /// - Parameter field: KeyPath to the low-cardinality field
+    public init(field: PartialKeyPath<Root>) {
+        self.fieldNames = [Root.fieldName(for: field)]
+    }
+
+    /// Initialize with multiple KeyPaths for composite bitmap
+    ///
+    /// - Parameter fields: KeyPaths to fields
+    public init(fields: [PartialKeyPath<Root>]) {
+        self.fieldNames = fields.map { Root.fieldName(for: $0) }
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(fieldNames: [String]) {
+        self.fieldNames = fieldNames
+    }
+
+    public static func validateTypes(_ types: [Any.Type]) throws {
+        guard !types.isEmpty else {
+            throw IndexTypeValidationError.invalidTypeCount(
+                index: identifier,
+                expected: 1,
+                actual: 0
+            )
+        }
+        for type in types {
+            guard TypeValidation.isComparable(type) else {
+                throw IndexTypeValidationError.unsupportedType(
+                    index: identifier,
+                    type: type,
+                    reason: "Bitmap index requires Comparable types"
+                )
+            }
+        }
+    }
+}
+
+// MARK: - TimeWindowLeaderboardIndexKind
+
+/// Time-windowed leaderboard index for ranking with automatic window rotation
+///
+/// **Usage**:
+/// ```swift
+/// @Persistable
+/// struct GameScore {
+///     #Index(type: TimeWindowLeaderboardIndexKind<GameScore>(
+///         scoreField: \.score,
+///         window: .daily,
+///         windowCount: 7  // Keep last 7 days
+///     ))
+///     var playerId: String
+///     var score: Int64
+/// }
+/// ```
+///
+/// **Key Structure**:
+/// ```
+/// // Current window scores
+/// Key: [indexSubspace]["window"][windowId][score][primaryKey]
+/// Value: ''
+///
+/// // Window metadata
+/// Key: [indexSubspace]["meta"]["current"]
+/// Value: windowId
+///
+/// // Historical aggregates
+/// Key: [indexSubspace]["history"][windowId]
+/// Value: Tuple(startTime, endTime, topScores...)
+/// ```
+///
+/// **Supports**:
+/// - Top-K queries within current window
+/// - Historical window queries
+/// - Automatic window rotation
+/// - Cross-window aggregation
+///
+/// **Reference**: FDB Record Layer TIME_WINDOW_LEADERBOARD index type
+public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "time_window_leaderboard" }
+    public static var subspaceStructure: SubspaceStructure { .hierarchical }
+
+    /// Field name for the score to rank
+    public let scoreFieldName: String
+
+    /// Window type
+    public let window: LeaderboardWindowType
+
+    /// Number of windows to keep (history depth)
+    public let windowCount: Int
+
+    /// Optional grouping fields (e.g., by region, by game mode)
+    public let groupByFieldNames: [String]
+
+    /// All field names for IndexKind protocol
+    public var fieldNames: [String] {
+        groupByFieldNames + [scoreFieldName]
+    }
+
+    /// Default index name
+    public var indexName: String {
+        let scoreName = scoreFieldName.replacingOccurrences(of: ".", with: "_")
+        if groupByFieldNames.isEmpty {
+            return "\(Root.persistableType)_leaderboard_\(scoreName)"
+        }
+        let groupNames = groupByFieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        return "\(Root.persistableType)_leaderboard_\(groupNames.joined(separator: "_"))_\(scoreName)"
+    }
+
+    /// Initialize with KeyPaths
+    ///
+    /// - Parameters:
+    ///   - scoreField: KeyPath to the score field
+    ///   - groupBy: Optional grouping fields (default: empty)
+    ///   - window: Window type (default: daily)
+    ///   - windowCount: Number of windows to keep (default: 7)
+    public init(
+        scoreField: PartialKeyPath<Root>,
+        groupBy: [PartialKeyPath<Root>] = [],
+        window: LeaderboardWindowType = .daily,
+        windowCount: Int = 7
+    ) {
+        self.scoreFieldName = Root.fieldName(for: scoreField)
+        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
+        self.window = window
+        self.windowCount = windowCount
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(
+        scoreFieldName: String,
+        groupByFieldNames: [String] = [],
+        window: LeaderboardWindowType = .daily,
+        windowCount: Int = 7
+    ) {
+        self.scoreFieldName = scoreFieldName
+        self.groupByFieldNames = groupByFieldNames
+        self.window = window
+        self.windowCount = windowCount
+    }
+
+    public static func validateTypes(_ types: [Any.Type]) throws {
+        guard !types.isEmpty else {
+            throw IndexTypeValidationError.invalidTypeCount(
+                index: identifier,
+                expected: 1,
+                actual: 0
+            )
+        }
+        // Score field must be comparable
+        guard let scoreType = types.last else { return }
+        guard TypeValidation.isComparable(scoreType) else {
+            throw IndexTypeValidationError.unsupportedType(
+                index: identifier,
+                type: scoreType,
+                reason: "Leaderboard score field must be Comparable"
+            )
+        }
+    }
+}
+
+/// Leaderboard window type
+public enum LeaderboardWindowType: Sendable, Hashable, Codable {
+    /// Hourly windows
+    case hourly
+    /// Daily windows (default)
+    case daily
+    /// Weekly windows
+    case weekly
+    /// Monthly windows
+    case monthly
+    /// Custom duration in seconds
+    case custom(duration: TimeInterval)
+
+    /// Duration in seconds
+    public var durationSeconds: TimeInterval {
+        switch self {
+        case .hourly:
+            return 3600
+        case .daily:
+            return 86400
+        case .weekly:
+            return 604800
+        case .monthly:
+            return 2592000  // 30 days
+        case .custom(let duration):
+            return duration
+        }
+    }
+}
