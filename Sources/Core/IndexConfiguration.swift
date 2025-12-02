@@ -75,6 +75,23 @@ public protocol IndexConfiguration: Sendable {
     /// Format: `{modelTypeName}_{fieldName}`
     /// Default implementation extracts fieldName from keyPath.
     var indexName: String { get }
+
+    /// Optional subspace key for data isolation
+    ///
+    /// When multiple configurations exist for the same index (e.g., multi-language full-text),
+    /// this key creates separate subspaces for each configuration's data.
+    ///
+    /// **Subspace Structure**:
+    /// - Without subspaceKey: `[indexSubspace]/[indexName]/...`
+    /// - With subspaceKey: `[indexSubspace]/[indexName]/[subspaceKey]/...`
+    ///
+    /// **Use Cases**:
+    /// - Multi-language full-text: `subspaceKey: "ja"`, `subspaceKey: "en"`
+    /// - Multiple algorithms: `subspaceKey: "hnsw"`, `subspaceKey: "flat"`
+    /// - Tenant isolation: `subspaceKey: tenantId`
+    ///
+    /// Default implementation returns `nil` (no subspace separation).
+    var subspaceKey: String? { get }
 }
 
 // MARK: - Default Implementation
@@ -96,6 +113,9 @@ extension IndexConfiguration {
         }
         return "\(modelTypeName)_\(fieldName)"
     }
+
+    /// Default subspace key (nil = no subspace separation)
+    public var subspaceKey: String? { nil }
 }
 
 // MARK: - Configuration Errors
