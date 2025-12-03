@@ -18,7 +18,7 @@ import Foundation
 /// **Note**: This decoder uses CodingKeys with intValue for field numbers.
 /// If CodingKeys have intValue defined, those are used as field numbers.
 /// Otherwise, field numbers are assigned sequentially starting from 1.
-public final class ProtobufDecoder {
+public final class ProtobufDecoder: Sendable {
     public init() {}
 
     /// Decode Protobuf wire format data to a Decodable type

@@ -18,7 +18,7 @@ import Foundation
 /// **Note**: This encoder uses CodingKeys with intValue for field numbers.
 /// If CodingKeys have intValue defined, those are used as field numbers.
 /// Otherwise, field numbers are assigned sequentially starting from 1.
-public final class ProtobufEncoder {
+public final class ProtobufEncoder: Sendable {
     public init() {}
 
     /// Encode a Codable value to Protobuf wire format
