@@ -1,4 +1,4 @@
-import struct Foundation.Data
+import Foundation
 
 #if canImport(ObjectiveC)
 import class Foundation.NSNull
@@ -38,6 +38,7 @@ public enum FieldValue: Sendable, Hashable, Codable {
     case bool(Bool)
     case data(Data)
     case null
+    case array([FieldValue])
 
     // MARK: - Convenience Initializers
 
@@ -137,6 +138,12 @@ public enum FieldValue: Sendable, Hashable, Codable {
         return nil
     }
 
+    /// Get the value as array, or nil if not an array
+    public var arrayValue: [FieldValue]? {
+        if case .array(let v) = self { return v }
+        return nil
+    }
+
     /// Get the numeric value as Double (works for both int64 and double)
     public var asDouble: Double? {
         switch self {
@@ -196,6 +203,7 @@ extension FieldValue: Comparable {
         case .double: return 3
         case .string: return 4
         case .data: return 5
+        case .array: return 6
         }
     }
 }
@@ -217,6 +225,8 @@ extension FieldValue: CustomStringConvertible {
             return "data(\(v.count) bytes)"
         case .null:
             return "null"
+        case .array(let v):
+            return "array(\(v))"
         }
     }
 }
@@ -258,6 +268,13 @@ extension FieldValue {
 
         case .null:
             hasher.combine(Int64(5))  // Type discriminator
+
+        case .array(let values):
+            hasher.combine(Int64(6))  // Type discriminator
+            hasher.combine(Int64(values.count))
+            for element in values {
+                hasher.combine(element.stableHash())
+            }
         }
 
         return hasher.finalize()
@@ -308,5 +325,215 @@ private struct StableHasher {
 
     func finalize() -> UInt64 {
         return state
+    }
+}
+
+// MARK: - Comparison Helpers
+
+extension FieldValue {
+    /// Check if this value equals another (convenience for predicate evaluation)
+    public func isEqual(to other: FieldValue) -> Bool {
+        self == other
+    }
+
+    /// Check if this value is less than another (convenience for predicate evaluation)
+    public func isLessThan(_ other: FieldValue) -> Bool {
+        self < other
+    }
+
+    /// Check if array contains a value (for IN predicates)
+    public func contains(_ value: FieldValue) -> Bool {
+        guard case .array(let values) = self else { return false }
+        return values.contains(value)
+    }
+
+    /// Calculate numeric difference (self - other) if both are numeric
+    ///
+    /// Used for histogram bucket width calculation.
+    public func numericDifference(from other: FieldValue) -> Double? {
+        switch (self, other) {
+        case (.int64(let a), .int64(let b)):
+            return Double(a - b)
+        case (.double(let a), .double(let b)):
+            return a - b
+        case (.int64(let a), .double(let b)):
+            return Double(a) - b
+        case (.double(let a), .int64(let b)):
+            return a - Double(b)
+        default:
+            return nil
+        }
+    }
+
+    /// Compare two FieldValues for ordering
+    ///
+    /// Returns nil if the values are not comparable (different types except numeric)
+    public func compare(to other: FieldValue) -> ComparisonResult? {
+        switch (self, other) {
+        case (.null, .null):
+            return .orderedSame
+        case (.null, _):
+            return .orderedAscending  // NULL sorts first
+        case (_, .null):
+            return .orderedDescending
+
+        case (.bool(let a), .bool(let b)):
+            if a == b { return .orderedSame }
+            return a ? .orderedDescending : .orderedAscending
+
+        case (.int64(let a), .int64(let b)):
+            if a < b { return .orderedAscending }
+            if a > b { return .orderedDescending }
+            return .orderedSame
+
+        case (.double(let a), .double(let b)):
+            if a < b { return .orderedAscending }
+            if a > b { return .orderedDescending }
+            return .orderedSame
+
+        case (.int64(let a), .double(let b)):
+            let da = Double(a)
+            if da < b { return .orderedAscending }
+            if da > b { return .orderedDescending }
+            return .orderedSame
+
+        case (.double(let a), .int64(let b)):
+            let db = Double(b)
+            if a < db { return .orderedAscending }
+            if a > db { return .orderedDescending }
+            return .orderedSame
+
+        case (.string(let a), .string(let b)):
+            return a.compare(b)
+
+        case (.data(let a), .data(let b)):
+            for (i, byte) in a.enumerated() {
+                if i >= b.count { return .orderedDescending }
+                if byte < b[i] { return .orderedAscending }
+                if byte > b[i] { return .orderedDescending }
+            }
+            if a.count < b.count { return .orderedAscending }
+            return .orderedSame
+
+        default:
+            return nil  // Incompatible types
+        }
+    }
+}
+
+// MARK: - FieldValueConvertible
+
+/// Protocol for types that can be converted to FieldValue
+///
+/// Enables the predicate DSL to accept Swift native types and automatically
+/// convert them to FieldValue at compile time.
+public protocol FieldValueConvertible: Sendable {
+    /// Convert this value to FieldValue
+    func toFieldValue() -> FieldValue
+}
+
+// MARK: - Standard Type Conformances
+
+extension Bool: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .bool(self) }
+}
+
+extension Int: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+}
+
+extension Int8: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+}
+
+extension Int16: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+}
+
+extension Int32: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+}
+
+extension Int64: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .int64(self) }
+}
+
+extension UInt: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+}
+
+extension UInt8: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+}
+
+extension UInt16: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+}
+
+extension UInt32: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+}
+
+extension UInt64: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .int64(Int64(bitPattern: self)) }
+}
+
+extension Float: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .double(Double(self)) }
+}
+
+extension Double: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .double(self) }
+}
+
+extension String: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .string(self) }
+}
+
+extension Data: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .data(self) }
+}
+
+extension Array: FieldValueConvertible where Element: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue {
+        .array(self.map { $0.toFieldValue() })
+    }
+}
+
+// MARK: - Literal Expressibility
+
+extension FieldValue: ExpressibleByBooleanLiteral {
+    public init(booleanLiteral value: Bool) {
+        self = .bool(value)
+    }
+}
+
+extension FieldValue: ExpressibleByIntegerLiteral {
+    public init(integerLiteral value: Int64) {
+        self = .int64(value)
+    }
+}
+
+extension FieldValue: ExpressibleByFloatLiteral {
+    public init(floatLiteral value: Double) {
+        self = .double(value)
+    }
+}
+
+extension FieldValue: ExpressibleByStringLiteral {
+    public init(stringLiteral value: String) {
+        self = .string(value)
+    }
+}
+
+extension FieldValue: ExpressibleByArrayLiteral {
+    public init(arrayLiteral elements: FieldValue...) {
+        self = .array(elements)
+    }
+}
+
+extension FieldValue: ExpressibleByNilLiteral {
+    public init(nilLiteral: ()) {
+        self = .null
     }
 }
