@@ -222,6 +222,9 @@ public extension Persistable {
     ///
     /// If `#Directory` macro is not used, defaults to `[Path(persistableType)]`.
     /// For example, `User` type → directory path `["User"]`.
+    ///
+    /// **Note**: @Persistable macro always generates explicit implementations,
+    /// which override this default for macro-decorated types.
     static var directoryPathComponents: [any DirectoryPathElement] {
         [Path(persistableType)]
     }
@@ -229,6 +232,9 @@ public extension Persistable {
     /// Default implementation returns `.default` layer
     ///
     /// If `#Directory` macro is not used, defaults to `.default` layer.
+    ///
+    /// **Note**: @Persistable macro always generates explicit implementations,
+    /// which override this default for macro-decorated types.
     static var directoryLayer: DirectoryLayer { .default }
 
     /// Default implementation returns nil (no field numbers)

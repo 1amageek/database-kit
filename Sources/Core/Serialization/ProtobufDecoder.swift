@@ -26,6 +26,19 @@ public final class ProtobufDecoder: Sendable {
         let decoder = _ProtobufDecoder(data: data)
         return try T(from: decoder)
     }
+
+    /// Decode Protobuf wire format data using a type-erased type at runtime
+    ///
+    /// Used for polymorphic deserialization where the concrete type is known at runtime.
+    ///
+    /// - Parameters:
+    ///   - type: The concrete Decodable type to decode as
+    ///   - data: The Protobuf data to decode
+    /// - Returns: Decoded instance (type-erased)
+    public func decodeAny(_ type: any Decodable.Type, from data: Data) throws -> any Decodable {
+        let decoder = _ProtobufDecoder(data: data)
+        return try type.init(from: decoder)
+    }
 }
 
 // MARK: - Internal Decoder Implementation

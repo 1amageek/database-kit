@@ -72,7 +72,13 @@ public final class Schema: Sendable {
 
     /// Entity metadata (type-independent)
     ///
-    /// Corresponds to a Persistable type's metadata.
+    /// Represents the schema definition for a Persistable type.
+    /// Contains only data type metadata - storage information (directories, polymorphic settings)
+    /// should be accessed directly from the type at runtime.
+    ///
+    /// **Design principle**: Entity is a schema definition, not a storage descriptor.
+    /// - Data type info: name, fields, indexes, enum metadata
+    /// - Storage info: accessed via `persistableType` at runtime
     public struct Entity: Sendable {
         /// Entity name (same as Persistable.persistableType)
         public let name: String
@@ -88,8 +94,10 @@ public final class Schema: Sendable {
 
         /// The Persistable type (stored for runtime type recovery)
         ///
-        /// This is used by FDBRuntime to create typed IndexMaintainers during migrations.
-        /// Since FDBCore is platform-independent, this stores only the metatype reference.
+        /// This is used by FDBRuntime to:
+        /// - Create typed IndexMaintainers during migrations
+        /// - Access directory path components at runtime
+        /// - Check Polymorphable conformance and access polymorphic properties
         public let persistableType: any Persistable.Type
 
         /// Initialize from Persistable type
@@ -137,6 +145,8 @@ public final class Schema: Sendable {
         static let persistableType = "_Placeholder"
         static let allFields: [String] = []
         static let indexDescriptors: [IndexDescriptor] = []
+        static let directoryPathComponents: [any DirectoryPathElement] = [Path("_placeholder")]
+        static let directoryLayer: DirectoryLayer = .default
 
         static func fieldNumber(for fieldName: String) -> Int? { nil }
         static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
@@ -331,6 +341,7 @@ public final class Schema: Sendable {
         }
         return entity.indexDescriptors
     }
+
 }
 
 // MARK: - CustomDebugStringConvertible

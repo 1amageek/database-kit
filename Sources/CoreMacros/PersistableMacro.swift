@@ -333,19 +333,27 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(indexDescriptorsDecl)
 
-        // Generate directoryPathComponents property (only if #Directory was specified)
+        // Generate directoryPathComponents property
+        // Always generate (no default in Persistable extension to avoid conflicts with Polymorphable)
         if !directoryPathComponents.isEmpty {
             let componentsArray = "[\(directoryPathComponents.joined(separator: ", "))]"
             let directoryPathDecl: DeclSyntax = """
                 public static var directoryPathComponents: [any DirectoryPathElement] { \(raw: componentsArray) }
                 """
             decls.append(directoryPathDecl)
-
-            let directoryLayerDecl: DeclSyntax = """
-                public static var directoryLayer: Core.DirectoryLayer { \(raw: directoryLayerValue) }
+        } else {
+            // Default: use persistableType as path
+            let directoryPathDecl: DeclSyntax = """
+                public static var directoryPathComponents: [any DirectoryPathElement] { [Path(persistableType)] }
                 """
-            decls.append(directoryLayerDecl)
+            decls.append(directoryPathDecl)
         }
+
+        // Generate directoryLayer property
+        let directoryLayerDecl: DeclSyntax = """
+            public static var directoryLayer: Core.DirectoryLayer { \(raw: directoryLayerValue) }
+            """
+        decls.append(directoryLayerDecl)
 
         // Generate fieldNumber method (excludes transient fields)
         var fieldNumberCases: [String] = []
@@ -733,6 +741,7 @@ private func generateIndexName(typeName: String, indexKindName: String, fieldNam
 struct FDBModelMacrosPlugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
         PersistableMacro.self,
+        PolymorphableMacro.self,
         IndexMacro.self,
         DirectoryMacro.self,
         TransientMacro.self,
