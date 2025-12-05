@@ -34,7 +34,7 @@
 /// // - [\User.address.city]
 /// // - [\User.period.lowerBound]
 /// ```
-public struct IndexDescriptor: @unchecked Sendable {
+public struct IndexDescriptor: Descriptor, @unchecked Sendable {
     /// Index name (unique identifier)
     ///
     /// **Naming convention**: "{RecordType}_{field1}_{field2}_..."
@@ -169,6 +169,20 @@ extension IndexDescriptor {
     /// ```
     public var kindIdentifier: String {
         type(of: kind).identifier
+    }
+}
+
+// MARK: - Description
+
+// MARK: - Hashable
+
+extension IndexDescriptor: Hashable {
+    public static func == (lhs: IndexDescriptor, rhs: IndexDescriptor) -> Bool {
+        lhs.name == rhs.name
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
     }
 }
 

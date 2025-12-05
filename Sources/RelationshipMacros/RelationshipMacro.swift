@@ -1,3 +1,4 @@
+import Foundation
 import SwiftCompilerPlugin
 import SwiftSyntax
 import SwiftSyntaxBuilder
@@ -9,12 +10,10 @@ import SwiftDiagnostics
 /// This is a peer macro that marks a FK field as a relationship.
 /// The actual relationship processing is done in `PersistableMacro`
 /// which detects `@Relationship` attributes and generates:
-/// - RelationshipDescriptor entries
-/// - Snapshot extension properties
+/// - RelationshipDescriptor entries in `descriptors`
 /// - Appropriate index descriptors
 ///
-/// The peer macro itself doesn't generate any code - it serves as
-/// a marker that `PersistableMacro` can detect and process.
+/// The peer macro itself validates the FK field and doesn't generate code.
 ///
 /// **Usage**:
 /// ```swift
@@ -163,11 +162,7 @@ public struct RelationshipMacro: PeerMacro {
         }
 
         // The peer macro doesn't generate any declarations.
-        // All relationship handling is done in PersistableMacro which:
-        // 1. Detects @Relationship attributes
-        // 2. Generates RelationshipDescriptor entries
-        // 3. Generates Snapshot extension properties
-        // 4. Generates relationship index descriptors
+        // All relationship handling is done in PersistableMacro.
         return []
     }
 }
@@ -176,7 +171,6 @@ public struct RelationshipMacro: PeerMacro {
 
 /// Suggest a FK field name for a given property name
 private func suggestFKName(for name: String) -> String {
-    // If it looks like a type name, suggest adding "ID"
     if name.first?.isUppercase == true {
         return name.lowercased() + "ID"
     }
@@ -234,12 +228,9 @@ public func extractRelationshipInfo(from attribute: AttributeSyntax) -> (related
 /// - `"orderIDs"` → `"orders"`
 public func deriveRelationshipPropertyName(from fkFieldName: String, isToMany: Bool) -> String {
     if isToMany {
-        // "orderIDs" → "orders"
-        // Remove "IDs" suffix and add "s"
         let base = fkFieldName.replacingOccurrences(of: "IDs", with: "")
         return base + "s"
     } else {
-        // "customerID" → "customer"
         return fkFieldName.replacingOccurrences(of: "ID", with: "")
     }
 }
@@ -266,4 +257,25 @@ public func getRelationshipAttribute(_ varDecl: VariableDeclSyntax) -> Attribute
         }
     }
     return nil
+}
+
+/// Error message helper
+struct MacroExpansionErrorMessage: DiagnosticMessage {
+    let message: String
+    let diagnosticID: MessageID
+    let severity: DiagnosticSeverity
+
+    init(_ message: String) {
+        self.message = message
+        self.diagnosticID = MessageID(domain: "RelationshipMacros", id: message)
+        self.severity = .error
+    }
+}
+
+/// Compiler plugin entry point
+@main
+struct RelationshipMacrosPlugin: CompilerPlugin {
+    let providingMacros: [Macro.Type] = [
+        RelationshipMacro.self,
+    ]
 }

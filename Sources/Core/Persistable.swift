@@ -89,31 +89,28 @@ public protocol Persistable: Sendable, Codable {
     /// **Example**: `["id", "email", "name", "createdAt"]`
     static var allFields: [String] { get }
 
-    /// Index descriptors for this persistable type
+    /// All descriptors for this persistable type
     ///
-    /// Generated from `#Index<T>` macro declarations.
+    /// Contains all metadata descriptors including:
+    /// - `IndexDescriptor`: Generated from `#Index<T>` macro
+    /// - `RelationshipDescriptor`: Generated from `@Relationship` macro (Relationship module)
+    /// - Future: `EncryptionDescriptor`, `TTLDescriptor`, etc.
     ///
-    /// **Example**:
-    /// ```swift
-    /// #Index<User>([\.email], type: ScalarIndexKind(), unique: true)
-    /// ```
-    static var indexDescriptors: [IndexDescriptor] { get }
-
-    /// Relationship descriptors for this persistable type
-    ///
-    /// Generated from `@Relationship` attribute declarations within
-    /// `@Persistable` structs. Contains metadata for relationship
-    /// maintenance, foreign key management, and delete rule enforcement.
+    /// **Type-safe access**:
+    /// Each module provides extension methods for type-safe access:
+    /// - `indexDescriptors` (Core)
+    /// - `relationshipDescriptors` (Relationship module)
     ///
     /// **Example**:
     /// ```swift
-    /// @Persistable
-    /// struct Order {
-    ///     @Relationship(inverse: \Customer.orders)
-    ///     var customer: Customer?
-    /// }
+    /// // Access all descriptors
+    /// let allDescriptors = User.descriptors
+    ///
+    /// // Type-safe access via extensions
+    /// let indexes = User.indexDescriptors
+    /// let relationships = User.relationshipDescriptors  // requires Relationship module
     /// ```
-    static var relationshipDescriptors: [RelationshipDescriptor] { get }
+    static var descriptors: [any Descriptor] { get }
 
     // MARK: - Directory Metadata
 
@@ -231,11 +228,15 @@ public protocol Persistable: Sendable, Codable {
 // MARK: - Default Implementations
 
 public extension Persistable {
-    /// Default implementation returns empty array (no indexes)
-    static var indexDescriptors: [IndexDescriptor] { [] }
+    /// Default implementation returns empty array (no descriptors)
+    static var descriptors: [any Descriptor] { [] }
 
-    /// Default implementation returns empty array (no relationships)
-    static var relationshipDescriptors: [RelationshipDescriptor] { [] }
+    /// Type-safe access to index descriptors
+    ///
+    /// Filters `descriptors` to return only `IndexDescriptor` instances.
+    static var indexDescriptors: [IndexDescriptor] {
+        descriptors.compactMap { $0 as? IndexDescriptor }
+    }
 
     /// Default implementation uses persistableType as single path component
     ///

@@ -13,6 +13,7 @@ let package = Package(
     ],
     products: [
         .library(name: "Core", targets: ["Core"]),
+        .library(name: "Relationship", targets: ["Relationship"]),
         .library(name: "Vector", targets: ["Vector"]),
         .library(name: "FullText", targets: ["FullText"]),
         .library(name: "Spatial", targets: ["Spatial"]),
@@ -27,8 +28,17 @@ let package = Package(
     ],
     targets: [
         .target(name: "Core", dependencies: ["CoreMacros"]),
+        .target(name: "Relationship", dependencies: ["Core", "RelationshipMacros"]),
         .macro(
             name: "CoreMacros",
+            dependencies: [
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+            ]
+        ),
+        .macro(
+            name: "RelationshipMacros",
             dependencies: [
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),

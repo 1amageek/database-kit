@@ -185,9 +185,9 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             ])
         }
 
-        // Extract #Index macro calls and generate IndexDescriptors
+        // Extract #Index macro calls and generate descriptors
         // Also collect all keyPath strings for fieldName(for:) generation
-        var indexDescriptors: [String] = []
+        var descriptorInits: [String] = []  // All descriptors (Index, Relationship, etc.)
         var allIndexKeyPaths: Set<String> = []  // Collect all keyPaths for fieldName generation
 
         for member in structDecl.memberBlock.members {
@@ -283,7 +283,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     )
                 """
 
-                indexDescriptors.append(descriptorInit)
+                descriptorInits.append(descriptorInit)
             }
         }
 
@@ -362,7 +362,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(allFieldsDecl)
 
-        // Generate relationship indexes for @Relationship FK fields
+        // Generate relationship indexes and RelationshipDescriptors for @Relationship FK fields
         // FK field name IS the property name (customerID, orderIDs)
         // Index name uses the derived relationship property name (customer, orders)
         // Key structure: [indexSubspace]/[relatedId]/[ownerId]
@@ -382,46 +382,35 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     commonOptions: .init()
                 )
             """
-            indexDescriptors.append(relationshipIndexInit)
-        }
+            descriptorInits.append(relationshipIndexInit)
 
-        // Generate indexDescriptors property
-        let indexDescriptorsArray = indexDescriptors.isEmpty
-            ? "[]"
-            : "[\n            \(indexDescriptors.joined(separator: ",\n            "))\n        ]"
-        let indexDescriptorsDecl: DeclSyntax = """
-            public static var indexDescriptors: [IndexDescriptor] { \(raw: indexDescriptorsArray) }
+            // Generate RelationshipDescriptor
+            // Uses Relationship module types (RelationshipDescriptor, DeleteRule)
+            // Note: We use unqualified names because user must `import Relationship` to use @Relationship macro
+            // Using "Relationship.DeleteRule" causes conflict with the @Relationship macro name
+            // rel.deleteRule is in format ".nullify" so we need "DeleteRule" prefix
+            let deleteRuleValue = rel.deleteRule.hasPrefix(".") ? String(rel.deleteRule.dropFirst()) : rel.deleteRule
+            let relationshipDescriptorInit = """
+                RelationshipDescriptor(
+                    name: "\(relationshipIndexName)",
+                    propertyName: "\(rel.propertyName)",
+                    relatedTypeName: "\(rel.relatedTypeName)",
+                    deleteRule: DeleteRule.\(deleteRuleValue),
+                    isToMany: \(rel.isToMany),
+                    relationshipPropertyName: "\(rel.relationshipPropertyName)"
+                )
             """
-        decls.append(indexDescriptorsDecl)
-
-        // Generate relationshipDescriptors property
-        // New simplified format: no inverse fields, FK field name = propertyName
-        if !relationships.isEmpty {
-            var relationshipInits: [String] = []
-            for rel in relationships {
-                let descriptorInit = """
-                    RelationshipDescriptor(
-                                propertyName: "\(rel.propertyName)",
-                                relatedTypeName: "\(rel.relatedTypeName)",
-                                deleteRule: \(rel.deleteRule),
-                                isToMany: \(rel.isToMany),
-                                relationshipPropertyName: "\(rel.relationshipPropertyName)"
-                            )
-                    """
-                relationshipInits.append(descriptorInit)
-            }
-
-            let relationshipDescriptorsArray = "[\n            \(relationshipInits.joined(separator: ",\n            "))\n        ]"
-            let relationshipDescriptorsDecl: DeclSyntax = """
-                public static var relationshipDescriptors: [RelationshipDescriptor] { \(raw: relationshipDescriptorsArray) }
-                """
-            decls.append(relationshipDescriptorsDecl)
-        } else {
-            let relationshipDescriptorsDecl: DeclSyntax = """
-                public static var relationshipDescriptors: [RelationshipDescriptor] { [] }
-                """
-            decls.append(relationshipDescriptorsDecl)
+            descriptorInits.append(relationshipDescriptorInit)
         }
+
+        // Generate descriptors property (unified array for all descriptor types)
+        let descriptorsArray = descriptorInits.isEmpty
+            ? "[]"
+            : "[\n            \(descriptorInits.joined(separator: ",\n            "))\n        ]"
+        let descriptorsDecl: DeclSyntax = """
+            public static var descriptors: [any Descriptor] { \(raw: descriptorsArray) }
+            """
+        decls.append(descriptorsDecl)
 
         // Note: FK fields are no longer auto-generated
         // User explicitly declares: var customerID: String? with @Relationship(Customer.self)
@@ -882,7 +871,6 @@ struct FDBModelMacrosPlugin: CompilerPlugin {
         IndexMacro.self,
         DirectoryMacro.self,
         TransientMacro.self,
-        RelationshipMacro.self,
         ReferenceMacro.self,
     ]
 }
