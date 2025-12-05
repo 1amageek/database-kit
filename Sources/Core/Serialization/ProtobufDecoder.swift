@@ -74,30 +74,44 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
     var codingPath: [CodingKey] { decoder.codingPath }
     var allKeys: [Key] = []
 
-    // Parse all fields into a dictionary: fieldNumber -> (wireType, data)
-    private var fields: [Int: (wireType: Int, data: Data)] = [:]
+    // Parse all fields into a dictionary: fieldNumber -> array of (wireType, data)
+    // Using array to support repeated fields (Protobuf allows same field number multiple times)
+    private var fields: [Int: [(wireType: Int, data: Data)]] = [:]
 
-    // Mutable state for field number tracking
+    // Mutable state for field number tracking (caches derived field numbers)
     private class FieldNumberTracker {
-        var nextFieldNumber: Int = 1
         var fieldNumbers: [String: Int] = [:]
     }
     private let tracker = FieldNumberTracker()
 
     init(decoder: _ProtobufDecoder) {
         self.decoder = decoder
-        self.fields = Self.parseFields(from: decoder.data, offset: &decoder.offset)
+        var parsedFields: [Int: [(wireType: Int, data: Data)]] = [:]
+        var parsedAllKeys: [Key] = []
+        Self.parseFields(from: decoder.data, offset: &decoder.offset, fields: &parsedFields, allKeys: &parsedAllKeys)
+        self.fields = parsedFields
+        self.allKeys = parsedAllKeys
     }
 
     /// Parse Protobuf wire format into field map
-    private static func parseFields(from data: Data, offset: inout Int) -> [Int: (wireType: Int, data: Data)] {
-        var fields: [Int: (wireType: Int, data: Data)] = [:]
+    /// Accumulates repeated fields into arrays instead of overwriting
+    private static func parseFields(from data: Data, offset: inout Int, fields: inout [Int: [(wireType: Int, data: Data)]], allKeys: inout [Key]) {
+        var seenFieldNumbers: Set<Int> = []
 
         while offset < data.count {
             guard let tag = try? decodeVarint(from: data, offset: &offset) else { break }
 
             let fieldNumber = Int(tag >> 3)
             let wireType = Int(tag & 0x7)
+
+            // Track unique field numbers for allKeys
+            if !seenFieldNumbers.contains(fieldNumber) {
+                seenFieldNumbers.insert(fieldNumber)
+                // Try to create a Key from the field number
+                if let key = Key(intValue: fieldNumber) {
+                    allKeys.append(key)
+                }
+            }
 
             switch wireType {
             case 0:  // Varint
@@ -109,25 +123,25 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
                     n >>= 7
                 }
                 valueData.append(UInt8(n))
-                fields[fieldNumber] = (wireType, valueData)
+                fields[fieldNumber, default: []].append((wireType, valueData))
 
             case 1:  // 64-bit
                 let endOffset = offset + 8
                 guard endOffset <= data.count else { break }
-                fields[fieldNumber] = (wireType, Data(data[offset..<endOffset]))
+                fields[fieldNumber, default: []].append((wireType, Data(data[offset..<endOffset])))
                 offset = endOffset
 
             case 2:  // Length-delimited
                 guard let length = try? decodeVarint(from: data, offset: &offset) else { break }
                 let endOffset = offset + Int(length)
                 guard endOffset <= data.count else { break }
-                fields[fieldNumber] = (wireType, Data(data[offset..<endOffset]))
+                fields[fieldNumber, default: []].append((wireType, Data(data[offset..<endOffset])))
                 offset = endOffset
 
             case 5:  // 32-bit
                 let endOffset = offset + 4
                 guard endOffset <= data.count else { break }
-                fields[fieldNumber] = (wireType, Data(data[offset..<endOffset]))
+                fields[fieldNumber, default: []].append((wireType, Data(data[offset..<endOffset])))
                 offset = endOffset
 
             default:
@@ -135,13 +149,29 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
                 break
             }
         }
+    }
 
-        return fields
+    /// Convenience method for parsing nested messages where we only need the last value per field
+    /// Used for Range decoding and similar internal structures
+    private static func parseFields(from data: Data, offset: inout Int) -> [Int: (wireType: Int, data: Data)] {
+        var arrayFields: [Int: [(wireType: Int, data: Data)]] = [:]
+        var dummyKeys: [Key] = []
+        parseFields(from: data, offset: &offset, fields: &arrayFields, allKeys: &dummyKeys)
+
+        // Convert to single-value dictionary (using last value for each field)
+        var result: [Int: (wireType: Int, data: Data)] = [:]
+        for (fieldNumber, values) in arrayFields {
+            if let lastValue = values.last {
+                result[fieldNumber] = lastValue
+            }
+        }
+        return result
     }
 
     func contains(_ key: Key) -> Bool {
         let fieldNumber = getFieldNumber(for: key)
-        return fields[fieldNumber] != nil
+        guard let values = fields[fieldNumber] else { return false }
+        return !values.isEmpty
     }
 
     func decodeNil(forKey key: Key) throws -> Bool {
@@ -1330,24 +1360,47 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
             return existing
         }
 
-        // Use explicit intValue from CodingKey if available
-        // Otherwise assign sequentially
+        // Use explicit intValue from CodingKey if available (recommended)
+        // Otherwise derive deterministically from field name to ensure
+        // encoder/decoder compatibility regardless of call order
         let fieldNumber: Int
         if let explicitNumber = key.intValue {
             fieldNumber = explicitNumber
         } else {
-            fieldNumber = tracker.nextFieldNumber
-            tracker.nextFieldNumber += 1
+            // Derive field number from string value using a stable hash
+            // This ensures the same field always gets the same number,
+            // regardless of encode/decode call order
+            fieldNumber = Self.deriveFieldNumber(from: fieldName)
         }
 
         tracker.fieldNumbers[fieldName] = fieldNumber
         return fieldNumber
     }
 
+    /// Derives a deterministic field number from a field name.
+    /// Uses DJB2 hash algorithm for stability across runs.
+    /// Returns values in range [1, 536870911] (max valid Protobuf field number is 2^29-1)
+    private static func deriveFieldNumber(from fieldName: String) -> Int {
+        var hash: UInt64 = 5381
+        for char in fieldName.utf8 {
+            hash = ((hash << 5) &+ hash) &+ UInt64(char)  // hash * 33 + char
+        }
+        // Protobuf field numbers must be positive and <= 536870911 (2^29-1)
+        // Reserved range 19000-19999 should be avoided
+        let maxFieldNumber: UInt64 = 536870911
+        let rawNumber = Int((hash % (maxFieldNumber - 20000)) + 1)
+        // Skip reserved range 19000-19999
+        if rawNumber >= 19000 && rawNumber <= 19999 {
+            return rawNumber + 1000
+        }
+        return rawNumber
+    }
+
+    /// Get the last value for a field (standard Protobuf behavior for scalar fields)
     private func getField(for key: Key) throws -> (wireType: Int, data: Data) {
         let fieldNumber = getFieldNumber(for: key)
 
-        guard let field = fields[fieldNumber] else {
+        guard let fieldValues = fields[fieldNumber], let lastValue = fieldValues.last else {
             throw DecodingError.keyNotFound(
                 key,
                 DecodingError.Context(
@@ -1357,7 +1410,13 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
             )
         }
 
-        return field
+        return lastValue
+    }
+
+    /// Get all values for a repeated field
+    private func getAllFields(for key: Key) -> [(wireType: Int, data: Data)] {
+        let fieldNumber = getFieldNumber(for: key)
+        return fields[fieldNumber] ?? []
     }
 }
 

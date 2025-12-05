@@ -15,6 +15,9 @@ public protocol CrossTypeIndexKindProtocol: IndexKind {
     /// Name of the relationship property (e.g., `"customer"`)
     var relationshipPropertyName: String { get }
 
+    /// Name of the FK field (e.g., `"customerID"` for To-One, `"orderIDs"` for To-Many)
+    var foreignKeyFieldName: String { get }
+
     /// Name of the related Persistable type (e.g., `"Customer"`)
     var relatedTypeName: String { get }
 
@@ -92,6 +95,9 @@ public struct CrossTypeIndexKind<Root: Persistable, Related: Persistable>: Cross
     /// Name of the relationship property (e.g., `"customer"`)
     public let relationshipPropertyName: String
 
+    /// Name of the FK field (e.g., `"customerID"` for To-One, `"orderIDs"` for To-Many)
+    public let foreignKeyFieldName: String
+
     /// Name of the related Persistable type (e.g., `"Customer"`)
     public let relatedTypeName: String
 
@@ -123,12 +129,12 @@ public struct CrossTypeIndexKind<Root: Persistable, Related: Persistable>: Cross
         return "\(Root.persistableType)_\(allNames.joined(separator: "_"))"
     }
 
-    // MARK: - Initialization (Type-Safe with KeyPaths)
+    // MARK: - Initialization (Type-Safe with KeyPaths - To-One)
 
-    /// Initialize with KeyPaths for type-safe field references
+    /// Initialize with KeyPaths for type-safe field references (To-One relationship)
     ///
     /// - Parameters:
-    ///   - relationship: KeyPath to the `@Relationship` property in Root
+    ///   - foreignKey: KeyPath to the FK field in Root (e.g., `\.customerID`)
     ///   - relatedFields: KeyPaths to fields in the Related type to include
     ///   - localFields: KeyPaths to fields in the Root type to include
     ///
@@ -136,17 +142,53 @@ public struct CrossTypeIndexKind<Root: Persistable, Related: Persistable>: Cross
     ///
     /// ```swift
     /// CrossTypeIndexKind(
-    ///     relationship: \.customer,
+    ///     foreignKey: \.customerID,
     ///     relatedFields: [\Customer.name, \Customer.tier],
     ///     localFields: [\.total, \.status]
     /// )
     /// ```
     public init(
-        relationship: KeyPath<Root, Related?>,
+        foreignKey: KeyPath<Root, String?>,
         relatedFields: [PartialKeyPath<Related>],
         localFields: [PartialKeyPath<Root>]
     ) {
-        self.relationshipPropertyName = Root.fieldName(for: relationship)
+        let fkFieldName = Root.fieldName(for: foreignKey)
+        self.foreignKeyFieldName = fkFieldName
+        // Derive relationship property name: "customerID" -> "customer"
+        self.relationshipPropertyName = fkFieldName.replacingOccurrences(of: "ID", with: "")
+        self.relatedTypeName = Related.persistableType
+        self.relatedFieldNames = relatedFields.map { Related.fieldName(for: $0) }
+        self.localFieldNames = localFields.map { Root.fieldName(for: $0) }
+    }
+
+    // MARK: - Initialization (Type-Safe with KeyPaths - To-Many)
+
+    /// Initialize with KeyPaths for type-safe field references (To-Many relationship)
+    ///
+    /// - Parameters:
+    ///   - foreignKey: KeyPath to the FK array field in Root (e.g., `\.orderIDs`)
+    ///   - relatedFields: KeyPaths to fields in the Related type to include
+    ///   - localFields: KeyPaths to fields in the Root type to include
+    ///
+    /// ## Example
+    ///
+    /// ```swift
+    /// CrossTypeIndexKind(
+    ///     foreignKey: \.orderIDs,
+    ///     relatedFields: [\Order.total],
+    ///     localFields: [\.name]
+    /// )
+    /// ```
+    public init(
+        foreignKey: KeyPath<Root, [String]>,
+        relatedFields: [PartialKeyPath<Related>],
+        localFields: [PartialKeyPath<Root>]
+    ) {
+        let fkFieldName = Root.fieldName(for: foreignKey)
+        self.foreignKeyFieldName = fkFieldName
+        // Derive relationship property name: "orderIDs" -> "orders"
+        let base = fkFieldName.replacingOccurrences(of: "IDs", with: "")
+        self.relationshipPropertyName = base + "s"
         self.relatedTypeName = Related.persistableType
         self.relatedFieldNames = relatedFields.map { Related.fieldName(for: $0) }
         self.localFieldNames = localFields.map { Root.fieldName(for: $0) }
@@ -157,17 +199,20 @@ public struct CrossTypeIndexKind<Root: Persistable, Related: Persistable>: Cross
     /// Initialize with field name strings (for Codable reconstruction)
     ///
     /// - Parameters:
-    ///   - relationshipPropertyName: Name of the relationship property
+    ///   - relationshipPropertyName: Name of the relationship property (e.g., "customer")
+    ///   - foreignKeyFieldName: Name of the FK field (e.g., "customerID" or "orderIDs")
     ///   - relatedTypeName: Name of the related Persistable type
     ///   - relatedFieldNames: Field names from the related type
     ///   - localFieldNames: Field names from the local type
     public init(
         relationshipPropertyName: String,
+        foreignKeyFieldName: String,
         relatedTypeName: String,
         relatedFieldNames: [String],
         localFieldNames: [String]
     ) {
         self.relationshipPropertyName = relationshipPropertyName
+        self.foreignKeyFieldName = foreignKeyFieldName
         self.relatedTypeName = relatedTypeName
         self.relatedFieldNames = relatedFieldNames
         self.localFieldNames = localFieldNames
@@ -233,6 +278,7 @@ extension CrossTypeIndexKind: CustomStringConvertible {
 extension CrossTypeIndexKind: Codable {
     enum CodingKeys: String, CodingKey {
         case relationshipPropertyName
+        case foreignKeyFieldName
         case relatedTypeName
         case relatedFieldNames
         case localFieldNames
@@ -241,6 +287,7 @@ extension CrossTypeIndexKind: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.relationshipPropertyName = try container.decode(String.self, forKey: .relationshipPropertyName)
+        self.foreignKeyFieldName = try container.decode(String.self, forKey: .foreignKeyFieldName)
         self.relatedTypeName = try container.decode(String.self, forKey: .relatedTypeName)
         self.relatedFieldNames = try container.decode([String].self, forKey: .relatedFieldNames)
         self.localFieldNames = try container.decode([String].self, forKey: .localFieldNames)
@@ -249,6 +296,7 @@ extension CrossTypeIndexKind: Codable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(relationshipPropertyName, forKey: .relationshipPropertyName)
+        try container.encode(foreignKeyFieldName, forKey: .foreignKeyFieldName)
         try container.encode(relatedTypeName, forKey: .relatedTypeName)
         try container.encode(relatedFieldNames, forKey: .relatedFieldNames)
         try container.encode(localFieldNames, forKey: .localFieldNames)
@@ -260,6 +308,7 @@ extension CrossTypeIndexKind: Codable {
 extension CrossTypeIndexKind: Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(relationshipPropertyName)
+        hasher.combine(foreignKeyFieldName)
         hasher.combine(relatedTypeName)
         hasher.combine(relatedFieldNames)
         hasher.combine(localFieldNames)
@@ -267,6 +316,7 @@ extension CrossTypeIndexKind: Hashable {
 
     public static func == (lhs: CrossTypeIndexKind, rhs: CrossTypeIndexKind) -> Bool {
         lhs.relationshipPropertyName == rhs.relationshipPropertyName &&
+        lhs.foreignKeyFieldName == rhs.foreignKeyFieldName &&
         lhs.relatedTypeName == rhs.relatedTypeName &&
         lhs.relatedFieldNames == rhs.relatedFieldNames &&
         lhs.localFieldNames == rhs.localFieldNames

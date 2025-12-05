@@ -56,8 +56,7 @@ private struct _ProtobufKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingCon
     let encoder: _ProtobufEncoder
     var codingPath: [CodingKey] { encoder.codingPath }
 
-    // Track next field number (starts at 1 for Protobuf)
-    private var nextFieldNumber: Int = 1
+    // Cache for derived field numbers
     private var fieldNumbers: [String: Int] = [:]
 
     init(encoder: _ProtobufEncoder) {
@@ -65,9 +64,7 @@ private struct _ProtobufKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingCon
     }
 
     mutating func encodeNil(forKey key: Key) throws {
-        // Protobuf omits nil/default values but we still need to reserve the field number
-        // so that subsequent fields get the correct field number
-        _ = getFieldNumber(for: key)
+        // Protobuf omits nil/default values - nothing to write
     }
 
     mutating func encode(_ value: Bool, forKey key: Key) throws {
@@ -830,18 +827,40 @@ private struct _ProtobufKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingCon
             return existing
         }
 
-        // Use explicit intValue from CodingKey if available
-        // Otherwise assign sequentially
+        // Use explicit intValue from CodingKey if available (recommended)
+        // Otherwise derive deterministically from field name to ensure
+        // encoder/decoder compatibility regardless of call order
         let fieldNumber: Int
         if let explicitNumber = key.intValue {
             fieldNumber = explicitNumber
         } else {
-            fieldNumber = nextFieldNumber
-            nextFieldNumber += 1
+            // Derive field number from string value using a stable hash
+            // This ensures the same field always gets the same number,
+            // regardless of encode/decode call order
+            fieldNumber = Self.deriveFieldNumber(from: fieldName)
         }
 
         fieldNumbers[fieldName] = fieldNumber
         return fieldNumber
+    }
+
+    /// Derives a deterministic field number from a field name.
+    /// Uses DJB2 hash algorithm for stability across runs.
+    /// Returns values in range [1, 536870911] (max valid Protobuf field number is 2^29-1)
+    private static func deriveFieldNumber(from fieldName: String) -> Int {
+        var hash: UInt64 = 5381
+        for char in fieldName.utf8 {
+            hash = ((hash << 5) &+ hash) &+ UInt64(char)  // hash * 33 + char
+        }
+        // Protobuf field numbers must be positive and <= 536870911 (2^29-1)
+        // Reserved range 19000-19999 should be avoided
+        let maxFieldNumber: UInt64 = 536870911
+        let rawNumber = Int((hash % (maxFieldNumber - 20000)) + 1)
+        // Skip reserved range 19000-19999
+        if rawNumber >= 19000 && rawNumber <= 19999 {
+            return rawNumber + 1000
+        }
+        return rawNumber
     }
 }
 

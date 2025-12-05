@@ -616,4 +616,432 @@ struct ProtobufEncoderDecoderTests {
         #expect(decoded.b == record.b)
         #expect(decoded.c == record.c)
     }
+
+    // MARK: - Field Number Determinism Tests (Previously failing)
+
+    @Test("Field numbers should be deterministic")
+    func testFieldNumberDeterminism() throws {
+        // This test verifies that field numbers are derived deterministically
+        // from field names, not from call order.
+        // Before the fix, encoding and decoding in different orders would break.
+
+        struct TestRecord: Codable {
+            var alpha: Int64
+            var beta: String
+            var gamma: Bool
+        }
+
+        let original = TestRecord(alpha: 42, beta: "test", gamma: true)
+
+        // Encode the record
+        let encoder = ProtobufEncoder()
+        let data = try encoder.encode(original)
+
+        // Decode should work because field numbers are deterministic
+        let decoder = ProtobufDecoder()
+        let decoded = try decoder.decode(TestRecord.self, from: data)
+
+        #expect(decoded.alpha == original.alpha)
+        #expect(decoded.beta == original.beta)
+        #expect(decoded.gamma == original.gamma)
+    }
+
+    @Test("Field numbers are consistent across multiple encode/decode cycles")
+    func testFieldNumberConsistency() throws {
+        struct ConsistencyRecord: Codable {
+            var first: Int64
+            var second: String
+            var third: Double
+        }
+
+        let original = ConsistencyRecord(first: 100, second: "hello", third: 3.14)
+
+        // Multiple encode/decode cycles should produce identical results
+        for _ in 0..<10 {
+            let encoder = ProtobufEncoder()
+            let data = try encoder.encode(original)
+
+            let decoder = ProtobufDecoder()
+            let decoded = try decoder.decode(ConsistencyRecord.self, from: data)
+
+            #expect(decoded.first == original.first)
+            #expect(decoded.second == original.second)
+            #expect(decoded.third == original.third)
+        }
+    }
+
+    @Test("Different field names produce different field numbers")
+    func testDifferentFieldsDifferentNumbers() throws {
+        // This ensures the hash function produces distinct values for different names
+        struct Record1: Codable {
+            var name: String
+        }
+
+        struct Record2: Codable {
+            var title: String  // Different field name
+        }
+
+        let r1 = Record1(name: "test")
+        let r2 = Record2(title: "test")
+
+        let encoder = ProtobufEncoder()
+        let data1 = try encoder.encode(r1)
+        let data2 = try encoder.encode(r2)
+
+        // The encoded data should be different because field numbers differ
+        #expect(data1 != data2, "Different field names should produce different encodings")
+    }
+
+    // MARK: - Custom Encode/Decode Order Tests
+
+    @Test("Custom encode order works with deterministic field numbers")
+    func testCustomEncodeOrder() throws {
+        // This test verifies that custom encode(to:) implementations
+        // that encode fields in a different order still work correctly.
+
+        struct CustomOrderRecord: Codable {
+            var first: Int64
+            var second: String
+            var third: Bool
+
+            // Custom encode that reverses the order
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                // Encode in reverse order
+                try container.encode(third, forKey: .third)
+                try container.encode(second, forKey: .second)
+                try container.encode(first, forKey: .first)
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case first, second, third
+            }
+        }
+
+        let original = CustomOrderRecord(first: 1, second: "two", third: true)
+
+        let encoder = ProtobufEncoder()
+        let data = try encoder.encode(original)
+
+        let decoder = ProtobufDecoder()
+        let decoded = try decoder.decode(CustomOrderRecord.self, from: data)
+
+        #expect(decoded.first == original.first)
+        #expect(decoded.second == original.second)
+        #expect(decoded.third == original.third)
+    }
+
+    @Test("Custom decode order works with deterministic field numbers")
+    func testCustomDecodeOrder() throws {
+        // This test verifies that custom init(from:) implementations
+        // that decode fields in a different order still work correctly.
+
+        struct CustomDecodeRecord: Codable {
+            var alpha: Int64
+            var beta: String
+            var gamma: Double
+
+            init(alpha: Int64, beta: String, gamma: Double) {
+                self.alpha = alpha
+                self.beta = beta
+                self.gamma = gamma
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                // Decode in reverse order
+                self.gamma = try container.decode(Double.self, forKey: .gamma)
+                self.beta = try container.decode(String.self, forKey: .beta)
+                self.alpha = try container.decode(Int64.self, forKey: .alpha)
+            }
+
+            enum CodingKeys: String, CodingKey {
+                case alpha, beta, gamma
+            }
+        }
+
+        let original = CustomDecodeRecord(alpha: 42, beta: "test", gamma: 3.14)
+
+        let encoder = ProtobufEncoder()
+        let data = try encoder.encode(original)
+
+        let decoder = ProtobufDecoder()
+        let decoded = try decoder.decode(CustomDecodeRecord.self, from: data)
+
+        #expect(decoded.alpha == original.alpha)
+        #expect(decoded.beta == original.beta)
+        #expect(abs(decoded.gamma - original.gamma) < 0.0001)
+    }
+
+    // MARK: - Repeated Field Tests (Previously failing)
+
+    @Test("String array encoding and decoding")
+    func testStringArrayEncoding() throws {
+        struct StringArrayRecord: Codable {
+            var id: Int64
+            var tags: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case id, tags
+
+                var intValue: Int? {
+                    switch self {
+                    case .id: return 1
+                    case .tags: return 2
+                    }
+                }
+
+                init?(intValue: Int) {
+                    switch intValue {
+                    case 1: self = .id
+                    case 2: self = .tags
+                    default: return nil
+                    }
+                }
+            }
+        }
+
+        let record = StringArrayRecord(id: 1, tags: ["swift", "protobuf", "test"])
+
+        let encoder = ProtobufEncoder()
+        let data = try encoder.encode(record)
+
+        let decoder = ProtobufDecoder()
+        let decoded = try decoder.decode(StringArrayRecord.self, from: data)
+
+        #expect(decoded.id == record.id)
+        #expect(decoded.tags == record.tags)
+    }
+
+    @Test("Data array encoding and decoding")
+    func testDataArrayEncoding() throws {
+        struct DataArrayRecord: Codable {
+            var id: Int64
+            var chunks: [Data]
+
+            enum CodingKeys: String, CodingKey {
+                case id, chunks
+
+                var intValue: Int? {
+                    switch self {
+                    case .id: return 1
+                    case .chunks: return 2
+                    }
+                }
+
+                init?(intValue: Int) {
+                    switch intValue {
+                    case 1: self = .id
+                    case 2: self = .chunks
+                    default: return nil
+                    }
+                }
+            }
+        }
+
+        let record = DataArrayRecord(
+            id: 1,
+            chunks: [
+                Data([0x01, 0x02, 0x03]),
+                Data([0x04, 0x05]),
+                Data([0x06, 0x07, 0x08, 0x09])
+            ]
+        )
+
+        let encoder = ProtobufEncoder()
+        let data = try encoder.encode(record)
+
+        let decoder = ProtobufDecoder()
+        let decoded = try decoder.decode(DataArrayRecord.self, from: data)
+
+        #expect(decoded.id == record.id)
+        #expect(decoded.chunks == record.chunks)
+    }
+
+    @Test("Empty array encoding and decoding")
+    func testEmptyArrayEncoding() throws {
+        struct EmptyArrayRecord: Codable {
+            var id: Int64
+            var items: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case id, items
+
+                var intValue: Int? {
+                    switch self {
+                    case .id: return 1
+                    case .items: return 2
+                    }
+                }
+
+                init?(intValue: Int) {
+                    switch intValue {
+                    case 1: self = .id
+                    case 2: self = .items
+                    default: return nil
+                    }
+                }
+            }
+        }
+
+        let record = EmptyArrayRecord(id: 1, items: [])
+
+        let encoder = ProtobufEncoder()
+        let data = try encoder.encode(record)
+
+        let decoder = ProtobufDecoder()
+        let decoded = try decoder.decode(EmptyArrayRecord.self, from: data)
+
+        #expect(decoded.id == record.id)
+        #expect(decoded.items.isEmpty)
+    }
+
+    @Test("Packed int32 array encoding and decoding")
+    func testPackedInt32ArrayEncoding() throws {
+        struct Int32ArrayRecord: Codable {
+            var id: Int64
+            var values: [Int32]
+
+            enum CodingKeys: String, CodingKey {
+                case id, values
+
+                var intValue: Int? {
+                    switch self {
+                    case .id: return 1
+                    case .values: return 2
+                    }
+                }
+
+                init?(intValue: Int) {
+                    switch intValue {
+                    case 1: self = .id
+                    case 2: self = .values
+                    default: return nil
+                    }
+                }
+            }
+        }
+
+        let record = Int32ArrayRecord(id: 1, values: [1, -2, 3, -4, Int32.max, Int32.min])
+
+        let encoder = ProtobufEncoder()
+        let data = try encoder.encode(record)
+
+        let decoder = ProtobufDecoder()
+        let decoded = try decoder.decode(Int32ArrayRecord.self, from: data)
+
+        #expect(decoded.id == record.id)
+        #expect(decoded.values == record.values)
+    }
+
+    @Test("Packed double array encoding and decoding")
+    func testPackedDoubleArrayEncoding() throws {
+        struct DoubleArrayRecord: Codable {
+            var id: Int64
+            var values: [Double]
+
+            enum CodingKeys: String, CodingKey {
+                case id, values
+
+                var intValue: Int? {
+                    switch self {
+                    case .id: return 1
+                    case .values: return 2
+                    }
+                }
+
+                init?(intValue: Int) {
+                    switch intValue {
+                    case 1: self = .id
+                    case 2: self = .values
+                    default: return nil
+                    }
+                }
+            }
+        }
+
+        let record = DoubleArrayRecord(id: 1, values: [1.1, 2.2, 3.3, -4.4, 0.0])
+
+        let encoder = ProtobufEncoder()
+        let data = try encoder.encode(record)
+
+        let decoder = ProtobufDecoder()
+        let decoded = try decoder.decode(DoubleArrayRecord.self, from: data)
+
+        #expect(decoded.id == record.id)
+        #expect(decoded.values.count == record.values.count)
+        for (d, o) in zip(decoded.values, record.values) {
+            #expect(abs(d - o) < 0.0001)
+        }
+    }
+
+    // MARK: - allKeys Population Tests (Previously failing)
+
+    @Test("Decoder allKeys is populated correctly")
+    func testAllKeysPopulated() throws {
+        // This test verifies that allKeys is properly populated
+        // Before the fix, allKeys was always empty
+
+        struct AllKeysTestRecord: Decodable {
+            var discoveredKeys: [String] = []
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: DynamicCodingKey.self)
+                // Collect all keys that the decoder reports
+                discoveredKeys = container.allKeys.map { $0.stringValue }
+            }
+        }
+
+        struct DynamicCodingKey: CodingKey {
+            var stringValue: String
+            var intValue: Int?
+
+            init?(stringValue: String) {
+                self.stringValue = stringValue
+                self.intValue = nil
+            }
+
+            init?(intValue: Int) {
+                self.stringValue = "\(intValue)"
+                self.intValue = intValue
+            }
+        }
+
+        // Create test data with explicit field numbers
+        struct SourceRecord: Codable {
+            var id: Int64
+            var name: String
+
+            enum CodingKeys: String, CodingKey {
+                case id, name
+
+                var intValue: Int? {
+                    switch self {
+                    case .id: return 1
+                    case .name: return 2
+                    }
+                }
+
+                init?(intValue: Int) {
+                    switch intValue {
+                    case 1: self = .id
+                    case 2: self = .name
+                    default: return nil
+                    }
+                }
+            }
+        }
+
+        let source = SourceRecord(id: 42, name: "test")
+        let encoder = ProtobufEncoder()
+        let data = try encoder.encode(source)
+
+        let decoder = ProtobufDecoder()
+        let decoded = try decoder.decode(AllKeysTestRecord.self, from: data)
+
+        // allKeys should contain the field numbers as string keys
+        #expect(decoded.discoveredKeys.contains("1"), "allKeys should contain field 1")
+        #expect(decoded.discoveredKeys.contains("2"), "allKeys should contain field 2")
+        #expect(decoded.discoveredKeys.count == 2, "allKeys should have exactly 2 keys")
+    }
 }
