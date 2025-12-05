@@ -45,7 +45,7 @@
 /// - If user defines `id` field: uses that type and default value
 /// - If user omits `id` field: macro adds `var id: String = ULID().ulidString`
 /// - `id` is NOT included in the generated initializer
-@attached(member, names: named(id), named(persistableType), named(allFields), named(indexDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys))
+@attached(member, names: named(id), named(persistableType), named(allFields), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys), arbitrary)
 @attached(extension, conformances: Persistable, Codable, Sendable)
 public macro Persistable() = #externalMacro(module: "CoreMacros", type: "PersistableMacro")
 
@@ -59,7 +59,7 @@ public macro Persistable() = #externalMacro(module: "CoreMacros", type: "Persist
 /// }
 /// // persistableType = "User"
 /// ```
-@attached(member, names: named(id), named(persistableType), named(allFields), named(indexDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys))
+@attached(member, names: named(id), named(persistableType), named(allFields), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys), arbitrary)
 @attached(extension, conformances: Persistable, Codable, Sendable)
 public macro Persistable(type: String) = #externalMacro(module: "CoreMacros", type: "PersistableMacro")
 
@@ -275,3 +275,24 @@ public macro Polymorphable() = #externalMacro(module: "CoreMacros", type: "Polym
 /// - Field must have a default value (since it's excluded from initializer)
 @attached(peer)
 public macro Transient() = #externalMacro(module: "CoreMacros", type: "TransientMacro")
+
+// MARK: - @Reference Macro (Test)
+
+/// @Reference macro declaration - TEST for circular reference behavior
+///
+/// Tests if type references in macros cause circular dependency issues.
+///
+/// **Usage**:
+/// ```swift
+/// struct A {
+///     @Reference(B.self)
+///     var bId: String?
+/// }
+///
+/// struct B {
+///     @Reference(A.self)
+///     var aId: String?
+/// }
+/// ```
+@attached(peer)
+public macro Reference<T>(_ type: T.Type) = #externalMacro(module: "CoreMacros", type: "ReferenceMacro")

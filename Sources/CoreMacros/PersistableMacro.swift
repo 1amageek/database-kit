@@ -82,10 +82,15 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         var userIdHasDefault = false
         var userIdBinding: PatternBindingSyntax?
 
-        // Extract all stored properties (fields)
+        // Extract all stored properties (fields) and @Relationship declarations
         var allFields: [String] = []
         var fieldInfos: [(name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)] = []
         var fieldNumber = 1
+
+        // Track @Relationship properties
+        // New design: FK fields are explicit (customerID: String?, orderIDs: [String])
+        // @Relationship marks FK fields and specifies the related type
+        var relationships: [(propertyName: String, relatedTypeName: String, deleteRule: String, isToMany: Bool, relationshipPropertyName: String)] = []
 
         for member in structDecl.memberBlock.members {
             if let varDecl = member.decl.as(VariableDeclSyntax.self) {
@@ -99,6 +104,10 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     }
                     return false
                 }
+
+                // Check if field has @Relationship attribute
+                // Use helper functions from RelationshipMacro.swift
+                let relationshipAttr = getRelationshipAttribute(varDecl)
 
                 if isVar || isLet {
                     for binding in varDecl.bindings {
@@ -114,11 +123,40 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                 userIdBinding = binding
                             }
 
-                            // Only add non-transient fields to allFields
-                            if !isTransient {
+                            // Handle @Relationship property (marks FK field with related type)
+                            // FK field is explicit: customerID: String?, orderIDs: [String]
+                            if let relAttr = relationshipAttr {
+                                // Extract relationship info from @Relationship attribute
+                                let (relatedTypeName, deleteRule) = extractRelationshipInfo(from: relAttr)
+
+                                // Determine if to-many based on FK field type
+                                let isToMany = isToManyFKField(fieldType)
+
+                                // Derive relationship property name from FK field name
+                                // customerID -> customer, orderIDs -> orders
+                                let relationshipPropertyName = deriveRelationshipPropertyName(from: fieldName, isToMany: isToMany)
+
+                                relationships.append((
+                                    propertyName: fieldName,
+                                    relatedTypeName: relatedTypeName,
+                                    deleteRule: deleteRule,
+                                    isToMany: isToMany,
+                                    relationshipPropertyName: relationshipPropertyName
+                                ))
+
+                                // FK field IS stored (not transient) - it's the actual data
                                 allFields.append(fieldName)
+                                fieldInfos.append((name: fieldName, type: fieldType, hasDefault: hasDefault, defaultValue: defaultValue, isTransient: false))
                             }
-                            fieldInfos.append((name: fieldName, type: fieldType, hasDefault: hasDefault, defaultValue: defaultValue, isTransient: isTransient))
+                            // Regular field (not @Relationship)
+                            else {
+                                // Only add non-transient fields to allFields
+                                if !isTransient {
+                                    allFields.append(fieldName)
+                                }
+                                fieldInfos.append((name: fieldName, type: fieldType, hasDefault: hasDefault, defaultValue: defaultValue, isTransient: isTransient))
+                            }
+
                             fieldNumber += 1
                         }
                     }
@@ -324,6 +362,29 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(allFieldsDecl)
 
+        // Generate relationship indexes for @Relationship FK fields
+        // FK field name IS the property name (customerID, orderIDs)
+        // Index name uses the derived relationship property name (customer, orders)
+        // Key structure: [indexSubspace]/[relatedId]/[ownerId]
+        for rel in relationships {
+            // Use relationshipPropertyName for index naming (e.g., "Order_customer")
+            let relationshipIndexName = "\(typeName)_\(rel.relationshipPropertyName)"
+            // FK field name is the property name itself (customerID, orderIDs)
+            let fkFieldName = rel.propertyName
+
+            // Generate IndexDescriptor for relationship index
+            // Uses ScalarIndexKind for foreign key lookup
+            let relationshipIndexInit = """
+                IndexDescriptor(
+                    name: "\(relationshipIndexName)",
+                    keyPaths: [\\\(structName).\(fkFieldName)],
+                    kind: ScalarIndexKind<\(structName)>(fieldNames: ["\(fkFieldName)"]),
+                    commonOptions: .init()
+                )
+            """
+            indexDescriptors.append(relationshipIndexInit)
+        }
+
         // Generate indexDescriptors property
         let indexDescriptorsArray = indexDescriptors.isEmpty
             ? "[]"
@@ -332,6 +393,38 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             public static var indexDescriptors: [IndexDescriptor] { \(raw: indexDescriptorsArray) }
             """
         decls.append(indexDescriptorsDecl)
+
+        // Generate relationshipDescriptors property
+        // New simplified format: no inverse fields, FK field name = propertyName
+        if !relationships.isEmpty {
+            var relationshipInits: [String] = []
+            for rel in relationships {
+                let descriptorInit = """
+                    RelationshipDescriptor(
+                                propertyName: "\(rel.propertyName)",
+                                relatedTypeName: "\(rel.relatedTypeName)",
+                                deleteRule: \(rel.deleteRule),
+                                isToMany: \(rel.isToMany),
+                                relationshipPropertyName: "\(rel.relationshipPropertyName)"
+                            )
+                    """
+                relationshipInits.append(descriptorInit)
+            }
+
+            let relationshipDescriptorsArray = "[\n            \(relationshipInits.joined(separator: ",\n            "))\n        ]"
+            let relationshipDescriptorsDecl: DeclSyntax = """
+                public static var relationshipDescriptors: [RelationshipDescriptor] { \(raw: relationshipDescriptorsArray) }
+                """
+            decls.append(relationshipDescriptorsDecl)
+        } else {
+            let relationshipDescriptorsDecl: DeclSyntax = """
+                public static var relationshipDescriptors: [RelationshipDescriptor] { [] }
+                """
+            decls.append(relationshipDescriptorsDecl)
+        }
+
+        // Note: FK fields are no longer auto-generated
+        // User explicitly declares: var customerID: String? with @Relationship(Customer.self)
 
         // Generate directoryPathComponents property
         // Always generate (no default in Persistable extension to avoid conflicts with Polymorphable)
@@ -388,10 +481,23 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         decls.append(enumMetadataDecl)
 
         // Generate subscript for @dynamicMemberLookup (excludes transient fields)
+        // For Optional types, unwrap before returning to avoid boxing Optional<T> as `any Sendable`
         var subscriptCases: [String] = []
         for fieldInfo in fieldInfos {
             if !fieldInfo.isTransient {
-                subscriptCases.append("case \"\(fieldInfo.name)\": return self.\(fieldInfo.name)")
+                // Check if the type is Optional (ends with ? or is Optional<...>)
+                let isOptional = fieldInfo.type.hasSuffix("?") ||
+                                 fieldInfo.type.hasPrefix("Optional<")
+                if isOptional {
+                    // For Optional types, unwrap the value to avoid boxing Optional as `any Sendable`
+                    subscriptCases.append("""
+                    case "\(fieldInfo.name)":
+                                if let value = self.\(fieldInfo.name) { return value }
+                                return nil
+                    """)
+                } else {
+                    subscriptCases.append("case \"\(fieldInfo.name)\": return self.\(fieldInfo.name)")
+                }
             }
         }
         let subscriptBody = subscriptCases.isEmpty
@@ -410,15 +516,19 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         decls.append(subscriptDecl)
 
         // Generate fieldName(for:) methods for KeyPath → String conversion
-        // Include top-level fields and all indexed keyPaths (including nested)
-        // Excludes transient fields
+        // Include top-level fields, @Relationship properties, and all indexed keyPaths (including nested)
         var fieldNameCases: [String] = []
 
-        // Add top-level fields (excludes transient)
+        // Add top-level fields (excludes transient, but includes @Relationship below)
         for fieldInfo in fieldInfos {
             if !fieldInfo.isTransient {
                 fieldNameCases.append("if keyPath == \\\(structName).\(fieldInfo.name) { return \"\(fieldInfo.name)\" }")
             }
+        }
+
+        // Add @Relationship property names (needed for related() API even though they're transient)
+        for rel in relationships {
+            fieldNameCases.append("if keyPath == \\\(structName).\(rel.propertyName) { return \"\(rel.propertyName)\" }")
         }
 
         // Add nested keyPaths from #Index declarations
@@ -491,22 +601,43 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             decls.append(initDecl)
         }
 
-        // Generate CodingKeys enum if there are @Transient fields
-        // This excludes transient fields from Codable serialization
-        let hasTransientFields = fieldInfos.contains { $0.isTransient }
-        if hasTransientFields {
-            let codingKeyCases = fieldInfos
-                .filter { !$0.isTransient }
-                .map { "case \($0.name)" }
-                .joined(separator: "\n            ")
+        // Generate CodingKeys enum with explicit intValue for Protobuf field numbers
+        // This ensures consistent field numbering even when Optional fields are nil
+        // (Swift's synthesized Codable skips nil values, which would shift field numbers)
+        let codableFieldInfos = fieldInfos.filter { !$0.isTransient }
+        let codingKeyCases = codableFieldInfos.map { "case \($0.name)" }
 
-            let codingKeysDecl: DeclSyntax = """
-                private enum CodingKeys: String, CodingKey {
-                    \(raw: codingKeyCases)
-                }
-                """
-            decls.append(codingKeysDecl)
+        // Generate intValue computed property
+        var intValueCases: [String] = []
+        for (index, field) in codableFieldInfos.enumerated() {
+            intValueCases.append("case .\(field.name): return \(index + 1)")
         }
+
+        // Generate init?(intValue:)
+        var initIntValueCases: [String] = []
+        for (index, field) in codableFieldInfos.enumerated() {
+            initIntValueCases.append("case \(index + 1): self = .\(field.name)")
+        }
+
+        let codingKeysDecl: DeclSyntax = """
+            private enum CodingKeys: String, CodingKey {
+                \(raw: codingKeyCases.joined(separator: "\n            "))
+
+                var intValue: Int? {
+                    switch self {
+                    \(raw: intValueCases.joined(separator: "\n                "))
+                    }
+                }
+
+                init?(intValue: Int) {
+                    switch intValue {
+                    \(raw: initIntValueCases.joined(separator: "\n                "))
+                    default: return nil
+                    }
+                }
+            }
+            """
+        decls.append(codingKeysDecl)
 
         return decls
     }
@@ -528,6 +659,12 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         }
 
         return []
+
+        // Note: Snapshot extensions cannot be generated by ExtensionMacro
+        // because macros can only extend the type they're attached to.
+        // Users access relationships via:
+        // - snapshot.ref(RelatedType.self, \.fkField) for to-one
+        // - snapshot.refs(RelatedType.self, \.fkArrayField) for to-many
     }
 }
 
@@ -745,6 +882,8 @@ struct FDBModelMacrosPlugin: CompilerPlugin {
         IndexMacro.self,
         DirectoryMacro.self,
         TransientMacro.self,
+        RelationshipMacro.self,
+        ReferenceMacro.self,
     ]
 }
 

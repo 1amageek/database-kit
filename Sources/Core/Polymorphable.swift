@@ -70,6 +70,17 @@ import Foundation
 ///
 /// The `typeCode` is a deterministic Int64 hash of the type name,
 /// ensuring stable identification across restarts.
+///
+/// **Swift Type System Limitation**:
+/// Protocol types cannot be passed to generic functions requiring `Polymorphable`:
+/// ```swift
+/// // ❌ Compile error: 'any Document' cannot conform to 'Polymorphable'
+/// try await context.fetchPolymorphic(Document.self)
+///
+/// // ✅ Use any concrete conforming type (all share the same polymorphic directory)
+/// try await context.fetchPolymorphic(Article.self)
+/// // Returns [any Persistable] containing all conforming types
+/// ```
 public protocol Polymorphable: Sendable {
     // MARK: - Type Metadata
 

@@ -99,6 +99,22 @@ public protocol Persistable: Sendable, Codable {
     /// ```
     static var indexDescriptors: [IndexDescriptor] { get }
 
+    /// Relationship descriptors for this persistable type
+    ///
+    /// Generated from `@Relationship` attribute declarations within
+    /// `@Persistable` structs. Contains metadata for relationship
+    /// maintenance, foreign key management, and delete rule enforcement.
+    ///
+    /// **Example**:
+    /// ```swift
+    /// @Persistable
+    /// struct Order {
+    ///     @Relationship(inverse: \Customer.orders)
+    ///     var customer: Customer?
+    /// }
+    /// ```
+    static var relationshipDescriptors: [RelationshipDescriptor] { get }
+
     // MARK: - Directory Metadata
 
     /// Directory path components for FDB storage
@@ -217,6 +233,9 @@ public protocol Persistable: Sendable, Codable {
 public extension Persistable {
     /// Default implementation returns empty array (no indexes)
     static var indexDescriptors: [IndexDescriptor] { [] }
+
+    /// Default implementation returns empty array (no relationships)
+    static var relationshipDescriptors: [RelationshipDescriptor] { [] }
 
     /// Default implementation uses persistableType as single path component
     ///

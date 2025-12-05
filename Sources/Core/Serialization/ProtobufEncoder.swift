@@ -65,7 +65,9 @@ private struct _ProtobufKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingCon
     }
 
     mutating func encodeNil(forKey key: Key) throws {
-        // Protobuf omits nil/default values
+        // Protobuf omits nil/default values but we still need to reserve the field number
+        // so that subsequent fields get the correct field number
+        _ = getFieldNumber(for: key)
     }
 
     mutating func encode(_ value: Bool, forKey key: Key) throws {
