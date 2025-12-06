@@ -330,7 +330,7 @@ struct FieldNumberUser {
 struct Analytics {
     #Index<Analytics>(ScalarIndexKind<Analytics>(fields: [\.category]))
     #Index<Analytics>(CountIndexKind<Analytics>(groupBy: [\.category]))
-    #Index<Analytics>(SumIndexKind<Analytics>(groupBy: [\.category], value: \.value))
+    #Index<Analytics>(SumIndexKind<Analytics, Double>(groupBy: [\.category], value: \.value))
 
     var category: String
     var value: Double

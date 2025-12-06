@@ -47,9 +47,9 @@ struct ModelMacroValidationTests {
         // Verify that all built-in IndexKinds can be created with proper generic parameters
         _ = ScalarIndexKind<SimpleUser>(fields: [\.email])
         _ = CountIndexKind<OrderedIndexProduct>(groupBy: [\.category])
-        _ = SumIndexKind<OrderedIndexProduct>(groupBy: [\.category], value: \.price)
-        _ = MinIndexKind<OrderedIndexProduct>(groupBy: [\.category], value: \.price)
-        _ = MaxIndexKind<OrderedIndexProduct>(groupBy: [\.category], value: \.price)
+        _ = SumIndexKind<OrderedIndexProduct, Double>(groupBy: [\.category], value: \.price)
+        _ = MinIndexKind<OrderedIndexProduct, Double>(groupBy: [\.category], value: \.price)
+        _ = MaxIndexKind<OrderedIndexProduct, Double>(groupBy: [\.category], value: \.price)
         _ = VersionIndexKind<SimpleUser>(field: \.email)
 
         // All should succeed without throwing

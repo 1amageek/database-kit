@@ -10,11 +10,11 @@ import Core
 /// Cross-type index kind for relationship queries
 ///
 /// Creates indexes that span relationships, enabling efficient queries like:
-/// "Find Orders where Customer.name = 'Alice' AND Order.total > 100"
+/// "Find Orders where Customer.name = 'Alice'"
 ///
 /// ## Index Structure
 /// ```
-/// Key: [indexSubspace]/[relatedField1]/.../[localField1]/.../[primaryKey] = ''
+/// Key: [indexSubspace]/[relatedField1]/.../[primaryKey] = ''
 /// ```
 ///
 /// ## Usage
@@ -25,24 +25,12 @@ import Core
 ///     var id: String
 ///     var total: Double
 ///
-///     @Relationship(Customer.self, deleteRule: .cascade)
+///     @Relationship(Customer.self, indexFields: [\.name])
 ///     var customerID: String?
-///
-///     static var descriptors: [any Descriptor] {
-///         [
-///             // Cross-type index for efficient queries
-///             IndexDescriptor(
-///                 name: "Order_customer_name_total",
-///                 kind: RelationshipIndexKind<Order, Customer>(
-///                     foreignKey: \.customerID,
-///                     relatedFields: [\.name],
-///                     localFields: [\.total]
-///                 )
-///             )
-///         ]
-///     }
 /// }
 /// ```
+///
+/// The `@Relationship` macro with `indexFields` generates this index automatically.
 public struct RelationshipIndexKind<Root: Persistable, Related: Persistable>: IndexKind {
     // MARK: - IndexKind Protocol
 
@@ -51,17 +39,14 @@ public struct RelationshipIndexKind<Root: Persistable, Related: Persistable>: In
 
     // MARK: - Properties (stored as strings for Codable)
 
-    /// FK field name
+    /// FK field name (e.g., "customerID")
     public let foreignKeyFieldName: String
 
-    /// Related type name
+    /// Related type name (e.g., "Customer")
     public let relatedTypeName: String
 
-    /// Related field names (from Related type)
+    /// Related field names from Related type (e.g., ["name"])
     public let relatedFieldNames: [String]
-
-    /// Local field names (from Root type)
-    public let localFieldNames: [String]
 
     /// Whether To-Many relationship
     public let isToMany: Bool
@@ -69,6 +54,7 @@ public struct RelationshipIndexKind<Root: Persistable, Related: Persistable>: In
     // MARK: - Computed Properties
 
     /// Relationship property name (derived from FK)
+    /// "customerID" → "customer", "orderIDs" → "orders"
     public var relationshipPropertyName: String {
         if isToMany {
             let base = foreignKeyFieldName.replacingOccurrences(of: "IDs", with: "")
@@ -81,12 +67,11 @@ public struct RelationshipIndexKind<Root: Persistable, Related: Persistable>: In
     // MARK: - IndexKind Requirements
 
     public var fieldNames: [String] {
-        let prefixed = relatedFieldNames.map { "\(relationshipPropertyName).\($0)" }
-        return prefixed + localFieldNames
+        relatedFieldNames.map { "\(relationshipPropertyName).\($0)" }
     }
 
     public var indexName: String {
-        let allNames = [relationshipPropertyName] + relatedFieldNames + localFieldNames
+        let allNames = [relationshipPropertyName] + relatedFieldNames
         return "\(Root.persistableType)_\(allNames.joined(separator: "_"))"
     }
 
@@ -94,13 +79,11 @@ public struct RelationshipIndexKind<Root: Persistable, Related: Persistable>: In
 
     public init(
         foreignKey: KeyPath<Root, String?>,
-        relatedFields: [PartialKeyPath<Related>],
-        localFields: [PartialKeyPath<Root>] = []
+        relatedFields: [PartialKeyPath<Related>]
     ) {
         self.foreignKeyFieldName = Root.fieldName(for: foreignKey)
         self.relatedTypeName = Related.persistableType
         self.relatedFieldNames = relatedFields.map { Related.fieldName(for: $0) }
-        self.localFieldNames = localFields.map { Root.fieldName(for: $0) }
         self.isToMany = false
     }
 
@@ -108,13 +91,11 @@ public struct RelationshipIndexKind<Root: Persistable, Related: Persistable>: In
 
     public init(
         foreignKey: KeyPath<Root, String>,
-        relatedFields: [PartialKeyPath<Related>],
-        localFields: [PartialKeyPath<Root>] = []
+        relatedFields: [PartialKeyPath<Related>]
     ) {
         self.foreignKeyFieldName = Root.fieldName(for: foreignKey)
         self.relatedTypeName = Related.persistableType
         self.relatedFieldNames = relatedFields.map { Related.fieldName(for: $0) }
-        self.localFieldNames = localFields.map { Root.fieldName(for: $0) }
         self.isToMany = false
     }
 
@@ -122,13 +103,11 @@ public struct RelationshipIndexKind<Root: Persistable, Related: Persistable>: In
 
     public init(
         foreignKey: KeyPath<Root, [String]>,
-        relatedFields: [PartialKeyPath<Related>],
-        localFields: [PartialKeyPath<Root>] = []
+        relatedFields: [PartialKeyPath<Related>]
     ) {
         self.foreignKeyFieldName = Root.fieldName(for: foreignKey)
         self.relatedTypeName = Related.persistableType
         self.relatedFieldNames = relatedFields.map { Related.fieldName(for: $0) }
-        self.localFieldNames = localFields.map { Root.fieldName(for: $0) }
         self.isToMany = true
     }
 
@@ -138,13 +117,11 @@ public struct RelationshipIndexKind<Root: Persistable, Related: Persistable>: In
         foreignKeyFieldName: String,
         relatedTypeName: String,
         relatedFieldNames: [String],
-        localFieldNames: [String],
         isToMany: Bool
     ) {
         self.foreignKeyFieldName = foreignKeyFieldName
         self.relatedTypeName = relatedTypeName
         self.relatedFieldNames = relatedFieldNames
-        self.localFieldNames = localFieldNames
         self.isToMany = isToMany
     }
 
@@ -174,6 +151,6 @@ public struct RelationshipIndexKind<Root: Persistable, Related: Persistable>: In
 
 extension RelationshipIndexKind: CustomStringConvertible {
     public var description: String {
-        "RelationshipIndexKind<\(Root.persistableType), \(relatedTypeName)>(fk: \(foreignKeyFieldName), related: \(relatedFieldNames), local: \(localFieldNames))"
+        "RelationshipIndexKind<\(Root.persistableType), \(relatedTypeName)>(fk: \(foreignKeyFieldName), fields: \(relatedFieldNames))"
     }
 }

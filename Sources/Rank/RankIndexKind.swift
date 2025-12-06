@@ -9,6 +9,9 @@ import Core
 
 /// Rank index kind for leaderboard and ranking queries
 ///
+/// **Type-Safe Design**: The `Score` type parameter preserves the score type,
+/// ensuring rankings work correctly with the original numeric type.
+///
 /// **Purpose**: Efficiently answer ranking queries
 /// - Leaderboards (top-K queries)
 /// - Percentile calculations (95th percentile)
@@ -36,11 +39,11 @@ import Core
 /// @Persistable
 /// struct Player {
 ///     var id: String = ULID().ulidString
-///
-///     #Index<Player>([\.score], type: RankIndexKind(bucketSize: 10))
-///
 ///     var score: Int64
 ///     var name: String
+///
+///     #Index<Player>(type: RankIndexKind(field: \.score, bucketSize: 10))
+///     // Infers: RankIndexKind<Player, Int64>
 /// }
 ///
 /// // Queries:
@@ -53,7 +56,7 @@ import Core
 /// - Small (10): More levels, slower writes, faster counts
 /// - Medium (100): Balanced (default)
 /// - Large (1000): Fewer levels, faster writes, slower counts
-public struct RankIndexKind<Root: Persistable>: IndexKind {
+public struct RankIndexKind<Root: Persistable, Score: Comparable & Numeric & Codable & Sendable>: IndexKind {
     /// Identifier: "rank"
     public static var identifier: String { "rank" }
 
@@ -62,6 +65,9 @@ public struct RankIndexKind<Root: Persistable>: IndexKind {
 
     /// Field names for this index
     public let fieldNames: [String]
+
+    /// Score type name for Codable reconstruction
+    public let scoreTypeName: String
 
     /// Bucket size for Range Tree
     /// - Controls granularity of count nodes
@@ -75,19 +81,21 @@ public struct RankIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_rank_\(flattenedNames.joined(separator: "_"))"
     }
 
-    /// Initialize with KeyPath
+    /// Initialize with KeyPath - type is inferred from KeyPath
     ///
     /// - Parameters:
-    ///   - field: KeyPath to the score field
+    ///   - field: KeyPath to the score field (type inferred)
     ///   - bucketSize: Bucket size for Range Tree (default: 100)
-    public init(field: PartialKeyPath<Root>, bucketSize: Int = 100) {
+    public init(field: KeyPath<Root, Score>, bucketSize: Int = 100) {
         self.fieldNames = [Root.fieldName(for: field)]
+        self.scoreTypeName = String(describing: Score.self)
         self.bucketSize = bucketSize
     }
 
     /// Initialize with field name strings (for Codable reconstruction)
-    public init(fieldNames: [String], bucketSize: Int = 100) {
+    public init(fieldNames: [String], scoreTypeName: String, bucketSize: Int = 100) {
         self.fieldNames = fieldNames
+        self.scoreTypeName = scoreTypeName
         self.bucketSize = bucketSize
     }
 
@@ -110,11 +118,14 @@ extension RankIndexKind {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(Self.identifier)
         hasher.combine(fieldNames)
+        hasher.combine(scoreTypeName)
         hasher.combine(bucketSize)
     }
 
     public static func == (lhs: RankIndexKind, rhs: RankIndexKind) -> Bool {
-        return lhs.fieldNames == rhs.fieldNames && lhs.bucketSize == rhs.bucketSize
+        return lhs.fieldNames == rhs.fieldNames
+            && lhs.scoreTypeName == rhs.scoreTypeName
+            && lhs.bucketSize == rhs.bucketSize
     }
 }
 

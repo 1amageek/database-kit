@@ -146,23 +146,33 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
 
 /// Aggregation index for summing numeric values by grouping fields
 ///
+/// **Type-Safe Design**: The `Value` type parameter preserves numeric type information,
+/// ensuring integers remain integers and floating-point types use appropriate storage.
+///
 /// **Usage**:
 /// ```swift
 /// @Persistable
 /// struct Order {
-///     #Index(type: SumIndexKind<Order>(groupBy: [\.customerId], value: \.amount))
 ///     var customerId: String
-///     var amount: Double
+///     var amount: Int64  // Type preserved as Int64
+///
+///     #Index<Order>(type: SumIndexKind(groupBy: [\.customerId], value: \.amount))
+///     // Infers: SumIndexKind<Order, Int64>
 /// }
 /// ```
 ///
-/// **Key Structure**: `[indexSubspace][groupKey1][groupKey2]... = Double(sum)`
+/// **Key Structure**: `[indexSubspace][groupKey1][groupKey2]... = Value(sum)`
+///
+/// **Storage**:
+/// - Integer types (Int, Int64, Int32): Stored as Int64 bytes
+/// - Floating-point types (Float, Double): Stored as scaled fixed-point Int64
 ///
 /// **Supports**:
 /// - Get sum by group key
 /// - Atomic add/subtract on insert/update/delete
 /// - Multiple grouping fields
-public struct SumIndexKind<Root: Persistable>: IndexKind {
+/// - Precision preservation for integer types
+public struct SumIndexKind<Root: Persistable, Value: Numeric & Codable & Sendable>: IndexKind {
     public static var identifier: String { "sum" }
     public static var subspaceStructure: SubspaceStructure { .aggregation }
 
@@ -171,6 +181,9 @@ public struct SumIndexKind<Root: Persistable>: IndexKind {
 
     /// Field name for the value to sum
     public let valueFieldName: String
+
+    /// Value type name for Codable reconstruction
+    public let valueTypeName: String
 
     /// All field names (groupBy + value) for IndexKind protocol
     public var fieldNames: [String] {
@@ -187,20 +200,22 @@ public struct SumIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_sum_\(groupNames.joined(separator: "_"))_\(valueName)"
     }
 
-    /// Initialize with KeyPaths
+    /// Initialize with KeyPaths - type is inferred from KeyPath
     ///
     /// - Parameters:
     ///   - groupBy: KeyPaths to grouping fields
-    ///   - value: KeyPath to the numeric field to sum
-    public init(groupBy: [PartialKeyPath<Root>], value: PartialKeyPath<Root>) {
+    ///   - value: KeyPath to the numeric field to sum (type inferred)
+    public init(groupBy: [PartialKeyPath<Root>], value: KeyPath<Root, Value>) {
         self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
         self.valueFieldName = Root.fieldName(for: value)
+        self.valueTypeName = String(describing: Value.self)
     }
 
     /// Initialize with field name strings (for Codable reconstruction)
-    public init(groupByFieldNames: [String], valueFieldName: String) {
+    public init(groupByFieldNames: [String], valueFieldName: String, valueTypeName: String) {
         self.groupByFieldNames = groupByFieldNames
         self.valueFieldName = valueFieldName
+        self.valueTypeName = valueTypeName
     }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
@@ -236,13 +251,18 @@ public struct SumIndexKind<Root: Persistable>: IndexKind {
 
 /// Aggregation index for tracking minimum values by grouping fields
 ///
+/// **Type-Safe Design**: The `Value` type parameter preserves the value type,
+/// ensuring the minimum is returned in its original type.
+///
 /// **Usage**:
 /// ```swift
 /// @Persistable
 /// struct Product {
-///     #Index(type: MinIndexKind<Product>(groupBy: [\.category], value: \.price))
 ///     var category: String
-///     var price: Double
+///     var price: Int64  // Type preserved as Int64
+///
+///     #Index<Product>(type: MinIndexKind(groupBy: [\.category], value: \.price))
+///     // Infers: MinIndexKind<Product, Int64>
 /// }
 /// ```
 ///
@@ -251,7 +271,8 @@ public struct SumIndexKind<Root: Persistable>: IndexKind {
 /// **Supports**:
 /// - Get minimum value by group key
 /// - Efficient min tracking via sorted storage
-public struct MinIndexKind<Root: Persistable>: IndexKind {
+/// - Type preservation for result
+public struct MinIndexKind<Root: Persistable, Value: Comparable & Codable & Sendable>: IndexKind {
     public static var identifier: String { "min" }
     public static var subspaceStructure: SubspaceStructure { .flat }
 
@@ -260,6 +281,9 @@ public struct MinIndexKind<Root: Persistable>: IndexKind {
 
     /// Field name for the value to track minimum
     public let valueFieldName: String
+
+    /// Value type name for Codable reconstruction
+    public let valueTypeName: String
 
     /// All field names (groupBy + value) for IndexKind protocol
     public var fieldNames: [String] {
@@ -276,16 +300,18 @@ public struct MinIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_min_\(groupNames.joined(separator: "_"))_\(valueName)"
     }
 
-    /// Initialize with KeyPaths
-    public init(groupBy: [PartialKeyPath<Root>], value: PartialKeyPath<Root>) {
+    /// Initialize with KeyPaths - type is inferred from KeyPath
+    public init(groupBy: [PartialKeyPath<Root>], value: KeyPath<Root, Value>) {
         self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
         self.valueFieldName = Root.fieldName(for: value)
+        self.valueTypeName = String(describing: Value.self)
     }
 
     /// Initialize with field name strings (for Codable reconstruction)
-    public init(groupByFieldNames: [String], valueFieldName: String) {
+    public init(groupByFieldNames: [String], valueFieldName: String, valueTypeName: String) {
         self.groupByFieldNames = groupByFieldNames
         self.valueFieldName = valueFieldName
+        self.valueTypeName = valueTypeName
     }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
@@ -312,13 +338,18 @@ public struct MinIndexKind<Root: Persistable>: IndexKind {
 
 /// Aggregation index for tracking maximum values by grouping fields
 ///
+/// **Type-Safe Design**: The `Value` type parameter preserves the value type,
+/// ensuring the maximum is returned in its original type.
+///
 /// **Usage**:
 /// ```swift
 /// @Persistable
 /// struct Product {
-///     #Index(type: MaxIndexKind<Product>(groupBy: [\.category], value: \.price))
 ///     var category: String
-///     var price: Double
+///     var price: Int64  // Type preserved as Int64
+///
+///     #Index<Product>(type: MaxIndexKind(groupBy: [\.category], value: \.price))
+///     // Infers: MaxIndexKind<Product, Int64>
 /// }
 /// ```
 ///
@@ -327,7 +358,8 @@ public struct MinIndexKind<Root: Persistable>: IndexKind {
 /// **Supports**:
 /// - Get maximum value by group key
 /// - Efficient max tracking via reverse-sorted storage
-public struct MaxIndexKind<Root: Persistable>: IndexKind {
+/// - Type preservation for result
+public struct MaxIndexKind<Root: Persistable, Value: Comparable & Codable & Sendable>: IndexKind {
     public static var identifier: String { "max" }
     public static var subspaceStructure: SubspaceStructure { .flat }
 
@@ -336,6 +368,9 @@ public struct MaxIndexKind<Root: Persistable>: IndexKind {
 
     /// Field name for the value to track maximum
     public let valueFieldName: String
+
+    /// Value type name for Codable reconstruction
+    public let valueTypeName: String
 
     /// All field names (groupBy + value) for IndexKind protocol
     public var fieldNames: [String] {
@@ -352,16 +387,18 @@ public struct MaxIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_max_\(groupNames.joined(separator: "_"))_\(valueName)"
     }
 
-    /// Initialize with KeyPaths
-    public init(groupBy: [PartialKeyPath<Root>], value: PartialKeyPath<Root>) {
+    /// Initialize with KeyPaths - type is inferred from KeyPath
+    public init(groupBy: [PartialKeyPath<Root>], value: KeyPath<Root, Value>) {
         self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
         self.valueFieldName = Root.fieldName(for: value)
+        self.valueTypeName = String(describing: Value.self)
     }
 
     /// Initialize with field name strings (for Codable reconstruction)
-    public init(groupByFieldNames: [String], valueFieldName: String) {
+    public init(groupByFieldNames: [String], valueFieldName: String, valueTypeName: String) {
         self.groupByFieldNames = groupByFieldNames
         self.valueFieldName = valueFieldName
+        self.valueTypeName = valueTypeName
     }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
@@ -388,28 +425,37 @@ public struct MaxIndexKind<Root: Persistable>: IndexKind {
 
 /// Aggregation index for computing average values by grouping fields
 ///
+/// **Type-Safe Design**: The `Value` type parameter preserves the sum type,
+/// while the result is always `Double` (since average = sum / count).
+///
 /// **Usage**:
 /// ```swift
 /// @Persistable
 /// struct Review {
-///     #Index(type: AverageIndexKind<Review>(groupBy: [\.productID], value: \.rating))
 ///     var productID: Int64
 ///     var rating: Int64  // Rating * 100 (e.g., 4.5 stars = 450)
+///
+///     #Index<Review>(type: AverageIndexKind(groupBy: [\.productID], value: \.rating))
+///     // Infers: AverageIndexKind<Review, Int64>
+///     // Result type: Double (average = sum / count)
 /// }
 /// ```
 ///
 /// **Key Structure**:
-/// - `[indexSubspace][groupKey]["sum"] = Int64(sum)`
-/// - `[indexSubspace][groupKey]["count"] = Int64(count)`
+/// - `[indexSubspace][groupKey]["sum"] = Value (Int64 bytes or scaled Double)`
+/// - `[indexSubspace][groupKey]["count"] = Int64`
+///
+/// **Storage**:
+/// - Integer types (Int, Int64, Int32): Sum stored as Int64 bytes
+/// - Floating-point types (Float, Double): Sum stored as scaled fixed-point Int64
+///
+/// **Result**: Always `Double` (average = sum / count)
 ///
 /// **Supports**:
-/// - Get average by group key (average = sum / count)
+/// - Get average by group key
 /// - Atomic increment/decrement on insert/update/delete
-///
-/// **Important**: Use Int64 for exact arithmetic
-/// - ✅ Multiply by 100 or 1000 for decimal precision
-/// - ❌ Do not use Double/Float (floating-point errors accumulate)
-public struct AverageIndexKind<Root: Persistable>: IndexKind {
+/// - Precision preservation for sum storage
+public struct AverageIndexKind<Root: Persistable, Value: Numeric & Codable & Sendable>: IndexKind {
     public static var identifier: String { "average" }
     public static var subspaceStructure: SubspaceStructure { .aggregation }
 
@@ -418,6 +464,12 @@ public struct AverageIndexKind<Root: Persistable>: IndexKind {
 
     /// Field name for the value to average
     public let valueFieldName: String
+
+    /// Value type name for Codable reconstruction
+    public let valueTypeName: String
+
+    /// Result type is always Double (average = sum / count)
+    public typealias ResultType = Double
 
     /// All field names (groupBy + value) for IndexKind protocol
     public var fieldNames: [String] {
@@ -434,16 +486,18 @@ public struct AverageIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_avg_\(groupNames.joined(separator: "_"))_\(valueName)"
     }
 
-    /// Initialize with KeyPaths
-    public init(groupBy: [PartialKeyPath<Root>], value: PartialKeyPath<Root>) {
+    /// Initialize with KeyPaths - type is inferred from KeyPath
+    public init(groupBy: [PartialKeyPath<Root>], value: KeyPath<Root, Value>) {
         self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
         self.valueFieldName = Root.fieldName(for: value)
+        self.valueTypeName = String(describing: Value.self)
     }
 
     /// Initialize with field name strings (for Codable reconstruction)
-    public init(groupByFieldNames: [String], valueFieldName: String) {
+    public init(groupByFieldNames: [String], valueFieldName: String, valueTypeName: String) {
         self.groupByFieldNames = groupByFieldNames
         self.valueFieldName = valueFieldName
+        self.valueTypeName = valueTypeName
     }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
@@ -781,17 +835,22 @@ public struct BitmapIndexKind<Root: Persistable>: IndexKind {
 
 /// Time-windowed leaderboard index for ranking with automatic window rotation
 ///
+/// **Type-Safe Design**: The `Score` type parameter preserves the score type,
+/// ensuring rankings work correctly with the original numeric type.
+///
 /// **Usage**:
 /// ```swift
 /// @Persistable
 /// struct GameScore {
-///     #Index(type: TimeWindowLeaderboardIndexKind<GameScore>(
+///     var playerId: String
+///     var score: Int64
+///
+///     #Index<GameScore>(type: TimeWindowLeaderboardIndexKind(
 ///         scoreField: \.score,
 ///         window: .daily,
 ///         windowCount: 7  // Keep last 7 days
 ///     ))
-///     var playerId: String
-///     var score: Int64
+///     // Infers: TimeWindowLeaderboardIndexKind<GameScore, Int64>
 /// }
 /// ```
 ///
@@ -815,14 +874,18 @@ public struct BitmapIndexKind<Root: Persistable>: IndexKind {
 /// - Historical window queries
 /// - Automatic window rotation
 /// - Cross-window aggregation
+/// - Type preservation for scores
 ///
 /// **Reference**: FDB Record Layer TIME_WINDOW_LEADERBOARD index type
-public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
+public struct TimeWindowLeaderboardIndexKind<Root: Persistable, Score: Comparable & Numeric & Codable & Sendable>: IndexKind {
     public static var identifier: String { "time_window_leaderboard" }
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
     /// Field name for the score to rank
     public let scoreFieldName: String
+
+    /// Score type name for Codable reconstruction
+    public let scoreTypeName: String
 
     /// Window type
     public let window: LeaderboardWindowType
@@ -848,20 +911,21 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_leaderboard_\(groupNames.joined(separator: "_"))_\(scoreName)"
     }
 
-    /// Initialize with KeyPaths
+    /// Initialize with KeyPaths - type is inferred from KeyPath
     ///
     /// - Parameters:
-    ///   - scoreField: KeyPath to the score field
+    ///   - scoreField: KeyPath to the score field (type inferred)
     ///   - groupBy: Optional grouping fields (default: empty)
     ///   - window: Window type (default: daily)
     ///   - windowCount: Number of windows to keep (default: 7)
     public init(
-        scoreField: PartialKeyPath<Root>,
+        scoreField: KeyPath<Root, Score>,
         groupBy: [PartialKeyPath<Root>] = [],
         window: LeaderboardWindowType = .daily,
         windowCount: Int = 7
     ) {
         self.scoreFieldName = Root.fieldName(for: scoreField)
+        self.scoreTypeName = String(describing: Score.self)
         self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
         self.window = window
         self.windowCount = windowCount
@@ -870,11 +934,13 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
     /// Initialize with field name strings (for Codable reconstruction)
     public init(
         scoreFieldName: String,
+        scoreTypeName: String,
         groupByFieldNames: [String] = [],
         window: LeaderboardWindowType = .daily,
         windowCount: Int = 7
     ) {
         self.scoreFieldName = scoreFieldName
+        self.scoreTypeName = scoreTypeName
         self.groupByFieldNames = groupByFieldNames
         self.window = window
         self.windowCount = windowCount

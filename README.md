@@ -23,6 +23,7 @@ dependencies: [
 | Module | Description |
 |--------|-------------|
 | `Core` | Persistable protocol, @Persistable macro, Schema, Serialization |
+| `Relationship` | RelationshipIndexKind for cross-type queries, @Relationship macro |
 | `Vector` | VectorIndexKind for similarity search |
 | `FullText` | FullTextIndexKind for text search |
 | `Spatial` | SpatialIndexKind for geospatial queries |
@@ -40,8 +41,8 @@ import Core
 @Persistable
 struct User {
     #Directory<User>("app", "users")
-    #Index<User>([\.email], unique: true)
-    #Index<User>([\.createdAt])
+    #Index<User>(ScalarIndexKind(fields: [\.email]), unique: true)
+    #Index<User>(ScalarIndexKind(fields: [\.createdAt]))
 
     var email: String
     var name: String
@@ -67,7 +68,6 @@ Use `Field(\.property)` to create dynamic path segments based on record fields:
 @Persistable
 struct Order {
     #Directory<Order>("tenants", Field(\.accountID), "orders", layer: .partition)
-    #PrimaryKey<Order>([\.orderID])
 
     var orderID: Int64
     var accountID: String  // Partition key
@@ -86,9 +86,10 @@ struct Message {
         layer: .partition
     )
 
-    var messageID: Int64
+    var messageID: String = ULID().ulidString
     var accountID: String  // First partition key
     var channelID: String  // Second partition key
+    var content: String
 }
 ```
 
@@ -121,6 +122,12 @@ public protocol IndexKind: Sendable, Codable, Hashable {
     /// Subspace structure type
     static var subspaceStructure: SubspaceStructure { get }
 
+    /// Auto-generated index name (can be overridden in #Index macro)
+    var indexName: String { get }
+
+    /// Field names used by this index
+    var fieldNames: [String] { get }
+
     /// Validate whether this index kind supports specified types
     static func validateTypes(_ types: [Any.Type]) throws
 }
@@ -129,20 +136,28 @@ public protocol IndexKind: Sendable, Codable, Hashable {
 ### Built-in Index Kinds
 
 ```swift
-// Standard indexes (in Core module)
-ScalarIndexKind()      // VALUE index for sorting and range queries
-CountIndexKind()       // Count aggregation
-SumIndexKind()         // Sum aggregation
-MinIndexKind()         // Minimum value tracking
-MaxIndexKind()         // Maximum value tracking
-VersionIndexKind()     // Version history tracking
+// Standard indexes (in Core module) - Generic over Root: Persistable
+ScalarIndexKind<T>(fields: [\.field1, \.field2])     // VALUE index for sorting and range queries
+CountIndexKind<T>(groupBy: [\.field])                // Count aggregation
+SumIndexKind<T, V>(groupBy: [\.group], value: \.num) // Sum aggregation (V: Numeric)
+MinIndexKind<T, V>(groupBy: [\.group], value: \.num) // Minimum value tracking (V: Comparable)
+MaxIndexKind<T, V>(groupBy: [\.group], value: \.num) // Maximum value tracking (V: Comparable)
+AverageIndexKind<T, V>(groupBy: [\.g], value: \.num) // Average calculation (V: Numeric)
+VersionIndexKind<T>(field: \.id, strategy: .keepAll) // Version history tracking
+CountUpdatesIndexKind<T>(field: \.id)                // Update count tracking
+CountNotNullIndexKind<T>(groupBy: [\.g], value: \.f) // Non-null value counting
+BitmapIndexKind<T>(field: \.status)                  // Bitmap index (low-cardinality)
+TimeWindowLeaderboardIndexKind<T, S>(scoreField: \.score, window: .daily) // Time-windowed leaderboard
 
 // Extended indexes (separate modules)
-VectorIndexKind(...)   // Vector similarity search
-FullTextIndexKind(...) // Full-text search
-SpatialIndexKind(...)  // Geospatial queries
-RankIndexKind()        // Leaderboard rankings
-TripleIndexKind(...)   // RDF triple indexes (SPO/POS/OSP)
+VectorIndexKind<T>(...)           // Vector similarity search (Vector module)
+FullTextIndexKind<T>(...)         // Full-text search (FullText module)
+SpatialIndexKind<T>(...)          // Geospatial queries (Spatial module)
+RankIndexKind<T, S>(field: \.score) // Leaderboard rankings (Rank module)
+TripleIndexKind<T>(...)           // RDF triple indexes (Triple module)
+AdjacencyIndexKind<T>(...)        // Graph adjacency (Graph module)
+PermutedIndexKind<T>(...)         // Field permutation (Permuted module)
+RelationshipIndexKind<T, R>(...)  // Cross-type queries (Relationship module)
 ```
 
 ### TripleIndexKind (RDF/Knowledge Graph)
@@ -158,7 +173,7 @@ struct Statement {
     var predicate: String  // e.g., "rdfs:subClassOf"
     var object: String     // e.g., "Employee"
 
-    #Index<Statement>(type: TripleIndexKind(
+    #Index<Statement>(TripleIndexKind(
         subject: \.subject,
         predicate: \.predicate,
         object: \.object
@@ -176,6 +191,8 @@ struct Statement {
 **Combining with VectorIndex for semantic search:**
 
 ```swift
+import Vector
+
 @Persistable
 struct SemanticStatement {
     var subject: String
@@ -184,17 +201,18 @@ struct SemanticStatement {
     var object: String
 
     // Structural queries (SPO/POS/OSP)
-    #Index<SemanticStatement>(type: TripleIndexKind(
+    #Index<SemanticStatement>(TripleIndexKind(
         subject: \.subject,
         predicate: \.predicate,
         object: \.object
     ))
 
     // Semantic similarity search on predicates
-    #Index<SemanticStatement>(
-        [\.predicateEmbedding],
-        type: VectorIndexKind(dimensions: 384, metric: .cosine)
-    )
+    #Index<SemanticStatement>(VectorIndexKind(
+        embedding: \.predicateEmbedding,
+        dimensions: 384,
+        metric: .cosine
+    ))
 }
 ```
 
@@ -206,10 +224,11 @@ Third parties can create custom index types by conforming to `IndexKind`:
 import Core
 
 /// Custom time-series index for efficient time-range queries
-public struct TimeSeriesIndexKind: IndexKind {
-    public static let identifier = "com.mycompany.timeseries"
-    public static let subspaceStructure = SubspaceStructure.hierarchical
+public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "com.mycompany.timeseries" }
+    public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
+    public let fieldNames: [String]
     public let resolution: TimeResolution
     public let retention: TimeInterval?
 
@@ -217,23 +236,38 @@ public struct TimeSeriesIndexKind: IndexKind {
         case second, minute, hour, day
     }
 
-    public init(resolution: TimeResolution = .minute, retention: TimeInterval? = nil) {
+    public var indexName: String {
+        "\(Root.persistableType)_timeseries_\(fieldNames.joined(separator: "_"))"
+    }
+
+    public init(
+        fields: [PartialKeyPath<Root>],
+        resolution: TimeResolution = .minute,
+        retention: TimeInterval? = nil
+    ) {
+        self.fieldNames = fields.map { Root.fieldName(for: $0) }
+        self.resolution = resolution
+        self.retention = retention
+    }
+
+    public init(fieldNames: [String], resolution: TimeResolution = .minute, retention: TimeInterval? = nil) {
+        self.fieldNames = fieldNames
         self.resolution = resolution
         self.retention = retention
     }
 
     public static func validateTypes(_ types: [Any.Type]) throws {
         guard types.count >= 1 else {
-            throw IndexTypeValidationError.insufficientFields(
-                expected: 1, actual: types.count
+            throw IndexTypeValidationError.invalidTypeCount(
+                index: identifier, expected: 1, actual: types.count
             )
         }
         // First field must be Date
         guard types[0] == Date.self else {
-            throw IndexTypeValidationError.typeMismatch(
-                field: "timestamp",
-                expected: "Date",
-                actual: String(describing: types[0])
+            throw IndexTypeValidationError.unsupportedType(
+                index: identifier,
+                type: types[0],
+                reason: "First field must be Date"
             )
         }
     }
@@ -242,8 +276,10 @@ public struct TimeSeriesIndexKind: IndexKind {
 // Usage
 @Persistable
 struct SensorReading {
-    #Index<SensorReading>([\.timestamp, \.sensorId],
-                          type: TimeSeriesIndexKind(resolution: .second))
+    #Index<SensorReading>(TimeSeriesIndexKind(
+        fields: [\.timestamp, \.sensorId],
+        resolution: .second
+    ))
 
     var timestamp: Date
     var sensorId: String
@@ -280,8 +316,8 @@ struct Product {
     // ID is auto-generated as ULID if not defined
     // var id: String = ULID().ulidString
 
-    #Index<Product>([\.category, \.price])
-    #Index<Product>([\.name], unique: true)
+    #Index<Product>(ScalarIndexKind(fields: [\.category, \.price]))
+    #Index<Product>(ScalarIndexKind(fields: [\.name]), unique: true)
 
     var name: String
     var category: String
@@ -299,8 +335,68 @@ The macro generates:
 - `static var persistableType: String`
 - `static var allFields: [String]`
 - `static var indexDescriptors: [IndexDescriptor]`
+- `static var relationshipDescriptors: [RelationshipDescriptor]`
 - `Codable`, `Sendable` conformances
 - Dynamic member lookup support
+
+## Relationship Module
+
+The Relationship module enables efficient cross-type queries without JOINs using the `@Relationship` macro and `RelationshipIndexKind`.
+
+### @Relationship Macro
+
+```swift
+import Core
+import Relationship
+
+@Persistable
+struct Customer {
+    var name: String
+    var email: String
+}
+
+@Persistable
+struct Order {
+    var total: Double
+    var status: String
+
+    // Define relationship with index on related type's fields
+    @Relationship(Customer.self, indexFields: [\.name])
+    var customerID: String?
+}
+```
+
+### How It Works
+
+The `@Relationship` macro generates:
+1. A `RelationshipDescriptor` for metadata
+2. A `RelationshipIndexKind` for cross-type queries
+
+This enables queries like "Find Orders where Customer.name = 'Alice'" without JOIN operations.
+
+### RelationshipIndexKind
+
+```swift
+// Manual usage (the @Relationship macro generates this automatically)
+#Index<Order>(RelationshipIndexKind(
+    foreignKey: \.customerID,
+    relatedFields: [\.name]
+))
+```
+
+### Delete Rules
+
+```swift
+@Relationship(Customer.self, deleteRule: .cascade)
+var customerID: String?
+```
+
+| Rule | Behavior |
+|------|----------|
+| `.nullify` | Set FK to null when related record deleted (default) |
+| `.cascade` | Delete this record when related record deleted |
+| `.deny` | Prevent deletion if related records exist |
+| `.noAction` | No automatic action |
 
 ## Schema Definition
 
