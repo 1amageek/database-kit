@@ -10,4 +10,3 @@
 @_exported import Rank
 @_exported import Permuted
 @_exported import Graph
-@_exported import Triple

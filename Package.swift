@@ -3,7 +3,7 @@ import PackageDescription
 import CompilerPluginSupport
 
 let package = Package(
-    name: "DatabaseKit",
+    name: "database-kit",
     platforms: [
         .iOS(.v18),
         .macOS(.v15),
