@@ -28,6 +28,28 @@ public protocol DirectoryPathElement: Sendable {
     var value: Value { get }
 }
 
+// MARK: - DynamicDirectoryElement Protocol
+
+/// Marker protocol for dynamic (runtime-resolved) directory path elements
+///
+/// Only `Field<Root>` conforms to this protocol, allowing explicit identification
+/// of dynamic directory components without type-specific generics.
+///
+/// **Usage**:
+/// ```swift
+/// // Check if a directory path component is dynamic
+/// if component is DynamicDirectoryElement {
+///     // This is a Field that requires runtime resolution
+/// }
+///
+/// // Check if a type has dynamic directory
+/// let hasDynamic = type.directoryPathComponents.contains { $0 is DynamicDirectoryElement }
+/// ```
+public protocol DynamicDirectoryElement: DirectoryPathElement {
+    /// The keyPath as AnyKeyPath for type-erased access
+    var anyKeyPath: AnyKeyPath { get }
+}
+
 // MARK: - Path (Static String Component)
 
 /// Static string literal path element
@@ -82,11 +104,16 @@ public struct Path: DirectoryPathElement, ExpressibleByStringLiteral, Hashable, 
 ///     layer: .partition
 /// )
 /// ```
-public struct Field<Root>: DirectoryPathElement, @unchecked Sendable {
+public struct Field<Root>: DirectoryPathElement, DynamicDirectoryElement, @unchecked Sendable {
     public let value: PartialKeyPath<Root>
 
     public init(_ keyPath: PartialKeyPath<Root>) {
         self.value = keyPath
+    }
+
+    /// Type-erased keyPath for runtime access
+    public var anyKeyPath: AnyKeyPath {
+        value as AnyKeyPath
     }
 }
 
