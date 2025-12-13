@@ -31,7 +31,7 @@ import SwiftDiagnostics
 /// ```swift
 /// @Persistable
 /// struct User {
-///     #Index<User>(ScalarIndexKind(fields: [\.email]), unique: true)
+///     #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
 ///
 ///     var email: String
 ///     var name: String
@@ -194,8 +194,8 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
                macroDecl.macroName.text == "Index" {
 
-                // New format: #Index<T>(IndexKind(...), unique: Bool, name: String?)
-                // First unlabeled argument is the IndexKind expression
+                // Format: #Index(IndexKind<T>(...), unique: Bool, name: String?)
+                // First unlabeled argument is the IndexKind expression (type specified in IndexKind generic)
                 var keyPaths: [String] = []
                 var indexKindExpr: String?
                 var indexKindName: String?
@@ -661,11 +661,11 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 ///
 /// **Usage**:
 /// ```swift
-/// // IndexKind with KeyPaths in constructor
-/// #Index<Product>(ScalarIndexKind(fields: [\.email]), unique: true)
-/// #Index<Product>(ScalarIndexKind(fields: [\.category, \.price]))
-/// #Index<Product>(CountIndexKind(groupBy: [\.category]))
-/// #Index<Product>(SumIndexKind(groupBy: [\.category], value: \.price))
+/// // IndexKind with KeyPaths in constructor (type specified in IndexKind generic)
+/// #Index(ScalarIndexKind<Product>(fields: [\.email]), unique: true)
+/// #Index(ScalarIndexKind<Product>(fields: [\.category, \.price]))
+/// #Index(CountIndexKind<Product>(groupBy: [\.category]))
+/// #Index(SumIndexKind<Product>(groupBy: [\.category], value: \.price))
 /// ```
 ///
 /// This is a marker macro. Validation is performed, but no code is generated.
@@ -675,23 +675,12 @@ public struct IndexMacro: DeclarationMacro {
         of node: some FreestandingMacroExpansionSyntax,
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-        // Validate generic type parameter
-        guard let genericClause = node.genericArgumentClause,
-              let _ = genericClause.arguments.first else {
-            throw DiagnosticsError(diagnostics: [
-                Diagnostic(
-                    node: Syntax(node),
-                    message: MacroExpansionErrorMessage("#Index requires a type parameter (e.g., #Index<Product>)")
-                )
-            ])
-        }
-
         // First argument must be an IndexKind expression (unlabeled)
         guard let firstArg = node.arguments.first else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: MacroExpansionErrorMessage("#Index requires an IndexKind (e.g., ScalarIndexKind(fields: [\\.email]))")
+                    message: MacroExpansionErrorMessage("#Index requires an IndexKind (e.g., ScalarIndexKind<T>(fields: [\\.email]))")
                 )
             ])
         }
@@ -701,7 +690,7 @@ public struct IndexMacro: DeclarationMacro {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(firstArg),
-                    message: MacroExpansionErrorMessage("First argument must be an IndexKind (e.g., ScalarIndexKind(fields: [\\.email]))")
+                    message: MacroExpansionErrorMessage("First argument must be an IndexKind (e.g., ScalarIndexKind<T>(fields: [\\.email]))")
                 )
             ])
         }
@@ -710,7 +699,7 @@ public struct IndexMacro: DeclarationMacro {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(firstArg.expression),
-                    message: MacroExpansionErrorMessage("First argument must be an IndexKind initializer (e.g., ScalarIndexKind(fields: [\\.email]))")
+                    message: MacroExpansionErrorMessage("First argument must be an IndexKind initializer (e.g., ScalarIndexKind<T>(fields: [\\.email]))")
                 )
             ])
         }
