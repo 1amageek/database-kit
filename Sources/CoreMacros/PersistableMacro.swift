@@ -87,6 +87,9 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         var fieldInfos: [(name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)] = []
         var fieldNumber = 1
 
+        // Track @Restricted fields for field-level security metadata
+        var restrictedFields: [(fieldName: String, readExpr: String, writeExpr: String, defaultExpr: String)] = []
+
         // Track @Relationship properties
         // New design: FK fields are explicit (customerID: String?, orderIDs: [String])
         // @Relationship marks FK fields and specifies the related type
@@ -103,6 +106,32 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                         return attrSyntax.attributeName.description.trimmingCharacters(in: .whitespaces) == "Transient"
                     }
                     return false
+                }
+
+                // Check if field has @Restricted attribute and extract access levels
+                var restrictedInfo: (readExpr: String, writeExpr: String)? = nil
+                for attr in varDecl.attributes {
+                    if case .attribute(let attrSyntax) = attr,
+                       attrSyntax.attributeName.description.trimmingCharacters(in: .whitespaces) == "Restricted" {
+                        var readExpr = ".public"
+                        var writeExpr = ".public"
+
+                        if let arguments = attrSyntax.arguments,
+                           let labeledList = arguments.as(LabeledExprListSyntax.self) {
+                            for arg in labeledList {
+                                if let label = arg.label?.text {
+                                    let exprText = arg.expression.description.trimmingCharacters(in: .whitespaces)
+                                    if label == "read" {
+                                        readExpr = exprText
+                                    } else if label == "write" {
+                                        writeExpr = exprText
+                                    }
+                                }
+                            }
+                        }
+                        restrictedInfo = (readExpr: readExpr, writeExpr: writeExpr)
+                        break
+                    }
                 }
 
                 // Check if field has @Relationship attribute
@@ -155,6 +184,36 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                     allFields.append(fieldName)
                                 }
                                 fieldInfos.append((name: fieldName, type: fieldType, hasDefault: hasDefault, defaultValue: defaultValue, isTransient: isTransient))
+
+                                // Track @Restricted fields for metadata generation
+                                if let restricted = restrictedInfo {
+                                    // Determine default value expression based on type
+                                    let defaultExpr: String
+                                    if fieldType.hasSuffix("?") || fieldType.hasPrefix("Optional<") {
+                                        defaultExpr = "nil"
+                                    } else if fieldType == "String" {
+                                        defaultExpr = "\"\""
+                                    } else if fieldType == "Int" || fieldType == "Int64" || fieldType == "Int32" || fieldType == "Int16" || fieldType == "Int8" {
+                                        defaultExpr = "0"
+                                    } else if fieldType == "Double" || fieldType == "Float" {
+                                        defaultExpr = "0"
+                                    } else if fieldType == "Bool" {
+                                        defaultExpr = "false"
+                                    } else if fieldType.hasPrefix("[") || fieldType.hasPrefix("Array<") {
+                                        defaultExpr = "[]"
+                                    } else if fieldType == "Data" {
+                                        defaultExpr = "Data()"
+                                    } else {
+                                        // For other types, use the initializer default if available
+                                        defaultExpr = defaultValue ?? "/* unknown default */"
+                                    }
+                                    restrictedFields.append((
+                                        fieldName: fieldName,
+                                        readExpr: restricted.readExpr,
+                                        writeExpr: restricted.writeExpr,
+                                        defaultExpr: defaultExpr
+                                    ))
+                                }
                             }
 
                             fieldNumber += 1
@@ -436,6 +495,63 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             public static var directoryLayer: Core.DirectoryLayer { \(raw: directoryLayerValue) }
             """
         decls.append(directoryLayerDecl)
+
+        // Generate restrictedFieldsMetadata for field-level security
+        // This provides compile-time metadata about @Restricted fields
+        if !restrictedFields.isEmpty {
+            // Helper to add FieldAccessLevel prefix to expressions like ".roles([...])"
+            func fullyQualify(_ expr: String) -> String {
+                if expr.hasPrefix(".") {
+                    return "FieldAccessLevel\(expr)"
+                }
+                return expr
+            }
+
+            var metadataEntries: [String] = []
+            for field in restrictedFields {
+                metadataEntries.append("""
+                    RestrictedFieldMetadata(
+                            fieldName: "\(field.fieldName)",
+                            readAccess: \(fullyQualify(field.readExpr)),
+                            writeAccess: \(fullyQualify(field.writeExpr))
+                        )
+                """)
+            }
+            let metadataArray = "[\n            \(metadataEntries.joined(separator: ",\n            "))\n        ]"
+            let restrictedMetadataDecl: DeclSyntax = """
+                public static var restrictedFieldsMetadata: [RestrictedFieldMetadata] { \(raw: metadataArray) }
+                """
+            decls.append(restrictedMetadataDecl)
+
+            // Generate masked(auth:) method for field masking
+            var maskAssignments: [String] = []
+            for field in restrictedFields {
+                maskAssignments.append("""
+                    if !\(fullyQualify(field.readExpr)).evaluate(auth: auth) {
+                            copy.\(field.fieldName) = \(field.defaultExpr)
+                        }
+                """)
+            }
+            let maskedDecl: DeclSyntax = """
+                public func masked(auth: (any AuthContext)?) -> Self {
+                    var copy = self
+                    \(raw: maskAssignments.joined(separator: "\n        "))
+                    return copy
+                }
+                """
+            decls.append(maskedDecl)
+        } else {
+            // No restricted fields - provide empty metadata and identity mask
+            let emptyMetadataDecl: DeclSyntax = """
+                public static var restrictedFieldsMetadata: [RestrictedFieldMetadata] { [] }
+                """
+            decls.append(emptyMetadataDecl)
+
+            let identityMaskedDecl: DeclSyntax = """
+                public func masked(auth: (any AuthContext)?) -> Self { self }
+                """
+            decls.append(identityMaskedDecl)
+        }
 
         // Generate fieldNumber method (excludes transient fields)
         var fieldNumberCases: [String] = []
