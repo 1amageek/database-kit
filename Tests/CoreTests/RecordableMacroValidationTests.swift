@@ -77,9 +77,9 @@ struct ModelMacroValidationTests {
 
 @Persistable
 struct OrderedIndexProduct {
-    #Index<OrderedIndexProduct>(ScalarIndexKind<OrderedIndexProduct>(fields: [\.category]))
-    #Index<OrderedIndexProduct>(ScalarIndexKind<OrderedIndexProduct>(fields: [\.price]))
-    #Index<OrderedIndexProduct>(ScalarIndexKind<OrderedIndexProduct>(fields: [\.name]))
+    #Index(ScalarIndexKind<OrderedIndexProduct>(fields: [\.category]))
+    #Index(ScalarIndexKind<OrderedIndexProduct>(fields: [\.price]))
+    #Index(ScalarIndexKind<OrderedIndexProduct>(fields: [\.name]))
 
     var category: String
     var price: Double

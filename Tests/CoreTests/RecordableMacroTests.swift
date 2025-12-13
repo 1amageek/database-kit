@@ -285,7 +285,7 @@ struct BasicUser {
 
 @Persistable
 struct IndexedUser {
-    #Index<IndexedUser>(ScalarIndexKind<IndexedUser>(fields: [\.email]), unique: true)
+    #Index(ScalarIndexKind<IndexedUser>(fields: [\.email]), unique: true)
 
     var email: String
     var name: String
@@ -293,8 +293,8 @@ struct IndexedUser {
 
 @Persistable
 struct Product {
-    #Index<Product>(ScalarIndexKind<Product>(fields: [\.category]))
-    #Index<Product>(ScalarIndexKind<Product>(fields: [\.category, \.price]))
+    #Index(ScalarIndexKind<Product>(fields: [\.category]))
+    #Index(ScalarIndexKind<Product>(fields: [\.category, \.price]))
 
     var category: String
     var price: Double
@@ -303,7 +303,7 @@ struct Product {
 
 @Persistable
 struct CustomNamedUser {
-    #Index<CustomNamedUser>(ScalarIndexKind<CustomNamedUser>(fields: [\.email]), name: "user_email_idx")
+    #Index(ScalarIndexKind<CustomNamedUser>(fields: [\.email]), name: "user_email_idx")
 
     var email: String
 }
@@ -328,9 +328,9 @@ struct FieldNumberUser {
 
 @Persistable
 struct Analytics {
-    #Index<Analytics>(ScalarIndexKind<Analytics>(fields: [\.category]))
-    #Index<Analytics>(CountIndexKind<Analytics>(groupBy: [\.category]))
-    #Index<Analytics>(SumIndexKind<Analytics, Double>(groupBy: [\.category], value: \.value))
+    #Index(ScalarIndexKind<Analytics>(fields: [\.category]))
+    #Index(CountIndexKind<Analytics>(groupBy: [\.category]))
+    #Index(SumIndexKind<Analytics, Double>(groupBy: [\.category], value: \.value))
 
     var category: String
     var value: Double
