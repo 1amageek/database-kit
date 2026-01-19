@@ -23,7 +23,7 @@ let package = Package(
         .library(name: "DatabaseKit", targets: ["DatabaseKit"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/swiftlang/swift-syntax.git", "600.0.0"..<"602.0.0"),
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0"),
     ],
     targets: [
         .target(name: "Core", dependencies: ["CoreMacros"]),
