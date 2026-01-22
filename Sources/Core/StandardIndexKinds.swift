@@ -995,3 +995,230 @@ public enum LeaderboardWindowType: Sendable, Hashable, Codable {
         }
     }
 }
+
+// MARK: - DistinctIndexKind
+
+/// Aggregation index for estimating distinct (unique) values using HyperLogLog++
+///
+/// **Algorithm**: HyperLogLog++ (probabilistic cardinality estimation)
+/// - Accuracy: ~0.81% standard error (precision=14)
+/// - Memory: ~16KB per group
+/// - Supports merge for distributed computation
+///
+/// **Usage**:
+/// ```swift
+/// @Persistable
+/// struct PageView {
+///     var pageId: String
+///     var userId: String
+///
+///     // Count unique visitors per page
+///     #Index<PageView>(type: DistinctIndexKind(groupBy: [\.pageId], value: \.userId))
+/// }
+/// ```
+///
+/// **Key Structure**: `[indexSubspace][groupKey1][groupKey2]... = HyperLogLog (serialized)`
+///
+/// **Important Limitations**:
+/// - Add-only: Cannot remove values once added
+/// - Approximate: Results are estimates, not exact counts
+/// - After deletion, cardinality does NOT decrease
+///
+/// **Best for**:
+/// - Counting unique visitors/users
+/// - Cardinality estimation for high-cardinality fields
+/// - Analytics where ~1% error is acceptable
+///
+/// **Reference**: Heule, Nunkesser, Hall. "HyperLogLog in Practice" (Google, 2013)
+public struct DistinctIndexKind<Root: Persistable>: IndexKind {
+    public static var identifier: String { "distinct" }
+    public static var subspaceStructure: SubspaceStructure { .aggregation }
+
+    /// Field names for grouping
+    public let groupByFieldNames: [String]
+
+    /// Field name for the value to count distinct
+    public let valueFieldName: String
+
+    /// HyperLogLog precision parameter (default: 14)
+    /// - p=14: 16KB memory, ~0.81% error
+    /// - p=12: 4KB memory, ~1.63% error
+    public let precision: Int
+
+    /// All field names (groupBy + value) for IndexKind protocol
+    public var fieldNames: [String] {
+        groupByFieldNames + [valueFieldName]
+    }
+
+    /// Default index name: "{TypeName}_distinct_{groupFields}_{valueField}"
+    public var indexName: String {
+        let groupNames = groupByFieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let valueName = valueFieldName.replacingOccurrences(of: ".", with: "_")
+        if groupNames.isEmpty {
+            return "\(Root.persistableType)_distinct_\(valueName)"
+        }
+        return "\(Root.persistableType)_distinct_\(groupNames.joined(separator: "_"))_\(valueName)"
+    }
+
+    /// Initialize with KeyPaths
+    ///
+    /// - Parameters:
+    ///   - groupBy: KeyPaths to grouping fields (empty for global distinct)
+    ///   - value: KeyPath to the field to count distinct values
+    ///   - precision: HyperLogLog precision parameter (default: 14)
+    public init(groupBy: [PartialKeyPath<Root>] = [], value: PartialKeyPath<Root>, precision: Int = 14) {
+        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
+        self.valueFieldName = Root.fieldName(for: value)
+        self.precision = precision
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(groupByFieldNames: [String], valueFieldName: String, precision: Int = 14) {
+        self.groupByFieldNames = groupByFieldNames
+        self.valueFieldName = valueFieldName
+        self.precision = precision
+    }
+
+    public static func validateTypes(_ types: [Any.Type]) throws {
+        guard types.count >= 1 else {
+            throw IndexTypeValidationError.invalidTypeCount(
+                index: identifier,
+                expected: 1,
+                actual: 0
+            )
+        }
+        // Value field can be any Hashable type (will be hashed for HLL)
+        // Grouping fields must be Comparable (for key construction)
+        let groupingTypes = types.dropLast()
+        for type in groupingTypes {
+            guard TypeValidation.isComparable(type) else {
+                throw IndexTypeValidationError.unsupportedType(
+                    index: identifier,
+                    type: type,
+                    reason: "Distinct index grouping fields must be Comparable"
+                )
+            }
+        }
+    }
+}
+
+// MARK: - PercentileIndexKind
+
+/// Aggregation index for estimating percentiles using t-digest
+///
+/// **Algorithm**: t-digest (streaming quantile estimation)
+/// - High accuracy at extreme percentiles (p99, p99.9)
+/// - Memory: ~10KB per group (compression=100)
+/// - Supports merge for distributed computation
+///
+/// **Usage**:
+/// ```swift
+/// @Persistable
+/// struct ResponseTime {
+///     var endpoint: String
+///     var latencyMs: Double
+///
+///     // Track latency percentiles per endpoint
+///     #Index<ResponseTime>(type: PercentileIndexKind(groupBy: [\.endpoint], value: \.latencyMs))
+/// }
+/// ```
+///
+/// **Key Structure**: `[indexSubspace][groupKey1][groupKey2]... = TDigest (serialized)`
+///
+/// **Important Limitations**:
+/// - Add-only: Cannot remove values once added
+/// - Approximate: Results are estimates
+/// - After deletion, percentiles do NOT update
+///
+/// **Best for**:
+/// - Latency monitoring (p50, p90, p99, p99.9)
+/// - Response time analytics
+/// - Any scenario needing streaming quantile estimation
+///
+/// **Reference**: Dunning, T. & Ertl, O. "Computing Extremely Accurate Quantiles Using t-Digests" (2019)
+public struct PercentileIndexKind<Root: Persistable, Value: Numeric & Comparable & Codable & Sendable>: IndexKind {
+    public static var identifier: String { "percentile" }
+    public static var subspaceStructure: SubspaceStructure { .aggregation }
+
+    /// Field names for grouping
+    public let groupByFieldNames: [String]
+
+    /// Field name for the value to track percentiles
+    public let valueFieldName: String
+
+    /// Value type name for Codable reconstruction
+    public let valueTypeName: String
+
+    /// t-digest compression parameter (default: 100)
+    /// - Higher = more accuracy, more memory
+    /// - 50: Lower memory, less accuracy
+    /// - 100: Balanced (recommended)
+    /// - 200: Higher accuracy, more memory
+    public let compression: Double
+
+    /// All field names (groupBy + value) for IndexKind protocol
+    public var fieldNames: [String] {
+        groupByFieldNames + [valueFieldName]
+    }
+
+    /// Default index name: "{TypeName}_percentile_{groupFields}_{valueField}"
+    public var indexName: String {
+        let groupNames = groupByFieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let valueName = valueFieldName.replacingOccurrences(of: ".", with: "_")
+        if groupNames.isEmpty {
+            return "\(Root.persistableType)_percentile_\(valueName)"
+        }
+        return "\(Root.persistableType)_percentile_\(groupNames.joined(separator: "_"))_\(valueName)"
+    }
+
+    /// Initialize with KeyPaths
+    ///
+    /// - Parameters:
+    ///   - groupBy: KeyPaths to grouping fields (empty for global percentile)
+    ///   - value: KeyPath to the numeric field to track percentiles
+    ///   - compression: t-digest compression parameter (default: 100)
+    public init(groupBy: [PartialKeyPath<Root>] = [], value: KeyPath<Root, Value>, compression: Double = 100) {
+        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
+        self.valueFieldName = Root.fieldName(for: value)
+        self.valueTypeName = String(describing: Value.self)
+        self.compression = compression
+    }
+
+    /// Initialize with field name strings (for Codable reconstruction)
+    public init(groupByFieldNames: [String], valueFieldName: String, valueTypeName: String, compression: Double = 100) {
+        self.groupByFieldNames = groupByFieldNames
+        self.valueFieldName = valueFieldName
+        self.valueTypeName = valueTypeName
+        self.compression = compression
+    }
+
+    public static func validateTypes(_ types: [Any.Type]) throws {
+        guard types.count >= 1 else {
+            throw IndexTypeValidationError.invalidTypeCount(
+                index: identifier,
+                expected: 1,
+                actual: 0
+            )
+        }
+        // Grouping fields must be Comparable
+        let groupingTypes = types.dropLast()
+        for type in groupingTypes {
+            guard TypeValidation.isComparable(type) else {
+                throw IndexTypeValidationError.unsupportedType(
+                    index: identifier,
+                    type: type,
+                    reason: "Percentile index grouping fields must be Comparable"
+                )
+            }
+        }
+        // Value field must be Numeric
+        guard let valueType = types.last else { return }
+        guard TypeValidation.isNumeric(valueType) else {
+            throw IndexTypeValidationError.unsupportedType(
+                index: identifier,
+                type: valueType,
+                reason: "Percentile index value field must be Numeric"
+            )
+        }
+    }
+}
