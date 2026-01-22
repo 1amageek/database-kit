@@ -1,7 +1,5 @@
 // RelationshipMacro.swift
 // Relationship - @Relationship macro declaration
-//
-// Reference: SwiftData @Relationship macro
 
 // MARK: - @Relationship Macro Declaration
 

@@ -66,16 +66,14 @@ public struct Snapshot<T: Persistable>: Sendable {
     /// The underlying Persistable item
     public let item: T
 
-    /// Loaded relationships keyed by FK KeyPath
+    /// Loaded relationships keyed by field name
     ///
     /// This is populated when using `joining()` in queries.
-    /// Access via generated properties (e.g., `order.customer`) or
-    /// via `ref()`/`refs()` methods.
+    /// Access via `ref()`/`refs()` methods which internally convert
+    /// KeyPath to field name for lookup.
     ///
-    /// Note: `nonisolated(unsafe)` is used because AnyKeyPath is not Sendable,
-    /// but this is safe since relations are only set during initialization
-    /// and the `with()` methods create new Snapshot instances.
-    public nonisolated(unsafe) var relations: [AnyKeyPath: any Sendable]
+    /// Using field names instead of AnyKeyPath enables proper Sendable compliance.
+    public var relations: [String: any Sendable]
 
     // MARK: - Initialization
 
@@ -83,8 +81,8 @@ public struct Snapshot<T: Persistable>: Sendable {
     ///
     /// - Parameters:
     ///   - item: The Persistable item
-    ///   - relations: Dictionary of loaded relationships keyed by FK KeyPath
-    public init(item: T, relations: [AnyKeyPath: any Sendable] = [:]) {
+    ///   - relations: Dictionary of loaded relationships keyed by field name
+    public init(item: T, relations: [String: any Sendable] = [:]) {
         self.item = item
         self.relations = relations
     }
@@ -118,7 +116,8 @@ public struct Snapshot<T: Persistable>: Sendable {
     ///   - keyPath: KeyPath to the optional FK field
     /// - Returns: The loaded related item, or nil
     public func ref<R: Persistable>(_ type: R.Type, _ keyPath: KeyPath<T, String?>) -> R? {
-        relations[keyPath] as? R
+        let fieldName = T.fieldName(for: keyPath)
+        return relations[fieldName] as? R
     }
 
     /// Access a to-one relationship by FK KeyPath (required FK)
@@ -134,7 +133,8 @@ public struct Snapshot<T: Persistable>: Sendable {
     ///   - keyPath: KeyPath to the required FK field
     /// - Returns: The loaded related item, or nil
     public func ref<R: Persistable>(_ type: R.Type, _ keyPath: KeyPath<T, String>) -> R? {
-        relations[keyPath] as? R
+        let fieldName = T.fieldName(for: keyPath)
+        return relations[fieldName] as? R
     }
 
     /// Access a to-many relationship by FK array KeyPath
@@ -150,9 +150,10 @@ public struct Snapshot<T: Persistable>: Sendable {
     ///   - keyPath: KeyPath to the FK array field
     /// - Returns: Array of loaded related items (empty if not loaded)
     public func refs<R: Persistable>(_ type: R.Type, _ keyPath: KeyPath<T, [String]>) -> [R] {
+        let fieldName = T.fieldName(for: keyPath)
         // Note: We can't directly cast [any Persistable] to [R] because Swift arrays
         // are not covariant. We need to cast each element individually.
-        guard let items = relations[keyPath] as? [any Persistable] else {
+        guard let items = relations[fieldName] as? [any Persistable] else {
             return []
         }
         return items.compactMap { $0 as? R }
@@ -172,7 +173,8 @@ public struct Snapshot<T: Persistable>: Sendable {
     ) -> Snapshot<T> {
         var newRelations = relations
         if let value = value {
-            newRelations[keyPath] = value
+            let fieldName = T.fieldName(for: keyPath)
+            newRelations[fieldName] = value
         }
         return Snapshot(item: item, relations: newRelations)
     }
@@ -188,7 +190,8 @@ public struct Snapshot<T: Persistable>: Sendable {
         loadedAs value: [R]
     ) -> Snapshot<T> {
         var newRelations = relations
-        newRelations[keyPath] = value
+        let fieldName = T.fieldName(for: keyPath)
+        newRelations[fieldName] = value
         return Snapshot(item: item, relations: newRelations)
     }
 }

@@ -443,7 +443,7 @@ let decoded = try ProtobufDecoder().decode(User.self, from: data)
 Server-side database operations powered by FoundationDB. DatabaseFramework implements the index maintenance logic for index types defined in DatabaseKit.
 
 **Key Features:**
-- **FDBContainer**: SwiftData-like container management
+- **FDBContainer**: Application resource manager
 - **FDBContext**: Change tracking and batch operations
 - **Index Maintainers**: Concrete implementations for all index types
 - **Schema Versioning**: Online index building and migrations

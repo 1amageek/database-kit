@@ -1,5 +1,4 @@
-
-/// VersionedSchema - SwiftData-compatible protocol for defining schema versions
+/// VersionedSchema - Protocol for defining schema versions
 ///
 /// **Design**: Each schema version is represented as a type conforming to this protocol.
 /// This enables type-safe schema evolution with compile-time checks.

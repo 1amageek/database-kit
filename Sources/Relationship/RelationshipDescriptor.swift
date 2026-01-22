@@ -1,7 +1,5 @@
 // RelationshipDescriptor.swift
 // Relationship - Relationship descriptor for Persistable types
-//
-// Reference: SwiftData @Relationship macro
 
 import Core
 
@@ -10,8 +8,6 @@ import Core
 /// Delete rule when the related model is deleted
 ///
 /// Controls what happens to items that reference the deleted item.
-///
-/// **Reference**: SwiftData `Schema.Relationship.DeleteRule`
 ///
 /// **Usage**:
 /// ```swift
