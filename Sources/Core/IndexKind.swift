@@ -145,6 +145,33 @@ public protocol ValueTypedIndexKind: IndexKind {
     var valueTypeName: String { get }
 }
 
+// MARK: - CoveringIndexKind
+
+/// Protocol for index kinds that support covering indexes (index-only scans)
+///
+/// **Purpose**: Provides access to stored field information for type-erased IndexKind
+///
+/// **Conforming Types**:
+/// - ScalarIndexKind (with storedFieldNames)
+///
+/// **Usage**:
+/// ```swift
+/// if let covering = descriptor.kind as? CoveringIndexKind {
+///     let storedFields = covering.storedFieldNames
+///     if !storedFields.isEmpty {
+///         print("This index supports index-only scan for: \(storedFields)")
+///     }
+/// }
+/// ```
+public protocol CoveringIndexKind: IndexKind {
+    /// Field names stored in the index value for covering index / index-only scan
+    ///
+    /// When a query only needs these fields plus the indexed fields,
+    /// the executor can read values directly from the index without
+    /// looking up the primary record.
+    var storedFieldNames: [String] { get }
+}
+
 /// Index type validation error
 ///
 /// **Example**:

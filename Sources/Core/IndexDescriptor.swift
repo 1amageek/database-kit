@@ -170,6 +170,33 @@ extension IndexDescriptor {
     public var kindIdentifier: String {
         type(of: kind).identifier
     }
+
+    /// Field names stored in the index value (for covering index / index-only scan)
+    ///
+    /// Returns an empty array if the index kind doesn't support covering indexes.
+    ///
+    /// **Example**:
+    /// ```swift
+    /// if descriptor.storedFieldNames.isEmpty {
+    ///     print("This index requires primary key lookup")
+    /// } else {
+    ///     print("Index-only scan available for: \(descriptor.storedFieldNames)")
+    /// }
+    /// ```
+    public var storedFieldNames: [String] {
+        if let covering = kind as? any CoveringIndexKind {
+            return covering.storedFieldNames
+        }
+        return []
+    }
+
+    /// Whether this index supports index-only scan (covering index)
+    ///
+    /// An index is covering when it stores additional fields in its value,
+    /// allowing queries to be answered without looking up the primary record.
+    public var isCovering: Bool {
+        !storedFieldNames.isEmpty
+    }
 }
 
 // MARK: - Description
