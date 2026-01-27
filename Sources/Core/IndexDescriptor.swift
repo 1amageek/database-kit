@@ -84,6 +84,24 @@ public struct IndexDescriptor: Descriptor, @unchecked Sendable {
     /// - metadata: User-defined metadata
     public let commonOptions: CommonIndexOptions
 
+    /// KeyPaths of fields stored in the index value (for covering index / index-only scan)
+    ///
+    /// **Benefits**:
+    /// - Type-safe field access
+    /// - Refactoring-friendly (IDE renames propagate)
+    ///
+    /// **Example**: `[\Product.name, \Product.price]`
+    public let storedKeyPaths: [AnyKeyPath]
+
+    /// Field names stored in the index value (for covering index / index-only scan)
+    ///
+    /// When a query only needs these fields plus the indexed fields,
+    /// the executor can read values directly from the index without
+    /// looking up the primary record.
+    ///
+    /// **Example**: `["name", "price"]`
+    public let storedFieldNames: [String]
+
     /// Standard initializer with typed KeyPaths
     ///
     /// **Example**:
@@ -105,12 +123,16 @@ public struct IndexDescriptor: Descriptor, @unchecked Sendable {
         name: String,
         keyPaths: [PartialKeyPath<Root>],
         kind: any IndexKind,
-        commonOptions: CommonIndexOptions = .init()
+        commonOptions: CommonIndexOptions = .init(),
+        storedKeyPaths: [PartialKeyPath<Root>] = [],
+        storedFieldNames: [String] = []
     ) {
         self.name = name
         self.keyPaths = keyPaths
         self.kind = kind
         self.commonOptions = commonOptions
+        self.storedKeyPaths = storedKeyPaths
+        self.storedFieldNames = storedFieldNames
     }
 
     /// Initializer with AnyKeyPath array (for internal use)
@@ -118,12 +140,16 @@ public struct IndexDescriptor: Descriptor, @unchecked Sendable {
         name: String,
         anyKeyPaths: [AnyKeyPath],
         kind: any IndexKind,
-        commonOptions: CommonIndexOptions = .init()
+        commonOptions: CommonIndexOptions = .init(),
+        storedKeyPaths: [AnyKeyPath] = [],
+        storedFieldNames: [String] = []
     ) {
         self.name = name
         self.keyPaths = anyKeyPaths
         self.kind = kind
         self.commonOptions = commonOptions
+        self.storedKeyPaths = storedKeyPaths
+        self.storedFieldNames = storedFieldNames
     }
 }
 
@@ -169,25 +195,6 @@ extension IndexDescriptor {
     /// ```
     public var kindIdentifier: String {
         type(of: kind).identifier
-    }
-
-    /// Field names stored in the index value (for covering index / index-only scan)
-    ///
-    /// Returns an empty array if the index kind doesn't support covering indexes.
-    ///
-    /// **Example**:
-    /// ```swift
-    /// if descriptor.storedFieldNames.isEmpty {
-    ///     print("This index requires primary key lookup")
-    /// } else {
-    ///     print("Index-only scan available for: \(descriptor.storedFieldNames)")
-    /// }
-    /// ```
-    public var storedFieldNames: [String] {
-        if let covering = kind as? any CoveringIndexKind {
-            return covering.storedFieldNames
-        }
-        return []
     }
 
     /// Whether this index supports index-only scan (covering index)

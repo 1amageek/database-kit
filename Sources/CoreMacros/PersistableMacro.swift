@@ -253,9 +253,10 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
                macroDecl.macroName.text == "Index" {
 
-                // Format: #Index(IndexKind<T>(...), unique: Bool, name: String?)
+                // Format: #Index(IndexKind<T>(...), storedFields: [...], unique: Bool, name: String?)
                 // First unlabeled argument is the IndexKind expression (type specified in IndexKind generic)
                 var keyPaths: [String] = []
+                var storedFieldKeyPaths: [String] = []
                 var indexKindExpr: String?
                 var indexKindName: String?
                 var isUnique = false
@@ -296,6 +297,20 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                             indexKindExpr = arg.expression.description.trimmingCharacters(in: .whitespaces)
                         }
                     }
+                    // "storedFields:" argument (KeyPath array for covering index)
+                    else if let label = arg.label, label.text == "storedFields" {
+                        if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
+                            for element in arrayExpr.elements {
+                                if let keyPathExpr = element.expression.as(KeyPathExprSyntax.self) {
+                                    let keyPathString = extractKeyPathString(from: keyPathExpr)
+                                    if !keyPathString.isEmpty {
+                                        storedFieldKeyPaths.append(keyPathString)
+                                        allIndexKeyPaths.insert(keyPathString)
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // "unique:" argument
                     else if let label = arg.label, label.text == "unique" {
                         if let boolExpr = arg.expression.as(BooleanLiteralExprSyntax.self) {
@@ -333,14 +348,32 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 let kindInit = indexKindExpr ?? "ScalarIndexKind(fieldNames: [])"
                 let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
 
-                let descriptorInit = """
-                    IndexDescriptor(
-                        name: "\(finalIndexName)",
-                        keyPaths: [\(keyPathsLiterals)],
-                        kind: \(kindInit),
-                        commonOptions: \(optionsInit)
-                    )
-                """
+                // Generate storedKeyPaths and storedFieldNames if present
+                let storedKeyPathsLiterals = storedFieldKeyPaths.map { "\\\(structName).\($0)" }.joined(separator: ", ")
+                let storedFieldNamesLiterals = storedFieldKeyPaths.map { "\"\($0)\"" }.joined(separator: ", ")
+
+                let descriptorInit: String
+                if storedFieldKeyPaths.isEmpty {
+                    descriptorInit = """
+                        IndexDescriptor(
+                            name: "\(finalIndexName)",
+                            keyPaths: [\(keyPathsLiterals)],
+                            kind: \(kindInit),
+                            commonOptions: \(optionsInit)
+                        )
+                    """
+                } else {
+                    descriptorInit = """
+                        IndexDescriptor(
+                            name: "\(finalIndexName)",
+                            keyPaths: [\(keyPathsLiterals)],
+                            kind: \(kindInit),
+                            commonOptions: \(optionsInit),
+                            storedKeyPaths: [\(storedKeyPathsLiterals)],
+                            storedFieldNames: [\(storedFieldNamesLiterals)]
+                        )
+                    """
+                }
 
                 descriptorInits.append(descriptorInit)
             }

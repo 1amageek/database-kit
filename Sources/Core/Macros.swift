@@ -127,6 +127,7 @@ public macro Persistable(type: String) = #externalMacro(module: "CoreMacros", ty
 @freestanding(declaration)
 public macro Index(
     _ type: any IndexKind,
+    storedFields: [AnyKeyPath] = [],
     unique: Bool = false,
     name: String? = nil
 ) = #externalMacro(module: "CoreMacros", type: "IndexMacro")

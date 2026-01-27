@@ -18,14 +18,13 @@ public typealias TimeInterval = Double
 /// ```swift
 /// @Persistable
 /// struct Product {
-///     #Index(type: ScalarIndexKind<Product>(fields: [\.category, \.price]))
+///     #Index(ScalarIndexKind<Product>(fields: [\.category, \.price]))
 ///     var category: String
 ///     var price: Int
 /// }
 /// ```
 ///
 /// **Key Structure**: `[indexSubspace][field1Value][field2Value]...[primaryKey] = ''`
-/// (With covering index: value contains stored field values)
 ///
 /// **Supports**:
 /// - Exact match queries
@@ -33,32 +32,18 @@ public typealias TimeInterval = Double
 /// - Prefix queries
 /// - Composite indexes
 /// - Unique constraints
-/// - Covering indexes (index-only scans)
 ///
 /// **Covering Index (Index-Only Scan)**:
-/// Store additional fields in the index value to avoid primary key lookup:
+/// Use `storedFields` on `#Index` macro to store additional fields:
 /// ```swift
-/// ScalarIndexKind<Product>(
-///     fields: [\.category],
-///     storedFields: [\.name, \.price]  // Stored in value for index-only scan
-/// )
+/// #Index(ScalarIndexKind<Product>(fields: [\.category]), storedFields: [\.name, \.price])
 /// ```
-public struct ScalarIndexKind<Root: Persistable>: CoveringIndexKind {
+public struct ScalarIndexKind<Root: Persistable>: IndexKind {
     public static var identifier: String { "scalar" }
     public static var subspaceStructure: SubspaceStructure { .flat }
 
     /// Field names for this index (stored as strings for Codable)
     public let fieldNames: [String]
-
-    /// Field names to store in the index value (for covering index / index-only scan)
-    ///
-    /// When these fields are requested in a query, the executor can read them
-    /// directly from the index without looking up the primary record.
-    ///
-    /// **Trade-off**:
-    /// - Pro: Faster queries (no primary key lookup)
-    /// - Con: Larger index size, more write overhead
-    public let storedFieldNames: [String]
 
     /// Default index name: "{TypeName}_{field1}_{field2}_..."
     public var indexName: String {
@@ -68,18 +53,14 @@ public struct ScalarIndexKind<Root: Persistable>: CoveringIndexKind {
 
     /// Initialize with KeyPaths (converted to field names internally)
     ///
-    /// - Parameters:
-    ///   - fields: KeyPaths to indexed fields
-    ///   - storedFields: KeyPaths to fields to store in index value (for covering index)
-    public init(fields: [PartialKeyPath<Root>], storedFields: [PartialKeyPath<Root>] = []) {
+    /// - Parameter fields: KeyPaths to indexed fields
+    public init(fields: [PartialKeyPath<Root>]) {
         self.fieldNames = fields.map { Root.fieldName(for: $0) }
-        self.storedFieldNames = storedFields.map { Root.fieldName(for: $0) }
     }
 
     /// Initialize with field name strings (for Codable reconstruction)
-    public init(fieldNames: [String], storedFieldNames: [String] = []) {
+    public init(fieldNames: [String]) {
         self.fieldNames = fieldNames
-        self.storedFieldNames = storedFieldNames
     }
 
     public static func validateTypes(_ types: [Any.Type]) throws {

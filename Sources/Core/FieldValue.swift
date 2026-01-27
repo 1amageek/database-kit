@@ -31,7 +31,7 @@ import class Foundation.NSNull
 /// var hll = HyperLogLog()
 /// hll.add(value)
 /// ```
-public enum FieldValue: Sendable, Hashable, Codable {
+public enum FieldValue: Sendable, Codable {
     case int64(Int64)
     case double(Double)
     case string(String)
@@ -153,6 +153,74 @@ public enum FieldValue: Sendable, Hashable, Codable {
             return v
         default:
             return nil
+        }
+    }
+}
+
+// MARK: - Equatable
+
+extension FieldValue: Equatable {
+    /// Cross-type numeric equality
+    ///
+    /// Unlike Swift's synthesized enum Equatable (which requires matching cases),
+    /// this implementation treats numerically equivalent int64 and double as equal:
+    /// `.int64(42) == .double(42.0)` → `true`
+    ///
+    /// This is consistent with the Comparable implementation and with SPARQL/SQL
+    /// numeric semantics where integer 42 equals double 42.0.
+    ///
+    /// **Precision**: For Int64 values beyond ±2^53, `Double(largeInt64)` is rounded,
+    /// so `Double(largeInt64) == Double(otherLargeInt64)` may spuriously return true.
+    /// However, `.int64(largeValue) == .double(Double(largeValue))` correctly evaluates
+    /// because the Double side is already the rounded value.
+    public static func == (lhs: FieldValue, rhs: FieldValue) -> Bool {
+        switch (lhs, rhs) {
+        case (.int64(let l), .int64(let r)): return l == r
+        case (.double(let l), .double(let r)): return l == r
+        case (.string(let l), .string(let r)): return l == r
+        case (.bool(let l), .bool(let r)): return l == r
+        case (.data(let l), .data(let r)): return l == r
+        case (.null, .null): return true
+        case (.array(let l), .array(let r)): return l == r
+        // Cross-type numeric equality
+        case (.int64(let l), .double(let r)): return Double(l) == r
+        case (.double(let l), .int64(let r)): return l == Double(r)
+        default: return false
+        }
+    }
+}
+
+// MARK: - Hashable
+
+extension FieldValue: Hashable {
+    /// Cross-type consistent hashing
+    ///
+    /// Must be consistent with Equatable: if `a == b`, then `a.hashValue == b.hashValue`.
+    /// Since `.int64(42) == .double(42.0)`, both must produce the same hash.
+    /// Achieved by hashing all numeric types (int64, double) with a shared discriminator
+    /// and converting int64 to Double for the hash value.
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case .int64(let v):
+            hasher.combine(0)
+            hasher.combine(Double(v))
+        case .double(let v):
+            hasher.combine(0)
+            hasher.combine(v)
+        case .string(let v):
+            hasher.combine(1)
+            hasher.combine(v)
+        case .bool(let v):
+            hasher.combine(2)
+            hasher.combine(v)
+        case .data(let v):
+            hasher.combine(3)
+            hasher.combine(v)
+        case .null:
+            hasher.combine(4)
+        case .array(let v):
+            hasher.combine(5)
+            for element in v { hasher.combine(element) }
         }
     }
 }
