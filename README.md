@@ -22,7 +22,7 @@ dependencies: [
 
 | Module | Description |
 |--------|-------------|
-| `Core` | Persistable protocol, @Persistable macro, Schema, Serialization |
+| `Core` | Persistable protocol, @Persistable macro, Schema, Serialization, FieldSchema, PersistableEnum |
 | `Relationship` | RelationshipIndexKind for cross-type queries, @Relationship macro |
 | `Vector` | VectorIndexKind for similarity search |
 | `FullText` | FullTextIndexKind for text search |
@@ -334,6 +334,8 @@ The macro generates:
 - `var id: String = ULID().ulidString` (if not user-defined)
 - `static var persistableType: String`
 - `static var allFields: [String]`
+- `static var fieldSchemas: [FieldSchema]` (field names, types, field numbers, optionality)
+- `static func enumMetadata(for fieldName: String) -> EnumMetadata?` (runtime enum case extraction)
 - `static var indexDescriptors: [IndexDescriptor]`
 - `static var relationshipDescriptors: [RelationshipDescriptor]`
 - `Codable`, `Sendable` conformances
@@ -397,6 +399,44 @@ var customerID: String?
 | `.cascade` | Delete this record when related record deleted |
 | `.deny` | Prevent deletion if related records exist |
 | `.noAction` | No automatic action |
+
+## PersistableEnum
+
+Enum types used as fields in `@Persistable` models should conform to `PersistableEnum`. This enables automatic enum metadata generation for the schema catalog, allowing CLI tools to display valid cases and validate values.
+
+```swift
+import Core
+
+enum Status: String, PersistableEnum {
+    case active
+    case inactive
+    case pending
+}
+
+enum Priority: Int, PersistableEnum {
+    case low = 0
+    case medium = 1
+    case high = 2
+}
+
+@Persistable
+struct Task {
+    #Directory<Task>("app", "tasks")
+
+    var title: String
+    var status: Status = .pending
+    var priority: Priority = .medium
+}
+```
+
+`PersistableEnum` combines `Sendable`, `Codable`, `CaseIterable`, and `RawRepresentable`. The `@Persistable` macro automatically generates `enumMetadata(for:)` that extracts case information at runtime for fields whose types conform to `PersistableEnum`.
+
+### FieldSchemaType Resolution
+
+The `@Persistable` macro classifies field types at compile time. For types it cannot recognize as primitives (String, Int, Double, Bool, Date, UUID, Data), it generates `FieldSchemaType.resolve(TypeName.self)` which checks `RawRepresentable` conformance at runtime:
+
+- `RawRepresentable` types → `.enum`
+- All other types → `.nested`
 
 ## Schema Definition
 

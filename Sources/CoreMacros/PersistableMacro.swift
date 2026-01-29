@@ -610,10 +610,69 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(fieldNumberDecl)
 
-        // Generate enumMetadata method (default implementation: returns nil)
+        // Generate fieldSchemas property
+        var fieldSchemaEntries: [String] = []
+        var schemaFieldIndex = 0
+        for fieldInfo in fieldInfos {
+            if !fieldInfo.isTransient {
+                schemaFieldIndex += 1
+                let rawType = fieldInfo.type
+                let (schemaType, isOptional, isArray) = mapToFieldSchemaType(rawType)
+                fieldSchemaEntries.append(
+                    "FieldSchema(name: \"\(fieldInfo.name)\", fieldNumber: \(schemaFieldIndex), type: .\(schemaType), isOptional: \(isOptional), isArray: \(isArray))"
+                )
+            }
+        }
+        let fieldSchemasArray = fieldSchemaEntries.isEmpty
+            ? "[]"
+            : "[\n            \(fieldSchemaEntries.joined(separator: ",\n            "))\n        ]"
+        let fieldSchemasDecl: DeclSyntax = """
+            public static var fieldSchemas: [FieldSchema] { \(raw: fieldSchemasArray) }
+            """
+        decls.append(fieldSchemasDecl)
+
+        // Generate enumMetadata method with runtime extraction for non-primitive fields
+        let primitiveTypeNames: Set<String> = [
+            "String", "Int", "Int8", "Int16", "Int32", "Int64",
+            "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
+            "Double", "Float", "Bool", "Date", "UUID", "Data"
+        ]
+        var enumMetadataCases: [String] = []
+        for fieldInfo in fieldInfos {
+            if fieldInfo.isTransient || fieldInfo.name == "id" { continue }
+            // Extract bare type name (unwrap Optional, Array)
+            var bareType = fieldInfo.type.trimmingCharacters(in: .whitespaces)
+            if bareType.hasSuffix("?") {
+                bareType = String(bareType.dropLast())
+            } else if bareType.hasPrefix("Optional<") && bareType.hasSuffix(">") {
+                bareType = String(bareType.dropFirst("Optional<".count).dropLast())
+            }
+            if bareType.hasPrefix("[") && bareType.hasSuffix("]") {
+                bareType = String(bareType.dropFirst().dropLast())
+            } else if bareType.hasPrefix("Array<") && bareType.hasSuffix(">") {
+                bareType = String(bareType.dropFirst("Array<".count).dropLast())
+            }
+            if bareType.hasSuffix("?") {
+                bareType = String(bareType.dropLast())
+            }
+            if !primitiveTypeNames.contains(bareType) {
+                enumMetadataCases.append("case \"\(fieldInfo.name)\": return EnumMetadata.extract(from: \(bareType).self)")
+            }
+        }
+        let enumMetadataBody: String
+        if enumMetadataCases.isEmpty {
+            enumMetadataBody = "return nil"
+        } else {
+            enumMetadataBody = """
+            switch fieldName {
+                    \(enumMetadataCases.joined(separator: "\n        "))
+                    default: return nil
+                }
+            """
+        }
         let enumMetadataDecl: DeclSyntax = """
             public static func enumMetadata(for fieldName: String) -> EnumMetadata? {
-                return nil
+                \(raw: enumMetadataBody)
             }
             """
         decls.append(enumMetadataDecl)
@@ -998,6 +1057,82 @@ private func generateIndexName(typeName: String, indexKindName: String, fieldNam
         }
         return "\(typeName)_\(kindIdentifier)_\(fieldNames.joined(separator: "_"))"
     }
+}
+
+/// Maps a Swift type string to (FieldSchemaType name, isOptional, isArray)
+///
+/// Handles Optional<T>, T?, [T], Array<T>, and bare types.
+private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isOptional: Bool, isArray: Bool) {
+    var type = rawType.trimmingCharacters(in: .whitespaces)
+
+    // Unwrap Optional
+    var isOptional = false
+    if type.hasSuffix("?") {
+        isOptional = true
+        type = String(type.dropLast())
+    } else if type.hasPrefix("Optional<") && type.hasSuffix(">") {
+        isOptional = true
+        type = String(type.dropFirst("Optional<".count).dropLast())
+    }
+
+    // Unwrap Array
+    var isArray = false
+    if type.hasPrefix("[") && type.hasSuffix("]") {
+        isArray = true
+        type = String(type.dropFirst().dropLast())
+    } else if type.hasPrefix("Array<") && type.hasSuffix(">") {
+        isArray = true
+        type = String(type.dropFirst("Array<".count).dropLast())
+    }
+
+    // Unwrap inner Optional (e.g., [String?])
+    if type.hasSuffix("?") {
+        type = String(type.dropLast())
+    }
+
+    let schemaType: String
+    switch type {
+    case "String":
+        schemaType = "string"
+    case "Int":
+        schemaType = "int"
+    case "Int8":
+        schemaType = "int8"
+    case "Int16":
+        schemaType = "int16"
+    case "Int32":
+        schemaType = "int32"
+    case "Int64":
+        schemaType = "int64"
+    case "UInt":
+        schemaType = "uint"
+    case "UInt8":
+        schemaType = "uint8"
+    case "UInt16":
+        schemaType = "uint16"
+    case "UInt32":
+        schemaType = "uint32"
+    case "UInt64":
+        schemaType = "uint64"
+    case "Double":
+        schemaType = "double"
+    case "Float":
+        schemaType = "float"
+    case "Bool":
+        schemaType = "bool"
+    case "Date":
+        schemaType = "date"
+    case "UUID":
+        schemaType = "uuid"
+    case "Data":
+        schemaType = "data"
+    default:
+        // Non-primitive type: resolve at runtime via RawRepresentable check.
+        // FieldSchemaType.resolve(TypeName.self) returns .enum if RawRepresentable, .nested otherwise.
+        schemaType = "resolve(\(type).self)"
+    }
+
+    return (schemaType, isOptional, isArray)
 }
 
 /// Compiler plugin entry point
