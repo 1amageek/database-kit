@@ -81,6 +81,10 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     /// To node field name (RDF: Object, Graph: Target)
     public let toField: String
 
+    /// Graph field name (RDF: Named Graph)
+    /// nil means no graph field (traditional triple)
+    public let graphField: String?
+
     /// Storage strategy determining number of index orderings
     public let strategy: GraphIndexStrategy
 
@@ -88,21 +92,34 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
 
     /// All field names for IndexKind protocol
     public var fieldNames: [String] {
+        var fields: [String]
         if edgeField.isEmpty {
-            return [fromField, toField]
+            fields = [fromField, toField]
+        } else {
+            fields = [fromField, edgeField, toField]
         }
-        return [fromField, edgeField, toField]
+        if let graphField {
+            fields.append(graphField)
+        }
+        return fields
     }
 
     /// Default index name
     public var indexName: String {
         let f = fromField.replacingOccurrences(of: ".", with: "_")
         let t = toField.replacingOccurrences(of: ".", with: "_")
+        var name: String
         if edgeField.isEmpty {
-            return "\(Root.persistableType)_graph_\(f)_\(t)"
+            name = "\(Root.persistableType)_graph_\(f)_\(t)"
+        } else {
+            let e = edgeField.replacingOccurrences(of: ".", with: "_")
+            name = "\(Root.persistableType)_graph_\(f)_\(e)_\(t)"
         }
-        let e = edgeField.replacingOccurrences(of: ".", with: "_")
-        return "\(Root.persistableType)_graph_\(f)_\(e)_\(t)"
+        if let graphField {
+            let g = graphField.replacingOccurrences(of: ".", with: "_")
+            name += "_\(g)"
+        }
+        return name
     }
 
     /// Validate that field types are appropriate for graph index
@@ -147,16 +164,19 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     ///   - from: KeyPath to from/source/subject field
     ///   - edge: KeyPath to edge/label/predicate field
     ///   - to: KeyPath to to/target/object field
+    ///   - graph: Optional KeyPath to graph/named graph field
     ///   - strategy: Storage strategy (default: .tripleStore)
     public init(
         from: PartialKeyPath<Root>,
         edge: PartialKeyPath<Root>,
         to: PartialKeyPath<Root>,
+        graph: PartialKeyPath<Root>? = nil,
         strategy: GraphIndexStrategy = .tripleStore
     ) {
         self.fromField = Root.fieldName(for: from)
         self.edgeField = Root.fieldName(for: edge)
         self.toField = Root.fieldName(for: to)
+        self.graphField = graph.map { Root.fieldName(for: $0) }
         self.strategy = strategy
     }
 
@@ -165,11 +185,13 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
         fromField: String,
         edgeField: String,
         toField: String,
+        graphField: String? = nil,
         strategy: GraphIndexStrategy = .tripleStore
     ) {
         self.fromField = fromField
         self.edgeField = edgeField
         self.toField = toField
+        self.graphField = graphField
         self.strategy = strategy
     }
 
@@ -184,18 +206,21 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     ///   - subject: KeyPath to subject field
     ///   - predicate: KeyPath to predicate field
     ///   - object: KeyPath to object field
+    ///   - graph: Optional KeyPath to named graph field
     ///   - strategy: Storage strategy (default: .tripleStore)
     /// - Returns: GraphIndexKind configured for RDF
     public static func rdf(
         subject: PartialKeyPath<Root>,
         predicate: PartialKeyPath<Root>,
         object: PartialKeyPath<Root>,
+        graph: PartialKeyPath<Root>? = nil,
         strategy: GraphIndexStrategy = .tripleStore
     ) -> GraphIndexKind {
         GraphIndexKind(
             from: subject,
             edge: predicate,
             to: object,
+            graph: graph,
             strategy: strategy
         )
     }
@@ -209,17 +234,20 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     ///   - source: KeyPath to source node field
     ///   - target: KeyPath to target node field
     ///   - label: Optional KeyPath to edge label field
+    ///   - graph: Optional KeyPath to named graph field
     /// - Returns: GraphIndexKind configured for adjacency queries
     public static func adjacency(
         source: PartialKeyPath<Root>,
         target: PartialKeyPath<Root>,
-        label: PartialKeyPath<Root>? = nil
+        label: PartialKeyPath<Root>? = nil,
+        graph: PartialKeyPath<Root>? = nil
     ) -> GraphIndexKind {
         if let label = label {
             return GraphIndexKind(
                 from: source,
                 edge: label,
                 to: target,
+                graph: graph,
                 strategy: .adjacency
             )
         } else {
@@ -227,6 +255,7 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
                 fromField: Root.fieldName(for: source),
                 edgeField: "",
                 toField: Root.fieldName(for: target),
+                graphField: graph.map { Root.fieldName(for: $0) },
                 strategy: .adjacency
             )
         }
@@ -241,16 +270,19 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     ///   - entity: KeyPath to entity/subject field
     ///   - relation: KeyPath to relation/predicate field
     ///   - value: KeyPath to value/object field
+    ///   - graph: Optional KeyPath to named graph field
     /// - Returns: GraphIndexKind with hexastore strategy
     public static func knowledgeGraph(
         entity: PartialKeyPath<Root>,
         relation: PartialKeyPath<Root>,
-        value: PartialKeyPath<Root>
+        value: PartialKeyPath<Root>,
+        graph: PartialKeyPath<Root>? = nil
     ) -> GraphIndexKind {
         GraphIndexKind(
             from: entity,
             edge: relation,
             to: value,
+            graph: graph,
             strategy: .hexastore
         )
     }
@@ -261,6 +293,11 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     public var hasEdgeField: Bool {
         !edgeField.isEmpty
     }
+
+    /// Check if graph field is present
+    public var hasGraphField: Bool {
+        graphField != nil
+    }
 }
 
 // MARK: - Codable
@@ -270,6 +307,7 @@ extension GraphIndexKind: Codable {
         case fromField
         case edgeField
         case toField
+        case graphField
         case strategy
     }
 
@@ -278,6 +316,7 @@ extension GraphIndexKind: Codable {
         self.fromField = try container.decode(String.self, forKey: .fromField)
         self.edgeField = try container.decode(String.self, forKey: .edgeField)
         self.toField = try container.decode(String.self, forKey: .toField)
+        self.graphField = try container.decodeIfPresent(String.self, forKey: .graphField)
         self.strategy = try container.decode(GraphIndexStrategy.self, forKey: .strategy)
     }
 
@@ -286,6 +325,7 @@ extension GraphIndexKind: Codable {
         try container.encode(fromField, forKey: .fromField)
         try container.encode(edgeField, forKey: .edgeField)
         try container.encode(toField, forKey: .toField)
+        try container.encodeIfPresent(graphField, forKey: .graphField)
         try container.encode(strategy, forKey: .strategy)
     }
 }
@@ -297,6 +337,7 @@ extension GraphIndexKind: Hashable {
         hasher.combine(fromField)
         hasher.combine(edgeField)
         hasher.combine(toField)
+        hasher.combine(graphField)
         hasher.combine(strategy)
     }
 
@@ -304,6 +345,7 @@ extension GraphIndexKind: Hashable {
         lhs.fromField == rhs.fromField &&
         lhs.edgeField == rhs.edgeField &&
         lhs.toField == rhs.toField &&
+        lhs.graphField == rhs.graphField &&
         lhs.strategy == rhs.strategy
     }
 }
