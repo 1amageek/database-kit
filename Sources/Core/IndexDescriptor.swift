@@ -84,6 +84,15 @@ public struct IndexDescriptor: Descriptor, @unchecked Sendable {
     /// - metadata: User-defined metadata
     public let commonOptions: CommonIndexOptions
 
+    /// Field names for indexed KeyPaths (resolved at construction time)
+    ///
+    /// **Benefits**:
+    /// - Cached at construction (no repeated computation)
+    /// - Used by QueryPlanner, IndexMaintainer for field matching
+    ///
+    /// **Example**: `["email"]`, `["category", "price"]`
+    public let fieldNames: [String]
+
     /// KeyPaths of fields stored in the index value (for covering index / index-only scan)
     ///
     /// **Benefits**:
@@ -119,7 +128,7 @@ public struct IndexDescriptor: Descriptor, @unchecked Sendable {
     ///   - keyPaths: Array of KeyPaths to indexed fields
     ///   - kind: Index kind metadata
     ///   - commonOptions: Common options (default: empty)
-    public init<Root>(
+    public init<Root: Persistable>(
         name: String,
         keyPaths: [PartialKeyPath<Root>],
         kind: any IndexKind,
@@ -129,28 +138,13 @@ public struct IndexDescriptor: Descriptor, @unchecked Sendable {
     ) {
         self.name = name
         self.keyPaths = keyPaths
+        self.fieldNames = keyPaths.map { Root.fieldName(for: $0) }
         self.kind = kind
         self.commonOptions = commonOptions
         self.storedKeyPaths = storedKeyPaths
         self.storedFieldNames = storedFieldNames
     }
 
-    /// Initializer with AnyKeyPath array (for internal use)
-    public init(
-        name: String,
-        anyKeyPaths: [AnyKeyPath],
-        kind: any IndexKind,
-        commonOptions: CommonIndexOptions = .init(),
-        storedKeyPaths: [AnyKeyPath] = [],
-        storedFieldNames: [String] = []
-    ) {
-        self.name = name
-        self.keyPaths = anyKeyPaths
-        self.kind = kind
-        self.commonOptions = commonOptions
-        self.storedKeyPaths = storedKeyPaths
-        self.storedFieldNames = storedFieldNames
-    }
 }
 
 // MARK: - Convenience Methods
