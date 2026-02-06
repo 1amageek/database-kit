@@ -70,90 +70,204 @@ public final class Schema: Sendable {
 
     // MARK: - Entity
 
-    /// Entity metadata (type-independent)
+    /// Entity metadata (type-independent, Codable)
     ///
-    /// Represents the schema definition for a Persistable type.
-    /// Contains only data type metadata - storage information (directories, polymorphic settings)
-    /// should be accessed directly from the type at runtime.
+    /// Represents the complete schema definition for a Persistable type.
+    /// Designed after SwiftData's `Schema.Entity` — Entity IS the metadata.
     ///
-    /// **Design principle**: Entity is a schema definition, not a storage descriptor.
-    /// - Data type info: name, fields, indexes, enum metadata
-    /// - Storage info: accessed via `persistableType` at runtime
-    public struct Entity: Sendable {
+    /// **Codable properties**: name, fields, directoryComponents, indexes, enumMetadata
+    /// **Runtime-only properties**: persistableType, indexDescriptors
+    ///
+    /// **Usage**:
+    /// - Runtime: `Entity(from: User.self)` — full metadata + runtime type
+    /// - Wire/CLI: `JSONDecoder().decode(Entity.self, from: data)` — metadata only
+    public struct Entity: Sendable, Codable, Equatable, Hashable {
+
+        // MARK: - Codable Properties
+
         /// Entity name (same as Persistable.persistableType)
         public let name: String
 
-        /// All field names
-        public let allFields: [String]
+        /// Field metadata (name, type, field number, optionality, array)
+        public let fields: [FieldSchema]
 
-        /// Index descriptors (metadata only)
-        public let indexDescriptors: [IndexDescriptor]
+        /// Directory path components (static paths and dynamic field references)
+        public let directoryComponents: [DirectoryComponentCatalog]
 
-        /// Enum metadata for enum fields
-        public let enumMetadata: [String: EnumMetadata]
+        /// Index definitions (type-erased, Codable)
+        public let indexes: [AnyIndexDescriptor]
 
-        /// The Persistable type (stored for runtime type recovery)
+        /// Enum metadata: fieldName → case names
+        public let enumMetadata: [String: [String]]
+
+        // MARK: - Runtime-Only Properties
+
+        /// The Persistable type (for runtime type recovery)
         ///
-        /// This is used by FDBRuntime to:
+        /// Used by FDBRuntime to:
         /// - Create typed IndexMaintainers during migrations
         /// - Access directory path components at runtime
-        /// - Check Polymorphable conformance and access polymorphic properties
-        public let persistableType: any Persistable.Type
+        /// - Check Polymorphable conformance
+        ///
+        /// nil when Entity is decoded from wire (no compiled type available)
+        public var persistableType: (any Persistable.Type)?
+
+        /// Typed index descriptors (runtime only, requires KeyPath)
+        ///
+        /// Empty when Entity is decoded from wire.
+        public var indexDescriptors: [IndexDescriptor]
+
+        // MARK: - Custom Codable (exclude runtime fields)
+
+        private enum CodingKeys: String, CodingKey {
+            case name, fields, directoryComponents, indexes, enumMetadata
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.name = try container.decode(String.self, forKey: .name)
+            self.fields = try container.decode([FieldSchema].self, forKey: .fields)
+            self.directoryComponents = try container.decode([DirectoryComponentCatalog].self, forKey: .directoryComponents)
+            self.indexes = try container.decode([AnyIndexDescriptor].self, forKey: .indexes)
+            self.enumMetadata = try container.decode([String: [String]].self, forKey: .enumMetadata)
+            self.persistableType = nil
+            self.indexDescriptors = []
+        }
+
+        // MARK: - Computed Properties
+
+        /// All field names
+        public var allFields: [String] {
+            fields.map(\.name)
+        }
+
+        /// Build field name → FieldSchema map (for Encoder)
+        public var fieldMapByName: [String: FieldSchema] {
+            Dictionary(uniqueKeysWithValues: fields.map { ($0.name, $0) })
+        }
+
+        /// Build field number → FieldSchema map (for Decoder)
+        public var fieldMapByNumber: [Int: FieldSchema] {
+            Dictionary(uniqueKeysWithValues: fields.map { ($0.fieldNumber, $0) })
+        }
+
+        /// Whether this type has dynamic directory components requiring partition values
+        public var hasDynamicDirectory: Bool {
+            directoryComponents.contains {
+                if case .dynamicField = $0 { return true }
+                return false
+            }
+        }
+
+        /// Field names of dynamic directory components
+        public var dynamicFieldNames: [String] {
+            directoryComponents.compactMap {
+                if case .dynamicField(let name) = $0 { return name }
+                return nil
+            }
+        }
+
+        // MARK: - Directory Resolution
+
+        /// Resolve directoryComponents to a concrete [String] path
+        ///
+        /// - Parameter partitionValues: Mapping of field names to partition values
+        /// - Throws: DirectoryPathError.missingFields if a dynamic field has no value
+        /// - Returns: Resolved directory path as string array
+        public func resolvedDirectoryPath(partitionValues: [String: String] = [:]) throws -> [String] {
+            try directoryComponents.map { component in
+                switch component {
+                case .staticPath(let value):
+                    return value
+                case .dynamicField(let fieldName):
+                    guard let value = partitionValues[fieldName] else {
+                        throw DirectoryPathError.missingFields([fieldName])
+                    }
+                    return value
+                }
+            }
+        }
+
+        // MARK: - Init: from Persistable type (runtime)
 
         /// Initialize from Persistable type
         public init(from type: any Persistable.Type) {
             self.name = type.persistableType
-            self.allFields = type.allFields
-            self.indexDescriptors = type.indexDescriptors
+            self.fields = type.fieldSchemas
+            self.directoryComponents = Self.extractDirectoryComponents(from: type)
+            self.indexes = type.indexDescriptors.map { AnyIndexDescriptor($0) }
+            self.enumMetadata = Self.extractEnumMetadata(from: type)
             self.persistableType = type
-
-            // Extract enum metadata
-            var enumMeta: [String: EnumMetadata] = [:]
-            for field in type.allFields {
-                if let meta = type.enumMetadata(for: field) {
-                    enumMeta[field] = meta
-                }
-            }
-            self.enumMetadata = enumMeta
+            self.indexDescriptors = type.indexDescriptors
         }
 
-        /// Manual initializer for testing (without concrete type)
-        ///
-        /// **Warning**: Entities created with this initializer cannot use
-        /// OnlineIndexer for index building during migrations. Use
-        /// `init(from:)` with a Persistable type for full functionality.
+        // MARK: - Init: manual / decoded from wire
+
+        /// Manual initializer (for testing, CLI, or decoded from wire)
         public init(
             name: String,
-            allFields: [String],
-            indexDescriptors: [IndexDescriptor],
-            enumMetadata: [String: EnumMetadata] = [:]
+            fields: [FieldSchema],
+            directoryComponents: [DirectoryComponentCatalog] = [],
+            indexes: [AnyIndexDescriptor] = [],
+            enumMetadata: [String: [String]] = [:]
         ) {
             self.name = name
-            self.allFields = allFields
-            self.indexDescriptors = indexDescriptors
+            self.fields = fields
+            self.directoryComponents = directoryComponents
+            self.indexes = indexes
             self.enumMetadata = enumMetadata
-            // Use a placeholder type - migrations with OnlineIndexer won't work
-            self.persistableType = _PlaceholderPersistable.self
+            self.persistableType = nil
+            self.indexDescriptors = []
         }
-    }
 
-    /// Placeholder Persistable type for manual Entity initialization
-    ///
-    /// This type is used when Entity is created without a concrete Persistable type.
-    /// It cannot be used for actual index building.
-    private struct _PlaceholderPersistable: Persistable {
-        static let persistableType = "_Placeholder"
-        static let allFields: [String] = []
-        static let indexDescriptors: [IndexDescriptor] = []
-        static let directoryPathComponents: [any DirectoryPathElement] = [Path("_placeholder")]
-        static let directoryLayer: DirectoryLayer = .default
+        // MARK: - Custom Equatable (compare only Codable fields)
 
-        static func fieldNumber(for fieldName: String) -> Int? { nil }
-        static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
+        public static func == (lhs: Entity, rhs: Entity) -> Bool {
+            lhs.name == rhs.name &&
+            lhs.fields == rhs.fields &&
+            lhs.directoryComponents == rhs.directoryComponents &&
+            lhs.indexes == rhs.indexes &&
+            lhs.enumMetadata == rhs.enumMetadata
+        }
 
-        var id: String = ""
+        // MARK: - Custom Hashable (hash only Codable fields)
 
-        subscript(dynamicMember member: String) -> (any Sendable)? { nil }
+        public func hash(into hasher: inout Hasher) {
+            hasher.combine(name)
+            hasher.combine(fields)
+            hasher.combine(directoryComponents)
+            hasher.combine(indexes)
+            hasher.combine(enumMetadata)
+        }
+
+        // MARK: - Private Helpers
+
+        private static func extractDirectoryComponents(from type: any Persistable.Type) -> [DirectoryComponentCatalog] {
+            let components = type.directoryPathComponents
+            let fieldNames = type.directoryFieldNames
+            var fieldNameIndex = 0
+            return components.map { component -> DirectoryComponentCatalog in
+                if let path = component as? Path {
+                    return .staticPath(path.value)
+                } else if component is any DynamicDirectoryElement {
+                    let name = fieldNameIndex < fieldNames.count ? fieldNames[fieldNameIndex] : "unknown"
+                    fieldNameIndex += 1
+                    return .dynamicField(fieldName: name)
+                } else {
+                    return .staticPath("_unknown")
+                }
+            }
+        }
+
+        private static func extractEnumMetadata(from type: any Persistable.Type) -> [String: [String]] {
+            var result: [String: [String]] = [:]
+            for field in type.allFields {
+                if let meta = type.enumMetadata(for: field) {
+                    result[field] = meta.cases
+                }
+            }
+            return result
+        }
     }
 
     // MARK: - Properties

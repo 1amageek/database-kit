@@ -7,7 +7,7 @@
 /// **Design**: Analogous to PostgreSQL's `pg_attribute` catalog.
 
 /// Schema metadata for a single field of a Persistable type
-public struct FieldSchema: Sendable, Codable, Equatable {
+public struct FieldSchema: Sendable, Codable, Equatable, Hashable {
     /// Field name (e.g., "email", "price")
     public let name: String
 
