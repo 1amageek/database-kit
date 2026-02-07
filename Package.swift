@@ -21,6 +21,7 @@ let package = Package(
         .library(name: "Permuted", targets: ["Permuted"]),
         .library(name: "Graph", targets: ["Graph"]),
         .library(name: "DatabaseKit", targets: ["DatabaseKit"]),
+        .library(name: "DatabaseClientProtocol", targets: ["DatabaseClientProtocol"]),
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0"),
@@ -44,6 +45,7 @@ let package = Package(
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
             ]
         ),
+        .target(name: "DatabaseClientProtocol", dependencies: ["Core"]),
         .target(name: "Vector", dependencies: ["Core"]),
         .target(name: "FullText", dependencies: ["Core"]),
         .target(name: "Spatial", dependencies: ["Core"]),
