@@ -1,4 +1,46 @@
 import Core
+import QueryIR
+
+// MARK: - Query (Unified)
+
+/// Request payload for operationID: "query"
+///
+/// Accepts any QueryStatement (SELECT, INSERT, UPDATE, DELETE, etc.)
+/// for full SQL/SPARQL query capability over the wire.
+public struct QueryRequest: Sendable, Codable {
+    /// The query statement to execute
+    public let statement: QueryStatement
+
+    /// Partition values for dynamic directory types
+    public let partitionValues: [String: String]?
+
+    public init(statement: QueryStatement, partitionValues: [String: String]? = nil) {
+        self.statement = statement
+        self.partitionValues = partitionValues
+    }
+}
+
+/// Response payload for operationID: "query"
+public struct QueryResponse: Sendable, Codable {
+    /// Records as field-value dictionaries
+    public let records: [[String: FieldValue]]
+
+    /// Continuation token for next page (nil if no more pages)
+    public let continuation: String?
+
+    /// Number of affected rows (for INSERT/UPDATE/DELETE)
+    public let affectedRows: Int?
+
+    public init(
+        records: [[String: FieldValue]] = [],
+        continuation: String? = nil,
+        affectedRows: Int? = nil
+    ) {
+        self.records = records
+        self.continuation = continuation
+        self.affectedRows = affectedRows
+    }
+}
 
 // MARK: - Fetch
 
@@ -7,11 +49,11 @@ public struct FetchRequest: Sendable, Codable {
     /// Entity type name (Persistable.persistableType)
     public let entityName: String
 
-    /// Optional predicate filter
-    public let predicate: ClientPredicate?
+    /// Optional filter expression (QueryIR.Expression)
+    public let predicate: Expression?
 
-    /// Sort descriptors
-    public let sortDescriptors: [ClientSortDescriptor]
+    /// Sort keys
+    public let sortDescriptors: [SortKey]
 
     /// Maximum number of records to return
     public let limit: Int?
@@ -24,8 +66,8 @@ public struct FetchRequest: Sendable, Codable {
 
     public init(
         entityName: String,
-        predicate: ClientPredicate? = nil,
-        sortDescriptors: [ClientSortDescriptor] = [],
+        predicate: Expression? = nil,
+        sortDescriptors: [SortKey] = [],
         limit: Int? = nil,
         continuation: String? = nil,
         partitionValues: [String: String]? = nil
@@ -102,13 +144,13 @@ public struct CountRequest: Sendable, Codable {
     /// Entity type name
     public let entityName: String
 
-    /// Optional predicate filter
-    public let predicate: ClientPredicate?
+    /// Optional filter expression (QueryIR.Expression)
+    public let predicate: Expression?
 
     /// Partition values for dynamic directory types
     public let partitionValues: [String: String]?
 
-    public init(entityName: String, predicate: ClientPredicate? = nil, partitionValues: [String: String]? = nil) {
+    public init(entityName: String, predicate: Expression? = nil, partitionValues: [String: String]? = nil) {
         self.entityName = entityName
         self.predicate = predicate
         self.partitionValues = partitionValues
