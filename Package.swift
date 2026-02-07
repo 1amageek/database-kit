@@ -21,6 +21,7 @@ let package = Package(
         .library(name: "Permuted", targets: ["Permuted"]),
         .library(name: "Graph", targets: ["Graph"]),
         .library(name: "DatabaseKit", targets: ["DatabaseKit"]),
+        .library(name: "QueryIR", targets: ["QueryIR"]),
         .library(name: "DatabaseClientProtocol", targets: ["DatabaseClientProtocol"]),
     ],
     dependencies: [
@@ -45,7 +46,8 @@ let package = Package(
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
             ]
         ),
-        .target(name: "DatabaseClientProtocol", dependencies: ["Core"]),
+        .target(name: "QueryIR", dependencies: []),
+        .target(name: "DatabaseClientProtocol", dependencies: ["Core", "QueryIR"]),
         .target(name: "Vector", dependencies: ["Core"]),
         .target(name: "FullText", dependencies: ["Core"]),
         .target(name: "Spatial", dependencies: ["Core"]),
