@@ -104,7 +104,7 @@ public struct SHACLValidationResult: Sendable, Codable {
     public let resultPath: SHACLPath?
 
     /// sh:value — the value node that violated the constraint
-    public let value: SHACLValue?
+    public let value: RDFTerm?
 
     /// sh:sourceConstraintComponent — IRI of the constraint component
     public let sourceConstraintComponent: String
@@ -121,7 +121,7 @@ public struct SHACLValidationResult: Sendable, Codable {
     public init(
         focusNode: String,
         resultPath: SHACLPath? = nil,
-        value: SHACLValue? = nil,
+        value: RDFTerm? = nil,
         sourceConstraintComponent: String,
         sourceShape: String? = nil,
         resultMessage: [String] = [],

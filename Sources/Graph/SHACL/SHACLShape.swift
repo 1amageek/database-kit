@@ -172,7 +172,7 @@ public struct PropertyShape: Sendable, Codable, Hashable {
     public var group: String?
 
     /// Default value (sh:defaultValue)
-    public var defaultValue: SHACLValue?
+    public var defaultValue: RDFTerm?
 
     public init(
         iri: String? = nil,
@@ -187,7 +187,7 @@ public struct PropertyShape: Sendable, Codable, Hashable {
         shapeDescription: String? = nil,
         order: Double? = nil,
         group: String? = nil,
-        defaultValue: SHACLValue? = nil
+        defaultValue: RDFTerm? = nil
     ) {
         self.iri = iri
         self.path = path

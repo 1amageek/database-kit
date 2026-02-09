@@ -15,41 +15,34 @@
 
 import Foundation
 
-/// RDF Term with node type information
+/// RDF Term — the union of IRI, Literal, and Blank Node.
 ///
-/// Represents an RDF node (IRI, Literal, or Blank Node) and provides
+/// Represents an RDF node (W3C RDF 1.1 Concepts) and provides
 /// encoding/decoding for storage in graph index String fields.
+/// Used across Graph, SHACL, and OWL modules as the single type
+/// for RDF node values.
 ///
 /// **Usage**:
 /// ```swift
-/// // Creating RDF terms
 /// let iri = RDFTerm.iri("ex:Alice")
-/// let name = RDFTerm.literal("Alice")
-/// let age = RDFTerm.literal("30", datatype: "xsd:integer")
-/// let label = RDFTerm.literal("hello", language: "en")
+/// let name = RDFTerm.string("Alice")
+/// let age = RDFTerm.integer(30)
+/// let label = RDFTerm.langString("hello", language: "en")
 /// let blank = RDFTerm.blankNode("b1")
 ///
 /// // Encoding for graph index storage
-/// var stmt = Statement()
-/// stmt.subject = RDFTerm.iri("ex:Alice").encoded
-/// stmt.predicate = RDFTerm.iri("ex:name").encoded
-/// stmt.object = RDFTerm.literal("Alice").encoded
+/// stmt.object = RDFTerm.string("Alice").encoded   // → "\"Alice\""
+/// stmt.object = RDFTerm.integer(30).encoded        // → "\"30\"^^xsd:integer"
 ///
 /// // Decoding from graph index
 /// let term = RDFTerm.decode(stmt.object)
-/// // → .literal("Alice", datatype: "xsd:string", language: nil)
 /// ```
 public enum RDFTerm: Sendable, Hashable, Codable {
     /// IRI reference (e.g., "ex:Alice", "http://example.org/Person")
     case iri(String)
 
-    /// Literal value with optional datatype and language tag
-    ///
-    /// - Parameters:
-    ///   - lexicalForm: The string content of the literal
-    ///   - datatype: XSD datatype IRI (defaults to "xsd:string" when encoded)
-    ///   - language: BCP 47 language tag (e.g., "en", "ja")
-    case literal(String, datatype: String? = nil, language: String? = nil)
+    /// Literal value with datatype and optional language tag
+    case literal(OWLLiteral)
 
     /// Blank node identifier (e.g., "b1")
     case blankNode(String)
@@ -66,12 +59,12 @@ public enum RDFTerm: Sendable, Hashable, Codable {
         switch self {
         case .iri(let value):
             return value
-        case .literal(let lexicalForm, let datatype, let language):
-            var result = "\"\(Self.escapeNTriples(lexicalForm))\""
-            if let language {
+        case .literal(let literal):
+            var result = "\"\(Self.escapeNTriples(literal.lexicalForm))\""
+            if let language = literal.language {
                 result += "@\(language)"
-            } else if let datatype {
-                result += "^^\(datatype)"
+            } else if literal.datatype != "xsd:string" {
+                result += "^^\(literal.datatype)"
             }
             return result
         case .blankNode(let id):
@@ -97,46 +90,31 @@ public enum RDFTerm: Sendable, Hashable, Codable {
         return .iri(string)
     }
 
-    // MARK: - SHACLValue Conversion
-
-    /// Convert to SHACLValue for SHACL constraint evaluation
-    public func toSHACLValue() -> SHACLValue {
-        switch self {
-        case .iri(let value):
-            return .iri(value)
-        case .literal(let lexicalForm, let datatype, let language):
-            let dt = datatype ?? "xsd:string"
-            return .literal(OWLLiteral(lexicalForm: lexicalForm, datatype: dt, language: language))
-        case .blankNode(let id):
-            return .blankNode(id)
-        }
-    }
-
     // MARK: - Convenience Constructors
 
     /// Create a typed string literal
     public static func string(_ value: String) -> RDFTerm {
-        .literal(value, datatype: "xsd:string")
+        .literal(.string(value))
     }
 
     /// Create a typed integer literal
     public static func integer(_ value: Int) -> RDFTerm {
-        .literal(String(value), datatype: "xsd:integer")
+        .literal(.integer(value))
     }
 
     /// Create a typed decimal literal
     public static func decimal(_ value: Double) -> RDFTerm {
-        .literal(String(value), datatype: "xsd:decimal")
+        .literal(.decimal(value))
     }
 
     /// Create a typed boolean literal
     public static func boolean(_ value: Bool) -> RDFTerm {
-        .literal(value ? "true" : "false", datatype: "xsd:boolean")
+        .literal(.boolean(value))
     }
 
     /// Create a language-tagged string literal
     public static func langString(_ value: String, language: String) -> RDFTerm {
-        .literal(value, datatype: "rdf:langString", language: language)
+        .literal(.langString(value, language: language))
     }
 
     // MARK: - Private
@@ -224,24 +202,24 @@ public enum RDFTerm: Sendable, Hashable, Codable {
         // Check what follows the closing quote
         let afterQuote = s.index(after: i)
         if afterQuote >= s.endIndex {
-            // Plain literal: "value" (no explicit datatype)
-            return .literal(unescaped)
+            // Plain literal: "value" → default xsd:string
+            return .literal(OWLLiteral(lexicalForm: unescaped, datatype: "xsd:string"))
         }
 
         let suffix = s[afterQuote...]
         if suffix.hasPrefix("^^") {
             // Typed literal: "value"^^datatype
             let datatypeStr = String(suffix.dropFirst(2))
-            return .literal(unescaped, datatype: datatypeStr)
+            return .literal(OWLLiteral(lexicalForm: unescaped, datatype: datatypeStr))
         }
         if suffix.hasPrefix("@") {
             // Language-tagged literal: "value"@lang
             // W3C RDF: language-tagged literals always have rdf:langString datatype
             let lang = String(suffix.dropFirst(1))
-            return .literal(unescaped, datatype: "rdf:langString", language: lang)
+            return .literal(OWLLiteral(lexicalForm: unescaped, datatype: "rdf:langString", language: lang))
         }
 
-        return .literal(unescaped)
+        return .literal(OWLLiteral(lexicalForm: unescaped, datatype: "xsd:string"))
     }
 }
 

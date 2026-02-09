@@ -44,16 +44,16 @@ public indirect enum SHACLConstraint: Sendable, Codable, Hashable {
     // MARK: - §4.3 Value Range Constraints
 
     /// sh:minExclusive — each value node > the given value
-    case minExclusive(SHACLValue)
+    case minExclusive(RDFTerm)
 
     /// sh:maxExclusive — each value node < the given value
-    case maxExclusive(SHACLValue)
+    case maxExclusive(RDFTerm)
 
     /// sh:minInclusive — each value node >= the given value
-    case minInclusive(SHACLValue)
+    case minInclusive(RDFTerm)
 
     /// sh:maxInclusive — each value node <= the given value
-    case maxInclusive(SHACLValue)
+    case maxInclusive(RDFTerm)
 
     // MARK: - §4.4 String-based Constraints
 
@@ -118,10 +118,10 @@ public indirect enum SHACLConstraint: Sendable, Codable, Hashable {
     case closed(ignoredProperties: [String])
 
     /// sh:hasValue — the set of value nodes includes the given value
-    case hasValue(SHACLValue)
+    case hasValue(RDFTerm)
 
     /// sh:in — each value node is a member of the given list
-    case in_([SHACLValue])
+    case in_([RDFTerm])
 }
 
 // MARK: - SHACLNodeKind
@@ -154,61 +154,6 @@ public enum SHACLSeverity: String, Sendable, Codable, Hashable {
     case info = "sh:Info"
 }
 
-// MARK: - SHACLValue
-
-/// SHACL Value — represents a value in SHACL constraints
-///
-/// Can be an IRI, a typed literal, or a blank node.
-/// Used in constraint parameters (sh:hasValue, sh:in, sh:minInclusive, etc.).
-public enum SHACLValue: Sendable, Codable, Hashable {
-    /// An IRI reference
-    case iri(String)
-
-    /// A typed literal value
-    case literal(OWLLiteral)
-
-    /// A blank node identifier
-    case blankNode(String)
-}
-
-// MARK: - SHACLValue Convenience
-
-extension SHACLValue {
-    /// Create a string literal value
-    public static func string(_ value: String) -> SHACLValue {
-        .literal(.string(value))
-    }
-
-    /// Create an integer literal value
-    public static func integer(_ value: Int) -> SHACLValue {
-        .literal(.integer(value))
-    }
-
-    /// Create a decimal literal value
-    public static func decimal(_ value: Double) -> SHACLValue {
-        .literal(.decimal(value))
-    }
-
-    /// Create a boolean literal value
-    public static func boolean(_ value: Bool) -> SHACLValue {
-        .literal(.boolean(value))
-    }
-}
-
-// MARK: - CustomStringConvertible
-
-extension SHACLValue: CustomStringConvertible {
-    public var description: String {
-        switch self {
-        case .iri(let iri):
-            return "<\(iri)>"
-        case .literal(let lit):
-            return lit.description
-        case .blankNode(let id):
-            return "_:\(id)"
-        }
-    }
-}
 
 extension SHACLNodeKind: CustomStringConvertible {
     public var description: String { rawValue }
