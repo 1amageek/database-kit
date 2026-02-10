@@ -536,6 +536,92 @@ extension OWLClassExpression: CustomStringConvertible {
     }
 }
 
+// MARK: - Canonicalization
+
+extension OWLClassExpression {
+    /// Canonical form for stable hashing and cache key identity
+    ///
+    /// Normalizes intersection/union operands by sorting them, ensuring that
+    /// `intersection([B, A])` and `intersection([A, B])` produce the same
+    /// canonical form. Applied recursively to all sub-expressions.
+    ///
+    /// Reference: Baader et al., "The Description Logic Handbook", Section 2.2.3
+    public func canonicalized() -> OWLClassExpression {
+        switch self {
+        case .named, .thing, .nothing, .oneOf, .hasValue, .hasSelf,
+             .dataHasValue:
+            return self
+
+        case .intersection(let exprs):
+            let sorted = exprs.map { $0.canonicalized() }.sorted(by: stableOrder)
+            return .intersection(sorted)
+
+        case .union(let exprs):
+            let sorted = exprs.map { $0.canonicalized() }.sorted(by: stableOrder)
+            return .union(sorted)
+
+        case .complement(let expr):
+            return .complement(expr.canonicalized())
+
+        case .someValuesFrom(let prop, let filler):
+            return .someValuesFrom(property: prop, filler: filler.canonicalized())
+
+        case .allValuesFrom(let prop, let filler):
+            return .allValuesFrom(property: prop, filler: filler.canonicalized())
+
+        case .minCardinality(let prop, let n, let filler):
+            return .minCardinality(property: prop, n: n, filler: filler?.canonicalized())
+
+        case .maxCardinality(let prop, let n, let filler):
+            return .maxCardinality(property: prop, n: n, filler: filler?.canonicalized())
+
+        case .exactCardinality(let prop, let n, let filler):
+            return .exactCardinality(property: prop, n: n, filler: filler?.canonicalized())
+
+        case .dataSomeValuesFrom, .dataAllValuesFrom,
+             .dataMinCardinality, .dataMaxCardinality, .dataExactCardinality:
+            return self
+        }
+    }
+}
+
+/// Stable ordering for OWLClassExpression using structural comparison
+///
+/// Uses a tag + description approach for deterministic ordering
+/// without requiring Comparable conformance on the enum.
+private func stableOrder(_ lhs: OWLClassExpression, _ rhs: OWLClassExpression) -> Bool {
+    let lhsTag = expressionTag(lhs)
+    let rhsTag = expressionTag(rhs)
+    if lhsTag != rhsTag { return lhsTag < rhsTag }
+    return lhs.description < rhs.description
+}
+
+/// Assign a numeric tag to each expression variant for fast ordering
+private func expressionTag(_ expr: OWLClassExpression) -> Int {
+    switch expr {
+    case .nothing: return 0
+    case .thing: return 1
+    case .named: return 2
+    case .complement: return 3
+    case .intersection: return 4
+    case .union: return 5
+    case .oneOf: return 6
+    case .someValuesFrom: return 7
+    case .allValuesFrom: return 8
+    case .hasValue: return 9
+    case .hasSelf: return 10
+    case .minCardinality: return 11
+    case .maxCardinality: return 12
+    case .exactCardinality: return 13
+    case .dataSomeValuesFrom: return 14
+    case .dataAllValuesFrom: return 15
+    case .dataHasValue: return 16
+    case .dataMinCardinality: return 17
+    case .dataMaxCardinality: return 18
+    case .dataExactCardinality: return 19
+    }
+}
+
 // MARK: - CustomStringConvertible for OWLClass
 
 extension OWLClass: CustomStringConvertible {
