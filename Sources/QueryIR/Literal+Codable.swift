@@ -15,6 +15,7 @@ extension Literal: Codable {
         case value
         case datatype
         case language
+        case direction
         case elements
     }
 
@@ -32,6 +33,7 @@ extension Literal: Codable {
         case blankNode
         case typedLiteral
         case langLiteral
+        case dirLangLiteral
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -77,6 +79,11 @@ extension Literal: Codable {
             try container.encode(Tag.langLiteral, forKey: .tag)
             try container.encode(value, forKey: .value)
             try container.encode(language, forKey: .language)
+        case .dirLangLiteral(let value, let language, let direction):
+            try container.encode(Tag.dirLangLiteral, forKey: .tag)
+            try container.encode(value, forKey: .value)
+            try container.encode(language, forKey: .language)
+            try container.encode(direction, forKey: .direction)
         }
     }
 
@@ -114,6 +121,11 @@ extension Literal: Codable {
             let value = try container.decode(String.self, forKey: .value)
             let language = try container.decode(String.self, forKey: .language)
             self = .langLiteral(value: value, language: language)
+        case .dirLangLiteral:
+            let value = try container.decode(String.self, forKey: .value)
+            let language = try container.decode(String.self, forKey: .language)
+            let direction = try container.decode(String.self, forKey: .direction)
+            self = .dirLangLiteral(value: value, language: language, direction: direction)
         }
     }
 }

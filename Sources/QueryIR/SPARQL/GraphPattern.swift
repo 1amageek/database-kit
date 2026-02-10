@@ -153,6 +153,10 @@ extension GraphPattern {
         case .propertyPath(let subject, _, let object):
             if case .variable(let v) = subject { vars.insert(v) }
             if case .variable(let v) = object { vars.insert(v) }
+
+        case .lateral(let left, let right):
+            left.collectVariables(into: &vars)
+            right.collectVariables(into: &vars)
         }
     }
 
@@ -202,6 +206,9 @@ extension GraphPattern {
             if case .variable(let v) = subject { vars.insert(v) }
             if case .variable(let v) = object { vars.insert(v) }
             return vars
+
+        case .lateral(let left, let right):
+            return left.requiredVariables.union(right.requiredVariables)
         }
     }
 
@@ -211,7 +218,8 @@ extension GraphPattern {
         case .basic(let triples):
             return triples.count
         case .join(let left, let right), .optional(let left, let right),
-             .union(let left, let right), .minus(let left, let right):
+             .union(let left, let right), .minus(let left, let right),
+             .lateral(let left, let right):
             return left.tripleCount + right.tripleCount
         case .filter(let pattern, _), .bind(let pattern, _, _),
              .graph(_, let pattern), .service(_, let pattern, _):
@@ -267,6 +275,10 @@ extension GraphPattern {
 
         case .propertyPath(_, let path, _):
             return path.complexity
+
+        case .lateral(let left, let right):
+            // LATERAL is a correlated join — LHS * RHS per row
+            return left.complexity * right.complexity
         }
     }
 }
@@ -423,6 +435,14 @@ extension GraphPattern {
 
         case .propertyPath(let subject, let path, let object):
             return "\(indent)\(subject.toSPARQL(prefixes: prefixes)) \(path.toSPARQL(prefixes: prefixes)) \(object.toSPARQL(prefixes: prefixes)) ."
+
+        case .lateral(let left, let right):
+            return """
+            \(left.toSPARQL(prefixes: prefixes, indent: indent))
+            \(indent)LATERAL {
+            \(right.toSPARQL(prefixes: prefixes, indent: indent + "  "))
+            \(indent)}
+            """
         }
     }
 }

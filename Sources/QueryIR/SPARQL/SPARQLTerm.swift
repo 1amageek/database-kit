@@ -194,6 +194,9 @@ extension SPARQLTerm {
 
         case .quotedTriple(let s, let p, let o):
             return "<< \(s.toSPARQL(prefixes: prefixes)) \(p.toSPARQL(prefixes: prefixes)) \(o.toSPARQL(prefixes: prefixes)) >>"
+
+        case .reifiedTriple(let s, let p, let o, let r):
+            return "<< \(s.toSPARQL(prefixes: prefixes)) \(p.toSPARQL(prefixes: prefixes)) \(o.toSPARQL(prefixes: prefixes)) ~\(r.toSPARQL(prefixes: prefixes)) >>"
         }
     }
 }
@@ -242,6 +245,8 @@ extension Literal {
             return "\(SPARQLEscape.string(value))^^<\(datatype)>"
         case .langLiteral(let value, let language):
             return "\(SPARQLEscape.string(value))@\(language)"
+        case .dirLangLiteral(let value, let language, let direction):
+            return "\(SPARQLEscape.string(value))@\(language)--\(direction)"
         }
     }
 }
@@ -352,6 +357,7 @@ extension SPARQLTerm {
         case .literal: return 3
         case .variable: return 0
         case .quotedTriple: return 4
+        case .reifiedTriple: return 5
         }
     }
 
@@ -381,6 +387,12 @@ extension SPARQLTerm {
         case .blankNode(let id):
             return .literal(.blankNode(id))
         case .quotedTriple(let s, let p, let o):
+            return .triple(
+                subject: s.toExpression(),
+                predicate: p.toExpression(),
+                object: o.toExpression()
+            )
+        case .reifiedTriple(let s, let p, let o, _):
             return .triple(
                 subject: s.toExpression(),
                 predicate: p.toExpression(),

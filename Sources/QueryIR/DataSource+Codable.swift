@@ -180,6 +180,7 @@ extension GraphPattern: Codable {
         case subquery
         case groupBy
         case propertyPath
+        case lateral
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -239,6 +240,10 @@ extension GraphPattern: Codable {
             try container.encode(subject, forKey: .subject)
             try container.encode(path, forKey: .path)
             try container.encode(object, forKey: .object)
+        case .lateral(let left, let right):
+            try container.encode(Tag.lateral, forKey: .tag)
+            try container.encode(left, forKey: .left)
+            try container.encode(right, forKey: .right)
         }
     }
 
@@ -298,6 +303,10 @@ extension GraphPattern: Codable {
             let path = try container.decode(PropertyPath.self, forKey: .path)
             let object = try container.decode(SPARQLTerm.self, forKey: .object)
             self = .propertyPath(subject: subject, path: path, object: object)
+        case .lateral:
+            let left = try container.decode(GraphPattern.self, forKey: .left)
+            let right = try container.decode(GraphPattern.self, forKey: .right)
+            self = .lateral(left, right)
         }
     }
 }
@@ -314,6 +323,7 @@ extension SPARQLTerm: Codable {
         case subject
         case predicate
         case object
+        case reifier
     }
 
     private enum Tag: String, Codable {
@@ -323,6 +333,7 @@ extension SPARQLTerm: Codable {
         case literal
         case blankNode
         case quotedTriple
+        case reifiedTriple
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -349,6 +360,12 @@ extension SPARQLTerm: Codable {
             try container.encode(subject, forKey: .subject)
             try container.encode(predicate, forKey: .predicate)
             try container.encode(object, forKey: .object)
+        case .reifiedTriple(let subject, let predicate, let object, let reifier):
+            try container.encode(Tag.reifiedTriple, forKey: .tag)
+            try container.encode(subject, forKey: .subject)
+            try container.encode(predicate, forKey: .predicate)
+            try container.encode(object, forKey: .object)
+            try container.encode(reifier, forKey: .reifier)
         }
     }
 
@@ -373,6 +390,12 @@ extension SPARQLTerm: Codable {
             let predicate = try container.decode(SPARQLTerm.self, forKey: .predicate)
             let object = try container.decode(SPARQLTerm.self, forKey: .object)
             self = .quotedTriple(subject: subject, predicate: predicate, object: object)
+        case .reifiedTriple:
+            let subject = try container.decode(SPARQLTerm.self, forKey: .subject)
+            let predicate = try container.decode(SPARQLTerm.self, forKey: .predicate)
+            let object = try container.decode(SPARQLTerm.self, forKey: .object)
+            let reifier = try container.decode(SPARQLTerm.self, forKey: .reifier)
+            self = .reifiedTriple(subject: subject, predicate: predicate, object: object, reifier: reifier)
         }
     }
 }

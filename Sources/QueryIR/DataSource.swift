@@ -396,6 +396,7 @@ public indirect enum GraphPattern: Sendable, Equatable, Hashable {
     case subquery(SelectQuery)
     case groupBy(GraphPattern, expressions: [Expression], aggregates: [AggregateBinding])
     case propertyPath(subject: SPARQLTerm, path: PropertyPath, object: SPARQLTerm)
+    case lateral(GraphPattern, GraphPattern)
 }
 
 /// Placeholder for TriplePattern (defined in SPARQL/TriplePattern.swift)
@@ -420,6 +421,8 @@ public indirect enum SPARQLTerm: Sendable, Equatable, Hashable {
     case literal(Literal)
     case blankNode(String)
     case quotedTriple(subject: SPARQLTerm, predicate: SPARQLTerm, object: SPARQLTerm)
+    /// Reified triple (SPARQL 1.2) — << subject predicate object ~reifier >>
+    case reifiedTriple(subject: SPARQLTerm, predicate: SPARQLTerm, object: SPARQLTerm, reifier: SPARQLTerm)
 }
 
 /// Placeholder for PropertyPath (defined in SPARQL/PropertyPath.swift)

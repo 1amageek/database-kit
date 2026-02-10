@@ -904,6 +904,8 @@ extension Literal {
             return SQLEscape.string(value)
         case .langLiteral(let value, _):
             return SQLEscape.string(value)
+        case .dirLangLiteral(let value, _, _):
+            return SQLEscape.string(value)
         case .array(let values):
             return "ARRAY[\(values.map { $0.toSQL() }.joined(separator: ", "))]"
         }

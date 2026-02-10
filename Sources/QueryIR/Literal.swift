@@ -57,6 +57,10 @@ public enum Literal: Sendable, Equatable, Hashable {
     /// Language-tagged literal
     /// Example: "Hello"@en
     case langLiteral(value: String, language: String)
+
+    /// Language-tagged literal with base direction (SPARQL 1.2)
+    /// Example: "مرحبا"@ar--rtl
+    case dirLangLiteral(value: String, language: String, direction: String)
 }
 
 // MARK: - Convenience Initializers
@@ -124,6 +128,7 @@ extension Literal {
         case .string(let v): return v
         case .typedLiteral(let v, _): return v
         case .langLiteral(let v, _): return v
+        case .dirLangLiteral(let v, _, _): return v
         default: return nil
         }
     }
@@ -218,6 +223,8 @@ extension Literal: CustomStringConvertible {
             return "\"\(value)\"^^<\(datatype)>"
         case .langLiteral(let value, let language):
             return "\"\(value)\"@\(language)"
+        case .dirLangLiteral(let value, let language, let direction):
+            return "\"\(value)\"@\(language)--\(direction)"
         }
     }
 }

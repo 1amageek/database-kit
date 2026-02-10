@@ -43,6 +43,12 @@ public struct SelectQuery: Sendable, Equatable, Hashable, Codable {
     /// REDUCED flag (SPARQL)
     public let reduced: Bool
 
+    /// Dataset clauses (SPARQL FROM)
+    public let from: [String]?
+
+    /// Named graph dataset clauses (SPARQL FROM NAMED)
+    public let fromNamed: [String]?
+
     public init(
         projection: Projection,
         source: DataSource,
@@ -54,7 +60,9 @@ public struct SelectQuery: Sendable, Equatable, Hashable, Codable {
         offset: Int? = nil,
         distinct: Bool = false,
         subqueries: [NamedSubquery]? = nil,
-        reduced: Bool = false
+        reduced: Bool = false,
+        from: [String]? = nil,
+        fromNamed: [String]? = nil
     ) {
         self.projection = projection
         self.source = source
@@ -67,6 +75,8 @@ public struct SelectQuery: Sendable, Equatable, Hashable, Codable {
         self.distinct = distinct
         self.subqueries = subqueries
         self.reduced = reduced
+        self.from = from
+        self.fromNamed = fromNamed
     }
 }
 
@@ -172,7 +182,8 @@ extension SelectQuery {
                 collectVariables(from: triple, into: &vars)
             }
         case .join(let left, let right), .optional(let left, let right),
-             .union(let left, let right), .minus(let left, let right):
+             .union(let left, let right), .minus(let left, let right),
+             .lateral(let left, let right):
             collectVariables(from: left, into: &vars)
             collectVariables(from: right, into: &vars)
         case .filter(let pattern, let expr):
