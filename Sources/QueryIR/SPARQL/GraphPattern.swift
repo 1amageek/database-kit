@@ -523,6 +523,10 @@ extension Expression {
             let vals = values.map { $0.toSPARQL(prefixes: prefixes) }.joined(separator: ", ")
             return "(\(e.toSPARQL(prefixes: prefixes)) IN (\(vals)))"
 
+        case .notInList(let e, let values):
+            let vals = values.map { $0.toSPARQL(prefixes: prefixes) }.joined(separator: ", ")
+            return "(\(e.toSPARQL(prefixes: prefixes)) NOT IN (\(vals)))"
+
         case .inSubquery(let e, let subquery):
             return "(\(e.toSPARQL(prefixes: prefixes)) IN { \(subquery.toSPARQL(prefixes: prefixes)) })"
 

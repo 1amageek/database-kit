@@ -329,6 +329,9 @@ public indirect enum Expression: Sendable, Hashable {
     /// IN list: expr IN (val1, val2, ...)
     case inList(Expression, values: [Expression])
 
+    /// NOT IN list: expr NOT IN (val1, val2, ...)
+    case notInList(Expression, values: [Expression])
+
     /// IN subquery: expr IN (SELECT ...)
     case inSubquery(Expression, subquery: SelectQuery)
 
@@ -562,6 +565,8 @@ extension Expression: Equatable {
             return e1 == e2 && l1 == l2 && h1 == h2
         case (.inList(let e1, let v1), .inList(let e2, let v2)):
             return e1 == e2 && v1 == v2
+        case (.notInList(let e1, let v1), .notInList(let e2, let v2)):
+            return e1 == e2 && v1 == v2
         case (.inSubquery(let e1, let s1), .inSubquery(let e2, let s2)):
             return e1 == e2 && s1 == s2
         case (.aggregate(let a1), .aggregate(let a2)):
@@ -693,6 +698,12 @@ extension Expression {
             hasher.combine(high)
         case .inList(let e, let values):
             hasher.combine(24)
+            hasher.combine(e)
+            for v in values {
+                hasher.combine(v)
+            }
+        case .notInList(let e, let values):
+            hasher.combine(39)
             hasher.combine(e)
             for v in values {
                 hasher.combine(v)

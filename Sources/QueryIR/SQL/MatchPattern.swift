@@ -515,6 +515,10 @@ extension Expression {
             let vals = values.map { $0.toSQL() }.joined(separator: ", ")
             return "(\(e.toSQL()) IN (\(vals)))"
 
+        case .notInList(let e, let values):
+            let vals = values.map { $0.toSQL() }.joined(separator: ", ")
+            return "(\(e.toSQL()) NOT IN (\(vals)))"
+
         case .inSubquery(let e, let subquery):
             return "(\(e.toSQL()) IN (\(subquery.toSQL())))"
 

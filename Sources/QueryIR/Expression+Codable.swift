@@ -241,7 +241,7 @@ extension Expression: Codable {
         case and, or, not
         case isNull, isNotNull, bound
         case like, regex
-        case between, inList, inSubquery
+        case between, inList, notInList, inSubquery
         case aggregate, function
         case caseWhen, coalesce, nullIf, cast
         case triple, isTriple, subject, predicate, object
@@ -386,6 +386,11 @@ extension Expression: Codable {
             )
         case .inList:
             self = .inList(
+                try container.decode(Expression.self, forKey: .expr),
+                values: try container.decode([Expression].self, forKey: .values)
+            )
+        case .notInList:
+            self = .notInList(
                 try container.decode(Expression.self, forKey: .expr),
                 values: try container.decode([Expression].self, forKey: .values)
             )
@@ -562,6 +567,10 @@ extension Expression: Codable {
             try container.encode(high, forKey: .high)
         case .inList(let expr, let values):
             try container.encode(Tag.inList, forKey: .tag)
+            try container.encode(expr, forKey: .expr)
+            try container.encode(values, forKey: .values)
+        case .notInList(let expr, let values):
+            try container.encode(Tag.notInList, forKey: .tag)
             try container.encode(expr, forKey: .expr)
             try container.encode(values, forKey: .values)
         case .inSubquery(let expr, let query):
