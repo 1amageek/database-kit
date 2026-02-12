@@ -66,7 +66,7 @@ let package = Package(
             name: "DatabaseKit",
             dependencies: ["Core", "Vector", "FullText", "Spatial", "Rank", "Permuted", "Graph"]
         ),
-        .testTarget(name: "CoreTests", dependencies: ["Core", "Graph"]),
+        .testTarget(name: "CoreTests", dependencies: ["Core", "Graph", "DatabaseClientProtocol"]),
     ],
     swiftLanguageModes: [.v6]
 )

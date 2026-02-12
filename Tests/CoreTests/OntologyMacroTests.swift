@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import Core
 import Graph
+import DatabaseClientProtocol
 
 // MARK: - Test Models (File Scope)
 
@@ -436,5 +437,114 @@ struct OntologyMacroTests {
 
         let e = OntFullEmployee(name: "Charlie", age: 40, departmentID: nil)
         #expect(e.id.count == 26)
+    }
+
+    // ── Contract 15: Complex OWLOntology type-erasure round-trip ──
+
+    @Test("Complex OWLOntology with axioms, properties, individuals round-trips through Schema.Ontology")
+    func complexOntologyRoundTrip() throws {
+        var original = OWLOntology(iri: "http://example.org/complex")
+        original.classes = [
+            OWLClass(iri: "ex:Organization"),
+            OWLClass(iri: "ex:Company"),
+            OWLClass(iri: "ex:TechCompany"),
+        ]
+        original.objectProperties = [
+            OWLObjectProperty(
+                iri: "ex:worksFor",
+                domains: [.named("ex:Person")],
+                ranges: [.named("ex:Company")]
+            ),
+        ]
+        original.dataProperties = [
+            OWLDataProperty(iri: "ex:name", domains: [.named("ex:Person")]),
+        ]
+        original.axioms = [
+            .subClassOf(sub: .named("ex:Company"), sup: .named("ex:Organization")),
+            .subClassOf(sub: .named("ex:TechCompany"), sup: .named("ex:Company")),
+            .equivalentClasses([
+                .named("ex:TechCompany"),
+                .intersection([
+                    .named("ex:Company"),
+                    .dataHasValue(property: "ex:industry", literal: .string("Tech")),
+                ]),
+            ]),
+            .disjointClasses([.named("ex:Organization"), .named("ex:TechCompany")]),
+        ]
+        original.individuals = [
+            OWLNamedIndividual(iri: "ex:Google"),
+        ]
+
+        // OWLOntology → Schema.Ontology → JSON → Schema.Ontology → OWLOntology
+        let schemaOntology = original.asSchemaOntology()
+        let json = try JSONEncoder().encode(schemaOntology)
+        let decoded = try JSONDecoder().decode(Schema.Ontology.self, from: json)
+        let restored = try OWLOntology(schemaOntology: decoded)
+
+        #expect(restored.iri == "http://example.org/complex")
+        #expect(restored.classes.count == 3)
+        #expect(restored.objectProperties.count == 1)
+        #expect(restored.objectProperties[0].iri == "ex:worksFor")
+        #expect(restored.dataProperties.count == 1)
+        #expect(restored.dataProperties[0].iri == "ex:name")
+        #expect(restored.axioms.count == 4)
+        #expect(restored.individuals.count == 1)
+        #expect(restored.individuals[0].iri == "ex:Google")
+    }
+
+    @Test("Schema.Ontology preserves Hashable equality")
+    func schemaOntologyHashable() {
+        let ontology = OWLOntology(iri: "http://example.org/test")
+        let a = ontology.asSchemaOntology()
+        let b = ontology.asSchemaOntology()
+        #expect(a == b)
+        #expect(a.hashValue == b.hashValue)
+    }
+
+    // ── Contract 16: SchemaResponse transport ──
+
+    @Test("SchemaResponse with ontology round-trips through JSON")
+    func schemaResponseWithOntology() throws {
+        let ontology = OWLOntology(iri: "http://example.org/onto")
+        let entity = Schema([OntEmployee.self]).entities[0]
+        let response = SchemaResponse(
+            entities: [entity],
+            ontology: ontology.asSchemaOntology()
+        )
+
+        let data = try JSONEncoder().encode(response)
+        let decoded = try JSONDecoder().decode(SchemaResponse.self, from: data)
+
+        #expect(decoded.entities.count == 1)
+        #expect(decoded.entities[0].name == entity.name)
+        #expect(decoded.ontology != nil)
+        #expect(decoded.ontology?.iri == "http://example.org/onto")
+        #expect(decoded.ontology?.typeIdentifier == "OWLOntology")
+    }
+
+    @Test("SchemaResponse without ontology round-trips through JSON")
+    func schemaResponseWithoutOntology() throws {
+        let entity = Schema([OntEmployee.self]).entities[0]
+        let response = SchemaResponse(entities: [entity])
+
+        let data = try JSONEncoder().encode(response)
+        let decoded = try JSONDecoder().decode(SchemaResponse.self, from: data)
+
+        #expect(decoded.entities.count == 1)
+        #expect(decoded.ontology == nil)
+    }
+
+    @Test("SchemaResponse backward-compatible: missing ontology key decodes as nil")
+    func schemaResponseBackwardCompatibility() throws {
+        // Simulate old server response without ontology field
+        let entity = Schema([OntEmployee.self]).entities[0]
+        let entityJSON = try JSONEncoder().encode([entity])
+        let json = """
+        {"entities":\(String(data: entityJSON, encoding: .utf8)!)}
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(SchemaResponse.self, from: json)
+        #expect(decoded.entities.count == 1)
+        #expect(decoded.ontology == nil)
     }
 }
