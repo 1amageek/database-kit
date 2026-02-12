@@ -59,10 +59,11 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
             ])
         }
         let iri = String(iriExpr.dropFirst().dropLast())
+        let namespace = Self.extractNamespace(from: iri)
 
         let structName = structDecl.name.text
 
-        // @Property 付きフィールドを収集
+        // @OWLProperty 付きフィールドを収集
         var ontologyProperties: [(fieldName: String, iri: String, label: String?, targetTypeName: String?, targetFieldName: String?)] = []
 
         for member in structDecl.memberBlock.members {
@@ -75,7 +76,7 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
                         let fieldName = pattern.identifier.text
                         ontologyProperties.append((
                             fieldName: fieldName,
-                            iri: info.iri,
+                            iri: Self.resolvePropertyIRI(info.iri, namespace: namespace),
                             label: info.label,
                             targetTypeName: info.targetTypeName,
                             targetFieldName: info.targetFieldName
@@ -124,6 +125,40 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
         decls.append(descriptorsDecl)
 
         return decls
+    }
+
+    // MARK: - IRI Resolution
+
+    /// `@Ontology` の IRI から名前空間を抽出する。
+    ///
+    /// - CURIE `"ex:Employee"` → `"ex:"`
+    /// - フル IRI `"http://example.org/onto#Employee"` → `"http://example.org/onto#"`
+    /// - フル IRI `"http://example.org/onto/Employee"` → `"http://example.org/onto/"`
+    private static func extractNamespace(from iri: String) -> String {
+        if let colonIndex = iri.firstIndex(of: ":") {
+            let afterColon = iri[iri.index(after: colonIndex)...]
+            if !afterColon.hasPrefix("//") {
+                return String(iri[...colonIndex])
+            }
+        }
+        if let hashIndex = iri.lastIndex(of: "#") {
+            return String(iri[...hashIndex])
+        }
+        if let slashIndex = iri.lastIndex(of: "/") {
+            return String(iri[...slashIndex])
+        }
+        return iri
+    }
+
+    /// プロパティ IRI を名前空間で解決する。
+    ///
+    /// - `"://"` を含む → フル IRI → そのまま
+    /// - `":"` を含む → CURIE → そのまま
+    /// - それ以外 → ローカル名 → 名前空間を付与
+    private static func resolvePropertyIRI(_ rawIRI: String, namespace: String) -> String {
+        if rawIRI.contains("://") { return rawIRI }
+        if rawIRI.contains(":") { return rawIRI }
+        return namespace + rawIRI
     }
 
     // MARK: - ExtensionMacro

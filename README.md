@@ -241,37 +241,39 @@ import Core
 import Graph
 
 @Persistable
-@Ontology("http://example.org/onto#Employee")
+@Ontology("ex:Employee")
 struct Employee {
-    @Property("http://example.org/onto#name", label: "Name")
+    @OWLProperty("name", label: "Name")
     var name: String
 
-    @Property("http://example.org/onto#worksFor", to: \Department.id)
+    @OWLProperty("worksFor", to: \Department.id)
     var departmentID: String?
 }
 
 @Persistable
-@Ontology("http://example.org/onto#Department")
+@Ontology("ex:Department")
 struct Department {
     var name: String
 }
 ```
 
+Local names (e.g. `"name"`) are automatically resolved using the namespace from `@Ontology`. For example, `@Ontology("ex:Employee")` + `@OWLProperty("name")` → IRI `"ex:name"`. CURIEs (e.g. `"foaf:name"`) and full IRIs (e.g. `"http://..."`) are used as-is.
+
 **Macro responsibility separation**:
 - `@Persistable` (Core): `id`, `persistableType`, `allFields`, `fieldSchemas`, `indexDescriptors`, `Codable`/`Sendable`
-- `@Ontology` (Graph): `OntologyEntity` conformance, `ontologyClassIRI`, `ontologyPropertyDescriptors`, reverse indexes for `@Property(to:)` fields
+- `@Ontology` (Graph): `OntologyEntity` conformance, `ontologyClassIRI`, `ontologyPropertyDescriptors`, reverse indexes for `@OWLProperty(to:)` fields
 
-### @Property Macro
+### @OWLProperty Macro
 
-The `@Property` macro (defined in Graph module) annotates fields with OWL property IRIs. Two forms are available:
+The `@OWLProperty` macro (defined in Graph module) annotates fields with OWL property IRIs. Two forms are available:
 
 ```swift
 // DataProperty — value annotation
-@Property("http://example.org/onto#age")
+@OWLProperty("age")
 var age: Int
 
 // ObjectProperty — relationship to another entity
-@Property("http://example.org/onto#worksFor", to: \Department.id)
+@OWLProperty("worksFor", to: \Department.id)
 var departmentID: String?
 ```
 
@@ -279,13 +281,13 @@ When `to:` is specified, `@Ontology` treats the field as an **ObjectProperty** a
 
 ### OntologyPropertyDescriptor
 
-Each `@Property`-annotated field produces an `OntologyPropertyDescriptor` accessible via `Type.ontologyPropertyDescriptors`:
+Each `@OWLProperty`-annotated field produces an `OntologyPropertyDescriptor` accessible via `Type.ontologyPropertyDescriptors`:
 
 ```swift
 let descs = Employee.ontologyPropertyDescriptors
-// descs[0].iri          → "http://example.org/onto#name"
+// descs[0].iri          → "ex:name"
 // descs[0].isObjectProperty → false (DataProperty)
-// descs[1].iri          → "http://example.org/onto#worksFor"
+// descs[1].iri          → "ex:worksFor"
 // descs[1].isObjectProperty → true  (ObjectProperty)
 // descs[1].targetTypeName   → "Department"
 ```

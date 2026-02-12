@@ -5,11 +5,11 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 import SwiftDiagnostics
 
-/// @Property マクロの実装（マーカーマクロ）。
+/// @OWLProperty マクロの実装（マーカーマクロ）。
 ///
 /// `@Relationship` と同じパターンで、バリデーションのみ行い、
 /// コード生成は `PersistableMacro` が担当する。
-public struct PropertyMacro: PeerMacro {
+public struct OWLPropertyMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
@@ -19,8 +19,8 @@ public struct PropertyMacro: PeerMacro {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: PropertyMacroErrorMessage(
-                        "@Property can only be applied to variable declarations"
+                    message: OWLPropertyMacroErrorMessage(
+                        "@OWLProperty can only be applied to variable declarations"
                     )
                 )
             ])
@@ -30,8 +30,8 @@ public struct PropertyMacro: PeerMacro {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: PropertyMacroErrorMessage(
-                        "@Property must be applied to 'var' declarations, not 'let'"
+                    message: OWLPropertyMacroErrorMessage(
+                        "@OWLProperty must be applied to 'var' declarations, not 'let'"
                     )
                 )
             ])
@@ -43,9 +43,9 @@ public struct PropertyMacro: PeerMacro {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: PropertyMacroErrorMessage(
-                        "@Property requires an IRI string argument. " +
-                        "Example: @Property(\"http://example.org/onto#name\")"
+                    message: OWLPropertyMacroErrorMessage(
+                        "@OWLProperty requires an IRI string argument. " +
+                        "Example: @OWLProperty(\"name\")"
                     )
                 )
             ])
@@ -57,8 +57,8 @@ public struct PropertyMacro: PeerMacro {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(firstArg),
-                    message: PropertyMacroErrorMessage(
-                        "@Property first argument must be a string literal (IRI). " +
+                    message: OWLPropertyMacroErrorMessage(
+                        "@OWLProperty first argument must be a string literal. " +
                         "Found: \(firstArgExpr)"
                     )
                 )
@@ -69,8 +69,8 @@ public struct PropertyMacro: PeerMacro {
     }
 }
 
-/// @Property マクロのエラーメッセージ
-struct PropertyMacroErrorMessage: DiagnosticMessage {
+/// @OWLProperty マクロのエラーメッセージ
+struct OWLPropertyMacroErrorMessage: DiagnosticMessage {
     let message: String
     let diagnosticID: MessageID
     let severity: DiagnosticSeverity
@@ -86,7 +86,7 @@ struct PropertyMacroErrorMessage: DiagnosticMessage {
 @main
 struct GraphMacrosPlugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
-        PropertyMacro.self,
+        OWLPropertyMacro.self,
         OntologyMacro.self,
     ]
 }

@@ -496,7 +496,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             descriptorInits.append(relationshipDescriptorInit)
         }
 
-        // Generate reverse IndexDescriptor for @Property(to:) fields (FK indexing)
+        // Generate reverse IndexDescriptor for @OWLProperty(to:) fields (FK indexing)
         for member in structDecl.memberBlock.members {
             if let varDecl = member.decl.as(VariableDeclSyntax.self),
                let propertyAttr = getPropertyAttribute(varDecl) {

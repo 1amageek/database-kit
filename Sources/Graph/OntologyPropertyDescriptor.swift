@@ -2,7 +2,7 @@ import Core
 
 /// オントロジープロパティのメタデータ記述子。
 ///
-/// `@Property` マクロにより `@Persistable` が自動生成する。
+/// `@OWLProperty` マクロにより `@Persistable` が自動生成する。
 /// `RelationshipDescriptor` と同じ `Descriptor` パターンに準拠。
 public struct OntologyPropertyDescriptor: Descriptor, Sendable, Codable, Hashable {
 

@@ -2,33 +2,33 @@
 
 import SwiftSyntax
 
-// MARK: - @Property マクロヘルパー
+// MARK: - @OWLProperty マクロヘルパー
 
-/// VariableDecl に @Property 属性があるかを判定
+/// VariableDecl に @OWLProperty 属性があるかを判定
 public func hasPropertyAttribute(_ varDecl: VariableDeclSyntax) -> Bool {
     for attribute in varDecl.attributes {
         if let attr = attribute.as(AttributeSyntax.self),
            let identifier = attr.attributeName.as(IdentifierTypeSyntax.self),
-           identifier.name.text == "Property" {
+           identifier.name.text == "OWLProperty" {
             return true
         }
     }
     return false
 }
 
-/// VariableDecl から @Property 属性を取得
+/// VariableDecl から @OWLProperty 属性を取得
 public func getPropertyAttribute(_ varDecl: VariableDeclSyntax) -> AttributeSyntax? {
     for attribute in varDecl.attributes {
         if let attr = attribute.as(AttributeSyntax.self),
            let identifier = attr.attributeName.as(IdentifierTypeSyntax.self),
-           identifier.name.text == "Property" {
+           identifier.name.text == "OWLProperty" {
             return attr
         }
     }
     return nil
 }
 
-/// @Property 属性からメタデータを抽出
+/// @OWLProperty 属性からメタデータを抽出
 ///
 /// - Returns: (iri, label, targetTypeName, targetFieldName) タプル
 ///   - iri: OWL プロパティ IRI（文字列リテラル）
