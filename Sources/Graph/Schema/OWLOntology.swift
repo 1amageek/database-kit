@@ -43,7 +43,7 @@ import Core
 ///     class_: .named("ex:Parent")
 /// ))
 /// ```
-public struct OWLOntology: SchemaOntology, Sendable, Codable, Hashable {
+public struct OWLOntology: Sendable, Codable, Hashable {
 
     // MARK: - Metadata
 
@@ -479,5 +479,36 @@ extension OWLOntology {
     public mutating func addAxioms(_ newAxioms: [OWLAxiom]) -> Self {
         axioms.append(contentsOf: newAxioms)
         return self
+    }
+}
+
+// MARK: - Schema.Ontology Conversion
+
+extension OWLOntology {
+
+    /// Convert to type-erased `Schema.Ontology` for persistence and transport.
+    ///
+    /// Core module stores this representation without needing to import Graph.
+    /// Encoding is guaranteed to succeed because all OWLOntology fields are Codable.
+    ///
+    /// - Returns: `Schema.Ontology` containing JSON-encoded `OWLOntology`
+    public func asSchemaOntology() -> Schema.Ontology {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        // Safe: OWLOntology is composed entirely of Codable value types.
+        let data = try! encoder.encode(self)
+        return Schema.Ontology(
+            iri: self.iri,
+            typeIdentifier: "OWLOntology",
+            encodedData: data
+        )
+    }
+
+    /// Restore `OWLOntology` from a type-erased `Schema.Ontology`.
+    ///
+    /// - Parameter schemaOntology: The type-erased ontology from Core
+    /// - Throws: `DecodingError` if the encoded data is not a valid `OWLOntology`
+    public init(schemaOntology: Schema.Ontology) throws {
+        self = try JSONDecoder().decode(OWLOntology.self, from: schemaOntology.encodedData)
     }
 }

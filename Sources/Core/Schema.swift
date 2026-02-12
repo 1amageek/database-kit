@@ -294,8 +294,8 @@ public final class Schema: Sendable {
     /// Indexes by name for quick lookup
     internal let indexDescriptorsByName: [String: IndexDescriptor]
 
-    /// Schema に紐付くオントロジー
-    public let ontology: (any SchemaOntology)?
+    /// Type-erased ontology attached to this schema
+    public let ontology: Schema.Ontology?
 
     // MARK: - Initialization
 
@@ -319,7 +319,7 @@ public final class Schema: Sendable {
         _ types: [any Persistable.Type],
         version: Version = Version(1, 0, 0),
         indexDescriptors: [IndexDescriptor] = [],
-        ontology: (any SchemaOntology)? = nil
+        ontology: Schema.Ontology? = nil
     ) {
         self.version = version
         self.encodingVersion = version
@@ -380,7 +380,7 @@ public final class Schema: Sendable {
         entities: [Entity],
         version: Version = Version(1, 0, 0),
         indexDescriptors: [IndexDescriptor] = [],
-        ontology: (any SchemaOntology)? = nil
+        ontology: Schema.Ontology? = nil
     ) {
         self.version = version
         self.encodingVersion = version

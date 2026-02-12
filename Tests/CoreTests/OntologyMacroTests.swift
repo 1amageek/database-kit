@@ -236,15 +236,35 @@ struct OntologyMacroTests {
     @Test("Schema accepts ontology parameter")
     func schemaOntology() {
         let ontology = OWLOntology(iri: "http://example.org/onto")
-        let schema = Schema([OntEmployee.self], ontology: ontology)
+        let schema = Schema([OntEmployee.self], ontology: ontology.asSchemaOntology())
         #expect(schema.ontology != nil)
         #expect(schema.ontology?.iri == "http://example.org/onto")
+        #expect(schema.ontology?.typeIdentifier == "OWLOntology")
     }
 
     @Test("Schema without ontology defaults to nil")
     func schemaNoOntology() {
         let schema = Schema([OntEmployee.self])
         #expect(schema.ontology == nil)
+    }
+
+    @Test("Schema.Ontology round-trips through JSON")
+    func schemaOntologyRoundTrip() throws {
+        var original = OWLOntology(iri: "http://example.org/onto")
+        original.classes.append(OWLClass(iri: "ex:Person", label: "Person"))
+        let schemaOntology = original.asSchemaOntology()
+
+        // Round-trip through JSON
+        let data = try JSONEncoder().encode(schemaOntology)
+        let decoded = try JSONDecoder().decode(Schema.Ontology.self, from: data)
+        #expect(decoded.iri == "http://example.org/onto")
+        #expect(decoded.typeIdentifier == "OWLOntology")
+
+        // Restore to OWLOntology
+        let restored = try OWLOntology(schemaOntology: decoded)
+        #expect(restored.iri == "http://example.org/onto")
+        #expect(restored.classes.count == 1)
+        #expect(restored.classes.first?.iri == "ex:Person")
     }
 
     // ── Contract 6: Persistable 基本機能の維持 ──

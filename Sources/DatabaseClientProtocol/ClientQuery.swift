@@ -174,7 +174,11 @@ public struct SchemaResponse: Sendable, Codable {
     /// All registered entity definitions
     public let entities: [Schema.Entity]
 
-    public init(entities: [Schema.Entity]) {
+    /// Type-erased ontology metadata (nil if no ontology is configured)
+    public let ontology: Schema.Ontology?
+
+    public init(entities: [Schema.Entity], ontology: Schema.Ontology? = nil) {
         self.entities = entities
+        self.ontology = ontology
     }
 }
