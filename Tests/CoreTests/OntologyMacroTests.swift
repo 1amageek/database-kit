@@ -133,6 +133,26 @@ struct OntHashMixed {
     var fullProp: String
 }
 
+// --- Contract 14: ベア名 @Ontology (区切り文字なし) ---
+@Persistable
+@Ontology("Employee")
+struct OntBareEmployee {
+    @OWLProperty("name", label: "Name")
+    var name: String
+
+    @OWLProperty("age")
+    var age: Int
+
+    @OWLProperty("worksFor", to: \OntBareDepartment.id)
+    var departmentID: String?
+}
+
+@Persistable
+@Ontology("Department")
+struct OntBareDepartment {
+    var name: String
+}
+
 // MARK: - Test Suite
 
 @Suite("Ontology Macro Contract Tests")
@@ -356,6 +376,32 @@ struct OntologyMacroTests {
 
         let fullDesc = descs.first { $0.fieldName == "fullProp" }
         #expect(fullDesc?.iri == "http://other.org/full#prop")
+    }
+
+    // ── Contract 14: ベア名 @Ontology (デフォルト ex: 名前空間) ──
+
+    @Test("Bare name @Ontology defaults to ex: namespace")
+    func bareNameOntologyResolution() {
+        #expect(OntBareEmployee.ontologyClassIRI == "ex:Employee")
+        #expect(OntBareDepartment.ontologyClassIRI == "ex:Department")
+
+        let descs = OntBareEmployee.ontologyPropertyDescriptors
+        #expect(descs.count == 3)
+
+        let nameDesc = descs.first { $0.fieldName == "name" }
+        #expect(nameDesc?.iri == "ex:name")
+        #expect(nameDesc?.label == "Name")
+        #expect(nameDesc?.isObjectProperty == false)
+
+        let ageDesc = descs.first { $0.fieldName == "age" }
+        #expect(ageDesc?.iri == "ex:age")
+        #expect(ageDesc?.isObjectProperty == false)
+
+        let worksFor = descs.first { $0.fieldName == "departmentID" }
+        #expect(worksFor?.iri == "ex:worksFor")
+        #expect(worksFor?.isObjectProperty == true)
+        #expect(worksFor?.targetTypeName == "OntBareDepartment")
+        #expect(worksFor?.targetFieldName == "id")
     }
 
     // ── Contract 11: フル IRI @Ontology の Persistable 基本機能 ──

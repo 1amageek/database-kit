@@ -58,8 +58,9 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
                 )
             ])
         }
-        let iri = String(iriExpr.dropFirst().dropLast())
-        let namespace = Self.extractNamespace(from: iri)
+        let rawIRI = String(iriExpr.dropFirst().dropLast())
+        let namespace = Self.extractNamespace(from: rawIRI)
+        let iri = Self.resolveClassIRI(rawIRI, namespace: namespace)
 
         let structName = structDecl.name.text
 
@@ -147,7 +148,18 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
         if let slashIndex = iri.lastIndex(of: "/") {
             return String(iri[...slashIndex])
         }
-        return iri
+        return "ex:"
+    }
+
+    /// クラス IRI を名前空間で解決する。
+    ///
+    /// 区切り文字（`:`, `#`, `/`）を含まないベア名の場合、
+    /// デフォルト名前空間 `"ex:"` を付与する。
+    private static func resolveClassIRI(_ rawIRI: String, namespace: String) -> String {
+        if rawIRI.contains(":") || rawIRI.contains("#") || rawIRI.contains("/") {
+            return rawIRI
+        }
+        return namespace + rawIRI
     }
 
     /// プロパティ IRI を名前空間で解決する。

@@ -241,7 +241,7 @@ import Core
 import Graph
 
 @Persistable
-@Ontology("ex:Employee")
+@Ontology("Employee")
 struct Employee {
     @OWLProperty("name", label: "Name")
     var name: String
@@ -251,13 +251,13 @@ struct Employee {
 }
 
 @Persistable
-@Ontology("ex:Department")
+@Ontology("Department")
 struct Department {
     var name: String
 }
 ```
 
-Local names (e.g. `"name"`) are automatically resolved using the namespace from `@Ontology`. For example, `@Ontology("ex:Employee")` + `@OWLProperty("name")` → IRI `"ex:name"`. CURIEs (e.g. `"foaf:name"`) and full IRIs (e.g. `"http://..."`) are used as-is.
+Bare names (without `:`, `#`, or `/`) default to the `ex:` namespace. `@Ontology("Employee")` resolves to class IRI `"ex:Employee"`, and `@OWLProperty("name")` resolves to `"ex:name"`. You can also use CURIEs (`"ex:Employee"`) or full IRIs (`"http://..."`) explicitly. CURIEs and full IRIs in `@OWLProperty` are used as-is.
 
 **Macro responsibility separation**:
 - `@Persistable` (Core): `id`, `persistableType`, `allFields`, `fieldSchemas`, `indexDescriptors`, `Codable`/`Sendable`
