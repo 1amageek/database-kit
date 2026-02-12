@@ -64,17 +64,18 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 
         let structName = structDecl.name.text
 
-        // Extract custom type name from macro argument if provided
-        let typeName: String
+        // Extract custom type name from macro arguments
+        var typeName: String = structName
+
         if let arguments = node.arguments,
-           let labeledList = arguments.as(LabeledExprListSyntax.self),
-           let firstArg = labeledList.first,
-           firstArg.label?.text == "type",
-           let stringLiteral = firstArg.expression.as(StringLiteralExprSyntax.self),
-           let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
-            typeName = segment.content.text
-        } else {
-            typeName = structName
+           let labeledList = arguments.as(LabeledExprListSyntax.self) {
+            for arg in labeledList {
+                if arg.label?.text == "type",
+                   let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self),
+                   let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
+                    typeName = segment.content.text
+                }
+            }
         }
 
         // Check if user defined `id` field
@@ -495,6 +496,31 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             descriptorInits.append(relationshipDescriptorInit)
         }
 
+        // Generate reverse IndexDescriptor for @Property(to:) fields (FK indexing)
+        for member in structDecl.memberBlock.members {
+            if let varDecl = member.decl.as(VariableDeclSyntax.self),
+               let propertyAttr = getPropertyAttribute(varDecl) {
+                let info = extractPropertyInfo(from: propertyAttr)
+                if info.targetTypeName != nil {
+                    for binding in varDecl.bindings {
+                        if let pattern = binding.pattern.as(IdentifierPatternSyntax.self) {
+                            let fieldName = pattern.identifier.text
+                            let reverseIndexName = "\(typeName)_\(fieldName)"
+                            let reverseIndexInit = """
+                                IndexDescriptor(
+                                    name: "\(reverseIndexName)",
+                                    keyPaths: [\\\(structName).\(fieldName)],
+                                    kind: ScalarIndexKind<\(structName)>(fieldNames: ["\(fieldName)"]),
+                                    commonOptions: .init()
+                                )
+                            """
+                            descriptorInits.append(reverseIndexInit)
+                        }
+                    }
+                }
+            }
+        }
+
         // Generate descriptors property (unified array for all descriptor types)
         let descriptorsArray = descriptorInits.isEmpty
             ? "[]"
@@ -503,9 +529,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             public static var descriptors: [any Descriptor] { \(raw: descriptorsArray) }
             """
         decls.append(descriptorsDecl)
-
-        // Note: FK fields are no longer auto-generated
-        // User explicitly declares: var customerID: String? with @Relationship(Customer.self)
 
         // Generate directoryPathComponents property
         // Always generate (no default in Persistable extension to avoid conflicts with Polymorphable)
@@ -846,7 +869,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
-        // Generate conformance extension (Persistable, Codable, Sendable)
         let conformanceExt: DeclSyntax = """
             extension \(type.trimmed): Persistable, Codable, Sendable {}
             """

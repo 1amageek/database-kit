@@ -7,6 +7,7 @@
 // https://www.w3.org/TR/owl2-syntax/#Ontologies
 
 import Foundation
+import Core
 
 /// OWL DL Ontology
 ///
@@ -42,7 +43,7 @@ import Foundation
 ///     class_: .named("ex:Parent")
 /// ))
 /// ```
-public struct OWLOntology: Sendable, Codable, Hashable {
+public struct OWLOntology: SchemaOntology, Sendable, Codable, Hashable {
 
     // MARK: - Metadata
 

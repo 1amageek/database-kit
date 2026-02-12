@@ -294,6 +294,9 @@ public final class Schema: Sendable {
     /// Indexes by name for quick lookup
     internal let indexDescriptorsByName: [String: IndexDescriptor]
 
+    /// Schema に紐付くオントロジー
+    public let ontology: (any SchemaOntology)?
+
     // MARK: - Initialization
 
     /// Create schema from array of Persistable types
@@ -315,10 +318,12 @@ public final class Schema: Sendable {
     public init(
         _ types: [any Persistable.Type],
         version: Version = Version(1, 0, 0),
-        indexDescriptors: [IndexDescriptor] = []
+        indexDescriptors: [IndexDescriptor] = [],
+        ontology: (any SchemaOntology)? = nil
     ) {
         self.version = version
         self.encodingVersion = version
+        self.ontology = ontology
 
         // Build entities
         var entities: [Entity] = []
@@ -374,10 +379,12 @@ public final class Schema: Sendable {
     public init(
         entities: [Entity],
         version: Version = Version(1, 0, 0),
-        indexDescriptors: [IndexDescriptor] = []
+        indexDescriptors: [IndexDescriptor] = [],
+        ontology: (any SchemaOntology)? = nil
     ) {
         self.version = version
         self.encodingVersion = version
+        self.ontology = ontology
 
         // Build entity maps
         var entitiesByName: [String: Entity] = [:]

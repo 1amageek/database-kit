@@ -53,12 +53,20 @@ let package = Package(
         .target(name: "Spatial", dependencies: ["Core"]),
         .target(name: "Rank", dependencies: ["Core"]),
         .target(name: "Permuted", dependencies: ["Core"]),
-        .target(name: "Graph", dependencies: ["Core"]),
+        .macro(
+            name: "GraphMacros",
+            dependencies: [
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+            ]
+        ),
+        .target(name: "Graph", dependencies: ["Core", "GraphMacros"]),
         .target(
             name: "DatabaseKit",
             dependencies: ["Core", "Vector", "FullText", "Spatial", "Rank", "Permuted", "Graph"]
         ),
-        .testTarget(name: "CoreTests", dependencies: ["Core"]),
+        .testTarget(name: "CoreTests", dependencies: ["Core", "Graph"]),
     ],
     swiftLanguageModes: [.v6]
 )

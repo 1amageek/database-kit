@@ -7,6 +7,8 @@ Platform-independent model definitions and index type specifications for the dat
 database-kit is the **shared foundation** used by both server ([database-framework](https://github.com/1amageek/database-framework)) and client ([database-client](https://github.com/1amageek/database-client)). It provides:
 
 - `@Persistable` macro for defining data models
+- `@Ontology` macro for OWL ontology class mapping (Graph module)
+- `@Property` macro for OWL property annotations (Graph module)
 - `IndexKind` protocol for extensible index type definitions
 - `QueryIR` for a unified query intermediate representation
 - Protobuf-compatible serialization
@@ -43,7 +45,8 @@ dependencies: [
 | `Spatial` | `SpatialIndexKind` for geospatial queries |
 | `Rank` | `RankIndexKind` for leaderboard rankings |
 | `Permuted` | `PermutedIndexKind` for alternative field orderings |
-| `Graph` | `AdjacencyIndexKind` / `TripleIndexKind` for graph relationships |
+| `Graph` | `GraphIndexKind`, OWL ontology types (`OWLOntology`, `OWLClass`, `OWLAxiom`), `@Ontology` / `@Property` macros, `OntologyEntity`, `OntologyPropertyDescriptor` |
+| `GraphMacros` | `@Ontology` / `@Property` macro compiler plugins |
 | `Relationship` | `RelationshipIndexKind` and `@Relationship` macro |
 | `QueryIR` | Unified query intermediate representation (Expression, SortKey, SelectQuery) |
 | `DatabaseClientProtocol` | Shared protocol for client-server communication |
@@ -223,6 +226,78 @@ struct Order {
     @Relationship(Customer.self, indexFields: [\.name])
     var customerID: String?
 }
+```
+
+## Ontology Integration
+
+Ontology concepts are entirely contained within the **Graph** module. `@Persistable` handles pure persistence; `@Ontology` (from Graph) handles OWL class mapping.
+
+### @Ontology Macro
+
+The `@Ontology` macro (defined in Graph module) maps a `Persistable` type to an OWL class IRI and generates `OntologyEntity` protocol conformance. It is applied independently of `@Persistable`.
+
+```swift
+import Core
+import Graph
+
+@Persistable
+@Ontology("http://example.org/onto#Employee")
+struct Employee {
+    @Property("http://example.org/onto#name", label: "Name")
+    var name: String
+
+    @Property("http://example.org/onto#worksFor", to: \Department.id)
+    var departmentID: String?
+}
+
+@Persistable
+@Ontology("http://example.org/onto#Department")
+struct Department {
+    var name: String
+}
+```
+
+**Macro responsibility separation**:
+- `@Persistable` (Core): `id`, `persistableType`, `allFields`, `fieldSchemas`, `indexDescriptors`, `Codable`/`Sendable`
+- `@Ontology` (Graph): `OntologyEntity` conformance, `ontologyClassIRI`, `ontologyPropertyDescriptors`, reverse indexes for `@Property(to:)` fields
+
+### @Property Macro
+
+The `@Property` macro (defined in Graph module) annotates fields with OWL property IRIs. Two forms are available:
+
+```swift
+// DataProperty — value annotation
+@Property("http://example.org/onto#age")
+var age: Int
+
+// ObjectProperty — relationship to another entity
+@Property("http://example.org/onto#worksFor", to: \Department.id)
+var departmentID: String?
+```
+
+When `to:` is specified, `@Ontology` treats the field as an **ObjectProperty** and automatically generates a reverse index for efficient lookups from the target entity.
+
+### OntologyPropertyDescriptor
+
+Each `@Property`-annotated field produces an `OntologyPropertyDescriptor` accessible via `Type.ontologyPropertyDescriptors`:
+
+```swift
+let descs = Employee.ontologyPropertyDescriptors
+// descs[0].iri          → "http://example.org/onto#name"
+// descs[0].isObjectProperty → false (DataProperty)
+// descs[1].iri          → "http://example.org/onto#worksFor"
+// descs[1].isObjectProperty → true  (ObjectProperty)
+// descs[1].targetTypeName   → "Department"
+```
+
+### Schema with Ontology
+
+```swift
+let ontology = OWLOntology(iri: "http://example.org/onto")
+let schema = Schema(
+    [Employee.self, Department.self],
+    ontology: ontology
+)
 ```
 
 ## Platform Support
