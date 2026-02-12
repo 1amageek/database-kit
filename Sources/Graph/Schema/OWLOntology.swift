@@ -418,6 +418,24 @@ extension OWLOntology: CustomStringConvertible {
     }
 }
 
+// MARK: - Result Builder Initializer
+
+extension OWLOntology {
+    /// @resultBuilder DSL でオントロジーを構築する
+    public init(
+        iri: String,
+        versionIRI: String? = nil,
+        prefixes: [String: String] = [:],
+        @OWLOntologyBuilder content: () -> [OWLOntologyComponent]
+    ) {
+        self.init(iri: iri, versionIRI: versionIRI, prefixes: prefixes)
+        let components = content()
+        for component in components {
+            component.apply(to: &self)
+        }
+    }
+}
+
 // MARK: - Builder Pattern
 
 extension OWLOntology {
