@@ -292,14 +292,17 @@ let descs = Employee.ontologyPropertyDescriptors
 // descs[1].targetTypeName   → "Department"
 ```
 
-### Schema with Ontology
+### Ontology
+
+Ontology is managed independently from Schema via `context.ontology` API on the server side (database-framework).
 
 ```swift
+// database-kit: Define ontology
 let ontology = OWLOntology(iri: "http://example.org/onto")
-let schema = Schema(
-    [Employee.self, Department.self],
-    ontology: ontology
-)
+
+// database-framework: Load ontology to OntologyStore
+let context = container.newContext()
+try await context.ontology.load(ontology)
 ```
 
 ## Platform Support
