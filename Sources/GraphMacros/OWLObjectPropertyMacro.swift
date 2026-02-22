@@ -31,7 +31,7 @@ public struct OWLObjectPropertyMacro: MemberMacro, ExtensionMacro {
             ])
         }
 
-        // Extract arguments: (_ iri: String, from: KeyPath, to: KeyPath)
+        // Extract arguments: (_ iri: String, from: String, to: String)
         guard let arguments = node.arguments,
               let labeledList = arguments.as(LabeledExprListSyntax.self) else {
             throw DiagnosticsError(diagnostics: [
@@ -90,7 +90,7 @@ public struct OWLObjectPropertyMacro: MemberMacro, ExtensionMacro {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: OWLObjectPropertyMacroErrorMessage("@OWLObjectProperty requires a 'from:' KeyPath argument")
+                    message: OWLObjectPropertyMacroErrorMessage("@OWLObjectProperty requires a 'from:' string argument (field name)")
                 )
             ])
         }
@@ -98,7 +98,7 @@ public struct OWLObjectPropertyMacro: MemberMacro, ExtensionMacro {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: OWLObjectPropertyMacroErrorMessage("@OWLObjectProperty requires a 'to:' KeyPath argument")
+                    message: OWLObjectPropertyMacroErrorMessage("@OWLObjectProperty requires a 'to:' string argument (field name)")
                 )
             ])
         }
