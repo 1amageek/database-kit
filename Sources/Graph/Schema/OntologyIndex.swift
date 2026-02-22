@@ -61,6 +61,12 @@ public struct OntologyIndex: Sendable {
     /// DifferentIndividuals assertions indexed by each individual
     public let differentIndividualsByIndividual: [String: [[String]]]
 
+    /// Negative object property assertions indexed by subject IRI
+    public let negativeObjectPropertyAssertionsBySubject: [String: [(property: String, object: String)]]
+
+    /// Negative data property assertions indexed by subject IRI
+    public let negativeDataPropertyAssertionsBySubject: [String: [(property: String, value: OWLLiteral)]]
+
     // MARK: - RBox Indices
 
     /// SubObjectPropertyOf axioms indexed by sub-property
@@ -82,6 +88,9 @@ public struct OntologyIndex: Sendable {
 
     /// All object property IRIs in the ontology signature
     public let objectPropertySignature: Set<String>
+
+    /// All data property IRIs in the ontology signature
+    public let dataPropertySignature: Set<String>
 
     /// All individual IRIs in the ontology signature
     public let individualSignature: Set<String>
@@ -121,6 +130,8 @@ public struct OntologyIndex: Sendable {
         var dataPropBySubject: [String: [(property: String, value: OWLLiteral)]] = [:]
         var sameIndividuals: [String: [[String]]] = [:]
         var diffIndividuals: [String: [[String]]] = [:]
+        var negObjPropBySubject: [String: [(property: String, object: String)]] = [:]
+        var negDataPropBySubject: [String: [(property: String, value: OWLLiteral)]] = [:]
 
         var subPropBySub: [String: [String]] = [:]
         var subPropBySup: [String: [String]] = [:]
@@ -129,6 +140,7 @@ public struct OntologyIndex: Sendable {
 
         var classSig = Set<String>(ontology.classes.map { $0.iri })
         var objPropSig = Set<String>(ontology.objectProperties.map { $0.iri })
+        var dataPropSig = Set<String>(ontology.dataProperties.map { $0.iri })
         var indSig = Set<String>(ontology.individuals.map { $0.iri })
 
         var tbox: [OWLAxiom] = []
@@ -145,6 +157,7 @@ public struct OntologyIndex: Sendable {
             // Collect signature
             classSig.formUnion(axiom.referencedClasses)
             objPropSig.formUnion(axiom.referencedObjectProperties)
+            dataPropSig.formUnion(axiom.referencedDataProperties)
             indSig.formUnion(axiom.referencedIndividuals)
 
             // Index by case
@@ -207,6 +220,12 @@ public struct OntologyIndex: Sendable {
                 inverseProps[first] = second
                 inverseProps[second] = first
 
+            case .negativeObjectPropertyAssertion(let subject, let property, let object):
+                negObjPropBySubject[subject, default: []].append((property: property, object: object))
+
+            case .negativeDataPropertyAssertion(let subject, let property, let value):
+                negDataPropBySubject[subject, default: []].append((property: property, value: value))
+
             default:
                 break
             }
@@ -239,8 +258,12 @@ public struct OntologyIndex: Sendable {
         self.propertyChainAxiomsBySup = propChainBySup
         self.inverseProperties = inverseProps
 
+        self.negativeObjectPropertyAssertionsBySubject = negObjPropBySubject
+        self.negativeDataPropertyAssertionsBySubject = negDataPropBySubject
+
         self.classSignature = classSig
         self.objectPropertySignature = objPropSig
+        self.dataPropertySignature = dataPropSig
         self.individualSignature = indSig
 
         self.tboxAxioms = tbox
