@@ -496,11 +496,11 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             descriptorInits.append(relationshipDescriptorInit)
         }
 
-        // Generate reverse IndexDescriptor for @OWLProperty(to:) fields (FK indexing)
+        // Generate reverse IndexDescriptor for @OWLDataProperty(to:) / @OWLProperty(to:) fields (FK indexing)
         for member in structDecl.memberBlock.members {
             if let varDecl = member.decl.as(VariableDeclSyntax.self),
-               let propertyAttr = getPropertyAttribute(varDecl) {
-                let info = extractPropertyInfo(from: propertyAttr)
+               let propertyAttr = getOWLDataPropertyAttribute(varDecl) {
+                let info = extractOWLDataPropertyInfo(from: propertyAttr)
                 if info.targetTypeName != nil {
                     for binding in varDecl.bindings {
                         if let pattern = binding.pattern.as(IdentifierPatternSyntax.self) {
@@ -518,6 +518,36 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                         }
                     }
                 }
+            }
+        }
+
+        // Generate graph index and OWLObjectPropertyDescriptor for @OWLObjectProperty
+        if let objPropAttr = getOWLObjectPropertyAttribute(structDecl) {
+            let objPropInfo = extractOWLObjectPropertyInfo(from: objPropAttr)
+            if !objPropInfo.fromField.isEmpty && !objPropInfo.toField.isEmpty {
+                let graphIndexName = "\(typeName)_graph_\(objPropInfo.fromField)_\(objPropInfo.toField)"
+                let graphIndexInit = """
+                    IndexDescriptor(
+                        name: "\(graphIndexName)",
+                        keyPaths: [\\\(structName).\(objPropInfo.fromField), \\\(structName).\(objPropInfo.toField)],
+                        kind: GraphIndexKind<\(structName)>.adjacency(
+                            source: \\.\(objPropInfo.fromField),
+                            target: \\.\(objPropInfo.toField)
+                        ),
+                        commonOptions: .init()
+                    )
+                """
+                descriptorInits.append(graphIndexInit)
+
+                let objPropDescriptorInit = """
+                    OWLObjectPropertyDescriptor(
+                        name: "\(typeName)_objectProperty",
+                        iri: "\(objPropInfo.iri)",
+                        fromFieldName: "\(objPropInfo.fromField)",
+                        toFieldName: "\(objPropInfo.toField)"
+                    )
+                """
+                descriptorInits.append(objPropDescriptorInit)
             }
         }
 

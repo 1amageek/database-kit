@@ -1,39 +1,39 @@
 import SwiftSyntax
 
-// MARK: - @OWLProperty マクロヘルパー
+// MARK: - @OWLDataProperty / @OWLProperty helpers
 
-/// VariableDecl に @OWLProperty 属性があるかを判定
-public func hasPropertyAttribute(_ varDecl: VariableDeclSyntax) -> Bool {
+/// Check if a VariableDecl has @OWLDataProperty or @OWLProperty attribute
+public func hasOWLDataPropertyAttribute(_ varDecl: VariableDeclSyntax) -> Bool {
     for attribute in varDecl.attributes {
         if let attr = attribute.as(AttributeSyntax.self),
            let identifier = attr.attributeName.as(IdentifierTypeSyntax.self),
-           identifier.name.text == "OWLProperty" {
+           identifier.name.text == "OWLDataProperty" || identifier.name.text == "OWLProperty" {
             return true
         }
     }
     return false
 }
 
-/// VariableDecl から @OWLProperty 属性を取得
-public func getPropertyAttribute(_ varDecl: VariableDeclSyntax) -> AttributeSyntax? {
+/// Get @OWLDataProperty or @OWLProperty attribute from a VariableDecl
+public func getOWLDataPropertyAttribute(_ varDecl: VariableDeclSyntax) -> AttributeSyntax? {
     for attribute in varDecl.attributes {
         if let attr = attribute.as(AttributeSyntax.self),
            let identifier = attr.attributeName.as(IdentifierTypeSyntax.self),
-           identifier.name.text == "OWLProperty" {
+           identifier.name.text == "OWLDataProperty" || identifier.name.text == "OWLProperty" {
             return attr
         }
     }
     return nil
 }
 
-/// @OWLProperty 属性からメタデータを抽出
+/// Extract metadata from @OWLDataProperty / @OWLProperty attribute
 ///
-/// - Returns: (iri, label, targetTypeName, targetFieldName) タプル
-///   - iri: OWL プロパティ IRI（文字列リテラル）
-///   - label: 表示ラベル（nil 可）
-///   - targetTypeName: `to:` パラメータの Root 型名（nil なら DataProperty）
-///   - targetFieldName: `to:` パラメータのフィールド名（nil なら DataProperty）
-public func extractPropertyInfo(from attribute: AttributeSyntax) -> (
+/// - Returns: (iri, label, targetTypeName, targetFieldName) tuple
+///   - iri: OWL property IRI (string literal)
+///   - label: Display label (optional)
+///   - targetTypeName: Root type name from `to:` parameter (nil for DataProperty)
+///   - targetFieldName: Field name from `to:` parameter (nil for DataProperty)
+public func extractOWLDataPropertyInfo(from attribute: AttributeSyntax) -> (
     iri: String,
     label: String?,
     targetTypeName: String?,
@@ -53,9 +53,8 @@ public func extractPropertyInfo(from attribute: AttributeSyntax) -> (
         let argLabel = argument.label?.text
 
         if index == 0 && argLabel == nil {
-            // 最初の無名引数 = IRI 文字列
+            // First unlabeled argument = IRI string
             let expr = argument.expression.description.trimmingCharacters(in: .whitespaces)
-            // クォーテーションを除去
             if expr.hasPrefix("\"") && expr.hasSuffix("\"") {
                 iri = String(expr.dropFirst().dropLast())
             } else {
@@ -67,7 +66,7 @@ public func extractPropertyInfo(from attribute: AttributeSyntax) -> (
                 label = String(expr.dropFirst().dropLast())
             }
         } else if argLabel == "to" {
-            // KeyPath 式をパース: \Department.id → (Department, id)
+            // Parse KeyPath expression: \Department.id → (Department, id)
             let expr = argument.expression.description.trimmingCharacters(in: .whitespaces)
             let parsed = parseKeyPathExpression(expr)
             targetTypeName = parsed.rootType
@@ -78,12 +77,11 @@ public func extractPropertyInfo(from attribute: AttributeSyntax) -> (
     return (iri, label, targetTypeName, targetFieldName)
 }
 
-/// KeyPath 式文字列 (`\Department.id`) から Root 型名とフィールド名を抽出
+/// Extract Root type name and field name from a KeyPath expression string (`\Department.id`)
 ///
-/// - Parameter expr: KeyPath 式の文字列表現
-/// - Returns: (rootType, fieldName) タプル
+/// - Parameter expr: String representation of a KeyPath expression
+/// - Returns: (rootType, fieldName) tuple
 private func parseKeyPathExpression(_ expr: String) -> (rootType: String?, fieldName: String?) {
-    // パターン: \TypeName.fieldName
     var s = expr
     if s.hasPrefix("\\") {
         s = String(s.dropFirst())
@@ -95,3 +93,59 @@ private func parseKeyPathExpression(_ expr: String) -> (rootType: String?, field
     let fieldName = String(s[s.index(after: dotIndex)...])
     return (rootType.isEmpty ? nil : rootType, fieldName.isEmpty ? nil : fieldName)
 }
+
+// MARK: - @OWLObjectProperty helpers
+
+/// Check if a struct has @OWLObjectProperty attribute
+public func getOWLObjectPropertyAttribute(_ decl: StructDeclSyntax) -> AttributeSyntax? {
+    for attribute in decl.attributes {
+        if let attr = attribute.as(AttributeSyntax.self),
+           let identifier = attr.attributeName.as(IdentifierTypeSyntax.self),
+           identifier.name.text == "OWLObjectProperty" {
+            return attr
+        }
+    }
+    return nil
+}
+
+/// Extract metadata from @OWLObjectProperty attribute
+///
+/// - Returns: (iri, fromField, toField) tuple
+public func extractOWLObjectPropertyInfo(from attribute: AttributeSyntax) -> (
+    iri: String,
+    fromField: String,
+    toField: String
+) {
+    var iri = ""
+    var fromField = ""
+    var toField = ""
+
+    guard let arguments = attribute.arguments,
+          let labeledList = arguments.as(LabeledExprListSyntax.self) else {
+        return (iri, fromField, toField)
+    }
+
+    for (index, argument) in labeledList.enumerated() {
+        let argLabel = argument.label?.text
+
+        if index == 0 && argLabel == nil {
+            let expr = argument.expression.description.trimmingCharacters(in: .whitespaces)
+            if expr.hasPrefix("\"") && expr.hasSuffix("\"") {
+                iri = String(expr.dropFirst().dropLast())
+            }
+        } else if argLabel == "from" {
+            let expr = argument.expression.description.trimmingCharacters(in: .whitespaces)
+            if expr.hasPrefix("\"") && expr.hasSuffix("\"") {
+                fromField = String(expr.dropFirst().dropLast())
+            }
+        } else if argLabel == "to" {
+            let expr = argument.expression.description.trimmingCharacters(in: .whitespaces)
+            if expr.hasPrefix("\"") && expr.hasSuffix("\"") {
+                toField = String(expr.dropFirst().dropLast())
+            }
+        }
+    }
+
+    return (iri, fromField, toField)
+}
+

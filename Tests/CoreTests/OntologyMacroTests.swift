@@ -8,39 +8,39 @@ import DatabaseClientProtocol
 
 // --- Contract 1: DataProperty ---
 @Persistable
-@Ontology("ex:Employee")
+@OWLClass("ex:Employee")
 struct OntEmployee {
-    @OWLProperty("name", label: "Name")
+    @OWLDataProperty("name", label: "Name")
     var name: String
 
-    @OWLProperty("age")
+    @OWLDataProperty("age")
     var age: Int
 }
 
 // --- Contract 2: ObjectProperty (to:) ---
 @Persistable
-@Ontology("ex:Employee")
+@OWLClass("ex:Employee")
 struct OntEmployeeWithFK {
-    @OWLProperty("name")
+    @OWLDataProperty("name")
     var name: String
 
-    @OWLProperty("worksFor", to: \OntDepartment.id)
+    @OWLDataProperty("worksFor", to: \OntDepartment.id)
     var departmentID: String?
 }
 
 @Persistable
-@Ontology("ex:Department")
+@OWLClass("ex:Department")
 struct OntDepartment {
     var name: String
 }
 
-// --- Contract 3: 標準機能との共存 ---
+// --- Contract 3: Standard feature coexistence ---
 @Persistable
-@Ontology("ex:Product")
+@OWLClass("ex:Product")
 struct OntProduct {
     #Index(ScalarIndexKind<OntProduct>(fields: [\.category]))
 
-    @OWLProperty("productName")
+    @OWLDataProperty("productName")
     var productName: String
 
     var category: String
@@ -49,55 +49,55 @@ struct OntProduct {
     var cached: String? = nil
 }
 
-// --- Contract 7: IRI 解決 ---
+// --- Contract 7: IRI resolution ---
 @Persistable
-@Ontology("ex:MixedEntity")
+@OWLClass("ex:MixedEntity")
 struct OntMixed {
-    @OWLProperty("localProp")
+    @OWLDataProperty("localProp")
     var localProp: String
 
-    @OWLProperty("foaf:name")
+    @OWLDataProperty("foaf:name")
     var foafName: String
 
-    @OWLProperty("http://other.org/full#prop")
+    @OWLDataProperty("http://other.org/full#prop")
     var fullProp: String
 }
 
-// --- Contract 8: フル IRI @Ontology ---
+// --- Contract 8: Full IRI @OWLClass ---
 @Persistable
-@Ontology("http://example.org/onto#FullIRIEntity")
+@OWLClass("http://example.org/onto#FullIRIEntity")
 struct OntFullIRI {
-    @OWLProperty("localField")
+    @OWLDataProperty("localField")
     var localField: String
 }
 
-// --- Contract 9: フル IRI @Ontology + DataProperty + ObjectProperty ---
+// --- Contract 9: Full IRI @OWLClass + DataProperty + ObjectProperty ---
 @Persistable
-@Ontology("http://example.org/onto#FullEmployee")
+@OWLClass("http://example.org/onto#FullEmployee")
 struct OntFullEmployee {
-    @OWLProperty("name", label: "Name")
+    @OWLDataProperty("name", label: "Name")
     var name: String
 
-    @OWLProperty("age")
+    @OWLDataProperty("age")
     var age: Int
 
-    @OWLProperty("worksFor", to: \OntFullDepartment.id)
+    @OWLDataProperty("worksFor", to: \OntFullDepartment.id)
     var departmentID: String?
 }
 
 @Persistable
-@Ontology("http://example.org/onto#FullDepartment")
+@OWLClass("http://example.org/onto#FullDepartment")
 struct OntFullDepartment {
     var name: String
 }
 
-// --- Contract 10: フル IRI @Ontology + 標準機能との共存 ---
+// --- Contract 10: Full IRI @OWLClass + standard feature coexistence ---
 @Persistable
-@Ontology("http://example.org/onto#FullProduct")
+@OWLClass("http://example.org/onto#FullProduct")
 struct OntFullProduct {
     #Index(ScalarIndexKind<OntFullProduct>(fields: [\.category]))
 
-    @OWLProperty("productName")
+    @OWLDataProperty("productName")
     var productName: String
 
     var category: String
@@ -106,64 +106,81 @@ struct OntFullProduct {
     var cached: String? = nil
 }
 
-// --- Contract 12: フル IRI @Ontology (/ 区切り) ---
+// --- Contract 12: Full IRI @OWLClass (slash-separated) ---
 @Persistable
-@Ontology("http://example.org/onto/SlashEntity")
+@OWLClass("http://example.org/onto/SlashEntity")
 struct OntSlashIRI {
-    @OWLProperty("localField")
+    @OWLDataProperty("localField")
     var localField: String
 
-    @OWLProperty("foaf:name")
+    @OWLDataProperty("foaf:name")
     var foafName: String
 
-    @OWLProperty("http://other.org/full#prop")
+    @OWLDataProperty("http://other.org/full#prop")
     var fullProp: String
 }
 
-// --- Contract 13: フル IRI @Ontology (# 区切り) + CURIE/フルIRI 混在 ---
+// --- Contract 13: Full IRI @OWLClass (hash-separated) + CURIE/full IRI mix ---
 @Persistable
-@Ontology("http://example.org/onto#HashMixed")
+@OWLClass("http://example.org/onto#HashMixed")
 struct OntHashMixed {
-    @OWLProperty("localProp")
+    @OWLDataProperty("localProp")
     var localProp: String
 
-    @OWLProperty("foaf:name")
+    @OWLDataProperty("foaf:name")
     var foafName: String
 
-    @OWLProperty("http://other.org/full#prop")
+    @OWLDataProperty("http://other.org/full#prop")
     var fullProp: String
 }
 
-// --- Contract 14: ベア名 @Ontology (区切り文字なし) ---
+// --- Contract 14: Bare name @OWLClass (no separator) ---
 @Persistable
-@Ontology("Employee")
+@OWLClass("Employee")
 struct OntBareEmployee {
-    @OWLProperty("name", label: "Name")
+    @OWLDataProperty("name", label: "Name")
     var name: String
 
-    @OWLProperty("age")
+    @OWLDataProperty("age")
     var age: Int
 
-    @OWLProperty("worksFor", to: \OntBareDepartment.id)
+    @OWLDataProperty("worksFor", to: \OntBareDepartment.id)
     var departmentID: String?
 }
 
 @Persistable
-@Ontology("Department")
+@OWLClass("Department")
 struct OntBareDepartment {
     var name: String
 }
 
+// --- Contract 20: @OWLObjectProperty ---
+@Persistable
+@OWLObjectProperty("onto:employs", from: "employeeID", to: "projectID")
+struct OntAssignment {
+    var employeeID: String = ""
+    var projectID: String = ""
+
+    @OWLDataProperty("onto:since")
+    var startDate: Date = Date()
+}
+
+// --- Contract 16: Plain model (no ontology) ---
+@Persistable
+struct OntPlainModel {
+    var name: String = ""
+}
+
 // MARK: - Test Suite
 
-@Suite("Ontology Macro Contract Tests")
+@Suite("OWL Macro Contract Tests")
 struct OntologyMacroTests {
 
-    // ── Contract 1: OntologyEntity 準拠 ──
+    // -- Contract 1: OWLClassEntity conformance --
 
-    @Test("ontologyClass generates OntologyEntity conformance")
-    func ontologyEntityConformance() {
-        let _: any OntologyEntity = OntEmployee(name: "Alice", age: 30)
+    @Test("@OWLClass generates OWLClassEntity conformance")
+    func owlClassEntityConformance() {
+        let _: any OWLClassEntity = OntEmployee(name: "Alice", age: 30)
     }
 
     @Test("ontologyClassIRI returns specified IRI")
@@ -172,9 +189,9 @@ struct OntologyMacroTests {
         #expect(OntDepartment.ontologyClassIRI == "ex:Department")
     }
 
-    // ── Contract 2: DataProperty descriptor ──
+    // -- Contract 2: DataProperty descriptor --
 
-    @Test("@OWLProperty generates OntologyPropertyDescriptor for data properties")
+    @Test("@OWLDataProperty generates OWLDataPropertyDescriptor for data properties")
     func dataPropertyDescriptors() {
         let descs = OntEmployee.ontologyPropertyDescriptors
         #expect(descs.count == 2)
@@ -193,9 +210,9 @@ struct OntologyMacroTests {
         #expect(ageDesc?.isObjectProperty == false)
     }
 
-    // ── Contract 3: ObjectProperty descriptor ──
+    // -- Contract 3: ObjectProperty descriptor --
 
-    @Test("@OWLProperty with to: generates ObjectProperty descriptor")
+    @Test("@OWLDataProperty with to: generates ObjectProperty descriptor")
     func objectPropertyDescriptor() {
         let descs = OntEmployeeWithFK.ontologyPropertyDescriptors
         let worksFor = descs.first { $0.fieldName == "departmentID" }
@@ -206,16 +223,16 @@ struct OntologyMacroTests {
         #expect(worksFor?.targetFieldName == "id")
     }
 
-    @Test("ObjectProperty auto-generates reverse index with @OWLProperty")
+    @Test("ObjectProperty auto-generates reverse index with @OWLDataProperty")
     func objectPropertyReverseIndex() {
         let indexes = OntEmployeeWithFK.indexDescriptors
         let reverseIdx = indexes.first { $0.name.contains("departmentID") }
         #expect(reverseIdx != nil)
     }
 
-    // ── Contract 4: 標準機能との共存 ──
+    // -- Contract 4: Standard feature coexistence --
 
-    @Test("Ontology features coexist with #Index and @Transient")
+    @Test("OWL features coexist with #Index and @Transient")
     func coexistenceWithStandardFeatures() {
         #expect(OntProduct.ontologyClassIRI == "ex:Product")
 
@@ -232,9 +249,9 @@ struct OntologyMacroTests {
         #expect(OntProduct.allFields.contains("category"))
     }
 
-    // ── Contract 6: Persistable 基本機能の維持 ──
+    // -- Contract 6: Persistable basics maintained --
 
-    @Test("Ontology entities retain standard Persistable features")
+    @Test("OWL entities retain standard Persistable features")
     func persistableBasics() {
         #expect(OntEmployee.persistableType == "OntEmployee")
         #expect(OntEmployee.allFields.contains("id"))
@@ -245,7 +262,7 @@ struct OntologyMacroTests {
         #expect(e.id.count == 26)
     }
 
-    // ── Contract 7: IRI 解決 ──
+    // -- Contract 7: IRI resolution --
 
     @Test("IRI resolution: local name, CURIE, full IRI")
     func iriResolution() {
@@ -262,9 +279,9 @@ struct OntologyMacroTests {
         #expect(fullDesc?.iri == "http://other.org/full#prop")
     }
 
-    // ── Contract 8: フル IRI @Ontology でのローカル名解決 ──
+    // -- Contract 8: Full IRI @OWLClass local name resolution --
 
-    @Test("IRI resolution with full IRI @Ontology")
+    @Test("IRI resolution with full IRI @OWLClass")
     func fullIRIOntologyResolution() {
         #expect(OntFullIRI.ontologyClassIRI == "http://example.org/onto#FullIRIEntity")
 
@@ -273,9 +290,9 @@ struct OntologyMacroTests {
         #expect(desc?.iri == "http://example.org/onto#localField")
     }
 
-    // ── Contract 9: フル IRI @Ontology + DataProperty + ObjectProperty ──
+    // -- Contract 9: Full IRI @OWLClass + DataProperty + ObjectProperty --
 
-    @Test("Full IRI @Ontology with DataProperty and ObjectProperty")
+    @Test("Full IRI @OWLClass with DataProperty and ObjectProperty")
     func fullIRIDataAndObjectProperty() {
         #expect(OntFullEmployee.ontologyClassIRI == "http://example.org/onto#FullEmployee")
         #expect(OntFullDepartment.ontologyClassIRI == "http://example.org/onto#FullDepartment")
@@ -299,16 +316,16 @@ struct OntologyMacroTests {
         #expect(worksFor?.targetFieldName == "id")
     }
 
-    @Test("Full IRI @Ontology ObjectProperty generates reverse index")
+    @Test("Full IRI @OWLClass ObjectProperty generates reverse index")
     func fullIRIObjectPropertyReverseIndex() {
         let indexes = OntFullEmployee.indexDescriptors
         let reverseIdx = indexes.first { $0.name.contains("departmentID") }
         #expect(reverseIdx != nil)
     }
 
-    // ── Contract 10: フル IRI @Ontology + 標準機能との共存 ──
+    // -- Contract 10: Full IRI @OWLClass + standard feature coexistence --
 
-    @Test("Full IRI @Ontology coexists with #Index and @Transient")
+    @Test("Full IRI @OWLClass coexists with #Index and @Transient")
     func fullIRICoexistence() {
         #expect(OntFullProduct.ontologyClassIRI == "http://example.org/onto#FullProduct")
 
@@ -325,9 +342,9 @@ struct OntologyMacroTests {
         #expect(OntFullProduct.allFields.contains("category"))
     }
 
-    // ── Contract 12: フル IRI @Ontology (/ 区切り) でのローカル名解決 ──
+    // -- Contract 12: Full IRI @OWLClass (slash-separated) --
 
-    @Test("IRI resolution with slash-separated full IRI @Ontology")
+    @Test("IRI resolution with slash-separated full IRI @OWLClass")
     func slashIRIOntologyResolution() {
         #expect(OntSlashIRI.ontologyClassIRI == "http://example.org/onto/SlashEntity")
 
@@ -344,9 +361,9 @@ struct OntologyMacroTests {
         #expect(fullDesc?.iri == "http://other.org/full#prop")
     }
 
-    // ── Contract 13: フル IRI @Ontology (# 区切り) + CURIE/フルIRI 混在 ──
+    // -- Contract 13: Full IRI @OWLClass (hash-separated) + mixed --
 
-    @Test("IRI resolution with hash-separated full IRI @Ontology and mixed property IRIs")
+    @Test("IRI resolution with hash-separated full IRI @OWLClass and mixed property IRIs")
     func hashIRIMixedPropertyResolution() {
         #expect(OntHashMixed.ontologyClassIRI == "http://example.org/onto#HashMixed")
 
@@ -363,9 +380,9 @@ struct OntologyMacroTests {
         #expect(fullDesc?.iri == "http://other.org/full#prop")
     }
 
-    // ── Contract 14: ベア名 @Ontology (デフォルト ex: 名前空間) ──
+    // -- Contract 14: Bare name @OWLClass (default ex: namespace) --
 
-    @Test("Bare name @Ontology defaults to ex: namespace")
+    @Test("Bare name @OWLClass defaults to ex: namespace")
     func bareNameOntologyResolution() {
         #expect(OntBareEmployee.ontologyClassIRI == "ex:Employee")
         #expect(OntBareDepartment.ontologyClassIRI == "ex:Department")
@@ -389,9 +406,9 @@ struct OntologyMacroTests {
         #expect(worksFor?.targetFieldName == "id")
     }
 
-    // ── Contract 11: フル IRI @Ontology の Persistable 基本機能 ──
+    // -- Contract 11: Full IRI @OWLClass Persistable basics --
 
-    @Test("Full IRI @Ontology retains Persistable features")
+    @Test("Full IRI @OWLClass retains Persistable features")
     func fullIRIPersistableBasics() {
         #expect(OntFullEmployee.persistableType == "OntFullEmployee")
         #expect(OntFullEmployee.allFields.contains("id"))
@@ -403,7 +420,7 @@ struct OntologyMacroTests {
         #expect(e.id.count == 26)
     }
 
-    // ── Contract 15: SchemaResponse transport ──
+    // -- Contract 15: SchemaResponse transport --
 
     @Test("SchemaResponse round-trips through JSON")
     func schemaResponseRoundTrip() throws {
@@ -415,5 +432,80 @@ struct OntologyMacroTests {
 
         #expect(decoded.entities.count == 1)
         #expect(decoded.entities[0].name == entity.name)
+    }
+
+    // -- Contract 20: @OWLObjectProperty --
+
+    @Test("@OWLObjectProperty generates OWLObjectPropertyEntity conformance")
+    func owlObjectPropertyEntityConformance() {
+        let _: any OWLObjectPropertyEntity = OntAssignment(employeeID: "e1", projectID: "p1")
+    }
+
+    @Test("@OWLObjectProperty IRI is set correctly")
+    func objectPropertyIRI() {
+        #expect(OntAssignment.objectPropertyIRI == "onto:employs")
+    }
+
+    @Test("@OWLObjectProperty from/to field names are set correctly")
+    func objectPropertyFromToFields() {
+        #expect(OntAssignment.fromFieldName == "employeeID")
+        #expect(OntAssignment.toFieldName == "projectID")
+    }
+
+    @Test("@OWLObjectProperty auto-generates graph index")
+    func objectPropertyAutoGraphIndex() {
+        let indexes = OntAssignment.indexDescriptors
+        let graphIdx = indexes.first { $0.name.contains("graph") }
+        #expect(graphIdx != nil)
+        #expect(graphIdx?.name == "OntAssignment_graph_employeeID_projectID")
+    }
+
+    @Test("@OWLObjectProperty generates OWLObjectPropertyDescriptor")
+    func objectPropertyDescriptorGenerated() {
+        let descs = OntAssignment.owlObjectPropertyDescriptors
+        #expect(descs.count == 1)
+        #expect(descs[0].iri == "onto:employs")
+        #expect(descs[0].fromFieldName == "employeeID")
+        #expect(descs[0].toFieldName == "projectID")
+    }
+
+    @Test("@OWLObjectProperty collects @OWLDataProperty metadata")
+    func objectPropertyCollectsDataProperties() {
+        let propDescs = OntAssignment.ontologyPropertyDescriptors
+        #expect(propDescs.count == 1)
+        #expect(propDescs[0].fieldName == "startDate")
+        #expect(propDescs[0].iri == "onto:since")
+    }
+
+    // -- Contract 16: Schema.Entity ontology metadata --
+
+    @Test("Schema.Entity captures ontologyClassIRI from @OWLClass")
+    func schemaEntityOntologyClassIRI() {
+        let entity = Schema.Entity(from: OntEmployee.self)
+        #expect(entity.ontologyClassIRI == "ex:Employee")
+    }
+
+    @Test("Schema.Entity captures objectPropertyIRI from @OWLObjectProperty")
+    func schemaEntityObjectPropertyIRI() {
+        let entity = Schema.Entity(from: OntAssignment.self)
+        #expect(entity.objectPropertyIRI == "onto:employs")
+        #expect(entity.objectPropertyFromField == "employeeID")
+        #expect(entity.objectPropertyToField == "projectID")
+    }
+
+    @Test("Schema.Entity ontology metadata round-trips through JSON")
+    func schemaEntityOntologyMetadataRoundTrip() throws {
+        let entity = Schema.Entity(from: OntEmployee.self)
+        let data = try JSONEncoder().encode(entity)
+        let decoded = try JSONDecoder().decode(Schema.Entity.self, from: data)
+        #expect(decoded.ontologyClassIRI == "ex:Employee")
+        #expect(decoded.objectPropertyIRI == nil)
+    }
+
+    @Test("Schema.Entity without ontology has nil ontology fields")
+    func schemaEntityNoOntology() {
+        let entity = Schema.Entity(from: OntPlainModel.self)
+        #expect(entity.ontologyClassIRI == nil)
+        #expect(entity.objectPropertyIRI == nil)
     }
 }

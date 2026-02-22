@@ -5,12 +5,12 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 import SwiftDiagnostics
 
-/// `@Ontology` マクロの実装。
+/// Implementation of the `@OWLClass` macro.
 ///
-/// OWL オントロジークラスと Persistable 型を紐付ける。
-/// `ontologyClassIRI` と `ontologyPropertyDescriptors` を生成し、
-/// `OntologyEntity` プロトコル準拠を追加する。
-public struct OntologyMacro: MemberMacro, ExtensionMacro {
+/// Binds a Persistable type to an OWL class in the OntologyStore.
+/// Generates `ontologyClassIRI` and `ontologyPropertyDescriptors`,
+/// and adds `OWLClassEntity` protocol conformance.
+public struct OWLClassMacro: MemberMacro, ExtensionMacro {
 
     // MARK: - MemberMacro
 
@@ -24,23 +24,23 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: OntologyMacroErrorMessage(
-                        "@Ontology can only be applied to structs"
+                    message: OWLClassMacroErrorMessage(
+                        "@OWLClass can only be applied to structs"
                     )
                 )
             ])
         }
 
-        // IRI 文字列を取得
+        // Extract IRI string argument
         guard let arguments = node.arguments,
               let labeledList = arguments.as(LabeledExprListSyntax.self),
               let firstArg = labeledList.first else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: OntologyMacroErrorMessage(
-                        "@Ontology requires an IRI string argument. " +
-                        "Example: @Ontology(\"http://example.org/onto#Employee\")"
+                    message: OWLClassMacroErrorMessage(
+                        "@OWLClass requires an IRI string argument. " +
+                        "Example: @OWLClass(\"http://example.org/onto#Employee\")"
                     )
                 )
             ])
@@ -51,8 +51,8 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(firstArg),
-                    message: OntologyMacroErrorMessage(
-                        "@Ontology argument must be a string literal (IRI). " +
+                    message: OWLClassMacroErrorMessage(
+                        "@OWLClass argument must be a string literal (IRI). " +
                         "Found: \(iriExpr)"
                     )
                 )
@@ -64,13 +64,13 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
 
         let structName = structDecl.name.text
 
-        // @OWLProperty 付きフィールドを収集
+        // Collect @OWLDataProperty / @OWLProperty annotated fields
         var ontologyProperties: [(fieldName: String, iri: String, label: String?, targetTypeName: String?, targetFieldName: String?)] = []
 
         for member in structDecl.memberBlock.members {
             if let varDecl = member.decl.as(VariableDeclSyntax.self) {
-                guard let propertyAttr = getPropertyAttribute(varDecl) else { continue }
-                let info = extractPropertyInfo(from: propertyAttr)
+                guard let propertyAttr = getOWLDataPropertyAttribute(varDecl) else { continue }
+                let info = extractOWLDataPropertyInfo(from: propertyAttr)
 
                 for binding in varDecl.bindings {
                     if let pattern = binding.pattern.as(IdentifierPatternSyntax.self) {
@@ -89,13 +89,13 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
 
         var decls: [DeclSyntax] = []
 
-        // ontologyClassIRI 生成
+        // Generate ontologyClassIRI
         let ontologyClassDecl: DeclSyntax = """
             public static var ontologyClassIRI: String { "\(raw: iri)" }
             """
         decls.append(ontologyClassDecl)
 
-        // ontologyPropertyDescriptors 生成
+        // Generate ontologyPropertyDescriptors
         var descriptorInits: [String] = []
         for prop in ontologyProperties {
             let descriptorName = "\(structName)_\(prop.fieldName)"
@@ -104,7 +104,7 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
             let targetFieldLiteral = prop.targetFieldName.map { "\"\($0)\"" } ?? "nil"
 
             let init_ = """
-                OntologyPropertyDescriptor(
+                OWLDataPropertyDescriptor(
                     name: "\(descriptorName)",
                     fieldName: "\(prop.fieldName)",
                     iri: "\(prop.iri)",
@@ -121,7 +121,7 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
             : "[\n            \(descriptorInits.joined(separator: ",\n            "))\n        ]"
 
         let descriptorsDecl: DeclSyntax = """
-            public static var ontologyPropertyDescriptors: [OntologyPropertyDescriptor] { \(raw: descriptorsArray) }
+            public static var ontologyPropertyDescriptors: [OWLDataPropertyDescriptor] { \(raw: descriptorsArray) }
             """
         decls.append(descriptorsDecl)
 
@@ -130,11 +130,11 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
 
     // MARK: - IRI Resolution
 
-    /// `@Ontology` の IRI から名前空間を抽出する。
+    /// Extract namespace from the `@OWLClass` IRI.
     ///
     /// - CURIE `"ex:Employee"` → `"ex:"`
-    /// - フル IRI `"http://example.org/onto#Employee"` → `"http://example.org/onto#"`
-    /// - フル IRI `"http://example.org/onto/Employee"` → `"http://example.org/onto/"`
+    /// - Full IRI `"http://example.org/onto#Employee"` → `"http://example.org/onto#"`
+    /// - Full IRI `"http://example.org/onto/Employee"` → `"http://example.org/onto/"`
     private static func extractNamespace(from iri: String) -> String {
         if let colonIndex = iri.firstIndex(of: ":") {
             let afterColon = iri[iri.index(after: colonIndex)...]
@@ -151,10 +151,9 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
         return "ex:"
     }
 
-    /// クラス IRI を名前空間で解決する。
+    /// Resolve class IRI with namespace.
     ///
-    /// 区切り文字（`:`, `#`, `/`）を含まないベア名の場合、
-    /// デフォルト名前空間 `"ex:"` を付与する。
+    /// Bare names (no `:`, `#`, `/`) get the default namespace `"ex:"` prepended.
     private static func resolveClassIRI(_ rawIRI: String, namespace: String) -> String {
         if rawIRI.contains(":") || rawIRI.contains("#") || rawIRI.contains("/") {
             return rawIRI
@@ -162,11 +161,11 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
         return namespace + rawIRI
     }
 
-    /// プロパティ IRI を名前空間で解決する。
+    /// Resolve property IRI with namespace.
     ///
-    /// - `"://"` を含む → フル IRI → そのまま
-    /// - `":"` を含む → CURIE → そのまま
-    /// - それ以外 → ローカル名 → 名前空間を付与
+    /// - Contains `"://"` → full IRI → keep as-is
+    /// - Contains `":"` → CURIE → keep as-is
+    /// - Otherwise → local name → prepend namespace
     private static func resolvePropertyIRI(_ rawIRI: String, namespace: String) -> String {
         if rawIRI.contains("://") { return rawIRI }
         if rawIRI.contains(":") { return rawIRI }
@@ -183,7 +182,7 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
         in context: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
         let conformanceExt: DeclSyntax = """
-            extension \(type.trimmed): OntologyEntity {}
+            extension \(type.trimmed): OWLClassEntity {}
             """
 
         if let extensionDecl = conformanceExt.as(ExtensionDeclSyntax.self) {
@@ -194,8 +193,8 @@ public struct OntologyMacro: MemberMacro, ExtensionMacro {
     }
 }
 
-/// @Ontology マクロのエラーメッセージ
-struct OntologyMacroErrorMessage: DiagnosticMessage {
+/// Error message for @OWLClass macro
+struct OWLClassMacroErrorMessage: DiagnosticMessage {
     let message: String
     let diagnosticID: MessageID
     let severity: DiagnosticSeverity

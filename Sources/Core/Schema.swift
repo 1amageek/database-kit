@@ -100,6 +100,18 @@ public final class Schema: Sendable {
         /// Enum metadata: fieldName → case names
         public let enumMetadata: [String: [String]]
 
+        /// OWL class IRI (from @OWLClass macro, nil if not an ontology entity)
+        public let ontologyClassIRI: String?
+
+        /// OWL ObjectProperty IRI (from @OWLObjectProperty macro, nil if not an ObjectProperty entity)
+        public let objectPropertyIRI: String?
+
+        /// ObjectProperty source field name (from @OWLObjectProperty `from:`)
+        public let objectPropertyFromField: String?
+
+        /// ObjectProperty target field name (from @OWLObjectProperty `to:`)
+        public let objectPropertyToField: String?
+
         // MARK: - Runtime-Only Properties
 
         /// The Persistable type (for runtime type recovery)
@@ -121,6 +133,7 @@ public final class Schema: Sendable {
 
         private enum CodingKeys: String, CodingKey {
             case name, fields, directoryComponents, indexes, enumMetadata
+            case ontologyClassIRI, objectPropertyIRI, objectPropertyFromField, objectPropertyToField
         }
 
         public init(from decoder: Decoder) throws {
@@ -130,6 +143,10 @@ public final class Schema: Sendable {
             self.directoryComponents = try container.decode([DirectoryComponentCatalog].self, forKey: .directoryComponents)
             self.indexes = try container.decode([AnyIndexDescriptor].self, forKey: .indexes)
             self.enumMetadata = try container.decode([String: [String]].self, forKey: .enumMetadata)
+            self.ontologyClassIRI = try container.decodeIfPresent(String.self, forKey: .ontologyClassIRI)
+            self.objectPropertyIRI = try container.decodeIfPresent(String.self, forKey: .objectPropertyIRI)
+            self.objectPropertyFromField = try container.decodeIfPresent(String.self, forKey: .objectPropertyFromField)
+            self.objectPropertyToField = try container.decodeIfPresent(String.self, forKey: .objectPropertyToField)
             self.persistableType = nil
             self.indexDescriptors = []
         }
@@ -197,6 +214,11 @@ public final class Schema: Sendable {
             self.directoryComponents = Self.extractDirectoryComponents(from: type)
             self.indexes = type.indexDescriptors.map { AnyIndexDescriptor($0) }
             self.enumMetadata = Self.extractEnumMetadata(from: type)
+            self.ontologyClassIRI = Self.extractOntologyClassIRI(from: type)
+            let objPropInfo = Self.extractObjectPropertyInfo(from: type)
+            self.objectPropertyIRI = objPropInfo?.iri
+            self.objectPropertyFromField = objPropInfo?.fromField
+            self.objectPropertyToField = objPropInfo?.toField
             self.persistableType = type
             self.indexDescriptors = type.indexDescriptors
         }
@@ -209,13 +231,21 @@ public final class Schema: Sendable {
             fields: [FieldSchema],
             directoryComponents: [DirectoryComponentCatalog] = [],
             indexes: [AnyIndexDescriptor] = [],
-            enumMetadata: [String: [String]] = [:]
+            enumMetadata: [String: [String]] = [:],
+            ontologyClassIRI: String? = nil,
+            objectPropertyIRI: String? = nil,
+            objectPropertyFromField: String? = nil,
+            objectPropertyToField: String? = nil
         ) {
             self.name = name
             self.fields = fields
             self.directoryComponents = directoryComponents
             self.indexes = indexes
             self.enumMetadata = enumMetadata
+            self.ontologyClassIRI = ontologyClassIRI
+            self.objectPropertyIRI = objectPropertyIRI
+            self.objectPropertyFromField = objectPropertyFromField
+            self.objectPropertyToField = objectPropertyToField
             self.persistableType = nil
             self.indexDescriptors = []
         }
@@ -227,7 +257,11 @@ public final class Schema: Sendable {
             lhs.fields == rhs.fields &&
             lhs.directoryComponents == rhs.directoryComponents &&
             lhs.indexes == rhs.indexes &&
-            lhs.enumMetadata == rhs.enumMetadata
+            lhs.enumMetadata == rhs.enumMetadata &&
+            lhs.ontologyClassIRI == rhs.ontologyClassIRI &&
+            lhs.objectPropertyIRI == rhs.objectPropertyIRI &&
+            lhs.objectPropertyFromField == rhs.objectPropertyFromField &&
+            lhs.objectPropertyToField == rhs.objectPropertyToField
         }
 
         // MARK: - Custom Hashable (hash only Codable fields)
@@ -238,6 +272,10 @@ public final class Schema: Sendable {
             hasher.combine(directoryComponents)
             hasher.combine(indexes)
             hasher.combine(enumMetadata)
+            hasher.combine(ontologyClassIRI)
+            hasher.combine(objectPropertyIRI)
+            hasher.combine(objectPropertyFromField)
+            hasher.combine(objectPropertyToField)
         }
 
         // MARK: - Private Helpers
@@ -257,6 +295,25 @@ public final class Schema: Sendable {
                     return .staticPath("_unknown")
                 }
             }
+        }
+
+        /// Extract ontology class IRI from a type if it conforms to OWLClassEntity-like protocol.
+        /// Uses runtime protocol check to avoid Core → Graph dependency.
+        private static func extractOntologyClassIRI(from type: any Persistable.Type) -> String? {
+            // Check if the type has ontologyClassIRI static property
+            // This is generated by @OWLClass macro and exposed via OWLClassEntity protocol
+            if let ontologyType = type as? any _OntologyClassIRIProvider.Type {
+                return ontologyType.ontologyClassIRI
+            }
+            return nil
+        }
+
+        /// Extract ObjectProperty info from a type if it conforms to OWLObjectPropertyEntity-like protocol.
+        private static func extractObjectPropertyInfo(from type: any Persistable.Type) -> (iri: String, fromField: String, toField: String)? {
+            if let objPropType = type as? any _ObjectPropertyIRIProvider.Type {
+                return (objPropType.objectPropertyIRI, objPropType.fromFieldName, objPropType.toFieldName)
+            }
+            return nil
         }
 
         private static func extractEnumMetadata(from type: any Persistable.Type) -> [String: [String]] {
