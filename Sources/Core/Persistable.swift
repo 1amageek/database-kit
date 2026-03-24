@@ -110,6 +110,17 @@ public protocol Persistable: Sendable, Codable {
     /// let indexes = User.indexDescriptors
     /// let relationships = User.relationshipDescriptors  // requires Relationship module
     /// ```
+    /// Macro-generated descriptors from @Persistable (#Index, @Relationship, @OWLObjectProperty).
+    ///
+    /// Override point for @Persistable macro. Other macros provide descriptors
+    /// through separate properties (e.g., `_owlTripleDescriptors` from @OWLClass).
+    static var _persistableDescriptors: [any Descriptor] { get }
+
+    /// Unified descriptor array merging all sources.
+    ///
+    /// Default implementation returns `_persistableDescriptors`.
+    /// Constrained extensions on protocols like `OWLClassEntity` override this
+    /// to merge additional descriptors.
     static var descriptors: [any Descriptor] { get }
 
     // MARK: - Directory Metadata
@@ -291,8 +302,14 @@ public protocol Persistable: Sendable, Codable {
 // MARK: - Default Implementations
 
 public extension Persistable {
-    /// Default implementation returns empty array (no descriptors)
-    static var descriptors: [any Descriptor] { [] }
+    /// Default: no macro-generated descriptors.
+    static var _persistableDescriptors: [any Descriptor] { [] }
+
+    /// Default: unified descriptors = macro-generated descriptors only.
+    ///
+    /// Overridden by constrained extensions (e.g., `Persistable where Self: OWLClassEntity`)
+    /// to merge additional descriptor sources.
+    static var descriptors: [any Descriptor] { _persistableDescriptors }
 
     /// Type-safe access to index descriptors
     ///

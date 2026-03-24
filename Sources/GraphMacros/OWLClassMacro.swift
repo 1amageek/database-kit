@@ -125,6 +125,15 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(descriptorsDecl)
 
+        // Generate _owlTripleDescriptors for OWLTripleIndexKind
+        // This is merged into `descriptors` via the OWLClassEntity constrained protocol extension.
+        let owlTripleDecl: DeclSyntax = """
+            public static var _owlTripleDescriptors: [any Descriptor] {
+                [IndexDescriptor(name: "\(raw: structName)_owlTriple", keyPaths: [] as [PartialKeyPath<\(raw: structName)>], kind: OWLTripleIndexKind<\(raw: structName)>())]
+            }
+            """
+        decls.append(owlTripleDecl)
+
         return decls
     }
 

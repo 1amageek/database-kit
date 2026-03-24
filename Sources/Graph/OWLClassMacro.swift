@@ -24,12 +24,12 @@
 /// - `static var ontologyClassIRI: String` — OWL class IRI
 /// - `static var ontologyPropertyDescriptors: [OWLDataPropertyDescriptor]` — metadata for `@OWLDataProperty` fields
 /// - `OWLClassEntity` protocol conformance
-@attached(member, names: named(ontologyClassIRI), named(ontologyPropertyDescriptors))
+@attached(member, names: named(ontologyClassIRI), named(ontologyPropertyDescriptors), named(_owlTripleDescriptors))
 @attached(extension, conformances: OWLClassEntity)
 public macro OWLClass(_ iri: String) = #externalMacro(module: "GraphMacros", type: "OWLClassMacro")
 
 /// Backward compatibility
 @available(*, deprecated, renamed: "OWLClass")
-@attached(member, names: named(ontologyClassIRI), named(ontologyPropertyDescriptors))
+@attached(member, names: named(ontologyClassIRI), named(ontologyPropertyDescriptors), named(_owlTripleDescriptors))
 @attached(extension, conformances: OWLClassEntity)
 public macro Ontology(_ iri: String) = #externalMacro(module: "GraphMacros", type: "OWLClassMacro")

@@ -551,12 +551,15 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             }
         }
 
-        // Generate descriptors property (unified array for all descriptor types)
+        // Generate _persistableDescriptors (macro-generated descriptors from #Index, @Relationship, @OWLObjectProperty)
+        // NOTE: This is NOT `descriptors` — the unified `descriptors` property is provided by
+        // protocol extensions in Persistable (default) and OWLClassEntity (constrained override).
+        // This separation allows independent macros to contribute descriptors without coupling.
         let descriptorsArray = descriptorInits.isEmpty
             ? "[]"
             : "[\n            \(descriptorInits.joined(separator: ",\n            "))\n        ]"
         let descriptorsDecl: DeclSyntax = """
-            public static var descriptors: [any Descriptor] { \(raw: descriptorsArray) }
+            public static var _persistableDescriptors: [any Descriptor] { \(raw: descriptorsArray) }
             """
         decls.append(descriptorsDecl)
 
