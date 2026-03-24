@@ -509,3 +509,109 @@ struct OntologyMacroTests {
         #expect(entity.objectPropertyIRI == nil)
     }
 }
+
+// MARK: - Descriptor Ownership Tests
+
+@Suite("Descriptor Ownership Tests")
+struct DescriptorOwnershipTests {
+
+    // -- _persistableDescriptors --
+
+    @Test("@Persistable generates _persistableDescriptors")
+    func persistableDescriptorsGenerated() {
+        // OntPlainModel has no #Index → empty
+        #expect(OntPlainModel._persistableDescriptors.isEmpty)
+    }
+
+    @Test("_persistableDescriptors contains #Index descriptors")
+    func persistableDescriptorsContainsIndex() {
+        // OntProduct has #Index(ScalarIndexKind<...>(fields: [\.category]))
+        let descs = OntProduct._persistableDescriptors
+        let indexDescs = descs.compactMap { $0 as? IndexDescriptor }
+        #expect(indexDescs.contains { $0.name.contains("category") })
+    }
+
+    // -- _owlTripleDescriptors --
+
+    @Test("@OWLClass generates _owlTripleDescriptors with OWLTripleIndexKind")
+    func owlTripleDescriptorsGenerated() {
+        let descs = OntEmployee._owlTripleDescriptors
+        #expect(descs.count == 1)
+
+        let indexDesc = descs[0] as? IndexDescriptor
+        #expect(indexDesc != nil)
+        #expect(indexDesc?.name == "OntEmployee_owlTriple")
+        #expect(indexDesc?.kindIdentifier == "owlTriple")
+    }
+
+    @Test("Non-OWL type has no _owlTripleDescriptors")
+    func plainTypeNoOwlDescriptors() {
+        // OntPlainModel is @Persistable but NOT @OWLClass
+        // It should not have _owlTripleDescriptors (protocol requirement not satisfied → no conformance)
+        let indexDescs = OntPlainModel.indexDescriptors
+        let owlTriple = indexDescs.first { $0.kindIdentifier == "owlTriple" }
+        #expect(owlTriple == nil)
+    }
+
+    // -- Descriptor merging --
+
+    @Test("OWLClassEntity.descriptors merges _persistable + _owlTriple")
+    func descriptorsMerge() {
+        // OntProduct has @OWLClass + #Index(ScalarIndexKind) + @Transient
+        let all = OntProduct.descriptors
+        let indexDescs = all.compactMap { $0 as? IndexDescriptor }
+
+        // Should contain both scalar index and owlTriple
+        let scalar = indexDescs.first { $0.kindIdentifier == "scalar" }
+        let owlTriple = indexDescs.first { $0.kindIdentifier == "owlTriple" }
+
+        #expect(scalar != nil, "Should contain scalar index from #Index")
+        #expect(owlTriple != nil, "Should contain owlTriple from @OWLClass")
+    }
+
+    @Test("Plain type descriptors == _persistableDescriptors (no merge)")
+    func plainTypeDescriptorsDefault() {
+        // No @OWLClass → descriptors defaults to _persistableDescriptors
+        let descs = OntPlainModel.descriptors
+        let persistable = OntPlainModel._persistableDescriptors
+        #expect(descs.count == persistable.count)
+    }
+
+    // -- OWLTripleIndexKind --
+
+    @Test("OWLTripleIndexKind has correct identifier and structure")
+    func owlTripleIndexKindProperties() {
+        let kind = OWLTripleIndexKind<OntEmployee>()
+        #expect(OWLTripleIndexKind<OntEmployee>.identifier == "owlTriple")
+        #expect(OWLTripleIndexKind<OntEmployee>.subspaceStructure == .hierarchical)
+        #expect(kind.indexName == "OntEmployee_owlTriple")
+        #expect(kind.graph == "default")
+        #expect(kind.prefix == "entity")
+    }
+
+    @Test("OWLTripleIndexKind custom graph and prefix")
+    func owlTripleIndexKindCustom() {
+        let kind = OWLTripleIndexKind<OntEmployee>(graph: "my:graph", prefix: "app")
+        #expect(kind.graph == "my:graph")
+        #expect(kind.prefix == "app")
+    }
+
+    @Test("OWLTripleIndexKind Codable round-trip")
+    func owlTripleIndexKindCodable() throws {
+        let kind = OWLTripleIndexKind<OntEmployee>(graph: "test:graph", prefix: "test")
+        let data = try JSONEncoder().encode(kind)
+        let decoded = try JSONDecoder().decode(OWLTripleIndexKind<OntEmployee>.self, from: data)
+        #expect(decoded.graph == "test:graph")
+        #expect(decoded.prefix == "test")
+    }
+
+    @Test("OWLTripleIndexKind Hashable")
+    func owlTripleIndexKindHashable() {
+        let a = OWLTripleIndexKind<OntEmployee>(graph: "g1", prefix: "p1")
+        let b = OWLTripleIndexKind<OntEmployee>(graph: "g1", prefix: "p1")
+        let c = OWLTripleIndexKind<OntEmployee>(graph: "g2", prefix: "p1")
+        #expect(a == b)
+        #expect(a != c)
+        #expect(a.hashValue == b.hashValue)
+    }
+}
