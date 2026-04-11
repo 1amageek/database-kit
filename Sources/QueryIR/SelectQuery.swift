@@ -377,7 +377,7 @@ extension SelectQuery {
         case .except(let left, let right):
             collectVariables(from: left, into: &vars)
             collectVariables(from: right, into: &vars)
-        case .table, .values, .graphTable:
+        case .table, .values, .graphTable, .logical:
             break
         }
     }

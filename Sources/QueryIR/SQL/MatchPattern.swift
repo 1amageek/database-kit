@@ -842,6 +842,9 @@ extension DataSource {
 
         case .except(let left, let right):
             return "(\(left.toSQL()) EXCEPT \(right.toSQL()))"
+
+        case .logical(let logicalSource):
+            return SQLEscape.identifier(logicalSource.effectiveName)
         }
     }
 }

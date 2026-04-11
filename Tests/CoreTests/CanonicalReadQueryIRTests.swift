@@ -4,6 +4,68 @@ import QueryIR
 import DatabaseClientProtocol
 import Core
 
+protocol CanonicalReadDocument: Polymorphable {
+    var id: String { get }
+    var title: String { get }
+}
+
+extension CanonicalReadDocument {
+    static var polymorphableType: String { "CanonicalReadDocument" }
+    static var polymorphicDirectoryPathComponents: [any DirectoryPathElement] {
+        [Path("canonical-read-documents")]
+    }
+}
+
+struct CanonicalReadArticle: Persistable, Codable, Sendable, CanonicalReadDocument {
+    typealias ID = String
+
+    var id: String
+    var title: String
+
+    static var persistableType: String { "CanonicalReadArticle" }
+    static var allFields: [String] { ["id", "title"] }
+    static func fieldNumber(for fieldName: String) -> Int? {
+        switch fieldName {
+        case "id": return 1
+        case "title": return 2
+        default: return nil
+        }
+    }
+    static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
+    subscript(dynamicMember member: String) -> (any Sendable)? {
+        switch member {
+        case "id": return id
+        case "title": return title
+        default: return nil
+        }
+    }
+}
+
+struct CanonicalReadReport: Persistable, Codable, Sendable, CanonicalReadDocument {
+    typealias ID = String
+
+    var id: String
+    var title: String
+
+    static var persistableType: String { "CanonicalReadReport" }
+    static var allFields: [String] { ["id", "title"] }
+    static func fieldNumber(for fieldName: String) -> Int? {
+        switch fieldName {
+        case "id": return 1
+        case "title": return 2
+        default: return nil
+        }
+    }
+    static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
+    subscript(dynamicMember member: String) -> (any Sendable)? {
+        switch member {
+        case "id": return id
+        case "title": return title
+        default: return nil
+        }
+    }
+}
+
 @Suite("Canonical Read QueryIR")
 struct CanonicalReadQueryIRTests {
     @Test("QueryParameterValue preserves structured arrays and objects")
@@ -66,6 +128,41 @@ struct CanonicalReadQueryIRTests {
         #expect(decoded.options.pageSize == 20)
         #expect(decoded.options.continuation?.token == "cursor-token")
         #expect(decoded.partitionValues == ["tenantID": "tenant-1"])
+    }
+
+    @Test("SelectQuery with logical source round-trips through QueryRequest")
+    func logicalSourceRoundTrip() throws {
+        let selectQuery = SelectQuery(
+            projection: .all,
+            source: .logical(
+                LogicalSourceRef(
+                    kindIdentifier: BuiltinLogicalSourceKind.polymorphic,
+                    identifier: "CanonicalReadDocument",
+                    alias: "docs"
+                )
+            ),
+            filter: .equal(.column(ColumnRef(column: "title")), .literal(.string("Hello")))
+        )
+
+        let request = QueryRequest(statement: .select(selectQuery))
+        let data = try JSONEncoder().encode(request)
+        let decoded = try JSONDecoder().decode(QueryRequest.self, from: data)
+
+        guard case .select(let decodedSelectQuery) = decoded.statement else {
+            Issue.record("Expected select statement")
+            return
+        }
+        #expect(decodedSelectQuery == selectQuery)
+    }
+
+    @Test("Schema builds polymorphic group catalog")
+    func schemaBuildsPolymorphicGroupCatalog() throws {
+        let schema = Schema([CanonicalReadArticle.self, CanonicalReadReport.self])
+        let group = try #require(schema.polymorphicGroup(identifier: "CanonicalReadDocument"))
+
+        #expect(group.identifier == "CanonicalReadDocument")
+        #expect(group.memberTypeNames == ["CanonicalReadArticle", "CanonicalReadReport"])
+        #expect(schema.polymorphicIndexDescriptors(identifier: "CanonicalReadDocument").isEmpty)
     }
 
     @Test("QueryResponse preserves row annotations and metadata")

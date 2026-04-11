@@ -171,12 +171,43 @@ public enum Projection: Sendable, Equatable, Hashable {
     case distinctItems([ProjectionItem])
 }
 
+/// Generic logical source reference.
+///
+/// Allows `QueryIR` to address extensible logical sources without enumerating
+/// feature-specific cases in `DataSource`.
+public struct LogicalSourceRef: Sendable, Equatable, Hashable, Codable {
+    public let kindIdentifier: String
+    public let identifier: String
+    public let alias: String?
+
+    public init(
+        kindIdentifier: String,
+        identifier: String,
+        alias: String? = nil
+    ) {
+        self.kindIdentifier = kindIdentifier
+        self.identifier = identifier
+        self.alias = alias
+    }
+
+    public var effectiveName: String {
+        alias ?? identifier
+    }
+}
+
+public enum BuiltinLogicalSourceKind {
+    public static let polymorphic = "polymorphic"
+}
+
 /// Unified data source representation
 public indirect enum DataSource: Sendable, Equatable, Hashable {
     // MARK: - Relational Sources
 
     /// Single table reference
     case table(TableRef)
+
+    /// Extensible logical source
+    case logical(LogicalSourceRef)
 
     /// Subquery as data source
     case subquery(SelectQuery, alias: String)

@@ -112,8 +112,13 @@ public struct SaveRequest: Sendable, Codable {
 /// Response payload for operationID: "schema".
 public struct SchemaResponse: Sendable, Codable {
     public let entities: [Schema.Entity]
+    public let polymorphicGroups: [PolymorphicGroup]
 
-    public init(entities: [Schema.Entity]) {
+    public init(
+        entities: [Schema.Entity],
+        polymorphicGroups: [PolymorphicGroup] = []
+    ) {
         self.entities = entities
+        self.polymorphicGroups = polymorphicGroups
     }
 }

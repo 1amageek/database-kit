@@ -20,6 +20,7 @@ extension DataSource: Codable {
     private enum CodingKeys: String, CodingKey {
         case tag
         case tableRef
+        case logicalSource
         case query
         case alias
         case joinClause
@@ -38,6 +39,7 @@ extension DataSource: Codable {
 
     private enum Tag: String, Codable {
         case table
+        case logical
         case subquery
         case join
         case values
@@ -57,6 +59,9 @@ extension DataSource: Codable {
         case .table(let ref):
             try container.encode(Tag.table, forKey: .tag)
             try container.encode(ref, forKey: .tableRef)
+        case .logical(let ref):
+            try container.encode(Tag.logical, forKey: .tag)
+            try container.encode(ref, forKey: .logicalSource)
         case .subquery(let query, let alias):
             try container.encode(Tag.subquery, forKey: .tag)
             try container.encode(query, forKey: .query)
@@ -105,6 +110,8 @@ extension DataSource: Codable {
         switch tag {
         case .table:
             self = .table(try container.decode(TableRef.self, forKey: .tableRef))
+        case .logical:
+            self = .logical(try container.decode(LogicalSourceRef.self, forKey: .logicalSource))
         case .subquery:
             let query = try container.decode(SelectQuery.self, forKey: .query)
             let alias = try container.decode(String.self, forKey: .alias)
