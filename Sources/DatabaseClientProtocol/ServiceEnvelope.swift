@@ -15,7 +15,7 @@ public struct ServiceEnvelope: Sendable, Codable {
     /// Unique request correlation ID
     public let requestID: String
 
-    /// Operation identifier: "fetch", "save", "schema", "get", "count", "delete"
+    /// Operation identifier: "query", "save", "schema"
     public let operationID: String
 
     /// JSON-encoded operation-specific body

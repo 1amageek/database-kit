@@ -16,6 +16,9 @@ public struct SelectQuery: Sendable, Equatable, Hashable, Codable {
     /// Data source (FROM clause / WHERE { } / GRAPH_TABLE)
     public let source: DataSource
 
+    /// Optional feature-specific access path layered on top of the logical source
+    public let accessPath: AccessPath?
+
     /// Filter condition (WHERE clause / FILTER)
     public let filter: Expression?
 
@@ -52,6 +55,7 @@ public struct SelectQuery: Sendable, Equatable, Hashable, Codable {
     public init(
         projection: Projection,
         source: DataSource,
+        accessPath: AccessPath? = nil,
         filter: Expression? = nil,
         groupBy: [Expression]? = nil,
         having: Expression? = nil,
@@ -66,6 +70,7 @@ public struct SelectQuery: Sendable, Equatable, Hashable, Codable {
     ) {
         self.projection = projection
         self.source = source
+        self.accessPath = accessPath
         self.filter = filter
         self.groupBy = groupBy
         self.having = having
@@ -77,6 +82,208 @@ public struct SelectQuery: Sendable, Equatable, Hashable, Codable {
         self.reduced = reduced
         self.from = from
         self.fromNamed = fromNamed
+    }
+}
+
+// MARK: - Immutable Copy Helpers
+
+extension SelectQuery {
+    public func replacing(projection: Projection) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            limit: limit,
+            offset: offset,
+            distinct: distinct,
+            subqueries: subqueries,
+            reduced: reduced,
+            from: from,
+            fromNamed: fromNamed
+        )
+    }
+
+    public func replacing(filter: Expression?) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            limit: limit,
+            offset: offset,
+            distinct: distinct,
+            subqueries: subqueries,
+            reduced: reduced,
+            from: from,
+            fromNamed: fromNamed
+        )
+    }
+
+    public func replacing(orderBy: [SortKey]?) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            limit: limit,
+            offset: offset,
+            distinct: distinct,
+            subqueries: subqueries,
+            reduced: reduced,
+            from: from,
+            fromNamed: fromNamed
+        )
+    }
+
+    public func replacing(groupBy: [Expression]?) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            limit: limit,
+            offset: offset,
+            distinct: distinct,
+            subqueries: subqueries,
+            reduced: reduced,
+            from: from,
+            fromNamed: fromNamed
+        )
+    }
+
+    public func replacing(having: Expression?) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            limit: limit,
+            offset: offset,
+            distinct: distinct,
+            subqueries: subqueries,
+            reduced: reduced,
+            from: from,
+            fromNamed: fromNamed
+        )
+    }
+
+    public func replacing(limit: Int?) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            limit: limit,
+            offset: offset,
+            distinct: distinct,
+            subqueries: subqueries,
+            reduced: reduced,
+            from: from,
+            fromNamed: fromNamed
+        )
+    }
+
+    public func replacing(offset: Int?) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            limit: limit,
+            offset: offset,
+            distinct: distinct,
+            subqueries: subqueries,
+            reduced: reduced,
+            from: from,
+            fromNamed: fromNamed
+        )
+    }
+
+    public func replacing(distinct: Bool) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            limit: limit,
+            offset: offset,
+            distinct: distinct,
+            subqueries: subqueries,
+            reduced: reduced,
+            from: from,
+            fromNamed: fromNamed
+        )
+    }
+
+    public func replacing(reduced: Bool) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            limit: limit,
+            offset: offset,
+            distinct: distinct,
+            subqueries: subqueries,
+            reduced: reduced,
+            from: from,
+            fromNamed: fromNamed
+        )
+    }
+
+    public func replacing(
+        projection: Projection? = nil,
+        filter: Expression? = nil,
+        orderBy: [SortKey]? = nil,
+        limit: Int? = nil,
+        offset: Int? = nil,
+        distinct: Bool? = nil,
+        reduced: Bool? = nil
+    ) -> SelectQuery {
+        SelectQuery(
+            projection: projection ?? self.projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter ?? self.filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy ?? self.orderBy,
+            limit: limit ?? self.limit,
+            offset: offset ?? self.offset,
+            distinct: distinct ?? self.distinct,
+            subqueries: subqueries,
+            reduced: reduced ?? self.reduced,
+            from: from,
+            fromNamed: fromNamed
+        )
     }
 }
 
