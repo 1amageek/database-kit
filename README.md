@@ -31,7 +31,7 @@ database-kit is the **shared foundation** used by both server ([database-framewo
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/1amageek/database-kit.git", from: "26.0207.0")
+    .package(url: "https://github.com/1amageek/database-kit.git", from: "26.0411.1")
 ]
 ```
 
