@@ -245,6 +245,83 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             ])
         }
 
+        func normalizedTypeName(_ typeName: String) -> String {
+            let withoutLineComment = typeName.components(separatedBy: "//").first ?? typeName
+            let withoutBlockComment = withoutLineComment.components(separatedBy: "/*").first ?? withoutLineComment
+            return withoutBlockComment.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        func isOptionalType(_ typeName: String) -> Bool {
+            let trimmed = normalizedTypeName(typeName)
+            return trimmed.hasSuffix("?") ||
+                (trimmed.hasPrefix("Optional<") && trimmed.hasSuffix(">"))
+        }
+
+        func wrappedTypeName(for typeName: String) -> String {
+            let trimmed = normalizedTypeName(typeName)
+            if trimmed.hasSuffix("?") {
+                return String(trimmed.dropLast())
+            }
+            if trimmed.hasPrefix("Optional<") && trimmed.hasSuffix(">") {
+                return String(trimmed.dropFirst("Optional<".count).dropLast())
+            }
+            return trimmed
+        }
+
+        func defaultInitializationExpr(
+            for fieldInfo: (name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)
+        ) -> String {
+            if let defaultValue = fieldInfo.defaultValue {
+                return defaultValue
+            }
+
+            let fieldType = normalizedTypeName(fieldInfo.type)
+            if isOptionalType(fieldType) {
+                return "nil"
+            }
+            if fieldType == "String" {
+                return "\"\""
+            }
+            if ["Int", "Int8", "Int16", "Int32", "Int64", "UInt", "UInt8", "UInt16", "UInt32", "UInt64"].contains(fieldType) {
+                return "0"
+            }
+            if fieldType == "Double" || fieldType == "Float" {
+                return "0"
+            }
+            if fieldType == "Bool" {
+                return "false"
+            }
+            if fieldType.hasPrefix("[") || fieldType.hasPrefix("Array<") {
+                return "[]"
+            }
+            if fieldType == "Data" {
+                return "Data()"
+            }
+            return "\(fieldType)()"
+        }
+
+        func decodeExpr(
+            for fieldInfo: (name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)
+        ) -> String {
+            if fieldInfo.isTransient {
+                return defaultInitializationExpr(for: fieldInfo)
+            }
+
+            let fieldType = normalizedTypeName(fieldInfo.type)
+            if fieldInfo.hasDefault {
+                let decodableType = isOptionalType(fieldType) ? wrappedTypeName(for: fieldType) : fieldType
+                let fallback = defaultInitializationExpr(for: fieldInfo)
+                return "(try container.decodeIfPresent(\(decodableType).self, forKey: .\(fieldInfo.name))) ?? \(fallback)"
+            }
+
+            if isOptionalType(fieldType) {
+                let wrappedType = wrappedTypeName(for: fieldType)
+                return "try container.decodeIfPresent(\(wrappedType).self, forKey: .\(fieldInfo.name))"
+            }
+
+            return "try container.decode(\(fieldType).self, forKey: .\(fieldInfo.name))"
+        }
+
         // Extract #Index macro calls and generate descriptors
         // Also collect all keyPath strings for fieldName(for:) generation
         var descriptorInits: [String] = []  // All descriptors (Index, Relationship, etc.)
@@ -408,17 +485,24 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                         continue
                     }
 
-                    // Check if it's Field(\.propertyName)
+                    // Check if it's Field(\.propertyName) or Field<T>(\.propertyName)
                     if let functionCall = expr.as(FunctionCallExprSyntax.self) {
-                        // Check for Field(...) pattern
-                        let calledExpr = functionCall.calledExpression.description.trimmingCharacters(in: .whitespaces)
-                        if calledExpr == "Field" {
+                        let calledBaseName: String?
+                        if let identExpr = functionCall.calledExpression.as(DeclReferenceExprSyntax.self) {
+                            calledBaseName = identExpr.baseName.text
+                        } else if let genericExpr = functionCall.calledExpression.as(GenericSpecializationExprSyntax.self),
+                                  let identExpr = genericExpr.expression.as(DeclReferenceExprSyntax.self) {
+                            calledBaseName = identExpr.baseName.text
+                        } else {
+                            calledBaseName = nil
+                        }
+                        if calledBaseName == "Field" {
                             if let firstArg = functionCall.arguments.first,
                                let keyPathExpr = firstArg.expression.as(KeyPathExprSyntax.self),
                                let component = keyPathExpr.components.first,
                                let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
                                 let fieldName = property.declName.baseName.text
-                                directoryPathComponents.append("Field(\\.\(fieldName))")
+                                directoryPathComponents.append("Field(\\\(structName).\(fieldName))")
                             }
                         }
                     }
@@ -891,6 +975,19 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             }
             """
         decls.append(codingKeysDecl)
+
+        let decodeAssignments = fieldInfos
+            .map { fieldInfo in
+                "self.\(fieldInfo.name) = \(decodeExpr(for: fieldInfo))"
+            }
+            .joined(separator: "\n        ")
+        let decodableInitDecl: DeclSyntax = """
+            public init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                \(raw: decodeAssignments)
+            }
+            """
+        decls.append(decodableInitDecl)
 
         return decls
     }

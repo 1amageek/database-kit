@@ -155,6 +155,21 @@ public struct DirectoryMacro: DeclarationMacro {
                 }
             }
 
+            // Support generic Field<Type>(\.property) call
+            if let functionCall = expr.as(FunctionCallExprSyntax.self),
+               let genericExpr = functionCall.calledExpression.as(GenericSpecializationExprSyntax.self),
+               let identExpr = genericExpr.expression.as(DeclReferenceExprSyntax.self),
+               identExpr.baseName.text == "Field" {
+                if let firstArg = functionCall.arguments.first,
+                   let keyPathExpr = firstArg.expression.as(KeyPathExprSyntax.self),
+                   let component = keyPathExpr.components.first,
+                   let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
+                    let fieldName = property.declName.baseName.text
+                    fieldProperties.append(fieldName)
+                    continue
+                }
+            }
+
             // Invalid element type
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(

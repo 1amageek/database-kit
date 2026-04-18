@@ -124,18 +124,7 @@ extension VersionedSchema {
     public static func canLightweightMigrate(
         from other: any VersionedSchema.Type
     ) -> Bool {
-        // Get field changes
-        let currentFields = Set(models.flatMap { $0.allFields })
-        let otherFields = Set(other.models.flatMap { $0.allFields })
-
-        // Field removal requires custom migration (data loss)
-        let removedFields = otherFields.subtracting(currentFields)
-        if !removedFields.isEmpty {
-            return false
-        }
-
-        // Index changes are always lightweight
-        // Field additions are lightweight (new fields get default values)
-        return true
+        let report = makeSchema().compatibilityReport(from: other.makeSchema())
+        return report.isLightweightCompatible
     }
 }
