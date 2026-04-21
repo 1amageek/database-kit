@@ -77,12 +77,27 @@ public enum GraphIndexStrategy: String, Sendable, Codable, CaseIterable {
     /// **Write cost**: 6 entries per edge
     case hexastore
 
+    /// 3-index: graph-first GSPO/GPOS/GOSP orderings
+    ///
+    /// Optimized for RDF datasets where named graph/document-scoped reads are
+    /// common. This keeps write cost equal to `.tripleStore` while making
+    /// `GRAPH <g> { ... }` and graph-scoped export/delete efficient.
+    ///
+    /// **Indexes**:
+    /// - `[gspo]/[graph]/[from]/[edge]/[to]`
+    /// - `[gpos]/[graph]/[edge]/[to]/[from]`
+    /// - `[gosp]/[graph]/[to]/[from]/[edge]`
+    ///
+    /// **Write cost**: 3 entries per edge
+    case namedGraphStore
+
     /// Number of index entries created per edge
     public var indexCount: Int {
         switch self {
         case .adjacency: return 2
         case .tripleStore: return 3
         case .hexastore: return 6
+        case .namedGraphStore: return 3
         }
     }
 
@@ -95,6 +110,8 @@ public enum GraphIndexStrategy: String, Sendable, Codable, CaseIterable {
             return "Triple Store (3-index): RDF-compatible with SPO/POS/OSP"
         case .hexastore:
             return "Hexastore (6-index): all permutations for maximum query performance"
+        case .namedGraphStore:
+            return "Named Graph Store (3-index): graph-first GSPO/GPOS/GOSP"
         }
     }
 }
@@ -117,6 +134,11 @@ public enum GraphIndexOrdering: String, Sendable, Codable, CaseIterable {
     case pso    // [edge]/[from]/[to]
     case ops    // [to]/[edge]/[from]
 
+    // Named graph orderings (GSPO/GPOS/GOSP)
+    case gspo   // [graph]/[from]/[edge]/[to]
+    case gpos   // [graph]/[edge]/[to]/[from]
+    case gosp   // [graph]/[to]/[from]/[edge]
+
     /// Element order for this index ordering
     ///
     /// Returns tuple indices for (from, edge, to) in the key order.
@@ -131,6 +153,17 @@ public enum GraphIndexOrdering: String, Sendable, Codable, CaseIterable {
         case .pos:  return [1, 2, 0]  // [edge]/[to]/[from]
         case .osp:  return [2, 0, 1]  // [to]/[from]/[edge]
         case .ops:  return [2, 1, 0]  // [to]/[edge]/[from]
+        case .gspo: return [0, 1, 2]  // [graph]/[from]/[edge]/[to]
+        case .gpos: return [1, 2, 0]  // [graph]/[edge]/[to]/[from]
+        case .gosp: return [2, 0, 1]  // [graph]/[to]/[from]/[edge]
+        }
+    }
+
+    /// Whether this ordering stores graph as the leading tuple component.
+    public var isGraphFirst: Bool {
+        switch self {
+        case .gspo, .gpos, .gosp: return true
+        default: return false
         }
     }
 }
