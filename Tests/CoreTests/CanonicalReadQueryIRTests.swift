@@ -162,6 +162,22 @@ struct IndexedCanonicalReadReport: Persistable, Codable, Sendable, IndexedCanoni
     }
 }
 
+enum CanonicalReadUnindexedSchema: VersionedSchema {
+    static let versionIdentifier = Schema.Version(1, 0, 0)
+    static let models: [any Persistable.Type] = [
+        CanonicalReadArticle.self,
+        CanonicalReadReport.self,
+    ]
+}
+
+enum CanonicalReadIndexedSchema: VersionedSchema {
+    static let versionIdentifier = Schema.Version(2, 0, 0)
+    static let models: [any Persistable.Type] = [
+        IndexedCanonicalReadArticle.self,
+        IndexedCanonicalReadReport.self,
+    ]
+}
+
 @Suite("Canonical Read QueryIR")
 struct CanonicalReadQueryIRTests {
     @Test("QueryParameterValue preserves structured arrays and objects")
@@ -343,6 +359,19 @@ struct CanonicalReadQueryIRTests {
             #expect(descriptor.kind is ScalarIndexKind<IndexedCanonicalReadReport>)
             #expect(!(descriptor.kind is ScalarIndexKind<IndexedCanonicalReadArticle>))
         }
+    }
+
+    @Test("VersionedSchema includes polymorphic descriptors in index diffs")
+    func versionedSchemaIncludesPolymorphicDescriptorsInIndexDiffs() {
+        let expectedNames = Set([
+            "IndexedCanonicalReadDocument_title",
+            "IndexedCanonicalReadDocument_id",
+        ])
+
+        #expect(Set(CanonicalReadIndexedSchema.allIndexDescriptors.map(\.name)) == expectedNames)
+        #expect(CanonicalReadIndexedSchema.indexChanges(
+            from: CanonicalReadUnindexedSchema.self
+        ).added == expectedNames)
     }
 
     @Test("QueryResponse preserves row annotations and metadata")

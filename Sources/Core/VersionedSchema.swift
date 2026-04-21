@@ -82,7 +82,7 @@ extension VersionedSchema {
     ///
     /// - Returns: Array of all index descriptors
     public static var allIndexDescriptors: [IndexDescriptor] {
-        return models.flatMap { $0.indexDescriptors }
+        return makeSchema().indexDescriptors
     }
 
     /// Get all index names from this schema version
