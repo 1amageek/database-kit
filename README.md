@@ -7,6 +7,7 @@ Platform-independent model definitions and index type specifications for the dat
 database-kit is the **shared foundation** used by both server ([database-framework](https://github.com/1amageek/database-framework)) and client ([database-client](https://github.com/1amageek/database-client)). It provides:
 
 - `@Persistable` macro for defining data models
+- `@Polymorphable` macro for protocol-oriented polymorphic storage metadata
 - `@OWLClass` macro for OWL ontology class mapping (Graph module)
 - `@OWLDataProperty` / `@OWLObjectProperty` macros for OWL property annotations (Graph module)
 - `IndexKind` protocol for extensible index type definitions
@@ -103,6 +104,47 @@ struct Product {
 ```
 
 **Generated code**: `var id`, `persistableType`, `allFields`, `fieldSchemas`, `indexDescriptors`, `Codable`/`Sendable` conformance, dynamic member lookup.
+
+## Polymorphic Persistence
+
+Polymorphic persistence lets multiple concrete `@Persistable` models share a
+logical protocol group for storage and querying.
+
+The intended API is:
+
+```swift
+@Polymorphable
+public protocol Entity: Polymorphable {
+    #Directory<Entity>("memory", "entities")
+
+    var label: String { get }
+    var embedding: [Float] { get set }
+}
+
+@Persistable
+public struct Person: Entity {
+    public var id: String
+    public var name: String
+    public var embedding: [Float]
+
+    public var label: String { name }
+}
+```
+
+`@Persistable` owns `Persistable` conformance for concrete structs.
+`Polymorphable` inherits from `Persistable`, so a polymorphic protocol only needs
+to inherit from `Polymorphable`.
+
+`@Polymorphable` is a metadata and validation macro. Swift 6.3 does not allow an
+attached macro on a protocol to add protocol inheritance, so the protocol must
+explicitly write `: Polymorphable`.
+
+Polymorphic indexes must be declared with KeyPaths, not developer-written string
+field names. Runtime index maintenance must use descriptors materialized for the
+actual concrete member type, not descriptors copied from the first schema member.
+
+See [Polymorphic Persistence Design](Docs/POLYMORPHIC_DESIGN.md) for the full
+design and migration plan.
 
 ## #Directory Macro
 

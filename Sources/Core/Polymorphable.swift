@@ -8,10 +8,15 @@ import Foundation
 
 /// Polymorphable protocol - Defines a group of persistable types that share storage
 ///
-/// When applied to a protocol via `@Polymorphable` macro, enables:
+/// When a protocol inherits from `Polymorphable` and is annotated with
+/// `@Polymorphable`, the protocol becomes a polymorphic storage group with:
 /// - Shared directory/subspace for all conforming types
 /// - Shared indexes across all conforming types
 /// - Polymorphic queries returning multiple types
+///
+/// `@Polymorphable` generates group metadata and should validate the protocol
+/// declaration. It cannot add `Polymorphable` inheritance to the protocol,
+/// because Swift does not allow `extension SomeProtocol: OtherProtocol`.
 ///
 /// **Platform Support**:
 /// - Client (iOS/macOS): Protocol definitions, metadata
@@ -81,7 +86,7 @@ import Foundation
 /// try await context.fetchPolymorphic(Article.self)
 /// // Returns [any Persistable] containing all conforming types
 /// ```
-public protocol Polymorphable: Sendable {
+public protocol Polymorphable: Persistable {
     // MARK: - Type Metadata
 
     /// Unique identifier for this polymorphic group

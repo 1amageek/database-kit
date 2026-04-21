@@ -165,14 +165,14 @@ public enum DirectoryLayer: String, Sendable, Codable {
 
 /// @Polymorphable macro declaration
 ///
-/// Generates Polymorphable protocol conformance for a protocol definition.
-/// Enables multiple Persistable types to share a directory and indexes,
-/// allowing them to be queried together.
+/// Generates polymorphic group metadata for a protocol definition. Enables
+/// multiple Persistable types to share a directory and indexes, allowing them to
+/// be queried together.
 ///
 /// **Usage**:
 /// ```swift
 /// @Polymorphable
-/// protocol Document: Polymorphable {  // Must explicitly inherit from Polymorphable
+/// protocol Document: Polymorphable {  // Required: macros cannot add protocol inheritance
 ///     var id: String { get }
 ///     var title: String { get }
 ///     var updatedAt: Date { get }
@@ -199,7 +199,10 @@ public enum DirectoryLayer: String, Sendable, Codable {
 /// ```
 ///
 /// **Important**: The protocol must explicitly inherit from `Polymorphable`.
-/// The macro generates default implementations for the protocol requirements.
+/// Swift 6.3 does not allow an attached macro on a protocol to add protocol
+/// inheritance by generating `extension Document: Polymorphable`.
+/// The macro generates default implementations for the protocol requirements
+/// and should validate that the declaration is a valid polymorphic group.
 ///
 /// **Generated code**:
 /// - `static var polymorphableType: String` - Protocol name identifier

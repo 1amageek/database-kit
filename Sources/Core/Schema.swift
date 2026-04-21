@@ -371,6 +371,9 @@ public final class Schema: Sendable {
     /// Runtime typed index descriptors for polymorphic protocol groups.
     private let polymorphicIndexDescriptorsByIdentifier: [String: [IndexDescriptor]]
 
+    /// Runtime typed index descriptors for each concrete polymorphic member.
+    private let polymorphicIndexDescriptorsByIdentifierAndMemberName: [String: [String: [IndexDescriptor]]]
+
     /// Former indexes (schema evolution)
     /// Records of deleted indexes (schema definition only)
     public let formerIndexes: [String: FormerIndex]
@@ -430,6 +433,9 @@ public final class Schema: Sendable {
             uniqueKeysWithValues: runtimePolymorphicGroups.map { ($0.identifier, $0) }
         )
         self.polymorphicIndexDescriptorsByIdentifier = Self.buildPolymorphicIndexDescriptors(
+            from: polymorphicMembers
+        )
+        self.polymorphicIndexDescriptorsByIdentifierAndMemberName = Self.buildPolymorphicIndexDescriptorsByMember(
             from: polymorphicMembers
         )
 
@@ -493,6 +499,7 @@ public final class Schema: Sendable {
         self.polymorphicGroups = []
         self.polymorphicGroupsByIdentifier = [:]
         self.polymorphicIndexDescriptorsByIdentifier = [:]
+        self.polymorphicIndexDescriptorsByIdentifierAndMemberName = [:]
 
         // Collect index descriptors from entities + manual descriptors
         var allIndexDescriptors: [IndexDescriptor] = []
@@ -550,6 +557,26 @@ public final class Schema: Sendable {
     /// Get typed index descriptors for a polymorphic group when runtime types are available.
     public func polymorphicIndexDescriptors(identifier: String) -> [IndexDescriptor] {
         polymorphicIndexDescriptorsByIdentifier[identifier] ?? []
+    }
+
+    /// Get typed index descriptors for a concrete member of a polymorphic group.
+    ///
+    /// Polymorphic indexes share one logical index name, but their KeyPaths are
+    /// concrete-type-specific. Runtime write maintenance must use this accessor
+    /// so descriptors for one member type are not applied to another member type.
+    public func polymorphicIndexDescriptors(
+        identifier: String,
+        memberType: any Persistable.Type
+    ) -> [IndexDescriptor] {
+        polymorphicIndexDescriptorsByIdentifierAndMemberName[identifier]?[memberType.persistableType] ?? []
+    }
+
+    /// Get typed index descriptors for a concrete member of a polymorphic group.
+    public func polymorphicIndexDescriptors<Member: Persistable>(
+        identifier: String,
+        memberType: Member.Type
+    ) -> [IndexDescriptor] {
+        polymorphicIndexDescriptors(identifier: identifier, memberType: memberType as any Persistable.Type)
     }
 
     // MARK: - Index Access
@@ -619,6 +646,26 @@ public final class Schema: Sendable {
                     return nil
                 }
                 return (identifier, protocolType.polymorphicIndexDescriptors)
+            }
+        )
+    }
+
+    private static func buildPolymorphicIndexDescriptorsByMember(
+        from membersByIdentifier: [String: [any Persistable.Type]]
+    ) -> [String: [String: [IndexDescriptor]]] {
+        Dictionary(
+            uniqueKeysWithValues: membersByIdentifier.compactMap { identifier, memberTypes in
+                var descriptorsByMemberName: [String: [IndexDescriptor]] = [:]
+                for memberType in memberTypes {
+                    guard let polymorphicType = memberType as? any Polymorphable.Type else {
+                        continue
+                    }
+                    descriptorsByMemberName[memberType.persistableType] = polymorphicType.polymorphicIndexDescriptors
+                }
+                guard !descriptorsByMemberName.isEmpty else {
+                    return nil
+                }
+                return (identifier, descriptorsByMemberName)
             }
         )
     }

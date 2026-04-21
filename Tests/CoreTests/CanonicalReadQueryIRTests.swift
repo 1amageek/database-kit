@@ -66,6 +66,102 @@ struct CanonicalReadReport: Persistable, Codable, Sendable, CanonicalReadDocumen
     }
 }
 
+protocol IndexedCanonicalReadDocument: Polymorphable {
+    var id: String { get }
+    var title: String { get }
+}
+
+extension IndexedCanonicalReadDocument {
+    static var polymorphableType: String { "IndexedCanonicalReadDocument" }
+    static var polymorphicDirectoryPathComponents: [any DirectoryPathElement] {
+        [Path("indexed-canonical-read-documents")]
+    }
+    static var polymorphicIndexDescriptors: [IndexDescriptor] {
+        [
+            IndexDescriptor(
+                name: "IndexedCanonicalReadDocument_title",
+                keyPaths: [\Self.title],
+                kind: ScalarIndexKind<Self>(fields: [\Self.title])
+            ),
+            IndexDescriptor(
+                name: "IndexedCanonicalReadDocument_id",
+                keyPaths: [\Self.id],
+                kind: ScalarIndexKind<Self>(fields: [\Self.id])
+            )
+        ]
+    }
+}
+
+struct IndexedCanonicalReadArticle: Persistable, Codable, Sendable, IndexedCanonicalReadDocument {
+    typealias ID = String
+
+    var id: String
+    var title: String
+
+    static var persistableType: String { "IndexedCanonicalReadArticle" }
+    static var allFields: [String] { ["id", "title"] }
+    static func fieldNumber(for fieldName: String) -> Int? {
+        switch fieldName {
+        case "id": return 1
+        case "title": return 2
+        default: return nil
+        }
+    }
+    static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
+    static func fieldName(for keyPath: PartialKeyPath<Self>) -> String {
+        let description = "\(keyPath)"
+        if description.hasSuffix(".id") {
+            return "id"
+        }
+        if description.hasSuffix(".title") {
+            return "title"
+        }
+        return description
+    }
+    subscript(dynamicMember member: String) -> (any Sendable)? {
+        switch member {
+        case "id": return id
+        case "title": return title
+        default: return nil
+        }
+    }
+}
+
+struct IndexedCanonicalReadReport: Persistable, Codable, Sendable, IndexedCanonicalReadDocument {
+    typealias ID = String
+
+    var id: String
+    var title: String
+
+    static var persistableType: String { "IndexedCanonicalReadReport" }
+    static var allFields: [String] { ["id", "title"] }
+    static func fieldNumber(for fieldName: String) -> Int? {
+        switch fieldName {
+        case "id": return 1
+        case "title": return 2
+        default: return nil
+        }
+    }
+    static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
+    static func fieldName(for keyPath: PartialKeyPath<Self>) -> String {
+        let description = "\(keyPath)"
+        if description.hasSuffix(".id") {
+            return "id"
+        }
+        if description.hasSuffix(".title") {
+            return "title"
+        }
+        return description
+    }
+    subscript(dynamicMember member: String) -> (any Sendable)? {
+        switch member {
+        case "id": return id
+        case "title": return title
+        default: return nil
+        }
+    }
+}
+
 @Suite("Canonical Read QueryIR")
 struct CanonicalReadQueryIRTests {
     @Test("QueryParameterValue preserves structured arrays and objects")
@@ -163,6 +259,90 @@ struct CanonicalReadQueryIRTests {
         #expect(group.identifier == "CanonicalReadDocument")
         #expect(group.memberTypeNames == ["CanonicalReadArticle", "CanonicalReadReport"])
         #expect(schema.polymorphicIndexDescriptors(identifier: "CanonicalReadDocument").isEmpty)
+    }
+
+    @Test("Schema preserves concrete KeyPaths for polymorphic index descriptors")
+    func schemaPreservesConcretePolymorphicIndexDescriptors() throws {
+        let schema = Schema([
+            IndexedCanonicalReadArticle.self,
+            IndexedCanonicalReadReport.self
+        ])
+
+        let logicalDescriptors = schema.polymorphicIndexDescriptors(
+            identifier: "IndexedCanonicalReadDocument"
+        )
+        #expect(logicalDescriptors.map(\.name) == [
+            "IndexedCanonicalReadDocument_title",
+            "IndexedCanonicalReadDocument_id",
+        ])
+
+        let articleDescriptors = schema.polymorphicIndexDescriptors(
+            identifier: "IndexedCanonicalReadDocument",
+            memberType: IndexedCanonicalReadArticle.self
+        )
+        let reportDescriptors = schema.polymorphicIndexDescriptors(
+            identifier: "IndexedCanonicalReadDocument",
+            memberType: IndexedCanonicalReadReport.self
+        )
+
+        let articleDescriptor = try #require(articleDescriptors.first)
+        let reportDescriptor = try #require(reportDescriptors.first)
+        let articleKeyPath = try #require(articleDescriptor.keyPaths.first)
+        let reportKeyPath = try #require(reportDescriptor.keyPaths.first)
+
+        #expect(articleDescriptor.name == "IndexedCanonicalReadDocument_title")
+        #expect(articleDescriptor.fieldNames == ["title"])
+        #expect(articleKeyPath is PartialKeyPath<IndexedCanonicalReadArticle>)
+        #expect(!(articleKeyPath is PartialKeyPath<IndexedCanonicalReadReport>))
+
+        #expect(reportDescriptor.name == "IndexedCanonicalReadDocument_title")
+        #expect(reportDescriptor.fieldNames == ["title"])
+        #expect(reportKeyPath is PartialKeyPath<IndexedCanonicalReadReport>)
+        #expect(!(reportKeyPath is PartialKeyPath<IndexedCanonicalReadArticle>))
+    }
+
+    @Test("Schema preserves all concrete polymorphic descriptors per member type")
+    func schemaPreservesMultipleConcretePolymorphicIndexDescriptors() throws {
+        let schema = Schema([
+            IndexedCanonicalReadArticle.self,
+            IndexedCanonicalReadReport.self
+        ])
+
+        let articleDescriptors = schema.polymorphicIndexDescriptors(
+            identifier: "IndexedCanonicalReadDocument",
+            memberType: IndexedCanonicalReadArticle.self
+        )
+        let reportDescriptors = schema.polymorphicIndexDescriptors(
+            identifier: "IndexedCanonicalReadDocument",
+            memberType: IndexedCanonicalReadReport.self
+        )
+
+        #expect(articleDescriptors.map(\.name) == [
+            "IndexedCanonicalReadDocument_title",
+            "IndexedCanonicalReadDocument_id",
+        ])
+        #expect(reportDescriptors.map(\.name) == [
+            "IndexedCanonicalReadDocument_title",
+            "IndexedCanonicalReadDocument_id",
+        ])
+        #expect(articleDescriptors.map(\.fieldNames) == [["title"], ["id"]])
+        #expect(reportDescriptors.map(\.fieldNames) == [["title"], ["id"]])
+
+        for descriptor in articleDescriptors {
+            let keyPath = try #require(descriptor.keyPaths.first)
+            #expect(keyPath is PartialKeyPath<IndexedCanonicalReadArticle>)
+            #expect(!(keyPath is PartialKeyPath<IndexedCanonicalReadReport>))
+            #expect(descriptor.kind is ScalarIndexKind<IndexedCanonicalReadArticle>)
+            #expect(!(descriptor.kind is ScalarIndexKind<IndexedCanonicalReadReport>))
+        }
+
+        for descriptor in reportDescriptors {
+            let keyPath = try #require(descriptor.keyPaths.first)
+            #expect(keyPath is PartialKeyPath<IndexedCanonicalReadReport>)
+            #expect(!(keyPath is PartialKeyPath<IndexedCanonicalReadArticle>))
+            #expect(descriptor.kind is ScalarIndexKind<IndexedCanonicalReadReport>)
+            #expect(!(descriptor.kind is ScalarIndexKind<IndexedCanonicalReadArticle>))
+        }
     }
 
     @Test("QueryResponse preserves row annotations and metadata")

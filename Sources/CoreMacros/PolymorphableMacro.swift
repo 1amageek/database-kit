@@ -6,8 +6,10 @@ import SwiftDiagnostics
 
 /// @Polymorphable macro implementation
 ///
-/// Generates Polymorphable protocol conformance for a protocol definition.
+/// Generates polymorphic group metadata for a protocol definition.
 /// Enables multiple Persistable types to share a directory and indexes.
+/// The protocol must explicitly inherit from `Polymorphable`; Swift does not
+/// allow an attached macro to add protocol inheritance through an extension.
 ///
 /// **Generated code includes**:
 /// - `static var polymorphableType: String`
