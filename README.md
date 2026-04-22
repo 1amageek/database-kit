@@ -115,10 +115,12 @@ The intended API is:
 ```swift
 @Polymorphable
 public protocol Entity: Polymorphable {
-    #Directory<Entity>("memory", "entities")
+    #Directory<Self>("memory", "entities")
 
     var label: String { get }
     var embedding: [Float] { get set }
+
+    #Index(VectorIndexKind<Self>(embedding: \Self.embedding, dimensions: 256))
 }
 
 @Persistable
@@ -138,6 +140,11 @@ to inherit from `Polymorphable`.
 `@Polymorphable` is a metadata and validation macro. Swift 6.3 does not allow an
 attached macro on a protocol to add protocol inheritance, so the protocol must
 explicitly write `: Polymorphable`.
+
+Current Swift 6.3 toolchains also have a compiler limitation around freestanding
+macros in protocol bodies. Until that is fixed, tests and downstream packages may
+spell the generated polymorphic metadata manually in a protocol extension; the
+runtime model is the same.
 
 Polymorphic indexes must be declared with KeyPaths, not developer-written string
 field names. Runtime index maintenance must use descriptors materialized for the

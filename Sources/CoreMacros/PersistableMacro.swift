@@ -348,15 +348,18 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                             indexKindName = funcCall.calledExpression.description.trimmingCharacters(in: .whitespaces)
 
                             // Extract KeyPaths from all function arguments
+                            var extractedKeyPaths: [String] = []
+                            var keyPathsByArgumentLabel: [String: [String]] = [:]
                             for funcArg in funcCall.arguments {
+                                var argumentKeyPaths: [String] = []
+
                                 // Check if argument is an array of KeyPaths (e.g., fields: [\.email, \.name])
                                 if let arrayExpr = funcArg.expression.as(ArrayExprSyntax.self) {
                                     for element in arrayExpr.elements {
                                         if let keyPathExpr = element.expression.as(KeyPathExprSyntax.self) {
                                             let keyPathString = extractKeyPathString(from: keyPathExpr)
                                             if !keyPathString.isEmpty {
-                                                keyPaths.append(keyPathString)
-                                                allIndexKeyPaths.insert(keyPathString)
+                                                argumentKeyPaths.append(keyPathString)
                                             }
                                         }
                                     }
@@ -365,10 +368,28 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                 else if let keyPathExpr = funcArg.expression.as(KeyPathExprSyntax.self) {
                                     let keyPathString = extractKeyPathString(from: keyPathExpr)
                                     if !keyPathString.isEmpty {
-                                        keyPaths.append(keyPathString)
-                                        allIndexKeyPaths.insert(keyPathString)
+                                        argumentKeyPaths.append(keyPathString)
                                     }
                                 }
+
+                                if let label = funcArg.label?.text {
+                                    keyPathsByArgumentLabel[label, default: []].append(contentsOf: argumentKeyPaths)
+                                }
+                                extractedKeyPaths.append(contentsOf: argumentKeyPaths)
+                            }
+
+                            let selectedKeyPaths: [String]
+                            if indexKindName?.contains("RelationshipIndexKind") == true {
+                                selectedKeyPaths = keyPathsByArgumentLabel["foreignKey"] ?? []
+                            } else if indexKindName?.contains("TimeWindowLeaderboardIndexKind") == true {
+                                selectedKeyPaths = (keyPathsByArgumentLabel["groupBy"] ?? []) +
+                                    (keyPathsByArgumentLabel["scoreField"] ?? [])
+                            } else {
+                                selectedKeyPaths = extractedKeyPaths
+                            }
+                            keyPaths.append(contentsOf: selectedKeyPaths)
+                            for keyPath in selectedKeyPaths {
+                                allIndexKeyPaths.insert(keyPath)
                             }
 
                             // Store the original expression as-is
@@ -880,7 +901,8 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         let fieldNameDecl: DeclSyntax = """
             public static func fieldName<Value>(for keyPath: KeyPath<\(raw: structName), Value>) -> String {
                 \(raw: fieldNameBody)
-                return "\\(keyPath)"
+                let description = "\\(keyPath)"
+                return _fieldName(fromKeyPathDescription: description) ?? description
             }
             """
         decls.append(fieldNameDecl)
@@ -889,7 +911,8 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         let partialFieldNameDecl: DeclSyntax = """
             public static func fieldName(for keyPath: PartialKeyPath<\(raw: structName)>) -> String {
                 \(raw: fieldNameBody)
-                return "\\(keyPath)"
+                let description = "\\(keyPath)"
+                return _fieldName(fromKeyPathDescription: description) ?? description
             }
             """
         decls.append(partialFieldNameDecl)
@@ -900,10 +923,30 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 if let partialKeyPath = keyPath as? PartialKeyPath<\(raw: structName)> {
                     return fieldName(for: partialKeyPath)
                 }
-                return "\\(keyPath)"
+                let description = "\\(keyPath)"
+                return _fieldName(fromKeyPathDescription: description) ?? description
             }
             """
         decls.append(anyFieldNameDecl)
+
+        let fieldNameFallbackDecl: DeclSyntax = """
+            private static func _fieldName(fromKeyPathDescription description: String) -> String? {
+                let parts = description.split(separator: ".").map(String.init)
+                for index in parts.indices {
+                    let component = parts[index].hasPrefix("\\\\")
+                        ? String(parts[index].dropFirst())
+                        : parts[index]
+                    guard allFields.contains(component) else {
+                        continue
+                    }
+                    var fieldPathParts = Array(parts[index...])
+                    fieldPathParts[0] = component
+                    return fieldPathParts.joined(separator: ".")
+                }
+                return nil
+            }
+            """
+        decls.append(fieldNameFallbackDecl)
 
         // Generate init without `id` parameter and transient fields
         // Only include fields that are NOT `id` and NOT @Transient

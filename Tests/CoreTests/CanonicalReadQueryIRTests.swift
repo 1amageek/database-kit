@@ -274,7 +274,7 @@ struct CanonicalReadQueryIRTests {
 
         #expect(group.identifier == "CanonicalReadDocument")
         #expect(group.memberTypeNames == ["CanonicalReadArticle", "CanonicalReadReport"])
-        #expect(schema.polymorphicIndexDescriptors(identifier: "CanonicalReadDocument").isEmpty)
+        #expect(schema.polymorphicIndexCatalog(identifier: "CanonicalReadDocument").isEmpty)
     }
 
     @Test("Schema preserves concrete KeyPaths for polymorphic index descriptors")
@@ -284,13 +284,15 @@ struct CanonicalReadQueryIRTests {
             IndexedCanonicalReadReport.self
         ])
 
-        let logicalDescriptors = schema.polymorphicIndexDescriptors(
+        let logicalDescriptors = schema.polymorphicIndexCatalog(
             identifier: "IndexedCanonicalReadDocument"
         )
         #expect(logicalDescriptors.map(\.name) == [
             "IndexedCanonicalReadDocument_title",
             "IndexedCanonicalReadDocument_id",
         ])
+        #expect(logicalDescriptors.map(\.fieldNames) == [["title"], ["id"]])
+        #expect(logicalDescriptors.map(\.kindIdentifier) == ["scalar", "scalar"])
 
         let articleDescriptors = schema.polymorphicIndexDescriptors(
             identifier: "IndexedCanonicalReadDocument",
@@ -361,14 +363,15 @@ struct CanonicalReadQueryIRTests {
         }
     }
 
-    @Test("VersionedSchema includes polymorphic descriptors in index diffs")
-    func versionedSchemaIncludesPolymorphicDescriptorsInIndexDiffs() {
+    @Test("VersionedSchema includes polymorphic logical indexes in index diffs")
+    func versionedSchemaIncludesPolymorphicLogicalIndexesInIndexDiffs() {
         let expectedNames = Set([
             "IndexedCanonicalReadDocument_title",
             "IndexedCanonicalReadDocument_id",
         ])
 
-        #expect(Set(CanonicalReadIndexedSchema.allIndexDescriptors.map(\.name)) == expectedNames)
+        #expect(CanonicalReadIndexedSchema.allIndexDescriptors.isEmpty)
+        #expect(CanonicalReadIndexedSchema.indexNames == expectedNames)
         #expect(CanonicalReadIndexedSchema.indexChanges(
             from: CanonicalReadUnindexedSchema.self
         ).added == expectedNames)

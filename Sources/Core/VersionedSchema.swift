@@ -76,9 +76,10 @@ extension VersionedSchema {
         return Schema(models, version: versionIdentifier)
     }
 
-    /// Get all index descriptors from models in this schema version
+    /// Get all concrete index descriptors from models in this schema version.
     ///
-    /// Aggregates indexDescriptors from all Persistable types.
+    /// Polymorphic logical indexes are exposed through `indexNames` because
+    /// they do not have a single concrete `IndexDescriptor`.
     ///
     /// - Returns: Array of all index descriptors
     public static var allIndexDescriptors: [IndexDescriptor] {
@@ -89,7 +90,7 @@ extension VersionedSchema {
     ///
     /// - Returns: Set of index names
     public static var indexNames: Set<String> {
-        return Set(allIndexDescriptors.map(\.name))
+        return makeSchema().allIndexNames
     }
 }
 

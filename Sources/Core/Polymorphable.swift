@@ -29,8 +29,8 @@ import Foundation
 ///     var id: String { get }
 ///     var title: String { get }
 ///
-///     #Directory<Document>("app", "documents")
-///     #Index<Document>(ScalarIndexKind(fields: [\.title]), name: "Document_title")
+///     #Directory<Self>("app", "documents")
+///     #Index(ScalarIndexKind<Self>(fields: [\Self.title]), name: "Document_title")
 /// }
 ///
 /// @Persistable

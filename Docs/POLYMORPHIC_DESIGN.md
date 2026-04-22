@@ -20,13 +20,15 @@ The desired public shape is:
 ```swift
 @Polymorphable
 public protocol Entity: Polymorphable {
-    #Directory<Entity>("memory", "entities")
+    #Directory<Self>("memory", "entities")
 
     var label: String { get }
     var entityType: String { get }
     var embedding: [Float] { get set }
     var created: Date { get set }
     var updated: Date { get set }
+
+    #Index(VectorIndexKind<Self>(embedding: \Self.embedding, dimensions: 256))
 }
 
 @Persistable
@@ -107,6 +109,12 @@ public protocol Entity: Polymorphable {
 `@Polymorphable` is a metadata and validation macro. It must not be described as
 a macro that makes a protocol conform to `Polymorphable`.
 
+There is a second Swift 6.3 frontend limitation: freestanding macros inside a
+protocol body can fail during type checking before the attached macro can finish
+expansion. Until that compiler issue is fixed, tests may spell the generated
+metadata manually in a protocol extension. The runtime contract remains the same:
+descriptors are materialized through `Self`, not through one concrete member.
+
 ## Macro Responsibilities
 
 `@Persistable`:
@@ -141,7 +149,7 @@ String field names are an internal metadata representation only.
 Accepted shape:
 
 ```swift
-#Index<Entity>(VectorIndexKind<Entity>(embedding: \.embedding, dimensions: 256))
+#Index(VectorIndexKind<Self>(embedding: \Self.embedding, dimensions: 256))
 ```
 
 Rejected developer-facing shape:

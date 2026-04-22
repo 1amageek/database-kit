@@ -66,7 +66,22 @@ let package = Package(
             name: "DatabaseKit",
             dependencies: ["Core", "Vector", "FullText", "Spatial", "Rank", "Permuted", "Graph"]
         ),
-        .testTarget(name: "CoreTests", dependencies: ["Core", "Graph", "DatabaseClientProtocol"]),
+        .testTarget(
+            name: "CoreTests",
+            dependencies: [
+                "Core",
+                "CoreMacros",
+                "Vector",
+                "FullText",
+                "Spatial",
+                "Rank",
+                "Permuted",
+                "Graph",
+                "Relationship",
+                "DatabaseClientProtocol",
+                .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
+            ]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

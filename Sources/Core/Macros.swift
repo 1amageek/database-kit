@@ -177,8 +177,8 @@ public enum DirectoryLayer: String, Sendable, Codable {
 ///     var title: String { get }
 ///     var updatedAt: Date { get }
 ///
-///     #Directory<Document>("app", "documents")
-///     #Index<Document>(ScalarIndexKind(fields: [\.title]), name: "Document_title")
+///     #Directory<Self>("app", "documents")
+///     #Index(ScalarIndexKind<Self>(fields: [\Self.title]), name: "Document_title")
 /// }
 ///
 /// @Persistable
@@ -201,6 +201,9 @@ public enum DirectoryLayer: String, Sendable, Codable {
 /// **Important**: The protocol must explicitly inherit from `Polymorphable`.
 /// Swift 6.3 does not allow an attached macro on a protocol to add protocol
 /// inheritance by generating `extension Document: Polymorphable`.
+/// Swift 6.3 also has a frontend limitation around freestanding macros in
+/// protocol bodies; until that is fixed, generated metadata may need to be
+/// spelled manually in a protocol extension.
 /// The macro generates default implementations for the protocol requirements
 /// and should validate that the declaration is a valid polymorphic group.
 ///

@@ -164,6 +164,49 @@ struct ModelMacroTests {
         #expect(user[dynamicMember: "nonexistent"] == nil)
     }
 
+    @Test("@Persistable resolves protocol-extension KeyPath field names")
+    func protocolExtensionKeyPathFieldNames() throws {
+        let schema = Schema([MacroPolymorphicArticle.self, MacroPolymorphicReport.self])
+        let articleDescriptor = try #require(
+            schema.polymorphicIndexDescriptors(
+                identifier: MacroPolymorphicArticle.polymorphableType,
+                memberType: MacroPolymorphicArticle.self
+            ).first
+        )
+        let reportDescriptor = try #require(
+            schema.polymorphicIndexDescriptors(
+                identifier: MacroPolymorphicReport.polymorphableType,
+                memberType: MacroPolymorphicReport.self
+            ).first
+        )
+
+        #expect(articleDescriptor.fieldNames == ["title"])
+        #expect(reportDescriptor.fieldNames == ["title"])
+        #expect(articleDescriptor.keyPaths.first is PartialKeyPath<MacroPolymorphicArticle>)
+        #expect(reportDescriptor.keyPaths.first is PartialKeyPath<MacroPolymorphicReport>)
+        #expect(!(articleDescriptor.keyPaths.first is PartialKeyPath<MacroPolymorphicReport>))
+        #expect(!(reportDescriptor.keyPaths.first is PartialKeyPath<MacroPolymorphicArticle>))
+    }
+
+    @Test("@Polymorphable macro participates in schema construction")
+    func polymorphableMacroParticipatesInSchemaConstruction() throws {
+        let schema = Schema([
+            MacroGeneratedPolymorphicArticle.self,
+            MacroGeneratedPolymorphicReport.self
+        ])
+
+        #expect(MacroGeneratedPolymorphicArticle.polymorphableType == "MacroGeneratedPolymorphicDocument")
+        #expect(MacroGeneratedPolymorphicReport.polymorphableType == "MacroGeneratedPolymorphicDocument")
+
+        let group = try #require(schema.polymorphicGroup(identifier: "MacroGeneratedPolymorphicDocument"))
+        #expect(group.identifier == "MacroGeneratedPolymorphicDocument")
+        #expect(group.memberTypeNames == [
+            "MacroGeneratedPolymorphicArticle",
+            "MacroGeneratedPolymorphicReport"
+        ])
+        #expect(schema.polymorphicIndexCatalog(identifier: group.identifier).isEmpty)
+    }
+
     // MARK: - @Transient Tests
 
     /// Test @Transient excludes fields from allFields
@@ -362,4 +405,57 @@ struct TransientUser {
 
     @Transient
     var isOnline: Bool = false      // Transient boolean
+}
+
+protocol MacroPolymorphicDocument: Polymorphable {
+    var id: String { get }
+    var title: String { get }
+}
+
+extension MacroPolymorphicDocument {
+    static var polymorphableType: String { "MacroPolymorphicDocument" }
+
+    static var polymorphicDirectoryPathComponents: [any DirectoryPathElement] {
+        [Path("macro-polymorphic-documents")]
+    }
+
+    static var polymorphicIndexDescriptors: [IndexDescriptor] {
+        [
+            IndexDescriptor(
+                name: "MacroPolymorphicDocument_title",
+                keyPaths: [\Self.title],
+                kind: ScalarIndexKind<Self>(fields: [\Self.title])
+            )
+        ]
+    }
+}
+
+@Persistable
+struct MacroPolymorphicArticle: MacroPolymorphicDocument {
+    #Directory<MacroPolymorphicArticle>("macro-polymorphic-articles")
+
+    var title: String
+}
+
+@Persistable
+struct MacroPolymorphicReport: MacroPolymorphicDocument {
+    #Directory<MacroPolymorphicReport>("macro-polymorphic-reports")
+
+    var title: String
+}
+
+@Polymorphable
+protocol MacroGeneratedPolymorphicDocument: Polymorphable {
+    var id: String { get }
+    var title: String { get }
+}
+
+@Persistable
+struct MacroGeneratedPolymorphicArticle: MacroGeneratedPolymorphicDocument {
+    var title: String
+}
+
+@Persistable
+struct MacroGeneratedPolymorphicReport: MacroGeneratedPolymorphicDocument {
+    var title: String
 }

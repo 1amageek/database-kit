@@ -20,12 +20,12 @@ import SwiftDiagnostics
 /// **Usage**:
 /// ```swift
 /// @Polymorphable
-/// protocol Document {
+/// protocol Document: Polymorphable {
 ///     var id: String { get }
 ///     var title: String { get }
 ///
-///     #Directory<Document>("app", "documents")
-///     #Index<Document>(ScalarIndexKind(fields: [\.title]), name: "Document_title")
+///     #Directory<Self>("app", "documents")
+///     #Index(ScalarIndexKind<Self>(fields: [\Self.title]), name: "Document_title")
 /// }
 /// ```
 public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
@@ -44,6 +44,17 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
                 )
             ])
         }
+        guard let protocolDecl = declaration.as(ProtocolDeclSyntax.self),
+              protocolDecl.inheritsPolymorphable else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: MacroExpansionErrorMessage(
+                        "@Polymorphable protocols must explicitly inherit from Polymorphable"
+                    )
+                )
+            ])
+        }
 
         // MemberMacro: Don't generate members in the protocol itself
         // All implementations are provided via ExtensionMacro below
@@ -59,6 +70,9 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
     ) throws -> [ExtensionDeclSyntax] {
         // Get protocol name
         guard let protocolDecl = declaration.as(ProtocolDeclSyntax.self) else {
+            return []
+        }
+        guard protocolDecl.inheritsPolymorphable else {
             return []
         }
         let protocolName = protocolDecl.name.text
@@ -155,23 +169,47 @@ private func extractKeyPathString(from keyPathExpr: KeyPathExprSyntax) -> String
     return pathComponents.joined(separator: ".")
 }
 
-/// Convert IndexKind expression to use fieldNames instead of KeyPaths
-/// e.g., ScalarIndexKind<Document>(fields: [\.title]) → ScalarIndexKind(fieldNames: ["title"])
-private func convertIndexKindToFieldNames(_ kindInit: String, keyPaths: [String]) -> String {
-    // Extract the IndexKind name (before the generic or opening paren)
-    let kindName: String
-    if let genericStart = kindInit.firstIndex(of: "<") {
-        kindName = String(kindInit[..<genericStart])
-    } else if let parenStart = kindInit.firstIndex(of: "(") {
-        kindName = String(kindInit[..<parenStart])
-    } else {
-        kindName = kindInit
+private extension ProtocolDeclSyntax {
+    var inheritsPolymorphable: Bool {
+        inheritanceClause?.inheritedTypes.contains { inheritedType in
+            let name = inheritedType.type.trimmedDescription
+            return name == "Polymorphable" || name.hasSuffix(".Polymorphable")
+        } ?? false
     }
+}
 
-    // Generate fieldNames array
-    let fieldNamesArray = keyPaths.map { "\"\($0)\"" }.joined(separator: ", ")
+private func collectKeyPathStrings(from expression: ExprSyntax) -> [String] {
+    if let arrayExpr = expression.as(ArrayExprSyntax.self) {
+        return arrayExpr.elements.compactMap { element in
+            guard let keyPathExpr = element.expression.as(KeyPathExprSyntax.self) else {
+                return nil
+            }
+            let keyPathString = extractKeyPathString(from: keyPathExpr)
+            return keyPathString.isEmpty ? nil : keyPathString
+        }
+    }
+    if let keyPathExpr = expression.as(KeyPathExprSyntax.self) {
+        let keyPathString = extractKeyPathString(from: keyPathExpr)
+        return keyPathString.isEmpty ? [] : [keyPathString]
+    }
+    return []
+}
 
-    return "\(kindName)(fieldNames: [\(fieldNamesArray)])"
+/// Rewrite protocol-level index expressions so generated descriptors are
+/// materialized per concrete conforming type.
+///
+/// `#Index<Document>(ScalarIndexKind<Document>(fields: [\.title]))` becomes
+/// `ScalarIndexKind<Self>(fields: [\Self.title])` inside `extension Document`.
+private func rewriteIndexKindExpression(
+    _ expression: String,
+    protocolName: String
+) -> String {
+    expression
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: "<\(protocolName)>", with: "<Self>")
+        .replacingOccurrences(of: "<\(protocolName),", with: "<Self,")
+        .replacingOccurrences(of: "\\\(protocolName).", with: "\\Self.")
+        .replacingOccurrences(of: "\\.", with: "\\Self.")
 }
 
 /// Parse #Directory macro and extract path components and layer
@@ -204,6 +242,7 @@ private func parseDirectoryMacro(_ macroDecl: MacroExpansionDeclSyntax) -> (comp
 /// Parse #Index macro and generate IndexDescriptor string
 private func parseIndexMacro(_ macroDecl: MacroExpansionDeclSyntax, protocolName: String) -> String? {
     var keyPaths: [String] = []
+    var storedFieldKeyPaths: [String] = []
     var indexKindExpr: String?
     var isUnique = false
     var indexName: String?
@@ -214,25 +253,15 @@ private func parseIndexMacro(_ macroDecl: MacroExpansionDeclSyntax, protocolName
             if let funcCall = arg.expression.as(FunctionCallExprSyntax.self) {
                 // Extract KeyPaths from function arguments
                 for funcArg in funcCall.arguments {
-                    if let arrayExpr = funcArg.expression.as(ArrayExprSyntax.self) {
-                        for element in arrayExpr.elements {
-                            if let keyPathExpr = element.expression.as(KeyPathExprSyntax.self) {
-                                let keyPathString = extractKeyPathString(from: keyPathExpr)
-                                if !keyPathString.isEmpty {
-                                    keyPaths.append(keyPathString)
-                                }
-                            }
-                        }
-                    } else if let keyPathExpr = funcArg.expression.as(KeyPathExprSyntax.self) {
-                        let keyPathString = extractKeyPathString(from: keyPathExpr)
-                        if !keyPathString.isEmpty {
-                            keyPaths.append(keyPathString)
-                        }
-                    }
+                    keyPaths.append(contentsOf: collectKeyPathStrings(from: funcArg.expression))
                 }
 
                 indexKindExpr = arg.expression.description.trimmingCharacters(in: .whitespaces)
             }
+        }
+        // "storedFields:" argument
+        else if let label = arg.label, label.text == "storedFields" {
+            storedFieldKeyPaths.append(contentsOf: collectKeyPathStrings(from: arg.expression))
         }
         // "unique:" argument
         else if let label = arg.label, label.text == "unique" {
@@ -260,20 +289,34 @@ private func parseIndexMacro(_ macroDecl: MacroExpansionDeclSyntax, protocolName
         finalIndexName = "\(protocolName)_\(flattenedKeyPaths.joined(separator: "_"))"
     }
 
-    // Generate IndexDescriptor with fieldNames (not keyPaths, since protocol has no concrete type)
-    let fieldNames = keyPaths.map { "\"\($0)\"" }.joined(separator: ", ")
-    let kindInit = indexKindExpr ?? "ScalarIndexKind(fieldNames: [])"
-
-    // Convert IndexKind to use fieldNames instead of KeyPaths
-    let convertedKindInit = convertIndexKindToFieldNames(kindInit, keyPaths: keyPaths)
+    let keyPathsLiterals = keyPaths.map { "\\Self.\($0)" }.joined(separator: ", ")
+    let kindInit = rewriteIndexKindExpression(
+        indexKindExpr ?? "ScalarIndexKind(fields: [])",
+        protocolName: protocolName
+    )
     let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
 
+    if storedFieldKeyPaths.isEmpty {
+        return """
+            IndexDescriptor(
+                name: "\(finalIndexName)",
+                keyPaths: [\(keyPathsLiterals)],
+                kind: \(kindInit),
+                commonOptions: \(optionsInit)
+            )
+        """
+    }
+
+    let storedKeyPathsLiterals = storedFieldKeyPaths.map { "\\Self.\($0)" }.joined(separator: ", ")
+    let storedFieldNamesLiterals = storedFieldKeyPaths.map { "\"\($0)\"" }.joined(separator: ", ")
     return """
         IndexDescriptor(
             name: "\(finalIndexName)",
-            fieldNames: [\(fieldNames)],
-            kind: \(convertedKindInit),
-            commonOptions: \(optionsInit)
+            keyPaths: [\(keyPathsLiterals)],
+            kind: \(kindInit),
+            commonOptions: \(optionsInit),
+            storedKeyPaths: [\(storedKeyPathsLiterals)],
+            storedFieldNames: [\(storedFieldNamesLiterals)]
         )
     """
 }
