@@ -43,7 +43,7 @@ dependencies: [
 | `Core` | `@Persistable` macro, `IndexKind` protocol, Schema, Protobuf serialization |
 | `Vector` | `VectorIndexKind` for similarity search |
 | `FullText` | `FullTextIndexKind` for text search |
-| `Spatial` | `SpatialIndexKind` for geospatial queries |
+| `Geospatial` | `SpatialIndexKind` for geospatial queries |
 | `Rank` | `RankIndexKind` for leaderboard rankings |
 | `Permuted` | `PermutedIndexKind` for alternative field orderings |
 | `Graph` | `GraphIndexKind`, OWL ontology types (`OWLOntology`, `OWLClass`, `OWLAxiom`), `@OWLClass` / `@OWLDataProperty` / `@OWLObjectProperty` macros, `OWLClassEntity`, `OWLDataPropertyDescriptor`, `OWLObjectPropertyDescriptor` |

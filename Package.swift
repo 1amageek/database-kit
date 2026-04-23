@@ -16,7 +16,7 @@ let package = Package(
         .library(name: "Relationship", targets: ["Relationship"]),
         .library(name: "Vector", targets: ["Vector"]),
         .library(name: "FullText", targets: ["FullText"]),
-        .library(name: "Spatial", targets: ["Spatial"]),
+        .library(name: "Geospatial", targets: ["Geospatial"]),
         .library(name: "Rank", targets: ["Rank"]),
         .library(name: "Permuted", targets: ["Permuted"]),
         .library(name: "Graph", targets: ["Graph"]),
@@ -50,7 +50,7 @@ let package = Package(
         .target(name: "DatabaseClientProtocol", dependencies: ["Core", "QueryIR"]),
         .target(name: "Vector", dependencies: ["Core"]),
         .target(name: "FullText", dependencies: ["Core"]),
-        .target(name: "Spatial", dependencies: ["Core"]),
+        .target(name: "Geospatial", dependencies: ["Core"]),
         .target(name: "Rank", dependencies: ["Core"]),
         .target(name: "Permuted", dependencies: ["Core"]),
         .macro(
@@ -64,7 +64,7 @@ let package = Package(
         .target(name: "Graph", dependencies: ["Core", "GraphMacros"]),
         .target(
             name: "DatabaseKit",
-            dependencies: ["Core", "Vector", "FullText", "Spatial", "Rank", "Permuted", "Graph"]
+            dependencies: ["Core", "Vector", "FullText", "Geospatial", "Rank", "Permuted", "Graph"]
         ),
         .testTarget(
             name: "CoreTests",
@@ -73,7 +73,7 @@ let package = Package(
                 "CoreMacros",
                 "Vector",
                 "FullText",
-                "Spatial",
+                "Geospatial",
                 "Rank",
                 "Permuted",
                 "Graph",

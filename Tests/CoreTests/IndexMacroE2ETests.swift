@@ -5,7 +5,7 @@ import Graph
 import Permuted
 import Rank
 import Relationship
-import Spatial
+import Geospatial
 import Vector
 
 @Suite("#Index Macro E2E Tests")

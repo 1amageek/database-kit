@@ -6,7 +6,7 @@
 @_exported import Core
 @_exported import Vector
 @_exported import FullText
-@_exported import Spatial
+@_exported import Geospatial
 @_exported import Rank
 @_exported import Permuted
 @_exported import Graph
