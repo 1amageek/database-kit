@@ -62,6 +62,26 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
         let namespace = Self.extractNamespace(from: rawIRI)
         let iri = Self.resolveClassIRI(rawIRI, namespace: namespace)
 
+        // Extract optional `graph:` argument. Baked into the generated
+        // OWLTripleIndexKind so every individual of this class materializes
+        // into the specified named graph.
+        var graphName = "default"
+        for arg in labeledList.dropFirst() {
+            guard arg.label?.text == "graph" else { continue }
+            let graphExpr = arg.expression.description.trimmingCharacters(in: .whitespaces)
+            guard graphExpr.hasPrefix("\"") && graphExpr.hasSuffix("\"") else {
+                throw DiagnosticsError(diagnostics: [
+                    Diagnostic(
+                        node: Syntax(arg),
+                        message: OWLClassMacroErrorMessage(
+                            "@OWLClass 'graph:' argument must be a string literal. Found: \(graphExpr)"
+                        )
+                    )
+                ])
+            }
+            graphName = String(graphExpr.dropFirst().dropLast())
+        }
+
         let structName = structDecl.name.text
 
         // Collect @OWLDataProperty / @OWLProperty annotated fields
@@ -129,7 +149,7 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
         // This is merged into `descriptors` via the OWLClassEntity constrained protocol extension.
         let owlTripleDecl: DeclSyntax = """
             public static var _owlTripleDescriptors: [any Descriptor] {
-                [IndexDescriptor(name: "\(raw: structName)_owlTriple", keyPaths: [] as [PartialKeyPath<\(raw: structName)>], kind: OWLTripleIndexKind<\(raw: structName)>())]
+                [IndexDescriptor(name: "\(raw: structName)_owlTriple", keyPaths: [] as [PartialKeyPath<\(raw: structName)>], kind: OWLTripleIndexKind<\(raw: structName)>(graph: "\(raw: graphName)"))]
             }
             """
         decls.append(owlTripleDecl)

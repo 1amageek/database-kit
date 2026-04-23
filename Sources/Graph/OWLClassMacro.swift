@@ -18,18 +18,29 @@
 ///     @OWLDataProperty("http://example.org/onto#worksFor", to: \Department.id)
 ///     var departmentID: String?
 /// }
+///
+/// // Bind materialized triples to a named graph:
+/// @Persistable
+/// @OWLClass("ex:Person", graph: "memory:default")
+/// struct Person { ... }
 /// ```
 ///
 /// **Generated code**:
 /// - `static var ontologyClassIRI: String` — OWL class IRI
 /// - `static var ontologyPropertyDescriptors: [OWLDataPropertyDescriptor]` — metadata for `@OWLDataProperty` fields
 /// - `OWLClassEntity` protocol conformance
+///
+/// - Parameters:
+///   - iri: OWL class IRI (CURIE like `"ex:Person"` or full IRI).
+///   - graph: Named graph IRI the materialized triples are written to. Defaults
+///     to `"default"` for backward compatibility; pass a specific graph (e.g.
+///     `"memory:default"`) when federating with `sparql(graph:)`.
 @attached(member, names: named(ontologyClassIRI), named(ontologyPropertyDescriptors), named(_owlTripleDescriptors))
 @attached(extension, conformances: OWLClassEntity)
-public macro OWLClass(_ iri: String) = #externalMacro(module: "GraphMacros", type: "OWLClassMacro")
+public macro OWLClass(_ iri: String, graph: String = "default") = #externalMacro(module: "GraphMacros", type: "OWLClassMacro")
 
 /// Backward compatibility
 @available(*, deprecated, renamed: "OWLClass")
 @attached(member, names: named(ontologyClassIRI), named(ontologyPropertyDescriptors), named(_owlTripleDescriptors))
 @attached(extension, conformances: OWLClassEntity)
-public macro Ontology(_ iri: String) = #externalMacro(module: "GraphMacros", type: "OWLClassMacro")
+public macro Ontology(_ iri: String, graph: String = "default") = #externalMacro(module: "GraphMacros", type: "OWLClassMacro")
