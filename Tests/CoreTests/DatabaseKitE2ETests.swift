@@ -256,6 +256,205 @@ struct DatabaseKitE2ETests {
         #expect(decodedFusion.inputs[1].parameters["boosts"]?.arrayValue == [.double(0.7), .double(0.3)])
     }
 
+    @Test("aggregate query wire payload preserves group by having and projection aliases")
+    func aggregateQueryWirePayloadPreservesGroupByHavingAndProjectionAliases() throws {
+        let totalExpression = QueryIR.Expression.aggregate(
+            .sum(.column(ColumnRef("total")), distinct: false)
+        )
+        let countExpression = QueryIR.Expression.aggregate(
+            .count(.column(ColumnRef("id")), distinct: true)
+        )
+        let query = SelectQuery(
+            projection: .items([
+                ProjectionItem(.column(ColumnRef("tenantID")), alias: "tenant"),
+                ProjectionItem(.column(ColumnRef("status")), alias: "state"),
+                ProjectionItem(totalExpression, alias: "totalRevenue"),
+                ProjectionItem(countExpression, alias: "orderCount"),
+            ]),
+            source: .table(TableRef(table: DatabaseKitE2EOrder.persistableType)),
+            filter: .greaterThanOrEqual(
+                .column(ColumnRef("total")),
+                .literal(.double(10.0))
+            ),
+            groupBy: [
+                .column(ColumnRef("tenantID")),
+                .column(ColumnRef("status")),
+            ],
+            having: .greaterThan(
+                totalExpression,
+                .literal(.double(100.0))
+            ),
+            orderBy: [
+                SortKey(totalExpression, direction: .descending),
+                SortKey(.column(ColumnRef("tenantID")), direction: .ascending),
+            ],
+            limit: 20,
+            offset: 10,
+            distinct: true
+        )
+        let request = QueryRequest(
+            statement: .select(query),
+            options: ReadExecutionOptions(
+                consistency: .serializable,
+                pageSize: 20,
+                continuation: QueryContinuation("aggregate-page-2")
+            ),
+            partitionValues: ["tenantID": "tenant-a"]
+        )
+
+        let decodedRequest = try JSONDecoder().decode(
+            QueryRequest.self,
+            from: try JSONEncoder().encode(request)
+        )
+
+        #expect(decodedRequest.statement == .select(query))
+        #expect(decodedRequest.options.continuation?.token == "aggregate-page-2")
+        #expect(decodedRequest.partitionValues == ["tenantID": "tenant-a"])
+
+        guard case .select(let decodedQuery) = decodedRequest.statement,
+              case .items(let projectionItems) = decodedQuery.projection else {
+            Issue.record("Expected aggregate select query")
+            return
+        }
+
+        #expect(projectionItems.map(\.alias) == [
+            "tenant",
+            "state",
+            "totalRevenue",
+            "orderCount",
+        ])
+        #expect(decodedQuery.groupBy == [
+            .column(ColumnRef("tenantID")),
+            .column(ColumnRef("status")),
+        ])
+        #expect(decodedQuery.having == .greaterThan(totalExpression, .literal(.double(100.0))))
+        #expect(decodedQuery.orderBy == [
+            SortKey(totalExpression, direction: .descending),
+            SortKey(.column(ColumnRef("tenantID")), direction: .ascending),
+        ])
+        #expect(decodedQuery.limit == 20)
+        #expect(decodedQuery.offset == 10)
+        #expect(decodedQuery.distinct == true)
+    }
+
+    @Test("relational query wire payload preserves CTE subquery join values and nested predicates")
+    func relationalQueryWirePayloadPreservesCTESubqueryJoinValuesAndNestedPredicates() throws {
+        let recentOrders = SelectQuery(
+            projection: .items([
+                ProjectionItem(.column(ColumnRef("id"))),
+                ProjectionItem(.column(ColumnRef("tenantID"))),
+                ProjectionItem(.column(ColumnRef("status"))),
+                ProjectionItem(.column(ColumnRef("total"))),
+            ]),
+            source: .table(TableRef(table: DatabaseKitE2EOrder.persistableType, alias: "orders")),
+            filter: .and(
+                .greaterThanOrEqual(.column(ColumnRef(table: "orders", column: "total")), .literal(.double(50.0))),
+                .inList(
+                    .column(ColumnRef(table: "orders", column: "status")),
+                    values: [.literal(.string("open")), .literal(.string("paid"))]
+                )
+            )
+        )
+        let allowedTenants = DataSource.values(
+            [
+                [.string("tenant-a"), .string("gold")],
+                [.string("tenant-b"), .string("silver")],
+            ],
+            columnNames: ["tenantID", "tier"]
+        )
+        let joinedSource = DataSource.join(JoinClause(
+            type: .left,
+            left: .subquery(recentOrders, alias: "recent"),
+            right: allowedTenants,
+            condition: .on(.equal(
+                .column(ColumnRef(table: "recent", column: "tenantID")),
+                .column(ColumnRef(table: "allowed", column: "tenantID"))
+            ))
+        ))
+        let highValueSubquery = SelectQuery(
+            projection: .items([
+                ProjectionItem(.column(ColumnRef("id")))
+            ]),
+            source: .table(TableRef(table: DatabaseKitE2EOrder.persistableType)),
+            filter: .greaterThan(.column(ColumnRef("total")), .literal(.double(90.0)))
+        )
+        let query = SelectQuery(
+            projection: .items([
+                ProjectionItem(.column(ColumnRef(table: "recent", column: "id")), alias: "orderID"),
+                ProjectionItem(.column(ColumnRef(table: "recent", column: "tenantID")), alias: "tenant"),
+                ProjectionItem(.column(ColumnRef(table: "recent", column: "total")), alias: "total"),
+                ProjectionItem(
+                    .caseWhen(
+                        cases: [
+                            CaseWhenPair(
+                                condition: .greaterThan(
+                                    .column(ColumnRef(table: "recent", column: "total")),
+                                    .literal(.double(100.0))
+                                ),
+                                result: .literal(.string("priority"))
+                            )
+                        ],
+                        elseResult: .literal(.string("standard"))
+                    ),
+                    alias: "routing"
+                ),
+            ]),
+            source: joinedSource,
+            filter: .or(
+                .inSubquery(.column(ColumnRef(table: "recent", column: "id")), subquery: highValueSubquery),
+                .isNotNull(.column(ColumnRef(table: "allowed", column: "tier")))
+            ),
+            orderBy: [
+                SortKey(.column(ColumnRef(table: "recent", column: "total")), direction: .descending, nulls: .last)
+            ],
+            limit: 50,
+            subqueries: [
+                NamedSubquery(
+                    name: "recent_orders",
+                    columns: ["id", "tenantID", "status", "total"],
+                    query: recentOrders,
+                    materialized: .notMaterialized
+                )
+            ]
+        )
+        let request = QueryRequest(
+            statement: .select(query),
+            options: ReadExecutionOptions(
+                consistency: .snapshot,
+                pageSize: 50,
+                continuation: QueryContinuation("joined-page")
+            ),
+            partitionValues: ["tenantID": "tenant-a"]
+        )
+
+        let decodedRequest = try JSONDecoder().decode(
+            QueryRequest.self,
+            from: try JSONEncoder().encode(request)
+        )
+
+        #expect(decodedRequest.statement == .select(query))
+        #expect(decodedRequest.partitionValues == ["tenantID": "tenant-a"])
+        #expect(decodedRequest.options.continuation?.token == "joined-page")
+
+        guard case .select(let decodedQuery) = decodedRequest.statement,
+              case .join(let decodedJoin) = decodedQuery.source,
+              case .values(let decodedValues, let decodedColumnNames) = decodedJoin.right else {
+            Issue.record("Expected joined source with values")
+            return
+        }
+
+        #expect(decodedQuery.subqueries?.first?.name == "recent_orders")
+        #expect(decodedQuery.subqueries?.first?.materialized == .notMaterialized)
+        #expect(decodedJoin.type == .left)
+        #expect(decodedValues == [
+            [.string("tenant-a"), .string("gold")],
+            [.string("tenant-b"), .string("silver")],
+        ])
+        #expect(decodedColumnNames == ["tenantID", "tier"])
+        #expect(decodedQuery.filter == query.filter)
+        #expect(decodedQuery.orderBy == query.orderBy)
+    }
+
     @Test("schema response preserves polymorphic groups enum metadata and index metadata")
     func schemaResponsePreservesPolymorphicGroupsEnumMetadataAndIndexMetadata() throws {
         let schema = Schema([
@@ -357,6 +556,33 @@ struct DatabaseKitE2ETests {
         #expect(decodedResponse.rows.first?.annotations["preview"] == .data(blob.prefix(2)))
         #expect(decodedResponse.metadata["checksums"] == .array([.int64(7), .int64(9)]))
         #expect(decodedResponse.metadata["missing"] == .null)
+    }
+
+    @Test("service envelope error payload preserves typed code message and metadata")
+    func serviceEnvelopeErrorPayloadPreservesTypedCodeMessageAndMetadata() throws {
+        let envelope = ServiceEnvelope(
+            responseTo: "request-1",
+            operationID: "query",
+            errorCode: "QUERY_REJECTED",
+            errorMessage: "Query rejected by policy",
+            metadata: [
+                "traceID": "database-kit-error-e2e",
+                "retryable": "false",
+            ]
+        )
+        let decodedEnvelope = try JSONDecoder().decode(
+            ServiceEnvelope.self,
+            from: try JSONEncoder().encode(envelope)
+        )
+
+        #expect(decodedEnvelope.requestID == "request-1")
+        #expect(decodedEnvelope.operationID == "query")
+        #expect(decodedEnvelope.isError == true)
+        #expect(decodedEnvelope.errorCode == "QUERY_REJECTED")
+        #expect(decodedEnvelope.errorMessage == "Query rejected by policy")
+        #expect(decodedEnvelope.metadata["traceID"] == "database-kit-error-e2e")
+        #expect(decodedEnvelope.metadata["retryable"] == "false")
+        #expect(decodedEnvelope.payload.isEmpty)
     }
 
     @Test("decoded schema response stays wire-safe without runtime type metadata")
