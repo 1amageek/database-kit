@@ -199,7 +199,13 @@ public enum BuiltinLogicalSourceKind {
     public static let polymorphic = "polymorphic"
 }
 
-/// Unified data source representation
+/// Unified data source representation.
+///
+/// `DataSource` intentionally models the stable core query languages:
+/// relational sources, SQL/PGQ graph tables, and SPARQL graph patterns.
+/// Optional index families and future feature-specific reads must use
+/// `SelectQuery.accessPath` or `DataSource.logical(LogicalSourceRef)` so adding
+/// a new index family does not require adding another enum case here.
 public indirect enum DataSource: Sendable, Equatable, Hashable {
     // MARK: - Relational Sources
 
@@ -218,12 +224,12 @@ public indirect enum DataSource: Sendable, Equatable, Hashable {
     /// Values clause (inline data)
     case values([[Literal]], columnNames: [String]?)
 
-    // MARK: - Graph Sources (SQL/PGQ)
+    // MARK: - Core Graph Sources (SQL/PGQ)
 
     /// GRAPH_TABLE (graph_name, MATCH pattern)
     case graphTable(GraphTableSource)
 
-    // MARK: - SPARQL Sources
+    // MARK: - Core SPARQL Sources
 
     /// Basic graph pattern (triple patterns)
     case graphPattern(GraphPattern)
