@@ -97,6 +97,71 @@ struct DatabaseKitE2ETests {
         #expect(decodedResponse.metadata["entity"] == .string("DatabaseKitE2EUser"))
     }
 
+    @Test("command request and response preserve retry and effect contracts")
+    func commandRequestAndResponsePreserveRetryAndEffectContracts() throws {
+        let payload = try JSONEncoder().encode(["leadID": "lead-1"])
+        let request = CommandRequest(
+            commandID: "crm.convertLead",
+            idempotencyKey: "convert-lead-1",
+            payload: payload,
+            preconditions: [
+                WritePreconditionEntry(
+                    key: RecordKey(entityName: "Lead", id: .string("lead-1")),
+                    precondition: .matchesStored(RecordVersionToken("version-1"))
+                )
+            ],
+            metadata: ["tenantID": "tenant-a"]
+        )
+        let envelope = ServiceEnvelope(
+            operationID: "command",
+            payload: try JSONEncoder().encode(request)
+        )
+
+        let decodedEnvelope = try JSONDecoder().decode(
+            ServiceEnvelope.self,
+            from: try JSONEncoder().encode(envelope)
+        )
+        let decodedRequest = try JSONDecoder().decode(CommandRequest.self, from: decodedEnvelope.payload)
+
+        #expect(decodedEnvelope.operationID == "command")
+        #expect(decodedRequest.commandID == "crm.convertLead")
+        #expect(decodedRequest.idempotencyKey?.value == "convert-lead-1")
+        #expect(decodedRequest.preconditions.first?.precondition.kind == .matchesStored)
+        #expect(decodedRequest.preconditions.first?.precondition.version?.value == "version-1")
+        #expect(decodedRequest.metadata["tenantID"] == "tenant-a")
+
+        let responsePayload = try JSONEncoder().encode(["accountID": "account-1"])
+        let response = CommandResponse(
+            status: "applied",
+            payload: responsePayload,
+            effects: [
+                CommandEffect(
+                    kind: "insert",
+                    key: RecordKey(entityName: "Account", id: .string("account-1")),
+                    metadata: ["source": .string("lead-1")]
+                )
+            ],
+            replayed: true
+        )
+        let responseEnvelope = ServiceEnvelope(
+            responseTo: decodedEnvelope.requestID,
+            operationID: "command",
+            payload: try JSONEncoder().encode(response)
+        )
+        let decodedResponseEnvelope = try JSONDecoder().decode(
+            ServiceEnvelope.self,
+            from: try JSONEncoder().encode(responseEnvelope)
+        )
+        let decodedResponse = try JSONDecoder().decode(CommandResponse.self, from: decodedResponseEnvelope.payload)
+
+        #expect(decodedResponseEnvelope.isError == false)
+        #expect(decodedResponse.status == "applied")
+        #expect(decodedResponse.replayed == true)
+        #expect(decodedResponse.effects.first?.kind == "insert")
+        #expect(decodedResponse.effects.first?.key?.entityName == "Account")
+        #expect(decodedResponse.effects.first?.metadata["source"] == .string("lead-1"))
+    }
+
     @Test("partitioned save changes and fusion access path preserve structured wire contracts")
     func partitionedSaveChangesAndFusionAccessPathPreserveStructuredWireContracts() throws {
         let schema = Schema([DatabaseKitE2EOrder.self])
@@ -144,7 +209,16 @@ struct DatabaseKitE2ETests {
                 operation: .delete,
                 partitionValues: ["tenantID": "tenant-b"]
             ),
-        ])
+        ], preconditions: [
+            WritePreconditionEntry(
+                key: RecordKey(
+                    entityName: DatabaseKitE2EOrder.persistableType,
+                    id: .string("order-1"),
+                    partitionValues: ["tenantID": "tenant-a"]
+                ),
+                precondition: .notExists
+            )
+        ], idempotencyKey: "partitioned-save-1", clientMutationID: "mutation-1")
         let saveEnvelope = ServiceEnvelope(
             operationID: "save",
             payload: try JSONEncoder().encode(saveRequest),
@@ -167,6 +241,20 @@ struct DatabaseKitE2ETests {
         #expect(decodedSaveRequest.changes[1].fields?["status"] == FieldValue.string("paid"))
         #expect(decodedSaveRequest.changes[2].fields == nil)
         #expect(decodedSaveRequest.changes[2].partitionValues == ["tenantID": "tenant-b"])
+        #expect(decodedSaveRequest.preconditions.count == 1)
+        #expect(decodedSaveRequest.preconditions.first?.key.id == .string("order-1"))
+        #expect(decodedSaveRequest.preconditions.first?.precondition.kind == .notExists)
+        #expect(decodedSaveRequest.idempotencyKey?.value == "partitioned-save-1")
+        #expect(decodedSaveRequest.clientMutationID == "mutation-1")
+
+        let legacySaveRequest = try JSONDecoder().decode(
+            SaveRequest.self,
+            from: #"{"changes":[]}"#.data(using: .utf8)!
+        )
+        #expect(legacySaveRequest.changes.isEmpty)
+        #expect(legacySaveRequest.preconditions.isEmpty)
+        #expect(legacySaveRequest.idempotencyKey == nil)
+        #expect(legacySaveRequest.clientMutationID == nil)
 
         let fusionSource = FusionSource(
             inputs: [

@@ -101,9 +101,54 @@ public struct QueryResponse: Sendable, Codable {
 /// Request payload for operationID: "save".
 public struct SaveRequest: Sendable, Codable {
     public let changes: [ChangeSet.Change]
+    public let preconditions: [WritePreconditionEntry]
+    public let idempotencyKey: IdempotencyKey?
+    public let clientMutationID: String?
 
-    public init(changes: [ChangeSet.Change]) {
+    private enum CodingKeys: String, CodingKey {
+        case changes
+        case preconditions
+        case idempotencyKey
+        case clientMutationID
+    }
+
+    public init(
+        changes: [ChangeSet.Change],
+        preconditions: [WritePreconditionEntry] = [],
+        idempotencyKey: IdempotencyKey? = nil,
+        clientMutationID: String? = nil
+    ) {
         self.changes = changes
+        self.preconditions = preconditions
+        self.idempotencyKey = idempotencyKey
+        self.clientMutationID = clientMutationID
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.changes = try container.decode([ChangeSet.Change].self, forKey: .changes)
+        self.preconditions = try container.decodeIfPresent(
+            [WritePreconditionEntry].self,
+            forKey: .preconditions
+        ) ?? []
+        self.idempotencyKey = try container.decodeIfPresent(
+            IdempotencyKey.self,
+            forKey: .idempotencyKey
+        )
+        self.clientMutationID = try container.decodeIfPresent(
+            String.self,
+            forKey: .clientMutationID
+        )
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(changes, forKey: .changes)
+        if !preconditions.isEmpty {
+            try container.encode(preconditions, forKey: .preconditions)
+        }
+        try container.encodeIfPresent(idempotencyKey, forKey: .idempotencyKey)
+        try container.encodeIfPresent(clientMutationID, forKey: .clientMutationID)
     }
 }
 
