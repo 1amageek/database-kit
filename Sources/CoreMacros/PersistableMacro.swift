@@ -86,8 +86,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         // Extract all stored properties (fields) and @Relationship declarations
         var allFields: [String] = []
         var fieldInfos: [(name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)] = []
-        var fieldNumber = 1
-
         // Track @Restricted fields for field-level security metadata
         var restrictedFields: [(fieldName: String, readExpr: String, writeExpr: String, defaultExpr: String)] = []
 
@@ -96,8 +94,35 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         // @Relationship marks FK fields and specifies the related type
         var relationships: [(propertyName: String, relatedTypeName: String, deleteRule: String, isToMany: Bool, relationshipPropertyName: String)] = []
 
+        func hasTypeLevelModifier(_ varDecl: VariableDeclSyntax) -> Bool {
+            varDecl.modifiers.contains { modifier in
+                let name = modifier.name.text
+                return name == "static" || name == "class"
+            }
+        }
+
+        func isComputedProperty(_ binding: PatternBindingSyntax) -> Bool {
+            guard let accessorBlock = binding.accessorBlock else {
+                return false
+            }
+
+            switch accessorBlock.accessors {
+            case .getter:
+                return true
+            case .accessors(let accessors):
+                return accessors.contains { accessor in
+                    let specifier = accessor.accessorSpecifier.text
+                    return specifier != "willSet" && specifier != "didSet"
+                }
+            }
+        }
+
         for member in structDecl.memberBlock.members {
             if let varDecl = member.decl.as(VariableDeclSyntax.self) {
+                if hasTypeLevelModifier(varDecl) {
+                    continue
+                }
+
                 let isVar = varDecl.bindingSpecifier.text == "var"
                 let isLet = varDecl.bindingSpecifier.text == "let"
 
@@ -141,6 +166,10 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 
                 if isVar || isLet {
                     for binding in varDecl.bindings {
+                        if isComputedProperty(binding) {
+                            continue
+                        }
+
                         if let pattern = binding.pattern.as(IdentifierPatternSyntax.self) {
                             let fieldName = pattern.identifier.text
                             let fieldType = binding.typeAnnotation?.type.description.trimmingCharacters(in: .whitespaces) ?? "Any"
@@ -217,7 +246,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                 }
                             }
 
-                            fieldNumber += 1
                         }
                     }
                 }

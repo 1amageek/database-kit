@@ -164,6 +164,37 @@ struct ModelMacroTests {
         #expect(user[dynamicMember: "nonexistent"] == nil)
     }
 
+    @Test("@Persistable only treats instance stored properties as persisted fields")
+    func staticAndComputedMembersAreNotPersistedFields() throws {
+        let model = StaticAndComputedMemberModel(email: "test@example.com", name: "Alice")
+
+        #expect(StaticAndComputedMemberModel.allFields == ["id", "email", "name"])
+        #expect(StaticAndComputedMemberModel.fieldNumber(for: "id") == 1)
+        #expect(StaticAndComputedMemberModel.fieldNumber(for: "email") == 2)
+        #expect(StaticAndComputedMemberModel.fieldNumber(for: "name") == 3)
+        #expect(StaticAndComputedMemberModel.fieldNumber(for: "displayName") == nil)
+        #expect(StaticAndComputedMemberModel.fieldNumber(for: "seedData") == nil)
+        #expect(StaticAndComputedMemberModel.fieldNumber(for: "supportedScopes") == nil)
+
+        #expect(model[dynamicMember: "email"] as? String == "test@example.com")
+        #expect(model[dynamicMember: "displayName"] == nil)
+        #expect(model[dynamicMember: "seedData"] == nil)
+        #expect(StaticAndComputedMemberModel.seedData.isEmpty)
+
+        let data = try JSONEncoder().encode(model)
+        let json = String(data: data, encoding: .utf8)!
+        #expect(json.contains("email"))
+        #expect(json.contains("name"))
+        #expect(!json.contains("displayName"))
+        #expect(!json.contains("seedData"))
+        #expect(!json.contains("supportedScopes"))
+
+        let decoded = try JSONDecoder().decode(StaticAndComputedMemberModel.self, from: data)
+        #expect(decoded.email == model.email)
+        #expect(decoded.name == model.name)
+        #expect(decoded.displayName == "Alice <test@example.com>")
+    }
+
     @Test("@Persistable resolves protocol-extension KeyPath field names")
     func protocolExtensionKeyPathFieldNames() throws {
         let schema = Schema([MacroPolymorphicArticle.self, MacroPolymorphicReport.self])
@@ -324,6 +355,16 @@ struct ModelMacroTests {
 struct BasicUser {
     var email: String
     var name: String
+}
+
+@Persistable
+struct StaticAndComputedMemberModel {
+    static let supportedScopes = ["public", "private"]
+    static var seedData: [StaticAndComputedMemberModel] { [] }
+
+    var email: String
+    var name: String
+    var displayName: String { "\(name) <\(email)>" }
 }
 
 @Persistable
