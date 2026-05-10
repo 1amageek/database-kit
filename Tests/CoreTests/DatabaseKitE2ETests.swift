@@ -135,10 +135,9 @@ struct DatabaseKitE2ETests {
             status: "applied",
             payload: responsePayload,
             effects: [
-                CommandEffect(
-                    kind: "insert",
+                .recordVersionChanged(
                     key: RecordKey(entityName: "Account", id: .string("account-1")),
-                    metadata: ["source": .string("lead-1")]
+                    version: RecordVersionToken("account-version-1")
                 )
             ],
             replayed: true
@@ -157,9 +156,9 @@ struct DatabaseKitE2ETests {
         #expect(decodedResponseEnvelope.isError == false)
         #expect(decodedResponse.status == "applied")
         #expect(decodedResponse.replayed == true)
-        #expect(decodedResponse.effects.first?.kind == "insert")
+        #expect(decodedResponse.effects.first?.kind == CommandEffectKind.recordVersionChanged)
         #expect(decodedResponse.effects.first?.key?.entityName == "Account")
-        #expect(decodedResponse.effects.first?.metadata["source"] == .string("lead-1"))
+        #expect(decodedResponse.effects.first?.metadata["version"] == .string("account-version-1"))
     }
 
     @Test("partitioned save changes and fusion access path preserve structured wire contracts")

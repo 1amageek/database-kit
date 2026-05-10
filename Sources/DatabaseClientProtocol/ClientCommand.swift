@@ -115,6 +115,21 @@ public struct CommandEffect: Sendable, Codable, Hashable {
         self.key = key
         self.metadata = metadata
     }
+
+    public static func recordVersionChanged(
+        key: RecordKey,
+        version: RecordVersionToken
+    ) -> CommandEffect {
+        CommandEffect(
+            kind: CommandEffectKind.recordVersionChanged,
+            key: key,
+            metadata: ["version": .string(version.value)]
+        )
+    }
+}
+
+public enum CommandEffectKind {
+    public static let recordVersionChanged = "record.versionChanged"
 }
 
 /// Request payload for command-style mutating operations.

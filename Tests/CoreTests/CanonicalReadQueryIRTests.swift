@@ -383,7 +383,8 @@ struct CanonicalReadQueryIRTests {
             rows: [
                 QueryRow(
                     fields: ["id": .string("doc-1"), "title": .string("Vector Search")],
-                    annotations: ["distance": .double(0.12), "rank": .int64(1)]
+                    annotations: ["distance": .double(0.12), "rank": .int64(1)],
+                    version: RecordVersionToken("row-version-1")
                 )
             ],
             continuation: QueryContinuation("next-page"),
@@ -400,6 +401,7 @@ struct CanonicalReadQueryIRTests {
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(QueryResponse.self, from: data)
         #expect(decoded.rows == original.rows)
+        #expect(decoded.rows.first?.version?.value == "row-version-1")
         #expect(decoded.continuation == original.continuation)
         #expect(decoded.metadata == original.metadata)
     }

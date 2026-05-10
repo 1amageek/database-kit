@@ -47,13 +47,16 @@ public struct ReadExecutionOptions: Sendable, Codable, Hashable {
 public struct QueryRow: Sendable, Codable, Hashable {
     public let fields: [String: FieldValue]
     public let annotations: [String: FieldValue]
+    public let version: RecordVersionToken?
 
     public init(
         fields: [String: FieldValue],
-        annotations: [String: FieldValue] = [:]
+        annotations: [String: FieldValue] = [:],
+        version: RecordVersionToken? = nil
     ) {
         self.fields = fields
         self.annotations = annotations
+        self.version = version
     }
 }
 
