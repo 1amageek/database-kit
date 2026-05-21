@@ -926,9 +926,69 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 
         let fieldNameBody = fieldNameCases.joined(separator: "\n        ")
 
+        // Generate value-type-based dispatch for uniquely-typed fields.
+        //
+        // Release builds with Whole-Module Optimization can share computed
+        // KeyPath accessors across generic specializations. When a polymorphic
+        // protocol extension creates `\Self.field` via generic context, the
+        // resulting KeyPath has identity that differs from a literal
+        // `\ConcreteType.field`, so the identity-based dispatch above and the
+        // `_fieldName(fromKeyPathDescription:)` parser both miss (the
+        // description is `\Type.<computed 0xADDR (ValueType)>`).
+        //
+        // Bridge that gap by emitting type-based dispatch for fields whose
+        // value type is unique within the struct. We deliberately only emit
+        // these for *uniquely-typed* fields so multiple same-typed fields
+        // cannot collide. Two-typed fields fall back to identity/description.
+        func canonicalTypeString(_ raw: String) -> String {
+            var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            while s.hasSuffix("?") {
+                s = "Optional<" + String(s.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines) + ">"
+            }
+            if s.hasPrefix("[") && s.hasSuffix("]") {
+                let inner = String(s.dropFirst().dropLast())
+                var depth = 0
+                var colonIndex: String.Index? = nil
+                for idx in inner.indices {
+                    let c = inner[idx]
+                    if c == "<" || c == "[" || c == "(" { depth += 1 }
+                    else if c == ">" || c == "]" || c == ")" { depth -= 1 }
+                    else if c == ":" && depth == 0 {
+                        colonIndex = idx
+                        break
+                    }
+                }
+                if let colonIndex {
+                    let key = inner[..<colonIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+                    let value = inner[inner.index(after: colonIndex)...].trimmingCharacters(in: .whitespacesAndNewlines)
+                    s = "Dictionary<\(key), \(value)>"
+                } else {
+                    s = "Array<\(inner.trimmingCharacters(in: .whitespacesAndNewlines))>"
+                }
+            }
+            return s
+        }
+
+        var canonicalTypeCounts: [String: Int] = [:]
+        for fieldInfo in fieldInfos where !fieldInfo.isTransient {
+            canonicalTypeCounts[canonicalTypeString(fieldInfo.type), default: 0] += 1
+        }
+        var valueTypeDispatchCases: [String] = []
+        var partialKeyPathTypeDispatchCases: [String] = []
+        for fieldInfo in fieldInfos where !fieldInfo.isTransient {
+            let canonical = canonicalTypeString(fieldInfo.type)
+            guard canonicalTypeCounts[canonical] == 1 else { continue }
+            let fieldType = fieldInfo.type.trimmingCharacters(in: .whitespacesAndNewlines)
+            valueTypeDispatchCases.append("if Value.self == (\(fieldType)).self { return \"\(fieldInfo.name)\" }")
+            partialKeyPathTypeDispatchCases.append("if keyPath as? KeyPath<\(structName), \(fieldType)> != nil { return \"\(fieldInfo.name)\" }")
+        }
+        let valueTypeDispatchBody = valueTypeDispatchCases.joined(separator: "\n        ")
+        let partialKeyPathTypeDispatchBody = partialKeyPathTypeDispatchCases.joined(separator: "\n        ")
+
         let fieldNameDecl: DeclSyntax = """
             public static func fieldName<Value>(for keyPath: KeyPath<\(raw: structName), Value>) -> String {
                 \(raw: fieldNameBody)
+                \(raw: valueTypeDispatchBody)
                 let description = "\\(keyPath)"
                 return _fieldName(fromKeyPathDescription: description) ?? description
             }
@@ -939,6 +999,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         let partialFieldNameDecl: DeclSyntax = """
             public static func fieldName(for keyPath: PartialKeyPath<\(raw: structName)>) -> String {
                 \(raw: fieldNameBody)
+                \(raw: partialKeyPathTypeDispatchBody)
                 let description = "\\(keyPath)"
                 return _fieldName(fromKeyPathDescription: description) ?? description
             }
