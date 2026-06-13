@@ -79,6 +79,7 @@ let package = Package(
                 "Graph",
                 "Relationship",
                 "DatabaseClientProtocol",
+                "QueryIR",
                 .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
             ]
         ),

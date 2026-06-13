@@ -451,4 +451,39 @@ struct CanonicalReadQueryIRTests {
         }
         #expect(rhs == .literal(.string("archived")))
     }
+
+    @Test("SelectQuery nil replacement contract distinguishes typed clear from combined preserve")
+    func selectQueryNilReplacementContract() {
+        let original = SelectQuery(
+            projection: .all,
+            source: .table(TableRef(table: "Document")),
+            filter: .equal(.column(ColumnRef("status")), .literal(.string("active"))),
+            orderBy: [SortKey(.column(ColumnRef("createdAt")))],
+            limit: 20,
+            offset: 10
+        )
+
+        let preserved = original.replacing(
+            filter: nil,
+            orderBy: nil,
+            limit: nil,
+            offset: nil
+        )
+
+        #expect(preserved.filter == original.filter)
+        #expect(preserved.orderBy == original.orderBy)
+        #expect(preserved.limit == original.limit)
+        #expect(preserved.offset == original.offset)
+
+        let cleared = original
+            .replacing(filter: nil)
+            .replacing(orderBy: nil)
+            .replacing(limit: nil)
+            .replacing(offset: nil)
+
+        #expect(cleared.filter == nil)
+        #expect(cleared.orderBy == nil)
+        #expect(cleared.limit == nil)
+        #expect(cleared.offset == nil)
+    }
 }
