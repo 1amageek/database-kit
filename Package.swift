@@ -13,6 +13,7 @@ let package = Package(
     ],
     products: [
         .library(name: "Core", targets: ["Core"]),
+        .library(name: "DatabaseWire", targets: ["DatabaseWire"]),
         .library(name: "Relationship", targets: ["Relationship"]),
         .library(name: "Vector", targets: ["Vector"]),
         .library(name: "FullText", targets: ["FullText"]),
@@ -28,6 +29,7 @@ let package = Package(
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0"),
     ],
     targets: [
+        .target(name: "DatabaseWire", dependencies: []),
         .target(name: "Core", dependencies: ["CoreMacros"]),
         .target(name: "Relationship", dependencies: ["Core", "RelationshipMacros"]),
         .macro(
@@ -65,6 +67,12 @@ let package = Package(
         .target(
             name: "DatabaseKit",
             dependencies: ["Core", "Vector", "FullText", "Geospatial", "Rank", "Permuted", "Graph"]
+        ),
+        .testTarget(
+            name: "DatabaseWireTests",
+            dependencies: [
+                "DatabaseWire",
+            ]
         ),
         .testTarget(
             name: "CoreTests",
