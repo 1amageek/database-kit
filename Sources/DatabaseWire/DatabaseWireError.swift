@@ -14,5 +14,6 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case unknownIndexKind(UInt8)
     case unknownComparisonOperator(UInt8)
     case unknownPredicate(UInt8)
+    case unknownVectorMetric(UInt8)
     case unsupportedPredicatePlan
 }

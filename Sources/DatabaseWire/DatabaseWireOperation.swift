@@ -4,6 +4,7 @@ public enum DatabaseWireOperation: UInt8, Sendable, Hashable {
     case putRecord = 2
     case getRecord = 3
     case query = 4
+    case vectorQuery = 5
 
     public func encode(into writer: inout DatabaseWireBinaryWriter) {
         writer.writeUInt8(rawValue)

@@ -4,6 +4,7 @@ public enum DatabaseWireRequest: Sendable, Hashable {
     case putRecord(DatabaseWireRecord)
     case getRecord(typeName: String, id: String)
     case query(DatabaseWireQueryRequest)
+    case vectorQuery(DatabaseWireVectorQueryRequest)
 
     public var operation: DatabaseWireOperation {
         switch self {
@@ -15,6 +16,8 @@ public enum DatabaseWireRequest: Sendable, Hashable {
             return .getRecord
         case .query:
             return .query
+        case .vectorQuery:
+            return .vectorQuery
         }
     }
 
@@ -30,6 +33,8 @@ public enum DatabaseWireRequest: Sendable, Hashable {
             try writer.writeString(id)
         case .query(let query):
             try query.encode(into: &writer)
+        case .vectorQuery(let query):
+            try query.encode(into: &writer)
         }
     }
 
@@ -43,6 +48,8 @@ public enum DatabaseWireRequest: Sendable, Hashable {
             self = .getRecord(typeName: try reader.readString(), id: try reader.readString())
         case .query:
             self = .query(try DatabaseWireQueryRequest(from: &reader))
+        case .vectorQuery:
+            self = .vectorQuery(try DatabaseWireVectorQueryRequest(from: &reader))
         }
     }
 }

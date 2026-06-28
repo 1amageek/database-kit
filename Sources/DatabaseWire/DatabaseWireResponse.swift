@@ -23,12 +23,14 @@ public enum DatabaseWireResponse: Sendable, Hashable {
     case empty
     case record(DatabaseWireRecord?)
     case records([DatabaseWireRecord])
+    case scoredRecords([DatabaseWireScoredRecord])
     case failure(status: DatabaseWireResponseStatus, message: String)
 
     private enum Payload: UInt8 {
         case empty = 1
         case record = 2
         case records = 3
+        case scoredRecords = 4
     }
 
     public func encode(into writer: inout DatabaseWireBinaryWriter) throws(DatabaseWireError) {
@@ -48,6 +50,13 @@ public enum DatabaseWireResponse: Sendable, Hashable {
         case .records(let records):
             DatabaseWireResponseStatus.ok.encode(into: &writer)
             writer.writeUInt8(Payload.records.rawValue)
+            try writer.writeCount(records.count)
+            for record in records {
+                try record.encode(into: &writer)
+            }
+        case .scoredRecords(let records):
+            DatabaseWireResponseStatus.ok.encode(into: &writer)
+            writer.writeUInt8(Payload.scoredRecords.rawValue)
             try writer.writeCount(records.count)
             for record in records {
                 try record.encode(into: &writer)
@@ -86,6 +95,14 @@ public enum DatabaseWireResponse: Sendable, Hashable {
                 records.append(try DatabaseWireRecord(from: &reader))
             }
             self = .records(records)
+        case .scoredRecords:
+            let count = try reader.readCount()
+            var records: [DatabaseWireScoredRecord] = []
+            records.reserveCapacity(count)
+            for _ in 0..<count {
+                records.append(try DatabaseWireScoredRecord(from: &reader))
+            }
+            self = .scoredRecords(records)
         }
     }
 }

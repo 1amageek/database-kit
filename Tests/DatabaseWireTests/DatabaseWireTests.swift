@@ -46,6 +46,15 @@ struct DatabaseWireTests {
                             name: "byTitle",
                             kind: .scalar,
                             fields: ["title"]
+                        ),
+                        DatabaseWireIndexDescriptor(
+                            name: "byEmbedding",
+                            kind: .vector,
+                            fields: ["embedding"],
+                            parameters: [
+                                DatabaseWireNamedValue(name: "dimensions", value: .int64(3)),
+                                DatabaseWireNamedValue(name: "metric", value: .string("cosine"))
+                            ]
                         )
                     ]
                 )
@@ -139,6 +148,24 @@ struct DatabaseWireTests {
         #expect(decoded == query)
     }
 
+    @Test func vectorQueryRoundTripsSearchParameters() throws {
+        let query = DatabaseWireVectorQueryRequest(
+            typeName: "Article",
+            fieldName: "embedding",
+            dimensions: 3,
+            metric: .cosine,
+            queryVector: [1, 0, 0],
+            k: 2,
+            predicate: .comparison(field: "status", op: .equal, value: .string("published"))
+        )
+
+        let decoded = try DatabaseWireCodec.decodeVectorQuery(
+            DatabaseWireCodec.encode(vectorQuery: query)
+        )
+
+        #expect(decoded == query)
+    }
+
     @Test func requestEnvelopeRoundTripsAllOperations() throws {
         let schema = DatabaseWireSchema(
             entities: [
@@ -162,11 +189,20 @@ struct DatabaseWireTests {
             predicate: .comparison(field: "title", op: .equal, value: .string("Hello")),
             limit: 10
         )
+        let vectorQuery = DatabaseWireVectorQueryRequest(
+            typeName: "Article",
+            fieldName: "embedding",
+            dimensions: 3,
+            metric: .cosine,
+            queryVector: [1, 0, 0],
+            k: 2
+        )
         let requests: [DatabaseWireRequest] = [
             .applySchema(schema),
             .putRecord(record),
             .getRecord(typeName: "Article", id: "article-1"),
-            .query(query)
+            .query(query),
+            .vectorQuery(vectorQuery)
         ]
 
         for request in requests {
@@ -190,6 +226,7 @@ struct DatabaseWireTests {
             .record(nil),
             .record(record),
             .records([record]),
+            .scoredRecords([DatabaseWireScoredRecord(record: record, distance: 0.25)]),
             .failure(status: .unsupported, message: "unsupported operation")
         ]
 

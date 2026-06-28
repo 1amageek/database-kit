@@ -1,6 +1,6 @@
 /// Convenience top-level codec for DatabaseKit wire DTOs.
 public enum DatabaseWireCodec {
-    public static let protocolVersion: UInt8 = 1
+    public static let protocolVersion: UInt8 = 2
 
     public static func encode(schema: DatabaseWireSchema) throws(DatabaseWireError) -> [UInt8] {
         var writer = DatabaseWireBinaryWriter()
@@ -43,6 +43,21 @@ public enum DatabaseWireCodec {
         var reader = DatabaseWireBinaryReader(bytes)
         try validateVersion(reader.readUInt8())
         let query = try DatabaseWireQueryRequest(from: &reader)
+        try reader.ensureFullyRead()
+        return query
+    }
+
+    public static func encode(vectorQuery: DatabaseWireVectorQueryRequest) throws(DatabaseWireError) -> [UInt8] {
+        var writer = DatabaseWireBinaryWriter()
+        writer.writeUInt8(protocolVersion)
+        try vectorQuery.encode(into: &writer)
+        return writer.bytes
+    }
+
+    public static func decodeVectorQuery(_ bytes: [UInt8]) throws(DatabaseWireError) -> DatabaseWireVectorQueryRequest {
+        var reader = DatabaseWireBinaryReader(bytes)
+        try validateVersion(reader.readUInt8())
+        let query = try DatabaseWireVectorQueryRequest(from: &reader)
         try reader.ensureFullyRead()
         return query
     }

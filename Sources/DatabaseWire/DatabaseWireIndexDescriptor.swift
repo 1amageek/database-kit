@@ -4,12 +4,20 @@ public struct DatabaseWireIndexDescriptor: Sendable, Hashable {
     public let kind: DatabaseWireIndexKind
     public let fields: [String]
     public let unique: Bool
+    public let parameters: [DatabaseWireNamedValue]
 
-    public init(name: String, kind: DatabaseWireIndexKind, fields: [String], unique: Bool = false) {
+    public init(
+        name: String,
+        kind: DatabaseWireIndexKind,
+        fields: [String],
+        unique: Bool = false,
+        parameters: [DatabaseWireNamedValue] = []
+    ) {
         self.name = name
         self.kind = kind
         self.fields = fields
         self.unique = unique
+        self.parameters = parameters
     }
 
     public func encode(into writer: inout DatabaseWireBinaryWriter) throws(DatabaseWireError) {
@@ -20,6 +28,10 @@ public struct DatabaseWireIndexDescriptor: Sendable, Hashable {
             try writer.writeString(field)
         }
         writer.writeBool(unique)
+        try writer.writeCount(parameters.count)
+        for parameter in parameters {
+            try parameter.encode(into: &writer)
+        }
     }
 
     public init(from reader: inout DatabaseWireBinaryReader) throws(DatabaseWireError) {
@@ -33,5 +45,12 @@ public struct DatabaseWireIndexDescriptor: Sendable, Hashable {
         }
         self.fields = fields
         self.unique = try reader.readBool()
+        let parameterCount = try reader.readCount()
+        var parameters: [DatabaseWireNamedValue] = []
+        parameters.reserveCapacity(parameterCount)
+        for _ in 0..<parameterCount {
+            parameters.append(try DatabaseWireNamedValue(from: &reader))
+        }
+        self.parameters = parameters
     }
 }
