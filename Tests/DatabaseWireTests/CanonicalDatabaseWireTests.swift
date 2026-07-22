@@ -4,6 +4,54 @@ import Testing
 
 @Suite("Canonical DatabaseWire")
 struct CanonicalDatabaseWireTests {
+    @Test("fixed request header decoding does not traverse an oversized payload")
+    func requestHeaderDecodingIsIndependentOfPayloadLimits() throws {
+        let payloadByteCount = DatabaseWireLimits.default.maximumFrameBytes
+        let limits = try DatabaseWireLimits(
+            maximumFrameBytes: payloadByteCount + 1_024,
+            maximumStringBytes: 1_024,
+            maximumByteStringBytes: payloadByteCount,
+            maximumCollectionCount: 1_024,
+            maximumNestingDepth: 64,
+            maximumObjectCount: 1_024
+        )
+        let frame = try DatabaseEnvelopeCodec.encode(
+            request: DatabaseWireRequestEnvelope(
+                requestID: 0x0102_0304_0506_0708,
+                operation: .queryExecute,
+                payload: DatabaseBytes(
+                    [UInt8](repeating: 0xa5, count: payloadByteCount)
+                )
+            ),
+            limits: limits
+        )
+
+        let header = try DatabaseEnvelopeCodec.decodeRequestHeader(frame)
+
+        #expect(header.requestID == 0x0102_0304_0506_0708)
+        #expect(header.operation == .queryExecute)
+        #expect(throws: DatabaseWireError.self) {
+            _ = try DatabaseEnvelopeCodec.decodeRequest(frame)
+        }
+    }
+
+    @Test("fixed response header validates message direction")
+    func responseHeaderValidatesMessageDirection() throws {
+        let request = try DatabaseEnvelopeCodec.encode(
+            request: DatabaseWireRequestEnvelope(
+                requestID: 7,
+                operation: .capabilitiesDescribe,
+                payload: []
+            )
+        )
+
+        #expect(
+            throws: DatabaseWireError.invalidMessageKind(2)
+        ) {
+            _ = try DatabaseEnvelopeCodec.decodeResponseHeader(request)
+        }
+    }
+
     @Test("request envelope matches the canonical golden vector")
     func requestEnvelopeMatchesGoldenVector() throws {
         let request = DatabaseWireRequestEnvelope(

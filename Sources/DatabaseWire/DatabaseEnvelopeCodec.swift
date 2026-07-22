@@ -13,6 +13,7 @@ public struct DatabaseEncodedSuccessResponse: Sendable {
 public enum DatabaseEnvelopeCodec {
     public static let protocolVersion: UInt16 = 1
     private static let magic: [UInt8] = [0x44, 0x42, 0x57, 0x52]
+    private static let envelopeHeaderByteCount = 17
     private static let successResponseFixedByteCount = 22
 
     public static func encode(
@@ -63,6 +64,13 @@ public enum DatabaseEnvelopeCodec {
         )
         try reader.ensureFullyRead()
         return envelope
+    }
+
+    /// Decodes only the fixed routing header without traversing metadata or payload.
+    public static func decodeRequestHeader(
+        _ bytes: DatabaseBytes
+    ) throws(DatabaseWireError) -> DatabaseWireEnvelopeHeader {
+        try decodeHeader(kind: .request, from: bytes)
     }
 
     public static func encode(
@@ -176,6 +184,13 @@ public enum DatabaseEnvelopeCodec {
         return envelope
     }
 
+    /// Decodes only the fixed routing header without traversing the response payload.
+    public static func decodeResponseHeader(
+        _ bytes: DatabaseBytes
+    ) throws(DatabaseWireError) -> DatabaseWireEnvelopeHeader {
+        try decodeHeader(kind: .response, from: bytes)
+    }
+
     public static func encode<Value: DatabaseWireValue>(
         _ value: Value,
         limits: DatabaseWireLimits = .default
@@ -234,6 +249,21 @@ public enum DatabaseEnvelopeCodec {
         guard try DatabaseWireMessageKind(from: &reader) == kind else {
             throw .invalidMessageKind(kind.rawValue)
         }
+    }
+
+    private static func decodeHeader(
+        kind: DatabaseWireMessageKind,
+        from bytes: DatabaseBytes
+    ) throws(DatabaseWireError) -> DatabaseWireEnvelopeHeader {
+        let readableByteCount = min(bytes.count, envelopeHeaderByteCount)
+        var reader = DatabaseWireReader(bytes.slice(0..<readableByteCount))
+        try validateHeader(kind: kind, reader: &reader)
+        let header = DatabaseWireEnvelopeHeader(
+            requestID: try reader.readUInt64(),
+            operation: try DatabaseOperationIdentifier(from: &reader)
+        )
+        try reader.ensureFullyRead()
+        return header
     }
 
     private static func encodeMeasured(
