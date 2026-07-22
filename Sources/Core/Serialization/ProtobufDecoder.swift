@@ -1,4 +1,8 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
 
 /// Decoder that decodes Protobuf wire format to Codable values
 ///
@@ -54,7 +58,7 @@ private final class _ProtobufDecoder: Decoder {
     }
 
     func container<Key>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> where Key: CodingKey {
-        let container = _ProtobufKeyedDecodingContainer<Key>(decoder: self)
+        let container = try _ProtobufKeyedDecodingContainer<Key>(decoder: self)
         return KeyedDecodingContainer(container)
     }
 
@@ -84,25 +88,38 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
     }
     private let tracker = FieldNumberTracker()
 
-    init(decoder: _ProtobufDecoder) {
+    init(decoder: _ProtobufDecoder) throws {
         self.decoder = decoder
         var parsedFields: [Int: [(wireType: Int, data: Data)]] = [:]
         var parsedAllKeys: [Key] = []
-        Self.parseFields(from: decoder.data, offset: &decoder.offset, fields: &parsedFields, allKeys: &parsedAllKeys)
+        try Self.parseFields(
+            from: decoder.data,
+            offset: &decoder.offset,
+            fields: &parsedFields,
+            allKeys: &parsedAllKeys
+        )
         self.fields = parsedFields
         self.allKeys = parsedAllKeys
     }
 
     /// Parse Protobuf wire format into field map
     /// Accumulates repeated fields into arrays instead of overwriting
-    private static func parseFields(from data: Data, offset: inout Int, fields: inout [Int: [(wireType: Int, data: Data)]], allKeys: inout [Key]) {
+    private static func parseFields(
+        from data: Data,
+        offset: inout Int,
+        fields: inout [Int: [(wireType: Int, data: Data)]],
+        allKeys: inout [Key]
+    ) throws {
         var seenFieldNumbers: Set<Int> = []
 
         while offset < data.count {
-            guard let tag = try? decodeVarint(from: data, offset: &offset) else { break }
+            let tag = try decodeVarint(from: data, offset: &offset)
 
             let fieldNumber = Int(tag >> 3)
             let wireType = Int(tag & 0x7)
+            guard fieldNumber > 0 else {
+                throw corruption("Protobuf field number zero is invalid")
+            }
 
             // Track unique field numbers for allKeys
             if !seenFieldNumbers.contains(fieldNumber) {
@@ -115,7 +132,7 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
 
             switch wireType {
             case 0:  // Varint
-                guard let value = try? decodeVarint(from: data, offset: &offset) else { break }
+                let value = try decodeVarint(from: data, offset: &offset)
                 var valueData = Data()
                 var n = value
                 while n >= 0x80 {
@@ -126,37 +143,51 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
                 fields[fieldNumber, default: []].append((wireType, valueData))
 
             case 1:  // 64-bit
+                guard data.count - offset >= 8 else {
+                    throw corruption("Truncated 64-bit Protobuf field")
+                }
                 let endOffset = offset + 8
-                guard endOffset <= data.count else { break }
                 fields[fieldNumber, default: []].append((wireType, Data(data[offset..<endOffset])))
                 offset = endOffset
 
             case 2:  // Length-delimited
-                guard let length = try? decodeVarint(from: data, offset: &offset) else { break }
-                let endOffset = offset + Int(length)
-                guard endOffset <= data.count else { break }
+                let encodedLength = try decodeVarint(from: data, offset: &offset)
+                guard let length = Int(exactly: encodedLength),
+                      length <= data.count - offset else {
+                    throw corruption("Invalid or truncated length-delimited Protobuf field")
+                }
+                let endOffset = offset + length
                 fields[fieldNumber, default: []].append((wireType, Data(data[offset..<endOffset])))
                 offset = endOffset
 
             case 5:  // 32-bit
+                guard data.count - offset >= 4 else {
+                    throw corruption("Truncated 32-bit Protobuf field")
+                }
                 let endOffset = offset + 4
-                guard endOffset <= data.count else { break }
                 fields[fieldNumber, default: []].append((wireType, Data(data[offset..<endOffset])))
                 offset = endOffset
 
             default:
-                // Unknown wire type - skip
-                break
+                throw corruption("Unsupported Protobuf wire type \(wireType)")
             }
         }
     }
 
     /// Convenience method for parsing nested messages where we only need the last value per field
     /// Used for Range decoding and similar internal structures
-    private static func parseFields(from data: Data, offset: inout Int) -> [Int: (wireType: Int, data: Data)] {
+    private static func parseFields(
+        from data: Data,
+        offset: inout Int
+    ) throws -> [Int: (wireType: Int, data: Data)] {
         var arrayFields: [Int: [(wireType: Int, data: Data)]] = [:]
         var dummyKeys: [Key] = []
-        parseFields(from: data, offset: &offset, fields: &arrayFields, allKeys: &dummyKeys)
+        try parseFields(
+            from: data,
+            offset: &offset,
+            fields: &arrayFields,
+            allKeys: &dummyKeys
+        )
 
         // Convert to single-value dictionary (using last value for each field)
         var result: [Int: (wireType: Int, data: Data)] = [:]
@@ -166,6 +197,15 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
             }
         }
         return result
+    }
+
+    private static func corruption(_ description: String) -> DecodingError {
+        .dataCorrupted(
+            DecodingError.Context(
+                codingPath: [],
+                debugDescription: description
+            )
+        )
     }
 
     func contains(_ key: Key) -> Bool {
@@ -329,7 +369,7 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
 
             // Parse the nested message containing lowerBound and upperBound
             var offset = 0
-            let fields = Self.parseFields(from: data, offset: &offset)
+            let fields = try Self.parseFields(from: data, offset: &offset)
 
             // Field 1: lowerBound (Double as 64-bit)
             guard let lowerField = fields[1], lowerField.wireType == 1 else {
@@ -404,7 +444,7 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
             let (_, data) = try getField(for: key)
 
             var offset = 0
-            let fields = Self.parseFields(from: data, offset: &offset)
+            let fields = try Self.parseFields(from: data, offset: &offset)
 
             // Field 1: lowerBound
             guard let lowerField = fields[1], lowerField.wireType == 1, lowerField.data.count == 8 else {
@@ -462,7 +502,7 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
             let (_, data) = try getField(for: key)
 
             var offset = 0
-            let fields = Self.parseFields(from: data, offset: &offset)
+            let fields = try Self.parseFields(from: data, offset: &offset)
 
             // Field 1: lowerBound (Int64 as 64-bit)
             guard let lowerField = fields[1], lowerField.wireType == 1, lowerField.data.count == 8 else {
@@ -520,7 +560,7 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
             let (_, data) = try getField(for: key)
 
             var offset = 0
-            let fields = Self.parseFields(from: data, offset: &offset)
+            let fields = try Self.parseFields(from: data, offset: &offset)
 
             // Field 1: lowerBound (Int64 as 64-bit)
             guard let lowerField = fields[1], lowerField.wireType == 1, lowerField.data.count == 8 else {
@@ -578,7 +618,7 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
             let (_, data) = try getField(for: key)
 
             var offset = 0
-            let fields = Self.parseFields(from: data, offset: &offset)
+            let fields = try Self.parseFields(from: data, offset: &offset)
 
             // Field 1: lowerBound (Double as 64-bit)
             guard let lowerField = fields[1], lowerField.wireType == 1, lowerField.data.count == 8 else {
@@ -635,7 +675,7 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
 
             let (_, data) = try getField(for: key)
             var offset = 0
-            let fields = Self.parseFields(from: data, offset: &offset)
+            let fields = try Self.parseFields(from: data, offset: &offset)
 
             // Field 1: lowerBound (Int64 as 64-bit)
             guard let lowerField = fields[1], lowerField.wireType == 1, lowerField.data.count == 8 else {
@@ -692,7 +732,7 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
 
             let (_, data) = try getField(for: key)
             var offset = 0
-            let fields = Self.parseFields(from: data, offset: &offset)
+            let fields = try Self.parseFields(from: data, offset: &offset)
 
             // Field 1: lowerBound (Int64 as 64-bit)
             guard let lowerField = fields[1], lowerField.wireType == 1, lowerField.data.count == 8 else {
@@ -749,7 +789,7 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
 
             let (_, data) = try getField(for: key)
             var offset = 0
-            let fields = Self.parseFields(from: data, offset: &offset)
+            let fields = try Self.parseFields(from: data, offset: &offset)
 
             // Field 1: lowerBound (Double as 64-bit)
             guard let lowerField = fields[1], lowerField.wireType == 1, lowerField.data.count == 8 else {
@@ -806,7 +846,7 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
 
             let (_, data) = try getField(for: key)
             var offset = 0
-            let fields = Self.parseFields(from: data, offset: &offset)
+            let fields = try Self.parseFields(from: data, offset: &offset)
 
             // Field 1: lowerBound (Double timestamp as 64-bit)
             guard let lowerField = fields[1], lowerField.wireType == 1, lowerField.data.count == 8 else {
@@ -871,7 +911,7 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
             let (_, data) = try getField(for: key)
 
             var offset = 0
-            let fields = Self.parseFields(from: data, offset: &offset)
+            let fields = try Self.parseFields(from: data, offset: &offset)
 
             // Determine which PartialRange type based on present fields
             let hasField1 = fields[1] != nil
@@ -1208,146 +1248,41 @@ private struct _ProtobufKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingCon
     }
 
     private func decodeStringArray(forKey key: Key) throws -> [String] {
-        guard contains(key) else {
-            return []
-        }
-
-        // String arrays use non-packed repeated encoding
-        // Each string appears as a separate field with the same field number
-        // We need to collect all occurrences of this field number
-        let fieldNumber = getFieldNumber(for: key)
-
-        var result: [String] = []
-
-        // Scan through the raw data to find all occurrences of this field
-        var offset = 0
-        while offset < decoder.data.count {
-            guard let tag = try? decodeVarint(from: decoder.data, offset: &offset) else {
-                break
-            }
-
-            let currentFieldNumber = Int(tag >> 3)
-            let wireType = Int(tag & 0x07)
-
-            if currentFieldNumber == fieldNumber {
-                // Found our field - decode the string
-                guard wireType == 2 else {  // Must be length-delimited
-                    throw DecodingError.typeMismatch(
-                        [String].self,
-                        DecodingError.Context(
-                            codingPath: codingPath,
-                            debugDescription: "Expected length-delimited wire type for string array element"
-                        )
+        try getAllFields(for: key).map { field in
+            guard field.wireType == 2 else {
+                throw DecodingError.typeMismatch(
+                    [String].self,
+                    DecodingError.Context(
+                        codingPath: codingPath,
+                        debugDescription: "Expected length-delimited wire type for string array element"
                     )
-                }
-
-                guard let length = try? decodeVarint(from: decoder.data, offset: &offset) else {
-                    break
-                }
-
-                let endOffset = offset + Int(length)
-                guard endOffset <= decoder.data.count else {
-                    break
-                }
-
-                let stringData = Data(decoder.data[offset..<endOffset])
-                guard let string = String(data: stringData, encoding: .utf8) else {
-                    throw DecodingError.dataCorrupted(
-                        DecodingError.Context(
-                            codingPath: codingPath,
-                            debugDescription: "Invalid UTF-8 data in string array element"
-                        )
-                    )
-                }
-                result.append(string)
-                offset = endOffset
-            } else {
-                // Skip other fields
-                switch wireType {
-                case 0:  // Varint
-                    _ = try? decodeVarint(from: decoder.data, offset: &offset)
-                case 1:  // 64-bit
-                    offset += 8
-                case 2:  // Length-delimited
-                    if let length = try? decodeVarint(from: decoder.data, offset: &offset) {
-                        offset += Int(length)
-                    }
-                case 5:  // 32-bit
-                    offset += 4
-                default:
-                    break
-                }
+                )
             }
+            guard let string = String(data: field.data, encoding: .utf8) else {
+                throw DecodingError.dataCorrupted(
+                    DecodingError.Context(
+                        codingPath: codingPath,
+                        debugDescription: "Invalid UTF-8 data in string array element"
+                    )
+                )
+            }
+            return string
         }
-
-        return result
     }
 
     private func decodeDataArray(forKey key: Key) throws -> [Data] {
-        guard contains(key) else {
-            return []
-        }
-
-        // Data arrays use non-packed repeated encoding (like strings)
-        // Each Data appears as a separate field with the same field number
-        let fieldNumber = getFieldNumber(for: key)
-
-        var result: [Data] = []
-
-        // Scan through the raw data to find all occurrences of this field
-        var offset = 0
-        while offset < decoder.data.count {
-            guard let tag = try? decodeVarint(from: decoder.data, offset: &offset) else {
-                break
-            }
-
-            let currentFieldNumber = Int(tag >> 3)
-            let wireType = Int(tag & 0x07)
-
-            if currentFieldNumber == fieldNumber {
-                // Found our field - decode the data
-                guard wireType == 2 else {  // Must be length-delimited
-                    throw DecodingError.typeMismatch(
-                        [Data].self,
-                        DecodingError.Context(
-                            codingPath: codingPath,
-                            debugDescription: "Expected length-delimited wire type for data array element"
-                        )
+        try getAllFields(for: key).map { field in
+            guard field.wireType == 2 else {
+                throw DecodingError.typeMismatch(
+                    [Data].self,
+                    DecodingError.Context(
+                        codingPath: codingPath,
+                        debugDescription: "Expected length-delimited wire type for data array element"
                     )
-                }
-
-                guard let length = try? decodeVarint(from: decoder.data, offset: &offset) else {
-                    break
-                }
-
-                let endOffset = offset + Int(length)
-                guard endOffset <= decoder.data.count else {
-                    break
-                }
-
-                let data = Data(decoder.data[offset..<endOffset])
-                result.append(data)
-                offset = endOffset
-            } else {
-                // Skip other fields
-                switch wireType {
-                case 0:  // Varint
-                    _ = try? decodeVarint(from: decoder.data, offset: &offset)
-                case 1:  // 64-bit
-                    offset += 8
-                case 2:  // Length-delimited
-                    if let length = try? decodeVarint(from: decoder.data, offset: &offset) {
-                        offset += Int(length)
-                    }
-                case 5:  // 32-bit
-                    offset += 4
-                default:
-                    break
-                }
+                )
             }
+            return field.data
         }
-
-        return result
     }
 
     // MARK: - Helpers

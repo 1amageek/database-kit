@@ -4,7 +4,6 @@
 /// Reference:
 /// - ISO/IEC 9075-16:2023 (SQL/PGQ)
 
-import Foundation
 
 // Note: Core GraphTableSource and GraphTableColumn types are defined in DataSource.swift
 // This file provides additional utilities for GRAPH_TABLE operations.
@@ -45,7 +44,8 @@ extension GraphTableSource {
         GraphTableSource(
             graphName: graphName,
             matchPattern: matchPattern,
-            columns: columns.map { GraphTableColumn(expression: $0.0, alias: $0.1) }
+            columns: columns.map { GraphTableColumn(expression: $0.0, alias: $0.1) },
+            alias: alias
         )
     }
 }
@@ -63,6 +63,9 @@ extension GraphTableSource {
             result += ")"
         }
         result += "\n)"
+        if let alias {
+            result += " AS \(SQLEscape.identifier(alias))"
+        }
         return result
     }
 }
@@ -77,7 +80,7 @@ extension GraphTableSource {
 
     /// Returns all columns exposed by the COLUMNS clause
     public var exposedColumns: [String] {
-        columns?.map(\.alias) ?? []
+        columns?.map { $0.alias } ?? []
     }
 
     /// Validate the graph table source

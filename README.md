@@ -11,20 +11,22 @@ database-kit is the **shared foundation** used by both server ([database-framewo
 - `@OWLClass` macro for OWL ontology class mapping (Graph module)
 - `@OWLDataProperty` / `@OWLObjectProperty` macros for OWL property annotations (Graph module)
 - `IndexKind` protocol for extensible index type definitions
-- `QueryIR` for a unified query intermediate representation
+- Foundation-independent `DatabaseValue` and `QueryIR` value models
+- canonical binary `DatabaseWire` operations, envelopes, limits, and errors
+- opt-in Foundation adapters for Codable values and platform conversions
 - Protobuf-compatible serialization
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                      database-kit                        │
-│  @Persistable models, IndexKind protocols, QueryIR       │
+│  Values, QueryIR, DatabaseWire, schemas, index contracts │
 └──────────┬───────────────────────────────┬───────────────┘
            │                               │
            ▼                               ▼
 ┌─────────────────────┐       ┌─────────────────────────┐
 │  database-framework │       │    database-client       │
-│  Server execution   │◄─────│    Client SDK            │
-│  FoundationDB       │  WS  │    iOS / macOS           │
+│  Server execution   │◄─────│    Embedded core         │
+│  Storage engines    │ Wire │    JS / HTTP / WebSocket │
 └─────────────────────┘       └─────────────────────────┘
 ```
 
@@ -40,7 +42,11 @@ dependencies: [
 
 | Module | Description |
 |--------|-------------|
+| `DatabaseValue` | Foundation-independent values, record identity, RDF terms, and owned/borrowed bytes |
+| `DatabaseValueCodable` | Optional Foundation Codable adapters for database values |
+| `DatabaseDigest` | Foundation-independent canonical SHA-256 digest support |
 | `Core` | `@Persistable` macro, `IndexKind` protocol, Schema, Protobuf serialization |
+| `DatabaseWire` | Canonical binary envelopes, typed operations, bounded codecs, results, and errors |
 | `Vector` | `VectorIndexKind` for similarity search |
 | `FullText` | `FullTextIndexKind` for text search |
 | `Geospatial` | `SpatialIndexKind` for geospatial queries |
@@ -50,7 +56,7 @@ dependencies: [
 | `GraphMacros` | `@OWLClass` / `@OWLDataProperty` / `@OWLObjectProperty` macro compiler plugins |
 | `Relationship` | `RelationshipIndexKind` and `@Relationship` macro |
 | `QueryIR` | Unified query intermediate representation (Expression, SortKey, SelectQuery) |
-| `DatabaseClientProtocol` | Shared protocol for client-server communication |
+| `QueryIRFoundation` | Optional Foundation conversions for QueryIR values |
 | `DatabaseKit` | All-in-one re-export |
 
 ## Quick Start

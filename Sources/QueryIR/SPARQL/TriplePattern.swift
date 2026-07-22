@@ -5,7 +5,6 @@
 /// - W3C SPARQL 1.1/1.2 Query Language
 /// - W3C RDF 1.1 Concepts
 
-import Foundation
 
 // Note: Core TriplePattern struct is defined in DataSource.swift
 // This file provides additional utilities and extensions.

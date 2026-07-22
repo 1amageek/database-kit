@@ -5,7 +5,7 @@
 /// - ISO/IEC 9075-16:2023 (SQL/PGQ)
 /// - GQL (Graph Query Language) specification
 
-import Foundation
+import DatabaseValue
 
 // Note: Core MatchPattern, PathPattern, PathElement, NodePattern, EdgePattern,
 // EdgeDirection, PathQuantifier, and PathMode types are defined in DataSource.swift
@@ -436,6 +436,14 @@ extension Expression {
         case .variable(let v):
             // In SQL context, treat variable as parameter placeholder
             return ":\(v.name)"
+
+        case .parameter(let reference):
+            switch reference {
+            case .position(let position):
+                return "$\(position)"
+            case .name(let name):
+                return ":\(name)"
+            }
 
         // Comparison operations
         case .equal(let l, let r):
@@ -869,17 +877,6 @@ extension JoinType {
 }
 
 extension Literal {
-    /// Cached ISO8601DateFormatter for date serialization
-    /// Note: ISO8601DateFormatter is not Sendable but the formatter is immutable after creation
-    nonisolated(unsafe) private static let sqlDateFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-        return formatter
-    }()
-
-    /// Cached ISO8601DateFormatter for timestamp serialization
-    nonisolated(unsafe) private static let sqlTimestampFormatter = ISO8601DateFormatter()
-
     /// Generate SQL literal syntax
     public func toSQL() -> String {
         switch self {
@@ -889,18 +886,24 @@ extension Literal {
             return v ? "TRUE" : "FALSE"
         case .int(let v):
             return String(v)
+        case .uint(let v):
+            return String(v)
+        case .decimal(let coefficient, let scale):
+            return DatabaseLiteralEncoding.decimal(coefficient: coefficient, scale: scale)
         case .double(let v):
             return String(v)
         case .string(let v):
             return SQLEscape.string(v)
         case .date(let v):
-            return "DATE '\(Self.sqlDateFormatter.string(from: v))'"
+            return "DATE '\(DatabaseLiteralEncoding.iso8601(v))'"
         case .timestamp(let v):
-            return "TIMESTAMP '\(Self.sqlTimestampFormatter.string(from: v))'"
+            return "TIMESTAMP '\(DatabaseLiteralEncoding.iso8601(v))'"
         case .iri(let v):
             return SQLEscape.string(v)
         case .binary(let v):
-            return "X'\(v.map { String(format: "%02X", $0) }.joined())'"
+            return "X'\(DatabaseLiteralEncoding.hex(v))'"
+        case .uuid(let v):
+            return "CAST(\(SQLEscape.string(v.description)) AS UUID)"
         case .blankNode(let v):
             return SQLEscape.string("_:\(v)")
         case .typedLiteral(let value, _):
@@ -909,6 +912,8 @@ extension Literal {
             return SQLEscape.string(value)
         case .dirLangLiteral(let value, _, _):
             return SQLEscape.string(value)
+        case .rdfTerm(let term):
+            return SQLEscape.string(term.description)
         case .array(let values):
             return "ARRAY[\(values.map { $0.toSQL() }.joined(separator: ", "))]"
         }

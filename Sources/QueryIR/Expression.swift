@@ -5,7 +5,6 @@
 /// - ISO/IEC 9075:2023 (SQL expressions)
 /// - W3C SPARQL 1.1/1.2 (SPARQL expressions and filters)
 
-import Foundation
 
 // MARK: - Custom Operators for Expression Building
 
@@ -28,7 +27,7 @@ infix operator .> : ComparisonPrecedence
 infix operator .>= : ComparisonPrecedence
 
 /// Column reference (SQL)
-public struct ColumnRef: Sendable, Equatable, Hashable, Codable {
+public struct ColumnRef: Sendable, Equatable, Hashable {
     /// Optional table/alias qualifier
     public let table: String?
 
@@ -68,17 +67,12 @@ extension ColumnRef {
 }
 
 /// Variable reference (SPARQL)
-public struct Variable: Sendable, Equatable, Hashable, Codable {
+public struct Variable: Sendable, Equatable, Hashable {
     /// Variable name (without ? prefix)
     public let name: String
 
     public init(_ name: String) {
-        // Remove leading ? or $ if present
-        if name.hasPrefix("?") || name.hasPrefix("$") {
-            self.name = String(name.dropFirst())
-        } else {
-            self.name = name
-        }
+        self.name = name
     }
 }
 
@@ -141,7 +135,7 @@ public enum AggregateFunction: Sendable, Equatable, Hashable {
 }
 
 /// Function call
-public struct FunctionCall: Sendable, Equatable, Hashable, Codable {
+public struct FunctionCall: Sendable, Equatable, Hashable {
     /// Function name (possibly qualified)
     public let name: String
 
@@ -159,19 +153,19 @@ public struct FunctionCall: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Sort direction
-public enum SortDirection: String, Sendable, Equatable, Hashable, Codable {
+public enum SortDirection: String, Sendable, Equatable, Hashable {
     case ascending
     case descending
 }
 
 /// NULL ordering
-public enum NullOrdering: String, Sendable, Equatable, Hashable, Codable {
+public enum NullOrdering: String, Sendable, Equatable, Hashable {
     case first
     case last
 }
 
 /// Sort key for ORDER BY
-public struct SortKey: Sendable, Equatable, Hashable, Codable {
+public struct SortKey: Sendable, Equatable, Hashable {
     public let expression: Expression
     public let direction: SortDirection
     public let nulls: NullOrdering?
@@ -188,7 +182,7 @@ public struct SortKey: Sendable, Equatable, Hashable, Codable {
 }
 
 /// CASE WHEN pair (condition → result)
-public struct CaseWhenPair: Sendable, Equatable, Hashable, Codable {
+public struct CaseWhenPair: Sendable, Equatable, Hashable {
     public let condition: Expression
     public let result: Expression
 
@@ -199,7 +193,7 @@ public struct CaseWhenPair: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Aggregate binding (for SPARQL GROUP BY)
-public struct AggregateBinding: Sendable, Equatable, Hashable, Codable {
+public struct AggregateBinding: Sendable, Equatable, Hashable {
     public let variable: String
     public let aggregate: AggregateFunction
 
@@ -250,6 +244,9 @@ public indirect enum Expression: Sendable, Hashable {
 
     /// Variable reference: ?var (SPARQL)
     case variable(Variable)
+
+    /// Bound parameter reference.
+    case parameter(QueryParameterReference)
 
     // MARK: - Arithmetic Operations
 
@@ -405,15 +402,19 @@ extension Expression {
         .variable(Variable(name))
     }
 
+    /// Create a one-based positional parameter expression.
+    public static func parameter(position: UInt32) -> Expression {
+        .parameter(.position(position))
+    }
+
+    /// Create a named parameter expression.
+    public static func parameter(name: String) -> Expression {
+        .parameter(.name(name))
+    }
+
     /// Create a literal expression
     public static func lit(_ value: Literal) -> Expression {
         .literal(value)
-    }
-
-    /// Create a literal from a value
-    public static func lit(_ value: Any) -> Expression? {
-        guard let literal = Literal(value) else { return nil }
-        return .literal(literal)
     }
 
     /// Create a string literal
@@ -521,6 +522,8 @@ extension Expression: Equatable {
             return c1 == c2
         case (.variable(let v1), .variable(let v2)):
             return v1 == v2
+        case (.parameter(let p1), .parameter(let p2)):
+            return p1 == p2
         case (.add(let l1, let r1), .add(let l2, let r2)):
             return l1 == l2 && r1 == r2
         case (.subtract(let l1, let r1), .subtract(let l2, let r2)):
@@ -615,6 +618,9 @@ extension Expression {
         case .variable(let v):
             hasher.combine(2)
             hasher.combine(v)
+        case .parameter(let parameter):
+            hasher.combine(40)
+            hasher.combine(parameter)
         case .add(let l, let r):
             hasher.combine(3)
             hasher.combine(l)

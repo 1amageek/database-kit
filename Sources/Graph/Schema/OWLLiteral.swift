@@ -6,90 +6,116 @@
 // Reference: W3C OWL 2 Web Ontology Language
 // https://www.w3.org/TR/owl2-syntax/#Literals
 
-import Foundation
+import DatabaseValue
 
-/// OWL Literal value
-///
-/// Represents a typed data value in OWL ontologies.
-/// Supports XSD datatypes and language-tagged strings.
-///
-/// **Example**:
-/// ```swift
-/// let name = OWLLiteral.string("Alice")
-/// let age = OWLLiteral.integer(30)
-/// let label = OWLLiteral.langString("Hello", language: "en")
-/// ```
-public struct OWLLiteral: Sendable, Codable, Hashable {
-    /// Lexical form (string representation of the value)
-    public let lexicalForm: String
+/// The canonical RDF literal used by OWL declarations and RDF datasets.
+public typealias OWLLiteral = DatabaseRDFLiteral
+public typealias XSDDatatype = DatabaseXSDDatatype
 
-    /// Datatype IRI (e.g., "xsd:string", "xsd:integer")
-    public let datatype: String
-
-    /// Language tag (for rdf:langString)
-    public let language: String?
-
-    // MARK: - Initialization
-
-    public init(lexicalForm: String, datatype: String, language: String? = nil) {
-        self.lexicalForm = lexicalForm
-        self.datatype = datatype
-        self.language = language
-    }
-
-    // MARK: - Convenience Constructors
-
+extension DatabaseRDFLiteral {
     /// Create a string literal
     public static func string(_ value: String) -> OWLLiteral {
-        OWLLiteral(lexicalForm: value, datatype: XSDDatatype.string.iri)
+        OWLLiteral(
+            lexicalForm: value,
+            datatype: XSDDatatype.string.typedLiteralDatatype
+        )
     }
 
     /// Create an integer literal
     public static func integer(_ value: Int) -> OWLLiteral {
-        OWLLiteral(lexicalForm: String(value), datatype: XSDDatatype.integer.iri)
+        OWLLiteral(
+            lexicalForm: String(value),
+            datatype: XSDDatatype.integer.typedLiteralDatatype
+        )
     }
 
     /// Create a decimal literal
     public static func decimal(_ value: Double) -> OWLLiteral {
-        OWLLiteral(lexicalForm: String(value), datatype: XSDDatatype.decimal.iri)
+        OWLLiteral(
+            lexicalForm: String(value),
+            datatype: XSDDatatype.decimal.typedLiteralDatatype
+        )
     }
 
     /// Create a float literal
     public static func float(_ value: Float) -> OWLLiteral {
-        OWLLiteral(lexicalForm: String(value), datatype: XSDDatatype.float.iri)
+        OWLLiteral(
+            lexicalForm: String(value),
+            datatype: XSDDatatype.float.typedLiteralDatatype
+        )
     }
 
     /// Create a double literal
     public static func double(_ value: Double) -> OWLLiteral {
-        OWLLiteral(lexicalForm: String(value), datatype: XSDDatatype.double.iri)
+        OWLLiteral(
+            lexicalForm: String(value),
+            datatype: XSDDatatype.double.typedLiteralDatatype
+        )
     }
 
     /// Create a boolean literal
     public static func boolean(_ value: Bool) -> OWLLiteral {
-        OWLLiteral(lexicalForm: value ? "true" : "false", datatype: XSDDatatype.boolean.iri)
+        OWLLiteral(
+            lexicalForm: value ? "true" : "false",
+            datatype: XSDDatatype.boolean.typedLiteralDatatype
+        )
     }
 
-    /// Create a date literal (ISO 8601 format)
-    public static func date(_ value: Date) -> OWLLiteral {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-        return OWLLiteral(lexicalForm: formatter.string(from: value), datatype: XSDDatatype.date.iri)
+    /// Create a canonical XSD date literal.
+    public static func date(_ value: DatabaseDate) throws -> OWLLiteral {
+        OWLLiteral(
+            lexicalForm: try DatabaseXSDDateTimeCodec.format(date: value),
+            datatype: XSDDatatype.date.typedLiteralDatatype
+        )
     }
 
-    /// Create a dateTime literal (ISO 8601 format)
-    public static func dateTime(_ value: Date) -> OWLLiteral {
-        let formatter = ISO8601DateFormatter()
-        return OWLLiteral(lexicalForm: formatter.string(from: value), datatype: XSDDatatype.dateTime.iri)
+    /// Create a canonical UTC XSD dateTime literal.
+    public static func dateTime(
+        _ value: DatabaseTimestamp
+    ) throws -> OWLLiteral {
+        OWLLiteral(
+            lexicalForm: try DatabaseXSDDateTimeCodec.format(timestamp: value),
+            datatype: XSDDatatype.dateTime.typedLiteralDatatype
+        )
     }
 
     /// Create a language-tagged string
-    public static func langString(_ value: String, language: String) -> OWLLiteral {
-        OWLLiteral(lexicalForm: value, datatype: "rdf:langString", language: language)
+    public static func langString(
+        _ value: String,
+        language: DatabaseRDFLanguageTag
+    ) -> OWLLiteral {
+        OWLLiteral(
+            lexicalForm: value,
+            language: language
+        )
+    }
+
+    public static func langString(
+        _ value: String,
+        language: String
+    ) throws -> OWLLiteral {
+        OWLLiteral(
+            lexicalForm: value,
+            language: try DatabaseRDFLanguageTag(language)
+        )
     }
 
     /// Create a literal with custom datatype
-    public static func typed(_ value: String, datatype: String) -> OWLLiteral {
+    public static func typed(
+        _ value: String,
+        datatype: DatabaseRDFTypedLiteralDatatype
+    ) -> OWLLiteral {
         OWLLiteral(lexicalForm: value, datatype: datatype)
+    }
+
+    public static func typed(
+        _ value: String,
+        datatype: String
+    ) throws -> OWLLiteral {
+        OWLLiteral(
+            lexicalForm: value,
+            datatype: try DatabaseRDFTypedLiteralDatatype(datatype)
+        )
     }
 }
 
@@ -108,17 +134,23 @@ extension OWLLiteral {
 
     /// Try to extract as Bool
     public var boolValue: Bool? {
-        switch lexicalForm.lowercased() {
+        switch lexicalForm {
         case "true", "1": return true
         case "false", "0": return false
         default: return nil
         }
     }
 
-    /// Try to extract as Date
-    public var dateValue: Date? {
-        let formatter = ISO8601DateFormatter()
-        return formatter.date(from: lexicalForm)
+    /// Extract an untimezoned XSD date without losing timezone information.
+    public var databaseDateValue: DatabaseDate? {
+        guard datatype == XSDDatatype.date.iri else { return nil }
+        return DatabaseXSDDateTimeCodec.parseDate(lexicalForm)
+    }
+
+    /// Extract a timezoned XSD dateTime as an absolute timestamp.
+    public var timestampValue: DatabaseTimestamp? {
+        guard datatype == XSDDatatype.dateTime.iri else { return nil }
+        return DatabaseXSDDateTimeCodec.parseTimestamp(lexicalForm)
     }
 
     /// String value (always available)
@@ -128,54 +160,6 @@ extension OWLLiteral {
 }
 
 // MARK: - XSD Datatypes
-
-/// Common XSD datatypes
-public enum XSDDatatype: String, Sendable, CaseIterable {
-    // Primitive types
-    case string = "xsd:string"
-    case boolean = "xsd:boolean"
-    case decimal = "xsd:decimal"
-    case float = "xsd:float"
-    case double = "xsd:double"
-    case duration = "xsd:duration"
-    case dateTime = "xsd:dateTime"
-    case time = "xsd:time"
-    case date = "xsd:date"
-    case anyURI = "xsd:anyURI"
-    case base64Binary = "xsd:base64Binary"
-    case hexBinary = "xsd:hexBinary"
-
-    // Derived string types
-    case normalizedString = "xsd:normalizedString"
-    case token = "xsd:token"
-    case language = "xsd:language"
-    case nmtoken = "xsd:NMTOKEN"
-    case name = "xsd:Name"
-    case ncname = "xsd:NCName"
-
-    // Derived numeric types
-    case integer = "xsd:integer"
-    case nonPositiveInteger = "xsd:nonPositiveInteger"
-    case negativeInteger = "xsd:negativeInteger"
-    case nonNegativeInteger = "xsd:nonNegativeInteger"
-    case positiveInteger = "xsd:positiveInteger"
-    case long = "xsd:long"
-    case int = "xsd:int"
-    case short = "xsd:short"
-    case byte = "xsd:byte"
-    case unsignedLong = "xsd:unsignedLong"
-    case unsignedInt = "xsd:unsignedInt"
-    case unsignedShort = "xsd:unsignedShort"
-    case unsignedByte = "xsd:unsignedByte"
-
-    /// Full IRI for the datatype
-    public var iri: String { rawValue }
-
-    /// Full expanded IRI
-    public var expandedIRI: String {
-        rawValue.replacingOccurrences(of: "xsd:", with: "http://www.w3.org/2001/XMLSchema#")
-    }
-}
 
 // MARK: - XSD Facets
 
@@ -192,6 +176,7 @@ public enum XSDFacet: String, Sendable, Codable, CaseIterable {
     case totalDigits = "xsd:totalDigits"
     case fractionDigits = "xsd:fractionDigits"
     case whiteSpace = "xsd:whiteSpace"
+    case langRange = "rdf:langRange"
 }
 
 /// Facet restriction for datatype definitions
@@ -232,18 +217,8 @@ public struct FacetRestriction: Sendable, Codable, Hashable {
     public static func pattern(_ regex: String) -> FacetRestriction {
         FacetRestriction(facet: .pattern, value: .string(regex))
     }
-}
 
-// MARK: - CustomStringConvertible
-
-extension OWLLiteral: CustomStringConvertible {
-    public var description: String {
-        if let lang = language {
-            return "\"\(lexicalForm)\"@\(lang)"
-        } else if datatype == XSDDatatype.string.iri {
-            return "\"\(lexicalForm)\""
-        } else {
-            return "\"\(lexicalForm)\"^^<\(datatype)>"
-        }
+    public static func languageRange(_ range: String) -> FacetRestriction {
+        FacetRestriction(facet: .langRange, value: .string(range))
     }
 }

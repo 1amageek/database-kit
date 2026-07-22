@@ -3,7 +3,6 @@
 //
 // Represents a single field change in a model diff.
 
-import Foundation
 
 // MARK: - ChangeType
 

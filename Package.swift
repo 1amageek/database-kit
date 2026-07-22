@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.4
 import PackageDescription
 import CompilerPluginSupport
 
@@ -12,6 +12,9 @@ let package = Package(
         .visionOS(.v26)
     ],
     products: [
+        .library(name: "DatabaseValue", targets: ["DatabaseValue"]),
+        .library(name: "DatabaseValueCodable", targets: ["DatabaseValueCodable"]),
+        .library(name: "DatabaseDigest", targets: ["DatabaseDigest"]),
         .library(name: "Core", targets: ["Core"]),
         .library(name: "DatabaseWire", targets: ["DatabaseWire"]),
         .library(name: "Relationship", targets: ["Relationship"]),
@@ -23,14 +26,23 @@ let package = Package(
         .library(name: "Graph", targets: ["Graph"]),
         .library(name: "DatabaseKit", targets: ["DatabaseKit"]),
         .library(name: "QueryIR", targets: ["QueryIR"]),
-        .library(name: "DatabaseClientProtocol", targets: ["DatabaseClientProtocol"]),
+        .library(name: "QueryIRFoundation", targets: ["QueryIRFoundation"]),
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0"),
     ],
     targets: [
-        .target(name: "DatabaseWire", dependencies: []),
-        .target(name: "Core", dependencies: ["CoreMacros"]),
+        .target(name: "DatabaseValue", dependencies: []),
+        .target(name: "DatabaseValueCodable", dependencies: ["DatabaseValue"]),
+        .target(name: "DatabaseDigest", dependencies: ["DatabaseValue"]),
+        .target(
+            name: "DatabaseWire",
+            dependencies: ["DatabaseDigest", "DatabaseValue", "QueryIR"]
+        ),
+        .target(
+            name: "Core",
+            dependencies: ["CoreMacros", "DatabaseValue", "DatabaseValueCodable"]
+        ),
         .target(name: "Relationship", dependencies: ["Core", "RelationshipMacros"]),
         .macro(
             name: "CoreMacros",
@@ -48,8 +60,8 @@ let package = Package(
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
             ]
         ),
-        .target(name: "QueryIR", dependencies: []),
-        .target(name: "DatabaseClientProtocol", dependencies: ["Core", "QueryIR"]),
+        .target(name: "QueryIR", dependencies: ["DatabaseValue"]),
+        .target(name: "QueryIRFoundation", dependencies: ["QueryIR", "DatabaseValue"]),
         .target(name: "Vector", dependencies: ["Core"]),
         .target(name: "FullText", dependencies: ["Core"]),
         .target(name: "Geospatial", dependencies: ["Core"]),
@@ -58,20 +70,50 @@ let package = Package(
         .macro(
             name: "GraphMacros",
             dependencies: [
+                "DatabaseValue",
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
             ]
         ),
-        .target(name: "Graph", dependencies: ["Core", "GraphMacros"]),
+        .target(
+            name: "Graph",
+            dependencies: ["Core", "DatabaseValue", "DatabaseValueCodable", "GraphMacros"]
+        ),
         .target(
             name: "DatabaseKit",
             dependencies: ["Core", "Vector", "FullText", "Geospatial", "Rank", "Permuted", "Graph"]
         ),
         .testTarget(
+            name: "DatabaseDigestTests",
+            dependencies: ["DatabaseDigest", "DatabaseValue"]
+        ),
+        .testTarget(
             name: "DatabaseWireTests",
             dependencies: [
+                "DatabaseValue",
                 "DatabaseWire",
+                "QueryIR",
+            ]
+        ),
+        .testTarget(
+            name: "DatabaseValueCodableTests",
+            dependencies: ["DatabaseValue", "DatabaseValueCodable"]
+        ),
+        .testTarget(
+            name: "DatabaseValueTests",
+            dependencies: ["DatabaseValue"]
+        ),
+        .testTarget(
+            name: "GraphValueTests",
+            dependencies: ["DatabaseValue", "Graph"]
+        ),
+        .testTarget(
+            name: "QueryIRFoundationTests",
+            dependencies: [
+                "DatabaseValue",
+                "QueryIR",
+                "QueryIRFoundation",
             ]
         ),
         .testTarget(
@@ -79,6 +121,8 @@ let package = Package(
             dependencies: [
                 "Core",
                 "CoreMacros",
+                "DatabaseValue",
+                "GraphMacros",
                 "Vector",
                 "FullText",
                 "Geospatial",
@@ -86,8 +130,8 @@ let package = Package(
                 "Permuted",
                 "Graph",
                 "Relationship",
-                "DatabaseClientProtocol",
                 "QueryIR",
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
             ]
         ),

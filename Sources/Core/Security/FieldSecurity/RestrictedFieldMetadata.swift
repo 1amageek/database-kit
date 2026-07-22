@@ -1,7 +1,6 @@
 // RestrictedFieldMetadata.swift
 // Core - Static metadata for restricted fields
 
-import Foundation
 
 /// Static metadata about a restricted field
 ///

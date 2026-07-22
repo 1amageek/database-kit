@@ -1,7 +1,6 @@
 // SecurityPolicy.swift
 // Core - Security policy protocol for declarative access control
 
-import Foundation
 
 /// Security policy protocol
 ///

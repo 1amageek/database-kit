@@ -6,7 +6,7 @@
 // Reference: W3C RDF 1.1 Turtle
 // https://www.w3.org/TR/turtle/
 
-import Foundation
+import DatabaseValue
 
 /// Decodes a Turtle (RDF) string into an OWLOntology.
 ///
@@ -32,6 +32,45 @@ public struct TurtleDecoder: Sendable {
         let builder = OWLBuilder(prefixes: prefixes, triples: triples)
         return builder.build()
     }
+
+    /// Decode an RDF dataset directly into the typed OWL model.
+    ///
+    /// Named graph identifiers are retained by `RDFDataset` for transport and
+    /// persistence, but OWL RDF mapping is evaluated over the union of triples.
+    /// The fallback IRI is used when the dataset omits an explicit
+    /// `owl:Ontology` declaration.
+    public func decode(
+        from dataset: RDFDataset,
+        fallbackIRI: String
+    ) throws -> OWLOntology {
+        try dataset.validate()
+        let triples = try dataset.quads.map { quad in
+            ParsedRDFTriple(
+                subject: try RDFNode(quad.subject),
+                predicate: try RDFNode(quad.predicate),
+                object: try RDFNode(quad.object)
+            )
+        }
+        let decoded = OWLBuilder(
+            prefixes: dataset.prefixes,
+            triples: triples
+        ).build()
+        guard decoded.iri.isEmpty else {
+            return decoded
+        }
+        return OWLOntology(
+            iri: fallbackIRI,
+            versionIRI: decoded.versionIRI,
+            imports: decoded.imports,
+            prefixes: decoded.prefixes,
+            classes: decoded.classes,
+            objectProperties: decoded.objectProperties,
+            dataProperties: decoded.dataProperties,
+            annotationProperties: decoded.annotationProperties,
+            individuals: decoded.individuals,
+            axioms: decoded.axioms
+        )
+    }
 }
 
 // MARK: - Error
@@ -41,6 +80,7 @@ public enum TurtleDecodingError: Error, Sendable, Equatable {
     case unterminatedString(line: Int)
     case undefinedPrefix(String, line: Int)
     case invalidIRI(String, line: Int)
+    case unsupportedRDFTerm(String)
     case unexpectedEndOfInput
 }
 
@@ -501,14 +541,14 @@ private final class TurtleParser {
     var pos: Int = 0
     var prefixes: [String: String] = [:]
     var baseIRI: String?
-    var triples: [RDFTripleRaw] = []
+    var triples: [ParsedRDFTriple] = []
     var blankNodeCounter: Int = 0
 
     init(tokens: [TurtleToken]) {
         self.tokens = tokens
     }
 
-    func parse() throws -> ([String: String], [RDFTripleRaw]) {
+    func parse() throws -> ([String: String], [ParsedRDFTriple]) {
         while !isAtEnd {
             try parseStatement()
         }
@@ -654,11 +694,11 @@ private final class TurtleParser {
 
     private func parseObjectList(subject: RDFNode, predicate: RDFNode) throws {
         let obj = try parseObject()
-        triples.append(RDFTripleRaw(subject: subject, predicate: predicate, object: obj))
+        triples.append(ParsedRDFTriple(subject: subject, predicate: predicate, object: obj))
         while case .comma = current {
             advance() // ,
             let obj = try parseObject()
-            triples.append(RDFTripleRaw(subject: subject, predicate: predicate, object: obj))
+            triples.append(ParsedRDFTriple(subject: subject, predicate: predicate, object: obj))
         }
     }
 
@@ -722,10 +762,10 @@ private final class TurtleParser {
                     line: currentLine
                 )
             }
-            return .literal(OWLLiteral.typed(lexicalForm, datatype: compactIRI(datatypeIRI)))
+            return .literal(try OWLLiteral.typed(lexicalForm, datatype: datatypeIRI))
         } else if case .langTag(let lang) = current {
             advance()
-            return .literal(OWLLiteral.langString(lexicalForm, language: lang))
+            return .literal(try OWLLiteral.langString(lexicalForm, language: lang))
         } else {
             return .literal(OWLLiteral.string(lexicalForm))
         }
@@ -773,14 +813,14 @@ private final class TurtleParser {
         for item in items {
             let node = freshBlankNode()
             if head == nil { head = node }
-            triples.append(RDFTripleRaw(subject: node, predicate: rdfFirst, object: item))
+            triples.append(ParsedRDFTriple(subject: node, predicate: rdfFirst, object: item))
             if let p = prev {
-                triples.append(RDFTripleRaw(subject: p, predicate: rdfRest, object: node))
+                triples.append(ParsedRDFTriple(subject: p, predicate: rdfRest, object: node))
             }
             prev = node
         }
         if let p = prev {
-            triples.append(RDFTripleRaw(subject: p, predicate: rdfRest, object: rdfNil))
+            triples.append(ParsedRDFTriple(subject: p, predicate: rdfRest, object: rdfNil))
         }
 
         return head ?? rdfNil
@@ -801,20 +841,10 @@ private final class TurtleParser {
     }
 
     private func resolveIRI(_ iri: String) -> String {
-        if let base = baseIRI, !iri.contains("://") {
+        if let base = baseIRI, !DatabaseText.contains("://", in: iri) {
             return base + iri
         }
         return iri
-    }
-
-    private func compactIRI(_ fullIRI: String) -> String {
-        for (prefix, namespace) in prefixes {
-            if fullIRI.hasPrefix(namespace) {
-                let local = String(fullIRI.dropFirst(namespace.count))
-                return "\(prefix):\(local)"
-            }
-        }
-        return fullIRI
     }
 
     private func freshBlankNode() -> RDFNode {
@@ -897,7 +927,7 @@ private final class TurtleParser {
 
 // MARK: - RDF Triple
 
-private struct RDFTripleRaw {
+private struct ParsedRDFTriple {
     let subject: RDFNode
     let predicate: RDFNode
     let object: RDFNode
@@ -907,6 +937,19 @@ private enum RDFNode: Hashable {
     case iri(String)
     case literal(OWLLiteral)
     case blankNode(String)
+
+    init(_ term: RDFTerm) throws {
+        switch term {
+        case .iri(let value):
+            self = .iri(value)
+        case .literal(let value):
+            self = .literal(value)
+        case .blankNode(let value):
+            self = .blankNode(value)
+        case .tripleTerm:
+            throw TurtleDecodingError.unsupportedRDFTerm(term.description)
+        }
+    }
 
     var iriValue: String? {
         if case .iri(let v) = self { return v }
@@ -987,12 +1030,12 @@ private final class OWLBuilder {
     private static let owlIrreflexiveProperty = "http://www.w3.org/2002/07/owl#IrreflexiveProperty"
 
     let prefixes: [String: String]
-    let triples: [RDFTripleRaw]
+    let triples: [ParsedRDFTriple]
 
     /// Subject → triples index for fast lookup
-    private var subjectIndex: [RDFNode: [RDFTripleRaw]] = [:]
+    private var subjectIndex: [RDFNode: [ParsedRDFTriple]] = [:]
 
-    init(prefixes: [String: String], triples: [RDFTripleRaw]) {
+    init(prefixes: [String: String], triples: [ParsedRDFTriple]) {
         self.prefixes = prefixes
         self.triples = triples
         for triple in triples {
@@ -1436,7 +1479,7 @@ private final class OWLBuilder {
         return .thing // fallback
     }
 
-    private func buildRestriction(triples: [RDFTripleRaw], prefixMap: PrefixMap) -> OWLClassExpression {
+    private func buildRestriction(triples: [ParsedRDFTriple], prefixMap: PrefixMap) -> OWLClassExpression {
         var property: String?
         var someValuesFrom: RDFNode?
         var allValuesFrom: RDFNode?

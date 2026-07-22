@@ -1,4 +1,5 @@
 import Foundation
+import DatabaseValue
 import SwiftCompilerPlugin
 import SwiftSyntax
 import SwiftSyntaxBuilder
@@ -51,15 +52,25 @@ public struct OWLDataPropertyMacro: PeerMacro {
             ])
         }
 
-        // Validate first argument is a string literal
-        let firstArgExpr = firstArg.expression.description.trimmingCharacters(in: .whitespaces)
-        guard firstArgExpr.hasPrefix("\"") && firstArgExpr.hasSuffix("\"") else {
+        guard let literal = firstArg.expression.as(StringLiteralExprSyntax.self),
+              literal.segments.count == 1,
+              let segment = literal.segments.first?.as(StringSegmentSyntax.self),
+              !segment.content.text.contains("\\") else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(firstArg),
                     message: OWLDataPropertyMacroErrorMessage(
-                        "@OWLDataProperty first argument must be a string literal. " +
-                        "Found: \(firstArgExpr)"
+                        "@OWLDataProperty first argument must be a plain string literal"
+                    )
+                )
+            ])
+        }
+        guard DatabaseRDFIRIValidator.isAbsolute(segment.content.text) else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(firstArg),
+                    message: OWLDataPropertyMacroErrorMessage(
+                        "@OWLDataProperty IRI must be absolute"
                     )
                 )
             ])

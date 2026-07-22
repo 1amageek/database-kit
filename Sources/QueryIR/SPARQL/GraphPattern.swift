@@ -5,7 +5,6 @@
 /// - W3C SPARQL 1.1 Query Language (Algebra)
 /// - W3C SPARQL 1.2 (Draft)
 
-import Foundation
 
 // Note: Core GraphPattern enum is defined in DataSource.swift
 // This file provides additional utilities and extensions.
@@ -15,12 +14,12 @@ import Foundation
 extension GraphPattern {
     /// Create a basic graph pattern from triple patterns
     public static func bgp(_ patterns: TriplePattern...) -> GraphPattern {
-        .basic(patterns)
+        .basic(BasicGraphPattern(triples: patterns))
     }
 
     /// Create a basic graph pattern from an array
     public static func bgp(_ patterns: [TriplePattern]) -> GraphPattern {
-        .basic(patterns)
+        .basic(BasicGraphPattern(triples: patterns))
     }
 
     /// Create a FILTER pattern
@@ -77,146 +76,41 @@ extension GraphPattern {
     ) -> GraphPattern {
         .propertyPath(subject: subject, path: path, object: object)
     }
+
+    /// Create a one-element basic graph pattern containing a property path.
+    public static func propertyPath(
+        subject: SPARQLTerm,
+        path: PropertyPath,
+        object: SPARQLTerm
+    ) -> GraphPattern {
+        .basic(
+            BasicGraphPattern(
+                elements: [
+                    .propertyPath(
+                        SPARQLPropertyPathPattern(
+                            subject: subject,
+                            path: path,
+                            object: object
+                        )
+                    )
+                ]
+            )
+        )
+    }
 }
 
 // MARK: - GraphPattern Analysis
 
 extension GraphPattern {
-    /// Returns all variables in scope for this pattern
-    public var variables: Set<String> {
-        var vars = Set<String>()
-        collectVariables(into: &vars)
-        return vars
-    }
-
-    private func collectVariables(into vars: inout Set<String>) {
-        switch self {
-        case .basic(let triples):
-            for triple in triples {
-                vars.formUnion(triple.variables)
-            }
-
-        case .join(let left, let right):
-            left.collectVariables(into: &vars)
-            right.collectVariables(into: &vars)
-
-        case .optional(let left, let right):
-            left.collectVariables(into: &vars)
-            right.collectVariables(into: &vars)
-
-        case .union(let left, let right):
-            left.collectVariables(into: &vars)
-            right.collectVariables(into: &vars)
-
-        case .filter(let pattern, _):
-            pattern.collectVariables(into: &vars)
-
-        case .minus(let left, _):
-            // MINUS does not project variables from the right
-            left.collectVariables(into: &vars)
-
-        case .graph(_, let pattern):
-            pattern.collectVariables(into: &vars)
-
-        case .service(_, let pattern, _):
-            pattern.collectVariables(into: &vars)
-
-        case .bind(let pattern, let variable, _):
-            pattern.collectVariables(into: &vars)
-            vars.insert(variable)
-
-        case .values(let variables, _):
-            vars.formUnion(variables)
-
-        case .subquery(let query):
-            // Only projected variables from subquery
-            switch query.projection {
-            case .items(let items), .distinctItems(let items):
-                for item in items {
-                    if case .variable(let v) = item.expression {
-                        vars.insert(v.name)
-                    }
-                }
-            case .all:
-                // SELECT * projects all variables bound in the source pattern
-                // Reference: SPARQL 1.1 §18.2.4.1 — SELECT * selects all in-scope variables
-                if case .graphPattern(let pattern) = query.source {
-                    pattern.collectVariables(into: &vars)
-                }
-            case .allFrom:
-                break
-            }
-
-        case .groupBy(let pattern, _, _):
-            pattern.collectVariables(into: &vars)
-
-        case .propertyPath(let subject, _, let object):
-            if case .variable(let v) = subject { vars.insert(v) }
-            if case .variable(let v) = object { vars.insert(v) }
-
-        case .lateral(let left, let right):
-            left.collectVariables(into: &vars)
-            right.collectVariables(into: &vars)
-        }
-    }
-
-    /// Returns variables that must be bound (required)
-    public var requiredVariables: Set<String> {
-        switch self {
-        case .basic(let triples):
-            var vars = Set<String>()
-            for triple in triples {
-                vars.formUnion(triple.variables)
-            }
-            return vars
-
-        case .join(let left, let right):
-            return left.requiredVariables.union(right.requiredVariables)
-
-        case .optional(let left, _):
-            return left.requiredVariables
-
-        case .union(let left, let right):
-            // Intersection: variables that are required in both branches
-            return left.requiredVariables.intersection(right.requiredVariables)
-
-        case .filter(let pattern, _):
-            return pattern.requiredVariables
-
-        case .minus(let left, _):
-            return left.requiredVariables
-
-        case .graph(_, let pattern):
-            return pattern.requiredVariables
-
-        case .service(_, let pattern, let silent):
-            return silent ? Set() : pattern.requiredVariables
-
-        case .bind(let pattern, _, _):
-            return pattern.requiredVariables
-
-        case .values(let variables, _):
-            return Set(variables)
-
-        case .subquery, .groupBy:
-            return Set()
-
-        case .propertyPath(let subject, _, let object):
-            var vars = Set<String>()
-            if case .variable(let v) = subject { vars.insert(v) }
-            if case .variable(let v) = object { vars.insert(v) }
-            return vars
-
-        case .lateral(let left, let right):
-            return left.requiredVariables.union(right.requiredVariables)
-        }
+    public var variableScope: SPARQLVariableScope {
+        SPARQLVariableScopeAnalyzer.scope(of: self)
     }
 
     /// Returns the number of triple patterns
     public var tripleCount: Int {
         switch self {
-        case .basic(let triples):
-            return triples.count
+        case .basic(let pattern):
+            return pattern.count
         case .join(let left, let right), .optional(let left, let right),
              .union(let left, let right), .minus(let left, let right),
              .lateral(let left, let right):
@@ -228,16 +122,21 @@ extension GraphPattern {
             return 0
         case .groupBy(let pattern, _, _):
             return pattern.tripleCount
-        case .propertyPath:
-            return 1  // Equivalent to one or more triples
         }
     }
 
     /// Complexity estimate for query optimization
     public var complexity: Int {
         switch self {
-        case .basic(let triples):
-            return triples.count
+        case .basic(let pattern):
+            return pattern.elements.reduce(into: 0) { complexity, element in
+                switch element {
+                case .triple:
+                    complexity += 1
+                case .propertyPath(let pathPattern):
+                    complexity += pathPattern.path.complexity
+                }
+            }
 
         case .join(let left, let right):
             return left.complexity * right.complexity
@@ -273,67 +172,10 @@ extension GraphPattern {
         case .groupBy(let pattern, _, _):
             return pattern.complexity * 2
 
-        case .propertyPath(_, let path, _):
-            return path.complexity
-
         case .lateral(let left, let right):
             // LATERAL is a correlated join — LHS * RHS per row
             return left.complexity * right.complexity
         }
-    }
-}
-
-// MARK: - GraphPattern Transformations
-
-extension GraphPattern {
-    /// Flatten nested joins into a single basic pattern where possible
-    public func flattened() -> GraphPattern {
-        switch self {
-        case .join(let left, let right):
-            let leftFlat = left.flattened()
-            let rightFlat = right.flattened()
-
-            // If both are basic patterns, merge them
-            if case .basic(let leftTriples) = leftFlat,
-               case .basic(let rightTriples) = rightFlat {
-                return .basic(leftTriples + rightTriples)
-            }
-
-            return .join(leftFlat, rightFlat)
-
-        case .filter(let pattern, let condition):
-            return .filter(pattern.flattened(), condition)
-
-        case .optional(let left, let right):
-            return .optional(left.flattened(), right.flattened())
-
-        case .union(let left, let right):
-            return .union(left.flattened(), right.flattened())
-
-        case .minus(let left, let right):
-            return .minus(left.flattened(), right.flattened())
-
-        case .graph(let name, let pattern):
-            return .graph(name: name, pattern: pattern.flattened())
-
-        case .service(let endpoint, let pattern, let silent):
-            return .service(endpoint: endpoint, pattern: pattern.flattened(), silent: silent)
-
-        case .bind(let pattern, let variable, let expression):
-            return .bind(pattern.flattened(), variable: variable, expression: expression)
-
-        case .groupBy(let pattern, let expressions, let aggregates):
-            return .groupBy(pattern.flattened(), expressions: expressions, aggregates: aggregates)
-
-        default:
-            return self
-        }
-    }
-
-    /// Push filters down to be closer to their relevant patterns
-    public func optimized() -> GraphPattern {
-        // This is a simplified version - full optimization is in QueryOptimizer
-        flattened()
     }
 }
 
@@ -343,8 +185,15 @@ extension GraphPattern {
     /// Generate SPARQL syntax
     public func toSPARQL(prefixes: [String: String] = [:], indent: String = "") -> String {
         switch self {
-        case .basic(let triples):
-            return triples.map { indent + $0.toSPARQL(prefixes: prefixes) }.joined(separator: "\n")
+        case .basic(let pattern):
+            return pattern.elements.map { element in
+                switch element {
+                case .triple(let triple):
+                    return indent + triple.toSPARQL(prefixes: prefixes)
+                case .propertyPath(let pathPattern):
+                    return "\(indent)\(pathPattern.subject.toSPARQL(prefixes: prefixes)) \(pathPattern.path.toSPARQL(prefixes: prefixes)) \(pathPattern.object.toSPARQL(prefixes: prefixes)) ."
+                }
+            }.joined(separator: "\n")
 
         case .join(let left, let right):
             return """
@@ -433,9 +282,6 @@ extension GraphPattern {
             \(pattern.toSPARQL(prefixes: prefixes, indent: indent))\(groupByStr)
             """
 
-        case .propertyPath(let subject, let path, let object):
-            return "\(indent)\(subject.toSPARQL(prefixes: prefixes)) \(path.toSPARQL(prefixes: prefixes)) \(object.toSPARQL(prefixes: prefixes)) ."
-
         case .lateral(let left, let right):
             return """
             \(left.toSPARQL(prefixes: prefixes, indent: indent))
@@ -457,6 +303,14 @@ extension Expression {
 
         case .variable(let v):
             return "?\(v.name)"
+
+        case .parameter(let reference):
+            switch reference {
+            case .position(let position):
+                return "$\(position)"
+            case .name(let name):
+                return ":\(name)"
+            }
 
         case .column(let col):
             // In SPARQL context, columns are treated as variables
@@ -524,9 +378,7 @@ extension Expression {
         // Pattern matching
         case .like(let e, let pattern):
             // Convert SQL LIKE to REGEX
-            let regexPattern = pattern
-                .replacingOccurrences(of: "%", with: ".*")
-                .replacingOccurrences(of: "_", with: ".")
+            let regexPattern = Self.regexPattern(fromSQLLike: pattern)
             return "REGEX(\(e.toSPARQL(prefixes: prefixes)), \"^\(regexPattern)$\", \"i\")"
 
         case .regex(let text, let pattern, let flags):
@@ -607,6 +459,19 @@ extension Expression {
         case .exists(let query):
             return "EXISTS { \(query.toSPARQL(prefixes: prefixes)) }"
         }
+    }
+
+    private static func regexPattern(fromSQLLike pattern: String) -> String {
+        var result = ""
+        result.reserveCapacity(pattern.count)
+        for character in pattern {
+            switch character {
+            case "%": result += ".*"
+            case "_": result += "."
+            default: result.append(character)
+            }
+        }
+        return result
     }
 }
 
@@ -759,4 +624,3 @@ extension SelectQuery {
         return result
     }
 }
-

@@ -1,10 +1,9 @@
-import Foundation
 
 /// Feature-specific access path layered on top of a logical row source.
 ///
 /// `DataSource` stays relational/graph-oriented. Optional index- or
 /// fusion-based access is represented here to preserve `QueryIR` extensibility.
-public enum AccessPath: Sendable, Equatable, Hashable, Codable {
+public enum AccessPath: Sendable, Equatable, Hashable {
     case index(IndexScanSource)
     case fusion(FusionSource)
 }
@@ -13,7 +12,7 @@ public enum AccessPath: Sendable, Equatable, Hashable, Codable {
 ///
 /// The binder/runtime in `database-framework` is responsible for interpreting
 /// `kindIdentifier` and validating `parameters`.
-public struct IndexScanSource: Sendable, Equatable, Hashable, Codable {
+public struct IndexScanSource: Sendable, Equatable, Hashable {
     public let indexName: String
     public let kindIdentifier: String
     public let parameters: [String: QueryParameterValue]
@@ -30,7 +29,7 @@ public struct IndexScanSource: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Type-erased description of a fusion access path.
-public struct FusionSource: Sendable, Equatable, Hashable, Codable {
+public struct FusionSource: Sendable, Equatable, Hashable {
     public let inputs: [IndexScanSource]
     public let strategyIdentifier: String
     public let parameters: [String: QueryParameterValue]

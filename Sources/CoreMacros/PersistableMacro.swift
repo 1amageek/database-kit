@@ -89,10 +89,13 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         // Track @Restricted fields for field-level security metadata
         var restrictedFields: [(fieldName: String, readExpr: String, writeExpr: String, defaultExpr: String)] = []
 
-        // Track @Relationship properties
-        // New design: FK fields are explicit (customerID: String?, orderIDs: [String])
-        // @Relationship marks FK fields and specifies the related type
-        var relationships: [(propertyName: String, relatedTypeName: String, deleteRule: String, isToMany: Bool, relationshipPropertyName: String)] = []
+        // Track typed @Relationship fields.
+        var relationships: [(
+            propertyName: String,
+            relatedTypeName: String,
+            deleteRule: String,
+            cardinalityExpression: String
+        )] = []
 
         func hasTypeLevelModifier(_ varDecl: VariableDeclSyntax) -> Bool {
             varDecl.modifiers.contains { modifier in
@@ -182,28 +185,26 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                 userIdBinding = binding
                             }
 
-                            // Handle @Relationship property (marks FK field with related type)
-                            // FK field is explicit: customerID: String?, orderIDs: [String]
                             if let relAttr = relationshipAttr {
-                                // Extract relationship info from @Relationship attribute
-                                let (relatedTypeName, deleteRule) = extractRelationshipInfo(from: relAttr)
-
-                                // Determine if to-many based on FK field type
-                                let isToMany = isToManyFKField(fieldType)
-
-                                // Derive relationship property name from FK field name
-                                // customerID -> customer, orderIDs -> orders
-                                let relationshipPropertyName = deriveRelationshipPropertyName(from: fieldName, isToMany: isToMany)
+                                guard let typeSyntax = binding.typeAnnotation?.type,
+                                      let parsed = parseRelationshipField(typeSyntax) else {
+                                    throw DiagnosticsError(diagnostics: [
+                                        Diagnostic(
+                                            node: Syntax(relAttr),
+                                            message: MacroExpansionErrorMessage(
+                                                "@Relationship requires a DatabaseReference<Target> field"
+                                            )
+                                        )
+                                    ])
+                                }
 
                                 relationships.append((
                                     propertyName: fieldName,
-                                    relatedTypeName: relatedTypeName,
-                                    deleteRule: deleteRule,
-                                    isToMany: isToMany,
-                                    relationshipPropertyName: relationshipPropertyName
+                                    relatedTypeName: parsed.relatedTypeName,
+                                    deleteRule: extractRelationshipDeleteRule(from: relAttr),
+                                    cardinalityExpression: parsed.cardinalityExpression
                                 ))
 
-                                // FK field IS stored (not transient) - it's the actual data
                                 allFields.append(fieldName)
                                 fieldInfos.append((name: fieldName, type: fieldType, hasDefault: hasDefault, defaultValue: defaultValue, isTransient: false))
                             }
@@ -350,9 +351,32 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             return "try container.decode(\(fieldType).self, forKey: .\(fieldInfo.name))"
         }
 
+        func databaseRecordDecodeExpr(
+            for fieldInfo: (name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)
+        ) -> String {
+            if fieldInfo.isTransient {
+                return defaultInitializationExpr(for: fieldInfo)
+            }
+
+            let fieldType = normalizedTypeName(fieldInfo.type)
+            if fieldInfo.hasDefault {
+                let decodedType = isOptionalType(fieldType) ? wrappedTypeName(for: fieldType) : fieldType
+                let fallback = defaultInitializationExpr(for: fieldInfo)
+                return "(try decoder.decodeIfPresent(\(decodedType).self, for: \"\(fieldInfo.name)\")) ?? \(fallback)"
+            }
+
+            if isOptionalType(fieldType) {
+                let wrappedType = wrappedTypeName(for: fieldType)
+                return "try decoder.decodeIfPresent(\(wrappedType).self, for: \"\(fieldInfo.name)\")"
+            }
+
+            return "try decoder.decode(\(fieldType).self, for: \"\(fieldInfo.name)\")"
+        }
+
         // Extract #Index macro calls and generate descriptors
         // Also collect all keyPath strings for fieldName(for:) generation
         var descriptorInits: [String] = []  // All descriptors (Index, Relationship, etc.)
+        var indexDescriptorInits: [String] = []
         var allIndexKeyPaths: Set<String> = []  // Collect all keyPaths for fieldName generation
 
         for member in structDecl.memberBlock.members {
@@ -407,9 +431,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                             }
 
                             let selectedKeyPaths: [String]
-                            if indexKindName?.contains("RelationshipIndexKind") == true {
-                                selectedKeyPaths = keyPathsByArgumentLabel["foreignKey"] ?? []
-                            } else if indexKindName?.contains("TimeWindowLeaderboardIndexKind") == true {
+                            if indexKindName?.contains("TimeWindowLeaderboardIndexKind") == true {
                                 selectedKeyPaths = (keyPathsByArgumentLabel["groupBy"] ?? []) +
                                     (keyPathsByArgumentLabel["scoreField"] ?? [])
                             } else {
@@ -453,7 +475,11 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     }
                 }
 
-                guard !keyPaths.isEmpty else { continue }
+                let isCountIndex = indexKindName?
+                    .components(separatedBy: "<")
+                    .first?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) == "CountIndexKind"
+                guard !keyPaths.isEmpty || isCountIndex else { continue }
 
                 // Generate index name if not provided
                 // Use IndexKind-specific naming patterns
@@ -471,12 +497,19 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 
                 // Generate IndexDescriptor initialization with KeyPaths
                 // e.g., [\User.email, \User.address.city]
-                let keyPathsLiterals = keyPaths.map { "\\\(structName).\($0)" }.joined(separator: ", ")
+                let keyPathsExpression: String
+                if keyPaths.isEmpty {
+                    keyPathsExpression = "[PartialKeyPath<\(structName)>]()"
+                } else {
+                    let keyPathsLiterals = keyPaths
+                        .map { "\\\(structName).\($0)" }
+                        .joined(separator: ", ")
+                    keyPathsExpression = "[\(keyPathsLiterals)]"
+                }
                 let kindInit = indexKindExpr ?? "ScalarIndexKind(fieldNames: [])"
                 let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
 
-                // Generate storedKeyPaths and storedFieldNames if present
-                let storedKeyPathsLiterals = storedFieldKeyPaths.map { "\\\(structName).\($0)" }.joined(separator: ", ")
+                // Generate stored field names if present.
                 let storedFieldNamesLiterals = storedFieldKeyPaths.map { "\"\($0)\"" }.joined(separator: ", ")
 
                 let descriptorInit: String
@@ -484,7 +517,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     descriptorInit = """
                         IndexDescriptor(
                             name: "\(finalIndexName)",
-                            keyPaths: [\(keyPathsLiterals)],
+                            keyPaths: \(keyPathsExpression),
                             kind: \(kindInit),
                             commonOptions: \(optionsInit)
                         )
@@ -493,21 +526,21 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     descriptorInit = """
                         IndexDescriptor(
                             name: "\(finalIndexName)",
-                            keyPaths: [\(keyPathsLiterals)],
+                            keyPaths: \(keyPathsExpression),
                             kind: \(kindInit),
                             commonOptions: \(optionsInit),
-                            storedKeyPaths: [\(storedKeyPathsLiterals)],
                             storedFieldNames: [\(storedFieldNamesLiterals)]
                         )
                     """
                 }
 
                 descriptorInits.append(descriptorInit)
+                indexDescriptorInits.append(descriptorInit)
             }
         }
 
         // Extract #Directory macro call and parse path components
-        var directoryPathComponents: [String] = []  // Generated code strings: Path("x") or Field(\Type.y)
+        var directoryPathComponents: [String] = []
         var directoryLayerValue: String = ".default"  // Default layer
 
         for member in structDecl.memberBlock.members {
@@ -526,11 +559,11 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 
                     let expr = arg.expression
 
-                    // Check if it's a string literal → Path("value")
+                    // Compile a string literal into a canonical static path component.
                     if let stringLiteral = expr.as(StringLiteralExprSyntax.self),
                        let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
                         let pathValue = segment.content.text
-                        directoryPathComponents.append("Path(\"\(pathValue)\")")
+                        directoryPathComponents.append(".staticPath(\"\(pathValue)\")")
                         continue
                     }
 
@@ -551,7 +584,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                let component = keyPathExpr.components.first,
                                let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
                                 let fieldName = property.declName.baseName.text
-                                directoryPathComponents.append("Field(\\\(structName).\(fieldName))")
+                                directoryPathComponents.append(".dynamicField(fieldName: \"\(fieldName)\")")
                             }
                         }
                     }
@@ -588,48 +621,34 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(allFieldsDecl)
 
-        // Generate relationship indexes and RelationshipDescriptors for @Relationship FK fields
-        // FK field name IS the property name (customerID, orderIDs)
-        // Index name uses the derived relationship property name (customer, orders)
-        // Key structure: [indexSubspace]/[relatedId]/[ownerId]
+        let persistedFieldInfos = fieldInfos.filter { !$0.isTransient }
         for rel in relationships {
-            // Use relationshipPropertyName for index naming (e.g., "Order_customer")
-            let relationshipIndexName = "\(typeName)_\(rel.relationshipPropertyName)"
-            // FK field name is the property name itself (customerID, orderIDs)
-            let fkFieldName = rel.propertyName
-
-            // Generate IndexDescriptor for relationship index
-            // Uses ScalarIndexKind for foreign key lookup
-            let relationshipIndexInit = """
-                IndexDescriptor(
-                    name: "\(relationshipIndexName)",
-                    keyPaths: [\\\(structName).\(fkFieldName)],
-                    kind: ScalarIndexKind<\(structName)>(fieldNames: ["\(fkFieldName)"]),
-                    commonOptions: .init()
-                )
-            """
-            descriptorInits.append(relationshipIndexInit)
-
-            // Generate RelationshipDescriptor
-            // Uses Relationship module types (RelationshipDescriptor, DeleteRule)
-            // Note: We use unqualified names because user must `import Relationship` to use @Relationship macro
-            // Using "Relationship.DeleteRule" causes conflict with the @Relationship macro name
-            // rel.deleteRule is in format ".nullify" so we need "DeleteRule" prefix
-            let deleteRuleValue = rel.deleteRule.hasPrefix(".") ? String(rel.deleteRule.dropFirst()) : rel.deleteRule
+            guard let fieldOffset = persistedFieldInfos.firstIndex(where: {
+                $0.name == rel.propertyName
+            }) else {
+                throw DiagnosticsError(diagnostics: [
+                    Diagnostic(
+                        node: Syntax(structDecl),
+                        message: MacroExpansionErrorMessage(
+                            "@Relationship field '\(rel.propertyName)' is not persisted"
+                        )
+                    )
+                ])
+            }
             let relationshipDescriptorInit = """
                 RelationshipDescriptor(
-                    name: "\(relationshipIndexName)",
+                    ownerTypeName: persistableType,
                     propertyName: "\(rel.propertyName)",
-                    relatedTypeName: "\(rel.relatedTypeName)",
-                    deleteRule: DeleteRule.\(deleteRuleValue),
-                    isToMany: \(rel.isToMany),
-                    relationshipPropertyName: "\(rel.relationshipPropertyName)"
+                    propertyFieldNumber: \(fieldOffset + 1),
+                    relatedTypeName: \(rel.relatedTypeName).persistableType,
+                    cardinality: \(rel.cardinalityExpression),
+                    deleteRule: \(rel.deleteRule)
                 )
             """
             descriptorInits.append(relationshipDescriptorInit)
         }
 
-        // Generate reverse IndexDescriptor for @OWLDataProperty(to:) / @OWLProperty(to:) fields (FK indexing)
+        // Generate reverse indexes for @OWLDataProperty(to:) fields.
         for member in structDecl.memberBlock.members {
             if let varDecl = member.decl.as(VariableDeclSyntax.self),
                let propertyAttr = getOWLDataPropertyAttribute(varDecl) {
@@ -648,6 +667,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                 )
                             """
                             descriptorInits.append(reverseIndexInit)
+                            indexDescriptorInits.append(reverseIndexInit)
                         }
                     }
                 }
@@ -671,6 +691,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     )
                 """
                 descriptorInits.append(graphIndexInit)
+                indexDescriptorInits.append(graphIndexInit)
 
                 let objPropDescriptorInit = """
                     OWLObjectPropertyDescriptor(
@@ -696,18 +717,26 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(descriptorsDecl)
 
+        let indexDescriptorsArray = indexDescriptorInits.isEmpty
+            ? "[]"
+            : "[\n            \(indexDescriptorInits.joined(separator: ",\n            "))\n        ]"
+        let indexDescriptorsDecl: DeclSyntax = """
+            public static var _persistableIndexDescriptors: [IndexDescriptor] { \(raw: indexDescriptorsArray) }
+            """
+        decls.append(indexDescriptorsDecl)
+
         // Generate directoryPathComponents property
         // Always generate (no default in Persistable extension to avoid conflicts with Polymorphable)
         if !directoryPathComponents.isEmpty {
             let componentsArray = "[\(directoryPathComponents.joined(separator: ", "))]"
             let directoryPathDecl: DeclSyntax = """
-                public static var directoryPathComponents: [any DirectoryPathElement] { \(raw: componentsArray) }
+                public static var directoryPathComponents: [DirectoryPathComponent] { \(raw: componentsArray) }
                 """
             decls.append(directoryPathDecl)
         } else {
             // Default: use persistableType as path
             let directoryPathDecl: DeclSyntax = """
-                public static var directoryPathComponents: [any DirectoryPathElement] { [Path(persistableType)] }
+                public static var directoryPathComponents: [DirectoryPathComponent] { [.staticPath(persistableType)] }
                 """
             decls.append(directoryPathDecl)
         }
@@ -806,9 +835,19 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             if !fieldInfo.isTransient {
                 schemaFieldIndex += 1
                 let rawType = fieldInfo.type
-                let (schemaType, isOptional, isArray) = mapToFieldSchemaType(rawType)
+                var (schemaType, isOptional, isArray) = mapToFieldSchemaType(rawType)
+                let relationship = relationships.first {
+                    $0.propertyName == fieldInfo.name
+                }
+                let referenceTarget: String
+                if let relationship {
+                    schemaType = "reference"
+                    referenceTarget = ", referenceTargetEntity: \(relationship.relatedTypeName).persistableType"
+                } else {
+                    referenceTarget = ""
+                }
                 fieldSchemaEntries.append(
-                    "FieldSchema(name: \"\(fieldInfo.name)\", fieldNumber: \(schemaFieldIndex), type: .\(schemaType), isOptional: \(isOptional), isArray: \(isArray))"
+                    "FieldSchema(name: \"\(fieldInfo.name)\", fieldNumber: \(schemaFieldIndex), type: .\(schemaType), isOptional: \(isOptional), isArray: \(isArray)\(referenceTarget))"
                 )
             }
         }
@@ -820,11 +859,36 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(fieldSchemasDecl)
 
+        let recordDecodeAssignments = fieldInfos
+            .map { fieldInfo in
+                "self.\(fieldInfo.name) = \(databaseRecordDecodeExpr(for: fieldInfo))"
+            }
+            .joined(separator: "\n        ")
+        let recordDecodableInitDecl: DeclSyntax = """
+            private init(_databaseRecordDecoder decoder: Core.DatabaseRecordFieldDecoder) throws {
+                \(raw: recordDecodeAssignments)
+            }
+            """
+        decls.append(recordDecodableInitDecl)
+
+        let recordDecoderDecl: DeclSyntax = """
+            public static func decodeDatabaseRecord(_ fields: [Core.DatabaseRecordField]) throws -> Self {
+                let decoder = try Core.DatabaseRecordFieldDecoder(
+                    entity: persistableType,
+                    fields: fields,
+                    schemas: fieldSchemas
+                )
+                return try Self(_databaseRecordDecoder: decoder)
+            }
+            """
+        decls.append(recordDecoderDecl)
+
         // Generate enumMetadata method with runtime extraction for non-primitive fields
         let primitiveTypeNames: Set<String> = [
             "String", "Int", "Int8", "Int16", "Int32", "Int64",
             "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
-            "Double", "Float", "Bool", "Date", "UUID", "Data"
+            "Double", "Float", "Bool", "Date", "UUID", "Data",
+            "DatabaseRDFTerm"
         ]
         var enumMetadataCases: [String] = []
         for fieldInfo in fieldInfos {
@@ -902,7 +966,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         decls.append(subscriptDecl)
 
         // Generate fieldName(for:) methods for KeyPath → String conversion
-        // Include top-level fields, @Relationship properties, and all indexed keyPaths (including nested)
+        // Include top-level fields and all indexed keyPaths (including nested)
         var fieldNameCases: [String] = []
 
         // Add top-level fields (excludes transient, but includes @Relationship below)
@@ -910,11 +974,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             if !fieldInfo.isTransient {
                 fieldNameCases.append("if keyPath == \\\(structName).\(fieldInfo.name) { return \"\(fieldInfo.name)\" }")
             }
-        }
-
-        // Add @Relationship property names (needed for related() API even though they're transient)
-        for rel in relationships {
-            fieldNameCases.append("if keyPath == \\\(structName).\(rel.propertyName) { return \"\(rel.propertyName)\" }")
         }
 
         // Add nested keyPaths from #Index declarations
@@ -1287,6 +1346,9 @@ private func generateIndexName(typeName: String, indexKindName: String, fieldNam
 
     case "CountIndexKind":
         // Format: {TypeName}_count_{field1}_{field2}
+        if fieldNames.isEmpty {
+            return "\(typeName)_count"
+        }
         return "\(typeName)_count_\(fieldNames.joined(separator: "_"))"
 
     case "SumIndexKind":
@@ -1410,6 +1472,8 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
         schemaType = "uuid"
     case "Data":
         schemaType = "data"
+    case "DatabaseRDFTerm":
+        schemaType = "rdfTerm"
     default:
         // Non-primitive type: resolve at runtime via RawRepresentable check.
         // FieldSchemaType.resolve(TypeName.self) returns .enum if RawRepresentable, .nested otherwise.

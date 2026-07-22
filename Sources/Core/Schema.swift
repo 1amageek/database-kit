@@ -1,4 +1,6 @@
 
+public import DatabaseValue
+
 /// Schema - Type-independent schema management
 ///
 /// **Design**: FDBRuntime's type-independent schema definition
@@ -27,46 +29,7 @@ public final class Schema: Sendable {
     /// - major: Incompatible changes
     /// - minor: Backward-compatible feature additions
     /// - patch: Backward-compatible bug fixes
-    public struct Version: Sendable, Hashable, Codable, CustomStringConvertible {
-        public let major: Int
-        public let minor: Int
-        public let patch: Int
-
-        /// Create a version
-        ///
-        /// - Parameters:
-        ///   - major: Major version
-        ///   - minor: Minor version
-        ///   - patch: Patch version
-        public init(_ major: Int, _ minor: Int, _ patch: Int) {
-            self.major = major
-            self.minor = minor
-            self.patch = patch
-        }
-
-        public var description: String {
-            return "\(major).\(minor).\(patch)"
-        }
-
-        // Codable
-        public init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            self.major = try container.decode(Int.self, forKey: .major)
-            self.minor = try container.decode(Int.self, forKey: .minor)
-            self.patch = try container.decode(Int.self, forKey: .patch)
-        }
-
-        public func encode(to encoder: Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(major, forKey: .major)
-            try container.encode(minor, forKey: .minor)
-            try container.encode(patch, forKey: .patch)
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case major, minor, patch
-        }
-    }
+    public typealias Version = DatabaseSchemaVersion
 
     // MARK: - Entity
 
@@ -75,7 +38,8 @@ public final class Schema: Sendable {
     /// Represents the complete schema definition for a Persistable type.
     /// Designed after SwiftData's `Schema.Entity` — Entity IS the metadata.
     ///
-    /// **Codable properties**: name, fields, directoryComponents, indexes, enumMetadata
+    /// **Codable properties**: name, fields, directoryComponents, directoryLayer,
+    /// indexes, enumMetadata
     /// **Runtime-only properties**: persistableType, indexDescriptors
     ///
     /// **Usage**:
@@ -92,10 +56,13 @@ public final class Schema: Sendable {
         public let fields: [FieldSchema]
 
         /// Directory path components (static paths and dynamic field references)
-        public let directoryComponents: [DirectoryComponentCatalog]
+        public let directoryComponents: [DirectoryPathComponent]
+
+        /// Directory resolution strategy compiled from `#Directory`.
+        public let directoryLayer: DirectoryLayer
 
         /// Index definitions (type-erased, Codable)
-        public let indexes: [AnyIndexDescriptor]
+        public let indexes: [IndexDescriptorMetadata]
 
         /// Enum metadata: fieldName → case names
         public let enumMetadata: [String: [String]]
@@ -137,7 +104,7 @@ public final class Schema: Sendable {
         // MARK: - Custom Codable (exclude runtime fields)
 
         private enum CodingKeys: String, CodingKey {
-            case name, fields, directoryComponents, indexes, enumMetadata
+            case name, fields, directoryComponents, directoryLayer, indexes, enumMetadata
             case ontologyClassIRI, objectPropertyIRI, objectPropertyFromField, objectPropertyToField
             case dataPropertyIRIs
         }
@@ -146,8 +113,9 @@ public final class Schema: Sendable {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             self.name = try container.decode(String.self, forKey: .name)
             self.fields = try container.decode([FieldSchema].self, forKey: .fields)
-            self.directoryComponents = try container.decode([DirectoryComponentCatalog].self, forKey: .directoryComponents)
-            self.indexes = try container.decode([AnyIndexDescriptor].self, forKey: .indexes)
+            self.directoryComponents = try container.decode([DirectoryPathComponent].self, forKey: .directoryComponents)
+            self.directoryLayer = try container.decode(DirectoryLayer.self, forKey: .directoryLayer)
+            self.indexes = try container.decode([IndexDescriptorMetadata].self, forKey: .indexes)
             self.enumMetadata = try container.decode([String: [String]].self, forKey: .enumMetadata)
             self.ontologyClassIRI = try container.decodeIfPresent(String.self, forKey: .ontologyClassIRI)
             self.objectPropertyIRI = try container.decodeIfPresent(String.self, forKey: .objectPropertyIRI)
@@ -219,7 +187,8 @@ public final class Schema: Sendable {
             self.name = type.persistableType
             self.fields = type.fieldSchemas
             self.directoryComponents = Self.extractDirectoryComponents(from: type)
-            self.indexes = type.indexDescriptors.map { AnyIndexDescriptor($0) }
+            self.directoryLayer = type.directoryLayer
+            self.indexes = type.indexDescriptors.map { IndexDescriptorMetadata($0) }
             self.enumMetadata = Self.extractEnumMetadata(from: type)
             self.ontologyClassIRI = Self.extractOntologyClassIRI(from: type)
             let objPropInfo = Self.extractObjectPropertyInfo(from: type)
@@ -237,8 +206,9 @@ public final class Schema: Sendable {
         public init(
             name: String,
             fields: [FieldSchema],
-            directoryComponents: [DirectoryComponentCatalog] = [],
-            indexes: [AnyIndexDescriptor] = [],
+            directoryComponents: [DirectoryPathComponent] = [],
+            directoryLayer: DirectoryLayer = .default,
+            indexes: [IndexDescriptorMetadata] = [],
             enumMetadata: [String: [String]] = [:],
             ontologyClassIRI: String? = nil,
             objectPropertyIRI: String? = nil,
@@ -249,6 +219,7 @@ public final class Schema: Sendable {
             self.name = name
             self.fields = fields
             self.directoryComponents = directoryComponents
+            self.directoryLayer = directoryLayer
             self.indexes = indexes
             self.enumMetadata = enumMetadata
             self.ontologyClassIRI = ontologyClassIRI
@@ -266,6 +237,7 @@ public final class Schema: Sendable {
             lhs.name == rhs.name &&
             lhs.fields == rhs.fields &&
             lhs.directoryComponents == rhs.directoryComponents &&
+            lhs.directoryLayer == rhs.directoryLayer &&
             lhs.indexes == rhs.indexes &&
             lhs.enumMetadata == rhs.enumMetadata &&
             lhs.ontologyClassIRI == rhs.ontologyClassIRI &&
@@ -281,6 +253,7 @@ public final class Schema: Sendable {
             hasher.combine(name)
             hasher.combine(fields)
             hasher.combine(directoryComponents)
+            hasher.combine(directoryLayer)
             hasher.combine(indexes)
             hasher.combine(enumMetadata)
             hasher.combine(ontologyClassIRI)
@@ -292,21 +265,8 @@ public final class Schema: Sendable {
 
         // MARK: - Private Helpers
 
-        private static func extractDirectoryComponents(from type: any Persistable.Type) -> [DirectoryComponentCatalog] {
-            let components = type.directoryPathComponents
-            let fieldNames = type.directoryFieldNames
-            var fieldNameIndex = 0
-            return components.map { component -> DirectoryComponentCatalog in
-                if let path = component as? Path {
-                    return .staticPath(path.value)
-                } else if component is any DynamicDirectoryElement {
-                    let name = fieldNameIndex < fieldNames.count ? fieldNames[fieldNameIndex] : "unknown"
-                    fieldNameIndex += 1
-                    return .dynamicField(fieldName: name)
-                } else {
-                    return .staticPath("_unknown")
-                }
-            }
+        private static func extractDirectoryComponents(from type: any Persistable.Type) -> [DirectoryPathComponent] {
+            type.directoryPathComponents
         }
 
         /// Extract ontology class IRI from a type if it conforms to OWLClassEntity-like protocol.
@@ -456,8 +416,8 @@ public final class Schema: Sendable {
             if let existing = indexDescriptorsByName[descriptor.name] {
                 preconditionFailure(
                     "Duplicate index name '\(descriptor.name)' detected. " +
-                    "Existing index keyPaths: \(existing.keyPaths), " +
-                    "duplicate index keyPaths: \(descriptor.keyPaths). " +
+                    "Existing index fields: \(existing.fieldNames), " +
+                    "duplicate index fields: \(descriptor.fieldNames). " +
                     "Index names must be unique across all entities in the schema."
                 )
             }
@@ -513,8 +473,8 @@ public final class Schema: Sendable {
             if let existing = indexDescriptorsByName[descriptor.name] {
                 preconditionFailure(
                     "Duplicate index name '\(descriptor.name)' detected. " +
-                    "Existing index keyPaths: \(existing.keyPaths), " +
-                    "duplicate index keyPaths: \(descriptor.keyPaths). " +
+                    "Existing index fields: \(existing.fieldNames), " +
+                    "duplicate index fields: \(descriptor.fieldNames). " +
                     "Index names must be unique across all entities in the schema."
                 )
             }
@@ -558,7 +518,7 @@ public final class Schema: Sendable {
     /// schema construction time. It intentionally does not expose `IndexDescriptor`
     /// because `IndexDescriptor` carries concrete `KeyPath` and `IndexKind<Self>`
     /// values that are only valid for one member type.
-    public func polymorphicIndexCatalog(identifier: String) -> [AnyIndexDescriptor] {
+    public func polymorphicIndexCatalog(identifier: String) -> [IndexDescriptorMetadata] {
         polymorphicGroupsByIdentifier[identifier]?.indexes ?? []
     }
 
@@ -658,7 +618,7 @@ public final class Schema: Sendable {
             let memberTypeNames = polymorphicTypes.map { $0.0.persistableType }.sorted()
             let allMemberNames = Set(memberTypeNames)
             var descriptorsByMemberName: [String: [IndexDescriptor]] = [:]
-            var logicalIndexByName: [String: AnyIndexDescriptor] = [:]
+            var logicalIndexByName: [String: IndexDescriptorMetadata] = [:]
             var logicalIndexOrder: [String] = []
             var membersByIndexName: [String: Set<String>] = [:]
 
@@ -673,7 +633,7 @@ public final class Schema: Sendable {
                         "Polymorphic group '\(identifier)' member '\(memberType.persistableType)' declares duplicate index '\(descriptor.name)'."
                     )
 
-                    let logicalDescriptor = AnyIndexDescriptor(descriptor)
+                    let logicalDescriptor = IndexDescriptorMetadata(descriptor)
                     if let existing = logicalIndexByName[descriptor.name] {
                         precondition(
                             existing == logicalDescriptor,
@@ -723,7 +683,7 @@ public final class Schema: Sendable {
                 if let existing = indexDescriptorsByName[index.name] {
                     preconditionFailure(
                         "Duplicate index name '\(index.name)' detected. " +
-                        "Entity index keyPaths: \(existing.keyPaths), " +
+                        "Entity index fields: \(existing.fieldNames), " +
                         "polymorphic group: \(group.identifier). " +
                         "Index names must be unique across all entities and polymorphic groups."
                     )
@@ -783,20 +743,6 @@ extension Schema: Hashable {
     }
 }
 
-// MARK: - Schema.Version Comparable
-
-extension Schema.Version: Comparable {
-    public static func < (lhs: Schema.Version, rhs: Schema.Version) -> Bool {
-        if lhs.major != rhs.major {
-            return lhs.major < rhs.major
-        }
-        if lhs.minor != rhs.minor {
-            return lhs.minor < rhs.minor
-        }
-        return lhs.patch < rhs.patch
-    }
-}
-
 // MARK: - FormerIndex
 
 /// Former index metadata (for schema evolution)
@@ -832,16 +778,16 @@ public enum SchemaError: Error, CustomStringConvertible, Sendable {
     ///
     /// Index names must be unique across all entities in a schema.
     /// This error provides details about both the existing and duplicate index.
-    case duplicateIndexName(indexName: String, existingKeyPaths: [String], duplicateKeyPaths: [String])
+    case duplicateIndexName(indexName: String, existingFields: [String], duplicateFields: [String])
 
     public var description: String {
         switch self {
-        case .duplicateIndexName(let indexName, let existingKeyPaths, let duplicateKeyPaths):
-            let existingDesc = existingKeyPaths.joined(separator: ", ")
-            let duplicateDesc = duplicateKeyPaths.joined(separator: ", ")
+        case .duplicateIndexName(let indexName, let existingFields, let duplicateFields):
+            let existingDesc = existingFields.joined(separator: ", ")
+            let duplicateDesc = duplicateFields.joined(separator: ", ")
             return "Duplicate index name '\(indexName)' detected. " +
-                   "Existing index keyPaths: [\(existingDesc)], " +
-                   "duplicate index keyPaths: [\(duplicateDesc)]. " +
+                   "Existing index fields: [\(existingDesc)], " +
+                   "duplicate index fields: [\(duplicateDesc)]. " +
                    "Index names must be unique across all entities in the schema."
         }
     }
@@ -875,8 +821,8 @@ extension Schema {
             if let existing = seenIndexes[descriptor.name] {
                 throw SchemaError.duplicateIndexName(
                     indexName: descriptor.name,
-                    existingKeyPaths: existing.keyPaths.map { String(describing: $0) },
-                    duplicateKeyPaths: descriptor.keyPaths.map { String(describing: $0) }
+                    existingFields: existing.fieldNames,
+                    duplicateFields: descriptor.fieldNames
                 )
             }
             seenIndexes[descriptor.name] = descriptor
@@ -887,8 +833,8 @@ extension Schema {
                 if let existing = seenIndexes[index.name] {
                     throw SchemaError.duplicateIndexName(
                         indexName: index.name,
-                        existingKeyPaths: existing.keyPaths.map { String(describing: $0) },
-                        duplicateKeyPaths: ["polymorphic:\(group.identifier)"]
+                        existingFields: existing.fieldNames,
+                        duplicateFields: ["polymorphic:\(group.identifier)"]
                     )
                 }
             }

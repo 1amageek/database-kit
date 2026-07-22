@@ -4,17 +4,25 @@
 /// Reference:
 /// - W3C SPARQL 1.1 Property Paths
 /// - W3C SPARQL 1.2 (Draft) - Extended Property Paths
+import DatabaseValue
 
-import Foundation
-
-// Note: Core PropertyPath enum is defined in DataSource.swift
-// This file provides additional utilities and extensions.
+public indirect enum PropertyPath: Sendable, Equatable, Hashable {
+    case iri(DatabaseRDFPredicateIRI)
+    case inverse(PropertyPath)
+    case sequence(PropertyPath, PropertyPath)
+    case alternative(PropertyPath, PropertyPath)
+    case zeroOrMore(PropertyPath)
+    case oneOrMore(PropertyPath)
+    case zeroOrOne(PropertyPath)
+    case negatedPropertySet(PropertyPathNegatedSet)
+    case range(PropertyPath, PropertyPathRange)
+}
 
 // MARK: - PropertyPath Builders
 
 extension PropertyPath {
     /// Create a simple IRI path
-    public static func uri(_ iri: String) -> PropertyPath {
+    public static func uri(_ iri: DatabaseRDFPredicateIRI) -> PropertyPath {
         .iri(iri)
     }
 
@@ -65,13 +73,18 @@ extension PropertyPath {
     }
 
     /// Create a negation path: !path
-    public static func neg(_ iris: String...) -> PropertyPath {
-        .negation(iris)
+    public static func negated(
+        _ exclusions: PropertyPathNegatedSet
+    ) -> PropertyPath {
+        .negatedPropertySet(exclusions)
     }
 
     /// Create a ranged path: path{min,max}
-    public static func ranged(_ path: PropertyPath, min: Int? = nil, max: Int? = nil) -> PropertyPath {
-        .range(path, min: min, max: max)
+    public static func ranged(
+        _ path: PropertyPath,
+        bounds: PropertyPathRange
+    ) -> PropertyPath {
+        .range(path, bounds)
     }
 }
 
@@ -79,13 +92,15 @@ extension PropertyPath {
 
 extension PropertyPath {
     /// Returns all IRIs used in this path
-    public var iris: Set<String> {
-        var result = Set<String>()
+    public var iris: Set<DatabaseRDFPredicateIRI> {
+        var result = Set<DatabaseRDFPredicateIRI>()
         collectIRIs(into: &result)
         return result
     }
 
-    private func collectIRIs(into result: inout Set<String>) {
+    private func collectIRIs(
+        into result: inout Set<DatabaseRDFPredicateIRI>
+    ) {
         switch self {
         case .iri(let iri):
             result.insert(iri)
@@ -99,9 +114,10 @@ extension PropertyPath {
             right.collectIRIs(into: &result)
         case .zeroOrMore(let path), .oneOrMore(let path), .zeroOrOne(let path):
             path.collectIRIs(into: &result)
-        case .negation(let iris):
-            result.formUnion(iris)
-        case .range(let path, _, _):
+        case .negatedPropertySet(let exclusions):
+            result.formUnion(exclusions.forward ?? [])
+            result.formUnion(exclusions.inverse ?? [])
+        case .range(let path, _):
             path.collectIRIs(into: &result)
         }
     }
@@ -109,7 +125,7 @@ extension PropertyPath {
     /// Returns true if this path contains any repetition operators (*, +, ?)
     public var hasRepetition: Bool {
         switch self {
-        case .iri, .negation:
+        case .iri, .negatedPropertySet:
             return false
         case .inverse(let path):
             return path.hasRepetition
@@ -123,7 +139,7 @@ extension PropertyPath {
     /// Returns true if this path can match zero-length paths
     public var canMatchEmpty: Bool {
         switch self {
-        case .iri, .negation, .oneOrMore:
+        case .iri, .negatedPropertySet, .oneOrMore:
             return false
         case .inverse(let path):
             return path.canMatchEmpty
@@ -133,11 +149,8 @@ extension PropertyPath {
             return left.canMatchEmpty || right.canMatchEmpty
         case .zeroOrMore, .zeroOrOne:
             return true
-        case .range(let path, let min, _):
-            if let m = min, m > 0 {
-                return false
-            }
-            return path.canMatchEmpty
+        case .range(let path, let bounds):
+            return bounds.minimum == 0 || path.canMatchEmpty
         }
     }
 
@@ -156,17 +169,17 @@ extension PropertyPath {
             return 0
         case .oneOrMore(let path):
             return path.minLength
-        case .negation:
+        case .negatedPropertySet:
             return 1
-        case .range(let path, let minVal, _):
-            return path.minLength * (minVal ?? 0)
+        case .range(let path, let bounds):
+            return path.minLength * bounds.minimum
         }
     }
 
     /// Returns the maximum path length (nil if unbounded)
     public var maxLength: Int? {
         switch self {
-        case .iri, .negation:
+        case .iri, .negatedPropertySet:
             return 1
         case .inverse(let path):
             return path.maxLength
@@ -180,8 +193,9 @@ extension PropertyPath {
             return nil
         case .zeroOrOne(let path):
             return path.maxLength
-        case .range(let path, _, let maxVal):
-            guard let pathMax = path.maxLength, let m = maxVal else { return nil }
+        case .range(let path, let bounds):
+            guard let pathMax = path.maxLength,
+                  let m = bounds.maximum else { return nil }
             return pathMax * m
         }
     }
@@ -194,7 +208,7 @@ extension PropertyPath {
     /// Complexity estimate for query optimization
     public var complexity: Int {
         switch self {
-        case .iri, .negation:
+        case .iri, .negatedPropertySet:
             return 1
         case .inverse(let path):
             return path.complexity
@@ -206,8 +220,8 @@ extension PropertyPath {
             return path.complexity * 10  // High complexity for unbounded
         case .zeroOrOne(let path):
             return path.complexity * 2
-        case .range(let path, _, let maxVal):
-            return path.complexity * (maxVal ?? 10)
+        case .range(let path, let bounds):
+            return path.complexity * (bounds.maximum ?? 10)
         }
     }
 }
@@ -232,18 +246,17 @@ extension PropertyPath {
             return .oneOrMore(path.reversed())
         case .zeroOrOne(let path):
             return .zeroOrOne(path.reversed())
-        case .negation(let iris):
-            // Negation of inverse
-            return .negation(iris)  // TODO: Handle inverse negation properly
-        case .range(let path, let minVal, let maxVal):
-            return .range(path.reversed(), min: minVal, max: maxVal)
+        case .negatedPropertySet(let exclusions):
+            return .negatedPropertySet(exclusions.reversed)
+        case .range(let path, let bounds):
+            return .range(path.reversed(), bounds)
         }
     }
 
     /// Simplify the path expression
     public func simplified() -> PropertyPath {
         switch self {
-        case .iri, .negation:
+        case .iri, .negatedPropertySet:
             return self
 
         case .inverse(let path):
@@ -263,8 +276,6 @@ extension PropertyPath {
         case .alternative(let left, let right):
             let l = left.simplified()
             let r = right.simplified()
-            // Remove duplicate alternatives
-            if l == r { return l }
             return .alternative(l, r)
 
         case .zeroOrMore(let path):
@@ -299,25 +310,25 @@ extension PropertyPath {
             }
             return .zeroOrOne(simplified)
 
-        case .range(let path, let minVal, let maxVal):
+        case .range(let path, let bounds):
             let simplified = path.simplified()
             // {1,1} = plain path
-            if minVal == 1 && maxVal == 1 {
+            if bounds.minimum == 1 && bounds.maximum == 1 {
                 return simplified
             }
             // {0,1} = ?
-            if minVal == 0 && maxVal == 1 {
+            if bounds.minimum == 0 && bounds.maximum == 1 {
                 return .zeroOrOne(simplified)
             }
             // {1,} = +
-            if minVal == 1 && maxVal == nil {
+            if bounds.minimum == 1 && bounds.maximum == nil {
                 return .oneOrMore(simplified)
             }
             // {0,} = *
-            if minVal == 0 && maxVal == nil {
+            if bounds.minimum == 0 && bounds.maximum == nil {
                 return .zeroOrMore(simplified)
             }
-            return .range(simplified, min: minVal, max: maxVal)
+            return .range(simplified, bounds)
         }
     }
 }
@@ -331,12 +342,12 @@ extension PropertyPath {
         case .iri(let iri):
             // Try to use prefix
             for (prefix, base) in prefixes {
-                if iri.hasPrefix(base) {
-                    let local = String(iri.dropFirst(base.count))
+                if iri.rawValue.hasPrefix(base) {
+                    let local = String(iri.rawValue.dropFirst(base.count))
                     return "\(prefix):\(local)"
                 }
             }
-            return "<\(iri)>"
+            return "<\(iri.rawValue)>"
 
         case .inverse(let path):
             return "^\(path.toSPARQL(prefixes: prefixes))"
@@ -356,37 +367,45 @@ extension PropertyPath {
         case .zeroOrOne(let path):
             return "\(wrapIfComplex(path, prefixes: prefixes))?"
 
-        case .negation(let iris):
-            if iris.count == 1 {
-                return "!\(formatIRI(iris[0], prefixes: prefixes))"
+        case .negatedPropertySet(let exclusions):
+            var values = (exclusions.forward ?? []).sorted().map {
+                formatIRI($0, prefixes: prefixes)
             }
-            return "!(\(iris.map { formatIRI($0, prefixes: prefixes) }.joined(separator: "|")))"
+            values.append(contentsOf: (exclusions.inverse ?? []).sorted().map {
+                "^\(formatIRI($0, prefixes: prefixes))"
+            })
+            if values.count == 1 {
+                return "!\(values[0])"
+            }
+            return "!(\(values.joined(separator: "|")))"
 
-        case .range(let path, let minVal, let maxVal):
+        case .range(let path, let bounds):
             let pathStr = wrapIfComplex(path, prefixes: prefixes)
-            let minStr = minVal.map(String.init) ?? ""
-            let maxStr = maxVal.map(String.init) ?? ""
+            let minStr = String(bounds.minimum)
+            let maxStr = bounds.maximum.map(String.init) ?? ""
             return "\(pathStr){\(minStr),\(maxStr)}"
         }
     }
 
     private func wrapIfComplex(_ path: PropertyPath, prefixes: [String: String]) -> String {
         switch path {
-        case .iri, .inverse, .negation:
+        case .iri, .inverse, .negatedPropertySet:
             return path.toSPARQL(prefixes: prefixes)
         default:
             return "(\(path.toSPARQL(prefixes: prefixes)))"
         }
     }
 
-    private func formatIRI(_ iri: String, prefixes: [String: String]) -> String {
+    private func formatIRI(
+        _ iri: DatabaseRDFPredicateIRI,
+        prefixes: [String: String]
+    ) -> String {
         for (prefix, base) in prefixes {
-            if iri.hasPrefix(base) {
-                let local = String(iri.dropFirst(base.count))
+            if iri.rawValue.hasPrefix(base) {
+                let local = String(iri.rawValue.dropFirst(base.count))
                 return "\(prefix):\(local)"
             }
         }
-        return "<\(iri)>"
+        return "<\(iri.rawValue)>"
     }
 }
-

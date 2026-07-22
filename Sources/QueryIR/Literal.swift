@@ -6,7 +6,8 @@
 /// - W3C SPARQL 1.1/1.2 (RDF literals)
 /// - W3C RDF-star (quoted triples)
 
-import Foundation
+
+import DatabaseValue
 
 /// Unified literal value representation
 /// Combines SQL literals and SPARQL RDF terms
@@ -22,6 +23,12 @@ public enum Literal: Sendable, Equatable, Hashable {
     /// Integer value (64-bit)
     case int(Int64)
 
+    /// Unsigned integer value (64-bit)
+    case uint(UInt64)
+
+    /// Exact fixed-point decimal value
+    case decimal(coefficient: Int64, scale: Int32)
+
     /// Floating-point value
     case double(Double)
 
@@ -29,13 +36,16 @@ public enum Literal: Sendable, Equatable, Hashable {
     case string(String)
 
     /// Date value (date only, no time)
-    case date(Date)
+    case date(DatabaseDate)
 
     /// Timestamp value (date + time)
-    case timestamp(Date)
+    case timestamp(DatabaseTimestamp)
 
     /// Binary data
-    case binary(Data)
+    case binary(DatabaseBytes)
+
+    /// Universally unique identifier
+    case uuid(DatabaseUUID)
 
     /// Array of literals
     case array([Literal])
@@ -61,38 +71,9 @@ public enum Literal: Sendable, Equatable, Hashable {
     /// Language-tagged literal with base direction (SPARQL 1.2)
     /// Example: "مرحبا"@ar--rtl
     case dirLangLiteral(value: String, language: String, direction: String)
-}
 
-// MARK: - Convenience Initializers
-
-extension Literal {
-    /// Create a literal from any supported Swift type
-    public init?(_ value: Any) {
-        switch value {
-        case let v as Bool:
-            self = .bool(v)
-        case let v as Int:
-            self = .int(Int64(v))
-        case let v as Int64:
-            self = .int(v)
-        case let v as Double:
-            self = .double(v)
-        case let v as Float:
-            self = .double(Double(v))
-        case let v as String:
-            self = .string(v)
-        case let v as Date:
-            self = .timestamp(v)
-        case let v as Data:
-            self = .binary(v)
-        case let v as [Any]:
-            let literals = v.compactMap { Literal($0) }
-            guard literals.count == v.count else { return nil }
-            self = .array(literals)
-        default:
-            return nil
-        }
-    }
+    /// Canonical RDF term, including RDF-star and reified triple terms.
+    case rdfTerm(DatabaseRDFTerm)
 }
 
 // MARK: - Type Accessors
@@ -116,6 +97,11 @@ extension Literal {
         return nil
     }
 
+    public var uintValue: UInt64? {
+        if case .uint(let v) = self { return v }
+        return nil
+    }
+
     /// Returns the double value if this is a double literal
     public var doubleValue: Double? {
         if case .double(let v) = self { return v }
@@ -129,6 +115,9 @@ extension Literal {
         case .typedLiteral(let v, _): return v
         case .langLiteral(let v, _): return v
         case .dirLangLiteral(let v, _, _): return v
+        case .rdfTerm(let term):
+            guard case .literal(let literal) = term else { return nil }
+            return literal.lexicalForm
         default: return nil
         }
     }
@@ -148,6 +137,7 @@ extension Literal {
         case string = "http://www.w3.org/2001/XMLSchema#string"
         case boolean = "http://www.w3.org/2001/XMLSchema#boolean"
         case integer = "http://www.w3.org/2001/XMLSchema#integer"
+        case unsignedLong = "http://www.w3.org/2001/XMLSchema#unsignedLong"
         case decimal = "http://www.w3.org/2001/XMLSchema#decimal"
         case double = "http://www.w3.org/2001/XMLSchema#double"
         case float = "http://www.w3.org/2001/XMLSchema#float"
@@ -172,6 +162,10 @@ extension Literal {
             return .boolean
         case .int:
             return .integer
+        case .uint:
+            return .unsignedLong
+        case .decimal:
+            return .decimal
         case .double:
             return .double
         case .string:
@@ -182,8 +176,13 @@ extension Literal {
             return .dateTime
         case .binary:
             return .base64Binary
+        case .uuid:
+            return nil
         case .typedLiteral(_, let datatype):
             return XSDDatatype(rawValue: datatype)
+        case .rdfTerm(let term):
+            guard case .literal(let literal) = term else { return nil }
+            return XSDDatatype(rawValue: literal.datatype)
         default:
             return nil
         }
@@ -201,20 +200,24 @@ extension Literal: CustomStringConvertible {
             return v ? "true" : "false"
         case .int(let v):
             return String(v)
+        case .uint(let v):
+            return String(v)
+        case .decimal(let coefficient, let scale):
+            return DatabaseLiteralEncoding.decimal(coefficient: coefficient, scale: scale)
         case .double(let v):
             return String(v)
         case .string(let v):
             return "\"\(v)\""
         case .date(let v):
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withFullDate]
-            return formatter.string(from: v)
+            return DatabaseLiteralEncoding.iso8601(v)
         case .timestamp(let v):
-            return ISO8601DateFormatter().string(from: v)
+            return DatabaseLiteralEncoding.iso8601(v)
         case .binary(let v):
             return "binary(\(v.count) bytes)"
+        case .uuid(let v):
+            return v.description
         case .array(let v):
-            return "[\(v.map(\.description).joined(separator: ", "))]"
+            return "[\(v.map { $0.description }.joined(separator: ", "))]"
         case .iri(let v):
             return "<\(v)>"
         case .blankNode(let v):
@@ -225,6 +228,8 @@ extension Literal: CustomStringConvertible {
             return "\"\(value)\"@\(language)"
         case .dirLangLiteral(let value, let language, let direction):
             return "\"\(value)\"@\(language)--\(direction)"
+        case .rdfTerm(let term):
+            return term.description
         }
     }
 }

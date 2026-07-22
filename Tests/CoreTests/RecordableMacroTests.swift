@@ -29,11 +29,8 @@ struct ModelMacroTests {
 
         let emailIndex = IndexedUser.indexDescriptors[0]
         #expect(emailIndex.name == "IndexedUser_email")
-        #expect(emailIndex.keyPaths.count == 1)
-        // Verify keyPath can be converted back to field name
-        if let kp = emailIndex.keyPaths.first as? PartialKeyPath<IndexedUser> {
-            #expect(IndexedUser.fieldName(for: kp) == "email")
-        }
+        #expect(emailIndex.fieldNames == ["email"])
+        #expect(emailIndex.kind.fieldNames == ["email"])
         #expect(emailIndex.kindIdentifier == "scalar")
         #expect(emailIndex.isUnique == true)
     }
@@ -47,23 +44,16 @@ struct ModelMacroTests {
         // First index: category
         let categoryIndex = Product.indexDescriptors[0]
         #expect(categoryIndex.name == "Product_category")
-        #expect(categoryIndex.keyPaths.count == 1)
-        if let kp = categoryIndex.keyPaths.first as? PartialKeyPath<Product> {
-            #expect(Product.fieldName(for: kp) == "category")
-        }
+        #expect(categoryIndex.fieldNames == ["category"])
+        #expect(categoryIndex.kind.fieldNames == ["category"])
         #expect(categoryIndex.kindIdentifier == "scalar")
         #expect(categoryIndex.isUnique == false)
 
         // Second index: category + price
         let compositeIndex = Product.indexDescriptors[1]
         #expect(compositeIndex.name == "Product_category_price")
-        #expect(compositeIndex.keyPaths.count == 2)
-        // Verify composite keyPaths
-        let fieldNames = compositeIndex.keyPaths.compactMap { kp -> String? in
-            guard let partialKP = kp as? PartialKeyPath<Product> else { return nil }
-            return Product.fieldName(for: partialKP)
-        }
-        #expect(fieldNames == ["category", "price"])
+        #expect(compositeIndex.fieldNames == ["category", "price"])
+        #expect(compositeIndex.kind.fieldNames == ["category", "price"])
         #expect(compositeIndex.kindIdentifier == "scalar")
     }
 
@@ -213,10 +203,10 @@ struct ModelMacroTests {
 
         #expect(articleDescriptor.fieldNames == ["title"])
         #expect(reportDescriptor.fieldNames == ["title"])
-        #expect(articleDescriptor.keyPaths.first is PartialKeyPath<MacroPolymorphicArticle>)
-        #expect(reportDescriptor.keyPaths.first is PartialKeyPath<MacroPolymorphicReport>)
-        #expect(!(articleDescriptor.keyPaths.first is PartialKeyPath<MacroPolymorphicReport>))
-        #expect(!(reportDescriptor.keyPaths.first is PartialKeyPath<MacroPolymorphicArticle>))
+        #expect(articleDescriptor.kind.identifier == "scalar")
+        #expect(reportDescriptor.kind.identifier == "scalar")
+        #expect(articleDescriptor.kind.fieldNames == ["title"])
+        #expect(reportDescriptor.kind.fieldNames == ["title"])
     }
 
     @Test("@Polymorphable macro participates in schema construction")
@@ -456,8 +446,8 @@ protocol MacroPolymorphicDocument: Polymorphable {
 extension MacroPolymorphicDocument {
     static var polymorphableType: String { "MacroPolymorphicDocument" }
 
-    static var polymorphicDirectoryPathComponents: [any DirectoryPathElement] {
-        [Path("macro-polymorphic-documents")]
+    static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
+        [.staticPath("macro-polymorphic-documents")]
     }
 
     static var polymorphicIndexDescriptors: [IndexDescriptor] {

@@ -1,7 +1,6 @@
 // Restricted.swift
 // Core - Property wrapper for field-level access control
 
-import Foundation
 
 /// Protocol to identify Restricted property wrappers at runtime
 public protocol RestrictedProtocol: Sendable {

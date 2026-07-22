@@ -4,8 +4,8 @@
 // Defines metadata for permuted compound indexes. This file is FDB-independent
 // and can be used on all platforms including iOS clients.
 
-import Foundation
 import Core
+import DatabaseValue
 
 // MARK: - Permutation
 
@@ -60,11 +60,29 @@ public struct Permutation: Sendable, Equatable, Hashable, Codable, CustomStringC
         self.indices = indices
     }
 
+    private init(validatedIndices: [Int]) {
+        self.indices = validatedIndices
+    }
+
     /// Create identity permutation (no reordering)
     /// - Parameter size: Number of fields
     public static func identity(size: Int) -> Permutation {
-        // identity permutation cannot fail validation
-        return try! Permutation(indices: Array(0..<size))
+        precondition(size > 0, "Permutation size must be positive")
+        return Permutation(validatedIndices: Array(0..<size))
+    }
+
+    /// Create a permutation that swaps two positions in an identity ordering.
+    public static func swapping(
+        _ first: Int,
+        _ second: Int,
+        size: Int
+    ) -> Permutation {
+        precondition(size > 0, "Permutation size must be positive")
+        precondition((0..<size).contains(first), "First position is out of bounds")
+        precondition((0..<size).contains(second), "Second position is out of bounds")
+        var indices = Array(0..<size)
+        indices.swapAt(first, second)
+        return Permutation(validatedIndices: indices)
     }
 
     // MARK: - Operations
@@ -91,8 +109,7 @@ public struct Permutation: Sendable, Equatable, Hashable, Codable, CustomStringC
         for (newPos, oldPos) in indices.enumerated() {
             inverseIndices[oldPos] = newPos
         }
-        // inverse permutation is always valid
-        return try! Permutation(indices: inverseIndices)
+        return Permutation(validatedIndices: inverseIndices)
     }
 
     /// Check if this is the identity permutation
@@ -163,7 +180,9 @@ public struct PermutedIndexKind<Root: Persistable>: IndexKind {
 
     /// Default index name: "{TypeName}_permuted_{fields}_{permutation}"
     public var indexName: String {
-        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let flattenedNames = fieldNames.map {
+            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+        }
         let permStr = permutation.indices.map(String.init).joined(separator: "")
         return "\(Root.persistableType)_permuted_\(flattenedNames.joined(separator: "_"))_\(permStr)"
     }
@@ -207,6 +226,10 @@ public struct PermutedIndexKind<Root: Persistable>: IndexKind {
 // MARK: - Hashable Conformance
 
 extension PermutedIndexKind {
+    public var metadata: [String: IndexMetadataValue] {
+        ["permutation": .intArray(permutation.indices)]
+    }
+
     public func hash(into hasher: inout Hasher) {
         hasher.combine(Self.identifier)
         hasher.combine(fieldNames)
@@ -225,6 +248,7 @@ public enum PermutedIndexError: Error, CustomStringConvertible, Sendable {
     case invalidPermutation(String)
     case invalidConfiguration(String)
     case fieldCountMismatch(expected: Int, got: Int)
+    case corruptedEntry(expectedMinimumElementCount: Int, actual: Int)
 
     public var description: String {
         switch self {
@@ -234,6 +258,8 @@ public enum PermutedIndexError: Error, CustomStringConvertible, Sendable {
             return "Invalid permuted index configuration: \(message)"
         case .fieldCountMismatch(let expected, let got):
             return "Field count mismatch: permutation expects \(expected) fields, got \(got)"
+        case .corruptedEntry(let expected, let actual):
+            return "Corrupted permuted index entry: expected at least \(expected) elements, got \(actual)"
         }
     }
 }

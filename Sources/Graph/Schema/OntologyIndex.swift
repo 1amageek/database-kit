@@ -8,8 +8,6 @@
 // Reference: Baader, F., et al. (2003).
 // "The Description Logic Handbook: Theory, Implementation, and Applications."
 
-import Foundation
-
 /// Pre-computed index for O(1) axiom lookup
 ///
 /// Built from an `OWLOntology` in a single O(|axioms|) pass.

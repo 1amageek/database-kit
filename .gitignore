@@ -17,6 +17,7 @@ DerivedData/
 .build/
 .swiftpm/
 Package.resolved
+*.profraw
 
 # Secrets
 .netrc

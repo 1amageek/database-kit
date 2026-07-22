@@ -321,7 +321,7 @@ let config = SecurityConfiguration(
 let container = try await FDBContainer(
     database: database,
     schema: schema,
-    securityDelegate: DefaultSecurityDelegate(configuration: config)
+    securityDelegate: RequestSecurityPolicyDelegate(configuration: config)
 )
 
 // Admin ユーザーは SecurityPolicy の評価をスキップ

@@ -4,8 +4,8 @@
 // Defines metadata for vector similarity search indexes. This file is FDB-independent
 // and can be used on all platforms including iOS clients.
 
-import Foundation
 import Core
+import DatabaseValue
 
 /// Vector metric for distance calculation
 ///
@@ -79,7 +79,9 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
 
     /// Default index name: "{TypeName}_vector_{field}"
     public var indexName: String {
-        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let flattenedNames = fieldNames.map {
+            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+        }
         return "\(Root.persistableType)_vector_\(flattenedNames.joined(separator: "_"))"
     }
 
@@ -128,6 +130,13 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
 // MARK: - Hashable Conformance
 
 extension VectorIndexKind {
+    public var metadata: [String: IndexMetadataValue] {
+        [
+            "dimensions": .int(dimensions),
+            "metric": .string(metric.rawValue),
+        ]
+    }
+
     public func hash(into hasher: inout Hasher) {
         hasher.combine(Self.identifier)
         hasher.combine(fieldNames)

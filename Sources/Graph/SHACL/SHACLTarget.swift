@@ -4,8 +4,6 @@
 // Reference: W3C SHACL §2.1.3 (Targets)
 // https://www.w3.org/TR/shacl/#targets
 
-import Foundation
-
 /// SHACL Target — focus node selection mechanism
 ///
 /// Targets determine which nodes in the data graph are validated against a shape.
@@ -22,8 +20,8 @@ import Foundation
 /// let target: SHACLTarget = .subjectsOf("ex:email")
 /// ```
 public enum SHACLTarget: Sendable, Codable, Hashable {
-    /// sh:targetNode — a specific node IRI
-    case node(String)
+    /// sh:targetNode — a specific RDF node
+    case node(RDFTerm)
 
     /// sh:targetClass — all instances of the given class
     case class_(String)
@@ -44,8 +42,10 @@ extension SHACLTarget {
     /// The IRI referenced by this target (if any)
     public var referencedIRI: String? {
         switch self {
-        case .node(let iri), .class_(let iri),
-             .subjectsOf(let iri), .objectsOf(let iri):
+        case .node(let term):
+            guard case .iri(let iri) = term else { return nil }
+            return iri
+        case .class_(let iri), .subjectsOf(let iri), .objectsOf(let iri):
             return iri
         case .implicitClass:
             return nil
@@ -58,8 +58,8 @@ extension SHACLTarget {
 extension SHACLTarget: CustomStringConvertible {
     public var description: String {
         switch self {
-        case .node(let iri):
-            return "sh:targetNode \(iri)"
+        case .node(let term):
+            return "sh:targetNode \(term)"
         case .class_(let iri):
             return "sh:targetClass \(iri)"
         case .subjectsOf(let iri):

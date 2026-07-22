@@ -6,8 +6,6 @@
 // Reference: W3C RDF 1.1 Turtle §2.4 (Prefixed Names)
 // https://www.w3.org/TR/turtle/#prefixed-name
 
-import Foundation
-
 /// Bidirectional IRI prefix map
 ///
 /// Manages prefix-to-namespace mappings for expanding and compacting IRIs.

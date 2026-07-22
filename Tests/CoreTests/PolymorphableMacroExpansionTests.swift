@@ -38,9 +38,15 @@ struct PolymorphableMacroExpansionTests {
             }
 
             extension MacroEntity {
-                public static var polymorphableType: String { "MacroEntity" }
-                public static var polymorphicDirectoryPathComponents: [any DirectoryPathElement] { [Path("memory"), Path("entities")] }
-                public static var polymorphicDirectoryLayer: Core.DirectoryLayer { .default }
+                public static var polymorphableType: String {
+                    "MacroEntity"
+                }
+                public static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
+                    [.staticPath("memory"), .staticPath("entities")]
+                }
+                public static var polymorphicDirectoryLayer: Core.DirectoryLayer {
+                    .default
+                }
                 public static var polymorphicIndexDescriptors: [IndexDescriptor] {
                     [
                         IndexDescriptor(
@@ -48,8 +54,57 @@ struct PolymorphableMacroExpansionTests {
                             keyPaths: [\\Self.title],
                             kind: ScalarIndexKind<Self>(fields: [\\Self.title]),
                             commonOptions: .init(unique: true),
-                            storedKeyPaths: [\\Self.id],
                             storedFieldNames: ["id"]
+                        )
+                    ]
+                }
+            }
+            """,
+            macros: [
+                "Polymorphable": PolymorphableMacro.self
+            ]
+        )
+    }
+
+    @Test("@Polymorphable preserves a global count descriptor")
+    func preservesGlobalCountDescriptor() {
+        assertMacroExpansion(
+            """
+            @Polymorphable
+            protocol GlobalCountEntity: Polymorphable {
+                var id: String { get }
+
+                #Index(
+                    CountIndexKind<Self>(groupBy: [])
+                )
+            }
+            """,
+            expandedSource: """
+            protocol GlobalCountEntity: Polymorphable {
+                var id: String { get }
+
+                #Index(
+                    CountIndexKind<Self>(groupBy: [])
+                )
+            }
+
+            extension GlobalCountEntity {
+                public static var polymorphableType: String {
+                    "GlobalCountEntity"
+                }
+                public static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
+                    [.staticPath(polymorphableType)]
+                }
+                public static var polymorphicDirectoryLayer: Core.DirectoryLayer {
+                    .default
+                }
+                public static var polymorphicIndexDescriptors: [IndexDescriptor] {
+                    [
+                        IndexDescriptor(
+                            name: "GlobalCountEntity_count",
+                            keyPaths: [PartialKeyPath<Self>](),
+                            kind: CountIndexKind<Self>(groupBy: []),
+                            commonOptions: .init()
                         )
                     ]
                 }

@@ -4,8 +4,8 @@
 // Defines metadata for ranking and leaderboard indexes. This file is FDB-independent
 // and can be used on all platforms including iOS clients.
 
-import Foundation
 import Core
+import DatabaseValue
 
 /// Rank index kind for leaderboard and ranking queries
 ///
@@ -56,7 +56,7 @@ import Core
 /// - Small (10): More levels, slower writes, faster counts
 /// - Medium (100): Balanced (default)
 /// - Large (1000): Fewer levels, faster writes, slower counts
-public struct RankIndexKind<Root: Persistable, Score: Comparable & Numeric & Codable & Sendable>: IndexKind {
+public struct RankIndexKind<Root: Persistable, Score: IndexNumericValue>: IndexKind {
     /// Identifier: "rank"
     public static var identifier: String { "rank" }
 
@@ -66,8 +66,8 @@ public struct RankIndexKind<Root: Persistable, Score: Comparable & Numeric & Cod
     /// Field names for this index
     public let fieldNames: [String]
 
-    /// Score type name for Codable reconstruction
-    public let scoreTypeName: String
+    /// Stable score scalar type used by the runtime.
+    public let scoreType: IndexScalarType
 
     /// Bucket size for Range Tree
     /// - Controls granularity of count nodes
@@ -77,7 +77,9 @@ public struct RankIndexKind<Root: Persistable, Score: Comparable & Numeric & Cod
 
     /// Default index name: "{TypeName}_rank_{field}"
     public var indexName: String {
-        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let flattenedNames = fieldNames.map {
+            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+        }
         return "\(Root.persistableType)_rank_\(flattenedNames.joined(separator: "_"))"
     }
 
@@ -88,14 +90,18 @@ public struct RankIndexKind<Root: Persistable, Score: Comparable & Numeric & Cod
     ///   - bucketSize: Bucket size for Range Tree (default: 100)
     public init(field: KeyPath<Root, Score>, bucketSize: Int = 100) {
         self.fieldNames = [Root.fieldName(for: field)]
-        self.scoreTypeName = String(describing: Score.self)
+        self.scoreType = Score.indexScalarType
         self.bucketSize = bucketSize
     }
 
     /// Initialize with field name strings (for Codable reconstruction)
-    public init(fieldNames: [String], scoreTypeName: String, bucketSize: Int = 100) {
+    public init(
+        fieldNames: [String],
+        scoreType: IndexScalarType,
+        bucketSize: Int = 100
+    ) {
         self.fieldNames = fieldNames
-        self.scoreTypeName = scoreTypeName
+        self.scoreType = scoreType
         self.bucketSize = bucketSize
     }
 
@@ -115,16 +121,23 @@ public struct RankIndexKind<Root: Persistable, Score: Comparable & Numeric & Cod
 // MARK: - Hashable Conformance
 
 extension RankIndexKind {
+    public var metadata: [String: IndexMetadataValue] {
+        [
+            "scoreType": .string(scoreType.rawValue),
+            "bucketSize": .int(bucketSize),
+        ]
+    }
+
     public func hash(into hasher: inout Hasher) {
         hasher.combine(Self.identifier)
         hasher.combine(fieldNames)
-        hasher.combine(scoreTypeName)
+        hasher.combine(scoreType)
         hasher.combine(bucketSize)
     }
 
     public static func == (lhs: RankIndexKind, rhs: RankIndexKind) -> Bool {
         return lhs.fieldNames == rhs.fieldNames
-            && lhs.scoreTypeName == rhs.scoreTypeName
+            && lhs.scoreType == rhs.scoreType
             && lhs.bucketSize == rhs.bucketSize
     }
 }

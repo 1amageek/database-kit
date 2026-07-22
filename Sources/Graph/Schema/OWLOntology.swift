@@ -6,7 +6,6 @@
 // Reference: W3C OWL 2 Web Ontology Language
 // https://www.w3.org/TR/owl2-syntax/#Ontologies
 
-import Foundation
 import Core
 
 /// OWL DL Ontology
@@ -481,4 +480,3 @@ extension OWLOntology {
         return self
     }
 }
-

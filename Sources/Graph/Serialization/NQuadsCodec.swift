@@ -1,8 +1,6 @@
 // NQuadsCodec.swift
 // Graph - N-Quads / N-Triples dataset codec
 
-import Foundation
-
 public struct NQuadsDecoder: Sendable {
     public init() {}
 
@@ -11,7 +9,7 @@ public struct NQuadsDecoder: Sendable {
         let lines = input.split(separator: "\n", omittingEmptySubsequences: false)
         for (offset, rawLine) in lines.enumerated() {
             let lineNumber = offset + 1
-            let line = stripComment(from: String(rawLine)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let line = trimASCIIWhitespace(stripComment(from: rawLine))
             guard !line.isEmpty else { continue }
 
             var parser = NQuadsLineParser(input: line, line: lineNumber)
@@ -22,7 +20,7 @@ public struct NQuadsDecoder: Sendable {
         return RDFDataset(quads: quads)
     }
 
-    private func stripComment(from line: String) -> String {
+    private func stripComment(from line: Substring) -> Substring {
         var escaped = false
         var inString = false
         var inIRI = false
@@ -49,10 +47,32 @@ public struct NQuadsDecoder: Sendable {
                 continue
             }
             if ch == "#" && !inString && !inIRI {
-                return String(line[..<index])
+                return line[..<index]
             }
         }
         return line
+    }
+
+    private func trimASCIIWhitespace(_ value: Substring) -> Substring {
+        var lowerBound = value.startIndex
+        var upperBound = value.endIndex
+        while lowerBound < upperBound,
+              Self.isASCIIWhitespace(value[lowerBound]) {
+            lowerBound = value.index(after: lowerBound)
+        }
+        while lowerBound < upperBound {
+            let previous = value.index(before: upperBound)
+            guard Self.isASCIIWhitespace(value[previous]) else {
+                break
+            }
+            upperBound = previous
+        }
+        return value[lowerBound..<upperBound]
+    }
+
+    private static func isASCIIWhitespace(_ character: Character) -> Bool {
+        character == " " || character == "\t"
+            || character == "\r" || character == "\n"
     }
 }
 
@@ -81,11 +101,11 @@ public struct NQuadsEncoder: Sendable {
 }
 
 private struct NQuadsLineParser {
-    let input: String
+    let input: Substring
     let line: Int
     var index: String.Index
 
-    init(input: String, line: Int) {
+    init(input: Substring, line: Int) {
         self.input = input
         self.line = line
         self.index = input.startIndex
@@ -215,7 +235,7 @@ private struct NQuadsLineParser {
             guard !language.isEmpty else {
                 throw RDFSyntaxError.invalidTerm("@", line: line)
             }
-            return .langString(lexicalForm, language: language)
+            return try .langString(lexicalForm, language: language)
         }
 
         if input[index...].hasPrefix("^^") {
@@ -230,7 +250,7 @@ private struct NQuadsLineParser {
             guard !datatype.isEmpty else {
                 throw RDFSyntaxError.invalidTerm("^^", line: line)
             }
-            return .typed(lexicalForm, datatype: datatype)
+            return try .typed(lexicalForm, datatype: datatype)
         }
 
         return .string(lexicalForm)

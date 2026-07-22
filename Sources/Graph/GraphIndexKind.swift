@@ -1,40 +1,19 @@
 // GraphIndexKind.swift
-// Graph - Unified graph index kind (FDB-independent, iOS-compatible)
-//
-// Provides a unified index type for both general graph edges and RDF triples.
-// Supports multiple storage strategies with different performance trade-offs.
+// Graph - Property graph index metadata
 
-import Foundation
 import Core
+import DatabaseValue
 
-/// Unified graph index kind
+/// Declarative metadata for a property graph edge index.
 ///
-/// Indexes graph edges (or RDF triples) using configurable storage strategies.
-/// Unifies the concepts of general graph adjacency and RDF triple stores.
-///
-/// **Terminology mapping**:
-/// ```
-/// Graph terms:  Source  --[Label]------>  Target
-/// RDF terms:    Subject --[Predicate]-->  Object
-/// Unified:      From    --[Edge]------->  To
-/// ```
+/// Records remain the source of truth. The execution layer maintains the
+/// selected derived orderings in the same transaction as record mutations.
+/// Every property-graph identity field is a `String`. RDF datasets use
+/// `RDFQuadIndexKind` because RDF term roles and default-graph semantics are
+/// different from property graph strings.
 ///
 /// **Usage with #Index macro**:
 /// ```swift
-/// // RDF triple store
-/// @Persistable
-/// struct Statement {
-///     var subject: String
-///     var predicate: String
-///     var object: String
-///
-///     #Index<Statement>(type: GraphIndexKind.rdf(
-///         subject: \.subject,
-///         predicate: \.predicate,
-///         object: \.object
-///     ))
-/// }
-///
 /// // Social graph (follows)
 /// @Persistable
 /// struct Follow {
@@ -51,8 +30,8 @@ import Core
 /// **Key structure** (depends on strategy):
 /// ```
 /// adjacency (2-index):
-///   [out]/[edge]/[from]/[to]
-///   [in]/[edge]/[to]/[from]
+///   [out]/[from]/[edge]/[to]
+///   [in]/[to]/[edge]/[from]
 ///
 /// tripleStore (3-index):
 ///   [spo]/[from]/[edge]/[to]
@@ -71,22 +50,26 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
 
     // MARK: - Fields
 
-    /// From node field name (RDF: Subject, Graph: Source)
+    /// Source node field name.
     public let fromField: String
 
-    /// Edge label field name (RDF: Predicate, Graph: Label)
+    /// Edge label field name.
     /// Empty string means no edge field (single edge type)
     public let edgeField: String
 
-    /// To node field name (RDF: Object, Graph: Target)
+    /// Target node field name.
     public let toField: String
 
-    /// Graph field name (RDF: Named Graph)
-    /// nil means no graph field (traditional triple)
+    /// Optional property-graph namespace field name.
     public let graphField: String?
 
     /// Storage strategy determining number of index orderings
-    public let strategy: GraphIndexStrategy
+    public let strategy: PropertyGraphIndexStrategy
+
+    /// Physical ordering layout consumed by the execution layer.
+    public var storageStrategy: GraphIndexStrategy {
+        strategy.storageStrategy
+    }
 
     // MARK: - IndexKind Protocol
 
@@ -106,23 +89,39 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
 
     /// Default index name
     public var indexName: String {
-        let f = fromField.replacingOccurrences(of: ".", with: "_")
-        let t = toField.replacingOccurrences(of: ".", with: "_")
+        let f = DatabaseText.replacingOccurrences(
+            in: fromField,
+            of: ".",
+            with: "_"
+        )
+        let t = DatabaseText.replacingOccurrences(
+            in: toField,
+            of: ".",
+            with: "_"
+        )
         var name: String
         if edgeField.isEmpty {
             name = "\(Root.persistableType)_graph_\(f)_\(t)"
         } else {
-            let e = edgeField.replacingOccurrences(of: ".", with: "_")
+            let e = DatabaseText.replacingOccurrences(
+                in: edgeField,
+                of: ".",
+                with: "_"
+            )
             name = "\(Root.persistableType)_graph_\(f)_\(e)_\(t)"
         }
         if let graphField {
-            let g = graphField.replacingOccurrences(of: ".", with: "_")
+            let g = DatabaseText.replacingOccurrences(
+                in: graphField,
+                of: ".",
+                with: "_"
+            )
             name += "_\(g)"
         }
         return name
     }
 
-    /// Validate that field types are appropriate for graph index
+    /// Validate that every property-graph identity field is a String.
     public static func validateTypes(_ types: [Any.Type]) throws {
         guard types.count >= 2 else {
             throw IndexTypeValidationError.invalidTypeCount(
@@ -132,28 +131,23 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
             )
         }
 
-        // Validate that from and to fields are Comparable
-        let fieldNames = ["from", "to"]
-        for (index, type) in types.prefix(2).enumerated() {
-            guard TypeValidation.isComparable(type) else {
+        for type in types {
+            guard isPropertyGraphString(type) else {
                 throw IndexTypeValidationError.unsupportedType(
                     index: identifier,
                     type: type,
-                    reason: "\(fieldNames[index]) field must be Comparable"
+                    reason: "property-graph identity fields must be String or String?"
                 )
             }
         }
+    }
 
-        // Validate edge field if present
-        if types.count >= 3 {
-            guard TypeValidation.isComparable(types[2]) else {
-                throw IndexTypeValidationError.unsupportedType(
-                    index: identifier,
-                    type: types[2],
-                    reason: "edge field must be Comparable"
-                )
-            }
+    private static func isPropertyGraphString(_ type: Any.Type) -> Bool {
+        if type == String.self { return true }
+        guard let optionalType = type as? any GraphOptionalType.Type else {
+            return false
         }
+        return optionalType.wrappedType == String.self
     }
 
     // MARK: - Initialization
@@ -171,7 +165,7 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
         edge: PartialKeyPath<Root>,
         to: PartialKeyPath<Root>,
         graph: PartialKeyPath<Root>? = nil,
-        strategy: GraphIndexStrategy = .tripleStore
+        strategy: PropertyGraphIndexStrategy = .tripleStore
     ) {
         self.fromField = Root.fieldName(for: from)
         self.edgeField = Root.fieldName(for: edge)
@@ -186,7 +180,7 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
         edgeField: String,
         toField: String,
         graphField: String? = nil,
-        strategy: GraphIndexStrategy = .tripleStore
+        strategy: PropertyGraphIndexStrategy = .tripleStore
     ) {
         self.fromField = fromField
         self.edgeField = edgeField
@@ -196,34 +190,6 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     }
 
     // MARK: - Convenience Initializers
-
-    /// Create RDF triple store index
-    ///
-    /// Uses standard RDF terminology (subject/predicate/object).
-    /// Default strategy is `.tripleStore` (3-index SPO/POS/OSP).
-    ///
-    /// - Parameters:
-    ///   - subject: KeyPath to subject field
-    ///   - predicate: KeyPath to predicate field
-    ///   - object: KeyPath to object field
-    ///   - graph: Optional KeyPath to named graph field
-    ///   - strategy: Storage strategy (default: .tripleStore)
-    /// - Returns: GraphIndexKind configured for RDF
-    public static func rdf(
-        subject: PartialKeyPath<Root>,
-        predicate: PartialKeyPath<Root>,
-        object: PartialKeyPath<Root>,
-        graph: PartialKeyPath<Root>? = nil,
-        strategy: GraphIndexStrategy = .tripleStore
-    ) -> GraphIndexKind {
-        GraphIndexKind(
-            from: subject,
-            edge: predicate,
-            to: object,
-            graph: graph,
-            strategy: strategy
-        )
-    }
 
     /// Create adjacency index for simple graph edges
     ///
@@ -300,6 +266,14 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     }
 }
 
+private protocol GraphOptionalType {
+    static var wrappedType: Any.Type { get }
+}
+
+extension Optional: GraphOptionalType {
+    fileprivate static var wrappedType: Any.Type { Wrapped.self }
+}
+
 // MARK: - Codable
 
 extension GraphIndexKind: Codable {
@@ -317,7 +291,10 @@ extension GraphIndexKind: Codable {
         self.edgeField = try container.decode(String.self, forKey: .edgeField)
         self.toField = try container.decode(String.self, forKey: .toField)
         self.graphField = try container.decodeIfPresent(String.self, forKey: .graphField)
-        self.strategy = try container.decode(GraphIndexStrategy.self, forKey: .strategy)
+        self.strategy = try container.decode(
+            PropertyGraphIndexStrategy.self,
+            forKey: .strategy
+        )
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -350,8 +327,12 @@ extension GraphIndexKind: Hashable {
     }
 }
 
-// MARK: - Deprecated Compatibility
-
-/// Type alias for backward compatibility
-@available(*, deprecated, renamed: "GraphIndexKind")
-public typealias AdjacencyIndexKind = GraphIndexKind
+extension GraphIndexKind {
+    public var metadata: [String: IndexMetadataValue] {
+        [
+            "strategy": .string(strategy.rawValue),
+            "hasEdgeField": .bool(hasEdgeField),
+            "hasGraphField": .bool(hasGraphField),
+        ]
+    }
+}

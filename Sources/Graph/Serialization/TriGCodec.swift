@@ -1,7 +1,7 @@
 // TriGCodec.swift
 // Graph - TriG dataset codec
 
-import Foundation
+import DatabaseValue
 
 public struct TriGDecoder: Sendable {
     public init() {}
@@ -569,13 +569,19 @@ private struct TriGParser {
             return try parseLiteralRest(lexicalForm: value)
         case .integerLiteral(let value):
             advance()
-            return .literal(.typed(value, datatype: XSDDatatype.integer.iri))
+            return .literal(
+                .typed(value, datatype: XSDDatatype.integer.typedLiteralDatatype)
+            )
         case .decimalLiteral(let value):
             advance()
-            return .literal(.typed(value, datatype: XSDDatatype.decimal.iri))
+            return .literal(
+                .typed(value, datatype: XSDDatatype.decimal.typedLiteralDatatype)
+            )
         case .doubleLiteral(let value):
             advance()
-            return .literal(.typed(value, datatype: XSDDatatype.double.iri))
+            return .literal(
+                .typed(value, datatype: XSDDatatype.double.typedLiteralDatatype)
+            )
         case .booleanLiteral(let value):
             advance()
             return .literal(.boolean(value == "true"))
@@ -601,11 +607,11 @@ private struct TriGParser {
             default:
                 throw unexpected("datatype IRI")
             }
-            return .literal(.typed(lexicalForm, datatype: datatype))
+            return .literal(try .typed(lexicalForm, datatype: datatype))
         }
         if case .langTag(let language) = current {
             advance()
-            return .literal(.langString(lexicalForm, language: language))
+            return .literal(try .langString(lexicalForm, language: language))
         }
         return .literal(.string(lexicalForm))
     }
@@ -687,7 +693,9 @@ private struct TriGParser {
     }
 
     private func resolveIRI(_ iri: String) -> String {
-        if let baseIRI, !iri.contains("://") && !iri.hasPrefix("urn:") {
+        if let baseIRI,
+           !DatabaseText.contains("://", in: iri),
+           !iri.hasPrefix("urn:") {
             return baseIRI + iri
         }
         return iri

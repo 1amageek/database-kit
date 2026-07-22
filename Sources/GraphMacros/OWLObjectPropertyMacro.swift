@@ -1,4 +1,5 @@
 import Foundation
+import DatabaseValue
 import SwiftCompilerPlugin
 import SwiftSyntax
 import SwiftSyntaxBuilder
@@ -52,29 +53,21 @@ public struct OWLObjectPropertyMacro: MemberMacro, ExtensionMacro {
             let argLabel = argument.label?.text
 
             if index == 0 && argLabel == nil {
-                // First unlabeled argument = IRI string
-                let expr = argument.expression.description.trimmingCharacters(in: .whitespaces)
-                guard expr.hasPrefix("\"") && expr.hasSuffix("\"") else {
+                guard let value = plainStringLiteral(argument.expression) else {
                     throw DiagnosticsError(diagnostics: [
                         Diagnostic(
                             node: Syntax(argument),
                             message: OWLObjectPropertyMacroErrorMessage(
-                                "@OWLObjectProperty first argument must be a string literal (IRI)"
+                                "@OWLObjectProperty first argument must be a plain string literal"
                             )
                         )
                     ])
                 }
-                iri = String(expr.dropFirst().dropLast())
+                iri = value
             } else if argLabel == "from" {
-                let expr = argument.expression.description.trimmingCharacters(in: .whitespaces)
-                if expr.hasPrefix("\"") && expr.hasSuffix("\"") {
-                    fromField = String(expr.dropFirst().dropLast())
-                }
+                fromField = plainStringLiteral(argument.expression) ?? ""
             } else if argLabel == "to" {
-                let expr = argument.expression.description.trimmingCharacters(in: .whitespaces)
-                if expr.hasPrefix("\"") && expr.hasSuffix("\"") {
-                    toField = String(expr.dropFirst().dropLast())
-                }
+                toField = plainStringLiteral(argument.expression) ?? ""
             }
         }
 
@@ -83,6 +76,16 @@ public struct OWLObjectPropertyMacro: MemberMacro, ExtensionMacro {
                 Diagnostic(
                     node: Syntax(node),
                     message: OWLObjectPropertyMacroErrorMessage("@OWLObjectProperty requires an IRI string argument")
+                )
+            ])
+        }
+        guard DatabaseRDFIRIValidator.isAbsolute(iri) else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: OWLObjectPropertyMacroErrorMessage(
+                        "@OWLObjectProperty IRI must be absolute"
+                    )
                 )
             ])
         }
@@ -105,23 +108,30 @@ public struct OWLObjectPropertyMacro: MemberMacro, ExtensionMacro {
 
         let structName = structDecl.name.text
 
-        // Resolve namespace from IRI
-        let namespace = extractNamespace(from: iri)
-
-        // Collect @OWLDataProperty / @OWLProperty annotated fields
+        // Collect @OWLDataProperty annotated fields.
         var ontologyProperties: [(fieldName: String, iri: String, label: String?)] = []
 
         for member in structDecl.memberBlock.members {
             if let varDecl = member.decl.as(VariableDeclSyntax.self) {
                 guard let propertyAttr = getOWLDataPropertyAttribute(varDecl) else { continue }
                 let info = extractOWLDataPropertyInfo(from: propertyAttr)
+                guard DatabaseRDFIRIValidator.isAbsolute(info.iri) else {
+                    throw DiagnosticsError(diagnostics: [
+                        Diagnostic(
+                            node: Syntax(propertyAttr),
+                            message: OWLObjectPropertyMacroErrorMessage(
+                                "@OWLDataProperty IRI must be absolute"
+                            )
+                        )
+                    ])
+                }
 
                 for binding in varDecl.bindings {
                     if let pattern = binding.pattern.as(IdentifierPatternSyntax.self) {
                         let fieldName = pattern.identifier.text
                         ontologyProperties.append((
                             fieldName: fieldName,
-                            iri: resolvePropertyIRI(info.iri, namespace: namespace),
+                            iri: info.iri,
                             label: info.label
                         ))
                     }
@@ -199,28 +209,14 @@ public struct OWLObjectPropertyMacro: MemberMacro, ExtensionMacro {
 
     // MARK: - Helpers
 
-    /// Extract namespace from IRI (same logic as OWLClassMacro)
-    private static func extractNamespace(from iri: String) -> String {
-        if let colonIndex = iri.firstIndex(of: ":") {
-            let afterColon = iri[iri.index(after: colonIndex)...]
-            if !afterColon.hasPrefix("//") {
-                return String(iri[...colonIndex])
-            }
+    private static func plainStringLiteral(_ expression: ExprSyntax) -> String? {
+        guard let literal = expression.as(StringLiteralExprSyntax.self),
+              literal.segments.count == 1,
+              let segment = literal.segments.first?.as(StringSegmentSyntax.self),
+              !segment.content.text.contains("\\") else {
+            return nil
         }
-        if let hashIndex = iri.lastIndex(of: "#") {
-            return String(iri[...hashIndex])
-        }
-        if let slashIndex = iri.lastIndex(of: "/") {
-            return String(iri[...slashIndex])
-        }
-        return "ex:"
-    }
-
-    /// Resolve property IRI with namespace
-    private static func resolvePropertyIRI(_ rawIRI: String, namespace: String) -> String {
-        if rawIRI.contains("://") { return rawIRI }
-        if rawIRI.contains(":") { return rawIRI }
-        return namespace + rawIRI
+        return segment.content.text
     }
 }
 

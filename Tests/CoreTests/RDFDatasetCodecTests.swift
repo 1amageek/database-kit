@@ -1,4 +1,5 @@
 import Testing
+import DatabaseValue
 @testable import Graph
 
 @Suite("RDF Dataset Codecs")
@@ -17,7 +18,13 @@ struct RDFDatasetCodecTests {
         #expect(dataset.quads.count == 3)
         #expect(dataset.quads[0].graph == nil)
         #expect(dataset.quads[1].graph == .iri("http://example.org/doc/1"))
-        #expect(dataset.quads[2].object == .literal(.typed("30", datatype: "http://www.w3.org/2001/XMLSchema#integer")))
+        let expected = RDFTerm.literal(
+            .typed(
+                "30",
+                datatype: XSDDatatype.integer.typedLiteralDatatype
+            )
+        )
+        #expect(dataset.quads[2].object == expected)
     }
 
     @Test("N-Quads rejects invalid predicate")
@@ -46,7 +53,13 @@ struct RDFDatasetCodecTests {
         #expect(dataset.quads[0].object == .blankNode("bob"))
         #expect(dataset.quads[0].graph == .iri("http://example.org/doc#1"))
         #expect(dataset.quads[1].subject == .iri("http://example.org/alice#id"))
-        #expect(dataset.quads[1].object == .literal(.langString("Alice #1\nAgent", language: "en")))
+        let expected = RDFTerm.literal(
+            .langString(
+                "Alice #1\nAgent",
+                language: try DatabaseRDFLanguageTag("en")
+            )
+        )
+        #expect(dataset.quads[1].object == expected)
     }
 
     @Test("N-Quads rejects literal graph names")
@@ -72,7 +85,12 @@ struct RDFDatasetCodecTests {
             RDFQuad(
                 subject: .iri("http://example.org/a"),
                 predicate: .iri("http://example.org/p"),
-                object: .literal(.langString("hello", language: "en"))
+                object: .literal(
+                    .langString(
+                        "hello",
+                        language: try DatabaseRDFLanguageTag("en")
+                    )
+                )
             ),
         ])
 

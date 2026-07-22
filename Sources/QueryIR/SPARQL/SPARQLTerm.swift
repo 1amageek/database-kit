@@ -6,7 +6,7 @@
 /// - W3C RDF 1.1 Concepts
 /// - W3C RDF-star
 
-import Foundation
+import DatabaseValue
 
 // Note: Core SPARQLTerm enum is defined in DataSource.swift
 // This file provides additional utilities and extensions.
@@ -16,17 +16,12 @@ import Foundation
 extension SPARQLTerm {
     /// Create a variable term
     public static func `var`(_ name: String) -> SPARQLTerm {
-        .variable(name.hasPrefix("?") ? String(name.dropFirst()) : name)
+        .variable(name)
     }
 
     /// Create an IRI term
     public static func uri(_ iri: String) -> SPARQLTerm {
         .iri(iri)
-    }
-
-    /// Create a prefixed name term
-    public static func prefixed(_ prefix: String, _ local: String) -> SPARQLTerm {
-        .prefixedName(prefix: prefix, local: local)
     }
 
     /// Create a string literal term
@@ -70,7 +65,7 @@ extension SPARQLTerm {
         predicate: SPARQLTerm,
         object: SPARQLTerm
     ) -> SPARQLTerm {
-        .quotedTriple(subject: subject, predicate: predicate, object: object)
+        .tripleTerm(subject: subject, predicate: predicate, object: object)
     }
 }
 
@@ -91,7 +86,6 @@ extension SPARQLTerm {
     /// Returns true if this is an IRI
     public var isIRI: Bool {
         if case .iri = self { return true }
-        if case .prefixedName = self { return true }
         return false
     }
 
@@ -109,7 +103,7 @@ extension SPARQLTerm {
 
     /// Returns true if this is a quoted triple (RDF-star)
     public var isQuotedTriple: Bool {
-        if case .quotedTriple = self { return true }
+        if case .tripleTerm = self { return true }
         return false
     }
 
@@ -119,19 +113,10 @@ extension SPARQLTerm {
         return nil
     }
 
-    /// Returns the IRI string if this is an IRI or prefixed name
-    public func resolveIRI(prefixes: [String: String] = [:]) -> String? {
-        switch self {
-        case .iri(let iri):
-            return iri
-        case .prefixedName(let prefix, let local):
-            if let base = prefixes[prefix] {
-                return base + local
-            }
-            return "\(prefix):\(local)"
-        default:
-            return nil
-        }
+    /// Returns the canonical absolute IRI string when this is an IRI.
+    public var iriValue: String? {
+        if case .iri(let iri) = self { return iri }
+        return nil
     }
 
     /// Returns the literal value if this is a literal
@@ -165,22 +150,6 @@ extension SPARQLTerm {
             // Fall back to full IRI with proper escaping
             return SPARQLEscape.iri(iri)
 
-        case .prefixedName(let prefix, let local):
-            // Validate NCName components
-            if let validatedPrefix = SPARQLEscape.ncNameOrNil(prefix) {
-                // Local part can be empty or valid
-                let localPattern = "^[a-zA-Z0-9_.-]*$"
-                if local.isEmpty || local.range(of: localPattern, options: .regularExpression) != nil {
-                    return "\(validatedPrefix):\(local)"
-                }
-            }
-            // Fall back to expanding to full IRI if we have the prefix mapping
-            if let base = prefixes[prefix] {
-                return SPARQLEscape.iri(base + local)
-            }
-            // Last resort: return as-is with warning potential
-            return "\(prefix):\(local)"
-
         case .literal(let lit):
             return lit.toSPARQL()
 
@@ -192,7 +161,7 @@ extension SPARQLTerm {
             // Generate safe blank node ID
             return "_:b\(abs(id.hashValue))"
 
-        case .quotedTriple(let s, let p, let o):
+        case .tripleTerm(let s, let p, let o):
             return "<< \(s.toSPARQL(prefixes: prefixes)) \(p.toSPARQL(prefixes: prefixes)) \(o.toSPARQL(prefixes: prefixes)) >>"
 
         case .reifiedTriple(let s, let p, let o, let r):
@@ -202,17 +171,6 @@ extension SPARQLTerm {
 }
 
 extension Literal {
-    /// Cached ISO8601DateFormatter for date serialization
-    /// Note: ISO8601DateFormatter is not Sendable but the formatter is immutable after creation
-    nonisolated(unsafe) private static let sparqlDateFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-        return formatter
-    }()
-
-    /// Cached ISO8601DateFormatter for timestamp serialization
-    nonisolated(unsafe) private static let sparqlTimestampFormatter = ISO8601DateFormatter()
-
     /// Generate SPARQL literal syntax
     public func toSPARQL() -> String {
         switch self {
@@ -222,16 +180,22 @@ extension Literal {
             return v ? "true" : "false"
         case .int(let v):
             return String(v)
+        case .uint(let v):
+            return "\"\(v)\"^^<http://www.w3.org/2001/XMLSchema#unsignedLong>"
+        case .decimal(let coefficient, let scale):
+            return "\"\(DatabaseLiteralEncoding.decimal(coefficient: coefficient, scale: scale))\"^^<urn:database:decimal>"
         case .double(let v):
             return String(v)
         case .string(let v):
             return SPARQLEscape.string(v)
         case .date(let v):
-            return "\"\(Self.sparqlDateFormatter.string(from: v))\"^^<http://www.w3.org/2001/XMLSchema#date>"
+            return "\"\(DatabaseLiteralEncoding.iso8601(v))\"^^<http://www.w3.org/2001/XMLSchema#date>"
         case .timestamp(let v):
-            return "\"\(Self.sparqlTimestampFormatter.string(from: v))\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"
+            return "\"\(DatabaseLiteralEncoding.iso8601(v))\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"
         case .binary(let v):
-            return "\"\(v.base64EncodedString())\"^^<http://www.w3.org/2001/XMLSchema#base64Binary>"
+            return "\"\(DatabaseLiteralEncoding.base64(v))\"^^<http://www.w3.org/2001/XMLSchema#base64Binary>"
+        case .uuid(let v):
+            return "\"\(v.description)\"^^<urn:uuid>"
         case .array(let v):
             return "(" + v.map { $0.toSPARQL() }.joined(separator: " ") + ")"
         case .iri(let v):
@@ -247,6 +211,35 @@ extension Literal {
             return "\(SPARQLEscape.string(value))@\(language)"
         case .dirLangLiteral(let value, let language, let direction):
             return "\(SPARQLEscape.string(value))@\(language)--\(direction)"
+        case .rdfTerm(let term):
+            return Self.rdfTermSPARQL(term)
+        }
+    }
+
+    private static func rdfTermSPARQL(_ term: DatabaseRDFTerm) -> String {
+        switch term {
+        case .iri(let value):
+            return SPARQLEscape.iri(value)
+        case .blankNode(let identifier):
+            if SPARQLEscape.ncNameOrNil(identifier) != nil {
+                return "_:\(identifier)"
+            }
+            var hash = UInt64(14_695_981_039_346_656_037)
+            for byte in identifier.utf8 {
+                hash = (hash ^ UInt64(byte)) &* 1_099_511_628_211
+            }
+            return "_:b\(hash)"
+        case .literal(let literal):
+            let lexical = SPARQLEscape.string(literal.lexicalForm)
+            if let language = literal.language {
+                if let direction = literal.direction {
+                    return "\(lexical)@\(language)--\(direction)"
+                }
+                return "\(lexical)@\(language)"
+            }
+            return "\(lexical)^^<\(literal.datatype)>"
+        case .tripleTerm(let subject, let predicate, let object):
+            return "<<( \(rdfTermSPARQL(subject)) \(rdfTermSPARQL(predicate)) \(rdfTermSPARQL(object)) )>>"
         }
     }
 }
@@ -267,44 +260,39 @@ extension SPARQLTerm {
         "skos": "http://www.w3.org/2004/02/skos/core#"
     ]
 
-    /// Create a prefixed term using common prefixes
-    public static func common(_ prefix: String, _ local: String) -> SPARQLTerm {
-        .prefixedName(prefix: prefix, local: local)
-    }
-
     /// RDF type property
     public static var rdfType: SPARQLTerm {
-        .prefixedName(prefix: "rdf", local: "type")
+        .iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
     }
 
     /// RDFS label property
     public static var rdfsLabel: SPARQLTerm {
-        .prefixedName(prefix: "rdfs", local: "label")
+        .iri("http://www.w3.org/2000/01/rdf-schema#label")
     }
 
     /// RDFS comment property
     public static var rdfsComment: SPARQLTerm {
-        .prefixedName(prefix: "rdfs", local: "comment")
+        .iri("http://www.w3.org/2000/01/rdf-schema#comment")
     }
 
     /// RDFS subClassOf property
     public static var rdfsSubClassOf: SPARQLTerm {
-        .prefixedName(prefix: "rdfs", local: "subClassOf")
+        .iri("http://www.w3.org/2000/01/rdf-schema#subClassOf")
     }
 
     /// RDFS subPropertyOf property
     public static var rdfsSubPropertyOf: SPARQLTerm {
-        .prefixedName(prefix: "rdfs", local: "subPropertyOf")
+        .iri("http://www.w3.org/2000/01/rdf-schema#subPropertyOf")
     }
 
     /// OWL sameAs property
     public static var owlSameAs: SPARQLTerm {
-        .prefixedName(prefix: "owl", local: "sameAs")
+        .iri("http://www.w3.org/2002/07/owl#sameAs")
     }
 
     /// OWL Class
     public static var owlClass: SPARQLTerm {
-        .prefixedName(prefix: "owl", local: "Class")
+        .iri("http://www.w3.org/2002/07/owl#Class")
     }
 }
 
@@ -329,21 +317,16 @@ extension SPARQLTerm {
         // Same type, compare values
         switch (self, other) {
         case (.blankNode(let a), .blankNode(let b)):
-            return a.compare(b) == .orderedAscending ? -1 : (a == b ? 0 : 1)
+            return a < b ? -1 : (a == b ? 0 : 1)
 
         case (.iri(let a), .iri(let b)):
-            return a.compare(b) == .orderedAscending ? -1 : (a == b ? 0 : 1)
-
-        case (.prefixedName, .prefixedName):
-            let a = resolveIRI(prefixes: prefixes) ?? ""
-            let b = other.resolveIRI(prefixes: prefixes) ?? ""
-            return a.compare(b) == .orderedAscending ? -1 : (a == b ? 0 : 1)
+            return a < b ? -1 : (a == b ? 0 : 1)
 
         case (.literal(let a), .literal(let b)):
             return compareLiterals(a, b)
 
         case (.variable(let a), .variable(let b)):
-            return a.compare(b) == .orderedAscending ? -1 : (a == b ? 0 : 1)
+            return a < b ? -1 : (a == b ? 0 : 1)
 
         default:
             return 0
@@ -353,19 +336,21 @@ extension SPARQLTerm {
     private var termRank: Int {
         switch self {
         case .blankNode: return 1
-        case .iri, .prefixedName: return 2
+        case .iri: return 2
         case .literal: return 3
         case .variable: return 0
-        case .quotedTriple: return 4
+        case .tripleTerm: return 4
         case .reifiedTriple: return 5
         }
     }
 
     private func compareLiterals(_ a: Literal, _ b: Literal) -> Int {
-        // Simple string comparison for now
+        if let numericComparison = a.compareExactNumeric(to: b) {
+            return numericComparison
+        }
         let aStr = a.description
         let bStr = b.description
-        return aStr.compare(bStr) == .orderedAscending ? -1 : (aStr == bStr ? 0 : 1)
+        return aStr < bStr ? -1 : (aStr == bStr ? 0 : 1)
     }
 }
 
@@ -381,12 +366,9 @@ extension SPARQLTerm {
             return .literal(lit)
         case .iri(let iri):
             return .literal(.iri(iri))
-        case .prefixedName(let prefix, let local):
-            // Convert to IRI literal
-            return .literal(.iri("\(prefix):\(local)"))
         case .blankNode(let id):
             return .literal(.blankNode(id))
-        case .quotedTriple(let s, let p, let o):
+        case .tripleTerm(let s, let p, let o):
             return .triple(
                 subject: s.toExpression(),
                 predicate: p.toExpression(),

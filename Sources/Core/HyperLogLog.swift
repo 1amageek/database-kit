@@ -1,9 +1,17 @@
-import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#elseif canImport(WASILibc)
+import WASILibc
+#endif
+import DatabaseValue
 
 /// HyperLogLog cardinality estimator
 ///
 /// Memory-efficient probabilistic cardinality estimation using the HyperLogLog algorithm.
-/// Uses only ~12KB memory (16,384 registers × 6 bits) with approximately ±2% accuracy.
+/// The default estimator uses 16 KiB in memory and can be persisted in a
+/// 12 KiB six-bit register frame with approximately 0.81% standard error.
 ///
 /// **Algorithm**:
 /// HyperLogLog works by hashing each element and observing the pattern of leading zeros
@@ -16,11 +24,11 @@ import Foundation
 ///
 /// // Add values
 /// for user in users {
-///     hll.add(.string(user.email))
+///     try hll.add(.string(user.email))
 /// }
 ///
 /// // Get estimated cardinality
-/// let uniqueCount = hll.cardinality()
+/// let uniqueCount = try hll.cardinality()
 /// print("Estimated unique emails: \(uniqueCount)")
 ///
 /// // Merge multiple estimators
@@ -29,38 +37,19 @@ import Foundation
 /// hll.merge(hll2)
 /// ```
 ///
-/// **Persistence**:
-/// ```swift
-/// // Save to FDB
-/// let data = try JSONEncoder().encode(hll)
-/// transaction.setValue(Array(data), for: key)
-///
-/// // Load from FDB
-/// let data = try await transaction.getValue(for: key)
-/// let hll = try JSONDecoder().decode(HyperLogLog.self, from: Data(data))
-/// ```
+/// Persistence belongs to the hosting runtime's bounded binary codec. JSON is
+/// not a canonical database storage representation.
 ///
 /// **References**:
 /// - P. Flajolet et al., "HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm"
 /// - http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf
 public struct HyperLogLog: Sendable, Codable, Hashable {
-    // MARK: - Constants
-
-    /// Number of registers (2^14 = 16,384)
-    /// More registers = better accuracy but more memory
-    private static let numRegisters = 16384
-
-    /// Number of bits for register index (14 bits for 16,384 registers)
-    private static let indexBits = 14
-
-    /// Mask for extracting register index
-    private static let indexMask: UInt64 = (1 << indexBits) - 1
-
-    /// Alpha constant for bias correction
-    /// alpha_m = 0.7213 / (1 + 1.079 / m) where m = numRegisters
-    private static let alpha: Double = 0.7213 / (1.0 + 1.079 / Double(numRegisters))
+    public static let supportedPrecision = 4...18
 
     // MARK: - Properties
+
+    /// Number of register-index bits.
+    public let precision: Int
 
     /// Registers storing the maximum number of leading zeros + 1 for each bucket
     /// Each register stores values 0-63 (6 bits), but we use UInt8 for simplicity
@@ -70,12 +59,44 @@ public struct HyperLogLog: Sendable, Codable, Hashable {
 
     /// Initialize a new HyperLogLog estimator
     public init() {
-        self.registers = Array(repeating: 0, count: Self.numRegisters)
+        self.precision = 14
+        self.registers = Array(repeating: 0, count: 1 << precision)
     }
 
-    /// Initialize from existing registers (for deserialization)
-    internal init(registers: [UInt8]) {
-        precondition(registers.count == Self.numRegisters, "Invalid register count")
+    /// Initialize an estimator with an explicit precision.
+    public init(precision: Int) throws(HyperLogLogError) {
+        guard Self.supportedPrecision.contains(precision) else {
+            throw .invalidPrecision(precision)
+        }
+        self.precision = precision
+        self.registers = Array(repeating: 0, count: 1 << precision)
+    }
+
+    /// Restores an estimator from its exact register state without an
+    /// additional array copy. The caller transfers the array's value ownership.
+    public init(
+        precision: Int,
+        registers: [UInt8]
+    ) throws(HyperLogLogError) {
+        guard Self.supportedPrecision.contains(precision) else {
+            throw .invalidPrecision(precision)
+        }
+        let expectedCount = 1 << precision
+        guard registers.count == expectedCount else {
+            throw .invalidRegisterCount(
+                expected: expectedCount,
+                actual: registers.count
+            )
+        }
+        let maximum = UInt8(65 - precision)
+        for (index, register) in registers.enumerated() where register > maximum {
+            throw .invalidRegisterValue(
+                index: index,
+                value: register,
+                maximum: maximum
+            )
+        }
+        self.precision = precision
         self.registers = registers
     }
 
@@ -86,8 +107,10 @@ public struct HyperLogLog: Sendable, Codable, Hashable {
     /// The value is hashed and the hash is used to update the appropriate register.
     ///
     /// - Parameter value: The value to add
-    public mutating func add(_ value: FieldValue) {
-        let hash = value.stableHash()
+    public mutating func add(
+        _ value: FieldValue
+    ) throws(DatabaseRDFTermCodecError) {
+        let hash = try value.stableHash()
         addHash(hash)
     }
 
@@ -98,11 +121,12 @@ public struct HyperLogLog: Sendable, Codable, Hashable {
     /// - Parameter hash: 64-bit hash value
     public mutating func addHash(_ hash: UInt64) {
         // Use lower bits for register index
-        let registerIndex = Int(hash & Self.indexMask)
+        let indexMask: UInt64 = (1 << precision) - 1
+        let registerIndex = Int(hash & indexMask)
 
         // Count leading zeros in remaining bits (upper 50 bits after using 14 for index)
-        let remainingBits = hash >> Self.indexBits
-        let effectiveBits = 64 - Self.indexBits  // 50 bits remaining
+        let remainingBits = hash >> precision
+        let effectiveBits = 64 - precision
 
         let leadingZeros: Int
         if remainingBits == 0 {
@@ -112,7 +136,7 @@ public struct HyperLogLog: Sendable, Codable, Hashable {
             // leadingZeroBitCount counts from MSB of 64-bit value
             // After right shift by indexBits, the upper indexBits positions are 0
             // We need leading zeros within the effective 50 bits
-            leadingZeros = remainingBits.leadingZeroBitCount - Self.indexBits
+            leadingZeros = remainingBits.leadingZeroBitCount - precision
         }
 
         // rho(w) = position of leftmost 1-bit, which is leadingZeros + 1
@@ -126,34 +150,48 @@ public struct HyperLogLog: Sendable, Codable, Hashable {
     /// Estimate the cardinality (number of distinct elements)
     ///
     /// - Returns: Estimated number of distinct elements added
-    public func cardinality() -> Int64 {
+    public func cardinality() throws(HyperLogLogError) -> Int64 {
         // Raw HyperLogLog estimate: alpha * m^2 / sum(2^(-M[j]))
         let harmonicMean = registers.reduce(0.0) { sum, register in
             sum + pow(2.0, -Double(register))
         }
 
-        let m = Double(Self.numRegisters)
-        var estimate = Self.alpha * m * m / harmonicMean
+        let m = Double(registers.count)
+        let alpha = 0.7213 / (1.0 + 1.079 / m)
+        var estimate = alpha * m * m / harmonicMean
 
         // Small range correction (linear counting)
         // When estimate < 2.5 * m, use linear counting for better accuracy
         if estimate <= 2.5 * m {
             // Count registers that are still zero
-            let zeroCount = registers.filter { $0 == 0 }.count
+            var zeroCount = 0
+            for register in registers where register == 0 {
+                zeroCount += 1
+            }
             if zeroCount > 0 {
                 // Linear counting: m * ln(m / V) where V = number of zero registers
                 estimate = m * log(m / Double(zeroCount))
             }
         }
 
-        // Large range correction
-        // When estimate > 1/30 * 2^32, apply correction for hash collisions
-        let threshold = (1.0 / 30.0) * pow(2.0, 32.0)
+        // Large-range correction must use the complete 64-bit hash domain.
+        // Applying the historical 32-bit correction here can produce NaN and
+        // trap during integer conversion for a valid 64-bit register state.
+        let hashSpace = 18_446_744_073_709_551_616.0
+        let threshold = hashSpace / 30.0
         if estimate > threshold {
-            estimate = -pow(2.0, 32.0) * log(1.0 - estimate / pow(2.0, 32.0))
+            guard estimate < hashSpace else {
+                throw .cardinalityOutOfRange
+            }
+            estimate = -hashSpace * log1p(-estimate / hashSpace)
         }
 
-        return Int64(estimate.rounded())
+        guard estimate.isFinite,
+              estimate >= 0,
+              let cardinality = Int64(exactly: estimate.rounded()) else {
+            throw .cardinalityOutOfRange
+        }
+        return cardinality
     }
 
     /// Merge another HyperLogLog estimator into this one
@@ -163,11 +201,17 @@ public struct HyperLogLog: Sendable, Codable, Hashable {
     /// the union of elements from both estimators.
     ///
     /// - Parameter other: Another HyperLogLog estimator
-    public mutating func merge(_ other: HyperLogLog) {
-        precondition(registers.count == other.registers.count,
-                     "Cannot merge HyperLogLog with different register counts")
+    public mutating func merge(
+        _ other: HyperLogLog
+    ) throws(HyperLogLogError) {
+        guard precision == other.precision else {
+            throw .precisionMismatch(
+                expected: precision,
+                actual: other.precision
+            )
+        }
 
-        for i in 0..<Self.numRegisters {
+        for i in registers.indices {
             registers[i] = max(registers[i], other.registers[i])
         }
     }
@@ -178,15 +222,18 @@ public struct HyperLogLog: Sendable, Codable, Hashable {
     ///   - lhs: First estimator
     ///   - rhs: Second estimator
     /// - Returns: New estimator containing the union
-    public static func merged(_ lhs: HyperLogLog, _ rhs: HyperLogLog) -> HyperLogLog {
+    public static func merged(
+        _ lhs: HyperLogLog,
+        _ rhs: HyperLogLog
+    ) throws(HyperLogLogError) -> HyperLogLog {
         var result = lhs
-        result.merge(rhs)
+        try result.merge(rhs)
         return result
     }
 
     /// Reset the estimator to empty state
     public mutating func reset() {
-        registers = Array(repeating: 0, count: Self.numRegisters)
+        registers = Array(repeating: 0, count: 1 << precision)
     }
 
     /// Check if the estimator is empty (no elements added)
@@ -203,14 +250,22 @@ public struct HyperLogLog: Sendable, Codable, Hashable {
     /// - Returns: Estimated relative error (e.g., 0.0081 for 0.81%)
     public var estimatedRelativeError: Double {
         // Standard error = 1.04 / sqrt(m)
-        return 1.04 / sqrt(Double(Self.numRegisters))
+        return 1.04 / sqrt(Double(registers.count))
     }
 
     /// Get memory usage in bytes
     ///
     /// - Returns: Number of bytes used by registers
     public var memorySizeInBytes: Int {
-        return Self.numRegisters  // 1 byte per register
+        return registers.count
+    }
+
+    /// Borrows the canonical register storage for zero-intermediate-copy codecs.
+    /// The pointer is valid only for the duration of `body` and must not escape.
+    public func withUnsafeRegisters<Result>(
+        _ body: (UnsafeBufferPointer<UInt8>) throws -> Result
+    ) rethrows -> Result {
+        try registers.withUnsafeBufferPointer(body)
     }
 }
 
@@ -218,25 +273,30 @@ public struct HyperLogLog: Sendable, Codable, Hashable {
 
 extension HyperLogLog {
     enum CodingKeys: String, CodingKey {
+        case precision
         case registers
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        // Try to decode as Data first (more compact)
-        if let data = try? container.decode(Data.self, forKey: .registers) {
-            self.registers = Array(data)
-        } else {
-            // Fall back to array of UInt8
-            self.registers = try container.decode([UInt8].self, forKey: .registers)
+        let precision = try container.decode(Int.self, forKey: .precision)
+        guard Self.supportedPrecision.contains(precision) else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: [CodingKeys.precision],
+                    debugDescription: "Unsupported HyperLogLog precision: \(precision)"
+                )
+            )
         }
-
-        guard registers.count == Self.numRegisters else {
+        let registers = try container.decode([UInt8].self, forKey: .registers)
+        do {
+            try self.init(precision: precision, registers: registers)
+        } catch let error {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(
                     codingPath: [CodingKeys.registers],
-                    debugDescription: "Invalid register count: expected \(Self.numRegisters), got \(registers.count)"
+                    debugDescription: "Invalid HyperLogLog register state: \(error)"
                 )
             )
         }
@@ -244,9 +304,8 @@ extension HyperLogLog {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-
-        // Encode as Data for compactness
-        try container.encode(Data(registers), forKey: .registers)
+        try container.encode(precision, forKey: .precision)
+        try container.encode(registers, forKey: .registers)
     }
 }
 
@@ -254,8 +313,13 @@ extension HyperLogLog {
 
 extension HyperLogLog: CustomStringConvertible {
     public var description: String {
-        let card = cardinality()
+        let cardinalityDescription: String
+        do {
+            cardinalityDescription = String(try cardinality())
+        } catch {
+            cardinalityDescription = "out-of-range"
+        }
         let error = estimatedRelativeError * 100
-        return "HyperLogLog(cardinality: ~\(card), error: ±\(String(format: "%.2f", error))%)"
+        return "HyperLogLog(cardinality: ~\(cardinalityDescription), errorPercent: \(error))"
     }
 }

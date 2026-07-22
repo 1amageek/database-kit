@@ -4,8 +4,6 @@
 // Reference: W3C SHACL §4-§7 (Core Constraint Components)
 // https://www.w3.org/TR/shacl/#core-components
 
-import Foundation
-
 /// SHACL Constraint Component
 ///
 /// Defines a single constraint that value nodes must satisfy.

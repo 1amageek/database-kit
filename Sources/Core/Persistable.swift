@@ -1,3 +1,5 @@
+public import DatabaseValue
+
 /// Persistable protocol - Storage-independent persistable model interface
 ///
 /// This protocol defines the metadata and serialization interface for persistable data models.
@@ -43,32 +45,37 @@ public protocol Persistable: Sendable, Codable {
 
     /// The type of the unique identifier
     ///
-    /// **IMPORTANT**: When used with FDBRuntime (server-side), the ID type MUST also
-    /// conform to `TupleElement` for FDB key encoding. This cannot be enforced at
-    /// compile time because FDBModel is platform-independent (iOS/macOS clients).
+    /// The identifier must provide one canonical logical representation through
+    /// `RecordIdentifier`. Storage and DatabaseWire use that same representation,
+    /// so identifier support is enforced at compile time instead of by a runtime
+    /// cast in a storage adapter.
     ///
-    /// **Supported ID types** (conform to TupleElement):
+    /// **Supported scalar ID types**:
     /// - `String` (recommended: ULID for sortable unique IDs)
     /// - `Int64`, `Int32`, `Int16`, `Int8`, `Int`
     /// - `UInt64`, `UInt32`, `UInt16`, `UInt8`, `UInt`
     /// - `UUID`
-    /// - `Double`, `Float`
     /// - `Bool`
     /// - `Data`, `[UInt8]`
     ///
-    /// **Unsupported** (will cause runtime error in FDBRuntime):
-    /// - Custom structs/classes (unless they conform to TupleElement)
-    /// - Enums (unless raw value is a supported type)
-    associatedtype ID: Sendable & Hashable & Codable
+    /// Custom composite identifiers conform to `RecordIdentifier` and declare an
+    /// exact `RecordIdentifierType.composite` shape.
+    associatedtype ID: RecordIdentifier & Codable
 
     /// Unique identifier for this instance
     ///
     /// - Auto-generated: `var id: String = ULID().ulidString`
-    /// - User-defined: Any type conforming to TupleElement
+    /// - User-defined: Any type conforming to `RecordIdentifier`
     ///
     /// **Important**: `id` is not included in the generated initializer.
     /// It is always auto-initialized with its default value.
     var id: ID { get }
+
+    /// Identifier type exposed through the `Persistable` existential boundary.
+    static var recordIdentifierType: RecordIdentifierType { get }
+
+    /// Identifier value exposed through the `Persistable` existential boundary.
+    var recordIdentifierValue: RecordIdentifierValue { get }
 
     // MARK: - Metadata (Storage-independent)
 
@@ -113,8 +120,11 @@ public protocol Persistable: Sendable, Codable {
     /// Macro-generated descriptors from @Persistable (#Index, @Relationship, @OWLObjectProperty).
     ///
     /// Override point for @Persistable macro. Other macros provide descriptors
-    /// through separate properties (e.g., `_owlTripleDescriptors` from @OWLClass).
+    /// through separate properties (e.g., `_owlRDFDescriptors` from @OWLClass).
     static var _persistableDescriptors: [any Descriptor] { get }
+
+    /// Macro-generated index descriptors without dynamic type recovery.
+    static var _persistableIndexDescriptors: [IndexDescriptor] { get }
 
     /// Unified descriptor array merging all sources.
     ///
@@ -128,19 +138,19 @@ public protocol Persistable: Sendable, Codable {
     /// Directory path components for FDB storage
     ///
     /// Generated from `#Directory<T>` macro declarations.
-    /// Contains a mix of static `Path` and dynamic `Field` components.
+    /// Contains canonical static path and dynamic field components.
     ///
     /// **Example**:
     /// ```swift
     /// #Directory<User>("app", "users")
-    /// // → [Path("app"), Path("users")]
+    /// // → [.staticPath("app"), .staticPath("users")]
     ///
     /// #Directory<Order>("tenants", Field(\.tenantID), "orders")
-    /// // → [Path("tenants"), Field(\.tenantID), Path("orders")]
+    /// // → [.staticPath("tenants"), .dynamicField("tenantID"), .staticPath("orders")]
     /// ```
     ///
-    /// **Default**: Returns `[Path(persistableType)]` if not specified via macro.
-    static var directoryPathComponents: [any DirectoryPathElement] { get }
+    /// **Default**: Returns `[.staticPath(persistableType)]` if not specified via macro.
+    static var directoryPathComponents: [DirectoryPathComponent] { get }
 
     /// Directory layer type for FDB storage
     ///
@@ -180,6 +190,9 @@ public protocol Persistable: Sendable, Codable {
     /// //  FieldSchema(name: "age", fieldNumber: 3, type: .int, ...)]
     /// ```
     static var fieldSchemas: [FieldSchema] { get }
+
+    /// Reconstruct a compiled record directly from canonical database values.
+    static func decodeDatabaseRecord(_ fields: [DatabaseObjectField]) throws -> Self
 
     /// Get field number for a field name (for Protobuf serialization)
     ///
@@ -302,8 +315,19 @@ public protocol Persistable: Sendable, Codable {
 // MARK: - Default Implementations
 
 public extension Persistable {
+    static var recordIdentifierType: RecordIdentifierType {
+        ID.recordIdentifierType
+    }
+
+    var recordIdentifierValue: RecordIdentifierValue {
+        id.recordIdentifierValue
+    }
+
     /// Default: no macro-generated descriptors.
     static var _persistableDescriptors: [any Descriptor] { [] }
+
+    /// Default: no macro-generated indexes.
+    static var _persistableIndexDescriptors: [IndexDescriptor] { [] }
 
     /// Default: unified descriptors = macro-generated descriptors only.
     ///
@@ -315,18 +339,18 @@ public extension Persistable {
     ///
     /// Filters `descriptors` to return only `IndexDescriptor` instances.
     static var indexDescriptors: [IndexDescriptor] {
-        descriptors.compactMap { $0 as? IndexDescriptor }
+        _persistableIndexDescriptors
     }
 
     /// Default implementation uses persistableType as single path component
     ///
-    /// If `#Directory` macro is not used, defaults to `[Path(persistableType)]`.
+    /// If `#Directory` macro is not used, defaults to `[.staticPath(persistableType)]`.
     /// For example, `User` type → directory path `["User"]`.
     ///
     /// **Note**: @Persistable macro always generates explicit implementations,
     /// which override this default for macro-decorated types.
-    static var directoryPathComponents: [any DirectoryPathElement] {
-        [Path(persistableType)]
+    static var directoryPathComponents: [DirectoryPathComponent] {
+        [.staticPath(persistableType)]
     }
 
     /// Default implementation returns `.default` layer
@@ -339,6 +363,12 @@ public extension Persistable {
 
     /// Default implementation returns empty array (no field schemas)
     static var fieldSchemas: [FieldSchema] { [] }
+
+    static func decodeDatabaseRecord(_ fields: [DatabaseObjectField]) throws -> Self {
+        throw DatabaseRecordDecodingError.missingCompiledDecoder(
+            persistableType
+        )
+    }
 
     /// Default implementation returns nil (no field numbers)
     static func fieldNumber(for fieldName: String) -> Int? { nil }
@@ -375,19 +405,4 @@ public extension Persistable {
         return "\(keyPath)"
     }
 
-    /// Register this type for index building during migrations (optional)
-    ///
-    /// **Default Implementation**: Does nothing.
-    ///
-    /// **Note**: This method is provided for backward compatibility and advanced
-    /// use cases. The primary index building flow uses `_EntityIndexBuildable`
-    /// protocol, which automatically works for all `Persistable & Codable` types.
-    ///
-    /// **FDBIndexing Override**: For `Persistable & Codable` types,
-    /// FDBIndexing provides a specialized implementation that registers
-    /// the type with `IndexBuilderRegistry` for optional manual registry usage.
-    static func registerForIndexBuilding() {
-        // Default: do nothing
-        // FDBIndexing provides specialized implementation for Codable types
-    }
 }

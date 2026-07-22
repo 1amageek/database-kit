@@ -6,8 +6,6 @@
 // Reference: W3C OWL 2 Web Ontology Language
 // https://www.w3.org/TR/owl2-syntax/#Class_Expressions
 
-import Foundation
-
 /// OWL Named Class
 ///
 /// Represents a named class (concept) in an OWL ontology.

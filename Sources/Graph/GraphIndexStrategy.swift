@@ -4,8 +4,6 @@
 // Defines different indexing strategies for graph data with varying
 // trade-offs between write cost and query performance.
 
-import Foundation
-
 /// Graph index storage strategy
 ///
 /// Determines how many index orderings are maintained for graph edges.
@@ -21,8 +19,8 @@ public enum GraphIndexStrategy: String, Sendable, Codable, CaseIterable {
     /// Best for social graphs and simple traversal patterns.
     ///
     /// **Indexes**:
-    /// - `[out]/[edge]/[from]/[to]` - outgoing edges
-    /// - `[in]/[edge]/[to]/[from]` - incoming edges
+    /// - `[out]/[from]/[edge]/[to]` - outgoing edges
+    /// - `[in]/[to]/[edge]/[from]` - incoming edges
     ///
     /// **Supported query patterns**:
     /// - `(from, ?, ?)` - all outgoing edges from a node
@@ -91,6 +89,24 @@ public enum GraphIndexStrategy: String, Sendable, Codable, CaseIterable {
     /// **Write cost**: 3 entries per edge
     case namedGraphStore
 
+    /// 6-index: triple-first and graph-first cyclic orderings
+    ///
+    /// Canonical RDF dataset layout. Unscoped patterns use SPO/POS/OSP while
+    /// graph-bound patterns use GSPO/GPOS/GOSP. This keeps both dataset-wide
+    /// and named-graph reads prefix-addressable without duplicating RDF
+    /// semantics outside the record-layer index maintainer.
+    ///
+    /// **Indexes**:
+    /// - `[spo]/[from]/[edge]/[to]/[graph]`
+    /// - `[pos]/[edge]/[to]/[from]/[graph]`
+    /// - `[osp]/[to]/[from]/[edge]/[graph]`
+    /// - `[gspo]/[graph]/[from]/[edge]/[to]`
+    /// - `[gpos]/[graph]/[edge]/[to]/[from]`
+    /// - `[gosp]/[graph]/[to]/[from]/[edge]`
+    ///
+    /// **Write cost**: 6 entries per quad
+    case quadStore
+
     /// Number of index entries created per edge
     public var indexCount: Int {
         switch self {
@@ -98,6 +114,7 @@ public enum GraphIndexStrategy: String, Sendable, Codable, CaseIterable {
         case .tripleStore: return 3
         case .hexastore: return 6
         case .namedGraphStore: return 3
+        case .quadStore: return 6
         }
     }
 
@@ -112,6 +129,8 @@ public enum GraphIndexStrategy: String, Sendable, Codable, CaseIterable {
             return "Hexastore (6-index): all permutations for maximum query performance"
         case .namedGraphStore:
             return "Named Graph Store (3-index): graph-first GSPO/GPOS/GOSP"
+        case .quadStore:
+            return "Quad Store (6-index): SPO/POS/OSP plus GSPO/GPOS/GOSP"
         }
     }
 }
@@ -121,8 +140,8 @@ public enum GraphIndexStrategy: String, Sendable, Codable, CaseIterable {
 /// Used to specify which index to scan for a given query pattern.
 public enum GraphIndexOrdering: String, Sendable, Codable, CaseIterable {
     // Adjacency orderings
-    case out    // [edge]/[from]/[to]
-    case `in`   // [edge]/[to]/[from]
+    case out    // [from]/[edge]/[to]
+    case `in`   // [to]/[edge]/[from]
 
     // Triple store orderings (SPO/POS/OSP)
     case spo    // [from]/[edge]/[to]
@@ -145,8 +164,8 @@ public enum GraphIndexOrdering: String, Sendable, Codable, CaseIterable {
     /// For example, SPO returns [0, 1, 2] meaning from=0, edge=1, to=2.
     public var elementOrder: [Int] {
         switch self {
-        case .out:  return [1, 0, 2]  // [edge]/[from]/[to]
-        case .in:   return [1, 2, 0]  // [edge]/[to]/[from]
+        case .out:  return [0, 1, 2]  // [from]/[edge]/[to]
+        case .in:   return [2, 1, 0]  // [to]/[edge]/[from]
         case .spo:  return [0, 1, 2]  // [from]/[edge]/[to]
         case .sop:  return [0, 2, 1]  // [from]/[to]/[edge]
         case .pso:  return [1, 0, 2]  // [edge]/[from]/[to]

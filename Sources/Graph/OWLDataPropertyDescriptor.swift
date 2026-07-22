@@ -44,6 +44,3 @@ public struct OWLDataPropertyDescriptor: Descriptor, Sendable, Codable, Hashable
         self.targetFieldName = targetFieldName
     }
 }
-
-/// Backward compatibility
-public typealias OntologyPropertyDescriptor = OWLDataPropertyDescriptor

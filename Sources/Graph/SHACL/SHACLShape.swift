@@ -4,8 +4,6 @@
 // Reference: W3C SHACL §2 (SHACL Core)
 // https://www.w3.org/TR/shacl/#shapes
 
-import Foundation
-
 /// SHACL Shape — a node shape or property shape
 ///
 /// Shapes define constraints that focus nodes must satisfy.
@@ -34,11 +32,11 @@ public enum SHACLShape: Sendable, Codable, Hashable {
 // MARK: - SHACLShape Analysis
 
 extension SHACLShape {
-    /// The shape IRI (if named)
-    public var iri: String? {
+    /// The RDF node identifying the shape, when it is not anonymous.
+    public var identifier: RDFTerm? {
         switch self {
-        case .node(let s): return s.iri
-        case .property(let s): return s.iri
+        case .node(let shape): return shape.identifier
+        case .property(let shape): return shape.identifier
         }
     }
 
@@ -85,8 +83,8 @@ extension SHACLShape {
 /// Reference: W3C SHACL §2.1.1
 public struct NodeShape: Sendable, Codable, Hashable {
 
-    /// Shape IRI (nil for anonymous/blank node shapes)
-    public var iri: String?
+    /// RDF node identifying the shape, or nil for an anonymous shape.
+    public var identifier: RDFTerm?
 
     /// Target declarations
     public var targets: [SHACLTarget]
@@ -107,7 +105,7 @@ public struct NodeShape: Sendable, Codable, Hashable {
     public var deactivated: Bool
 
     public init(
-        iri: String? = nil,
+        identifier: RDFTerm? = nil,
         targets: [SHACLTarget] = [],
         constraints: [SHACLConstraint] = [],
         propertyShapes: [PropertyShape] = [],
@@ -115,7 +113,7 @@ public struct NodeShape: Sendable, Codable, Hashable {
         messages: [String] = [],
         deactivated: Bool = false
     ) {
-        self.iri = iri
+        self.identifier = identifier
         self.targets = targets
         self.constraints = constraints
         self.propertyShapes = propertyShapes
@@ -135,8 +133,8 @@ public struct NodeShape: Sendable, Codable, Hashable {
 /// Reference: W3C SHACL §2.1.2
 public struct PropertyShape: Sendable, Codable, Hashable {
 
-    /// Shape IRI (nil for anonymous)
-    public var iri: String?
+    /// RDF node identifying the shape, or nil for an anonymous shape.
+    public var identifier: RDFTerm?
 
     /// Property path (sh:path) — required for property shapes
     public var path: SHACLPath
@@ -175,7 +173,7 @@ public struct PropertyShape: Sendable, Codable, Hashable {
     public var defaultValue: RDFTerm?
 
     public init(
-        iri: String? = nil,
+        identifier: RDFTerm? = nil,
         path: SHACLPath,
         targets: [SHACLTarget] = [],
         constraints: [SHACLConstraint] = [],
@@ -189,7 +187,7 @@ public struct PropertyShape: Sendable, Codable, Hashable {
         group: String? = nil,
         defaultValue: RDFTerm? = nil
     ) {
-        self.iri = iri
+        self.identifier = identifier
         self.path = path
         self.targets = targets
         self.constraints = constraints
@@ -211,9 +209,9 @@ extension SHACLShape: CustomStringConvertible {
     public var description: String {
         switch self {
         case .node(let s):
-            return "NodeShape(\(s.iri ?? "_:anon"), targets: \(s.targets.count), constraints: \(s.constraints.count), properties: \(s.propertyShapes.count))"
+            return "NodeShape(\(s.identifier?.description ?? "anonymous"), targets: \(s.targets.count), constraints: \(s.constraints.count), properties: \(s.propertyShapes.count))"
         case .property(let s):
-            return "PropertyShape(\(s.iri ?? "_:anon"), path: \(s.path), constraints: \(s.constraints.count))"
+            return "PropertyShape(\(s.identifier?.description ?? "anonymous"), path: \(s.path), constraints: \(s.constraints.count))"
         }
     }
 }

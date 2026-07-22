@@ -1,4 +1,8 @@
+#if canImport(FoundationEssentials)
+import struct FoundationEssentials.Date
+#else
 import struct Foundation.Date
+#endif
 
 /// ULID (Universally Unique Lexicographically Sortable Identifier)
 ///

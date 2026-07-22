@@ -6,10 +6,10 @@
 /// - ISO/IEC 9075-16:2023 (SQL/PGQ GRAPH_TABLE)
 /// - W3C SPARQL 1.1/1.2 (Graph Patterns, SERVICE)
 
-import Foundation
+import DatabaseValue
 
 /// Table reference (SQL)
-public struct TableRef: Sendable, Equatable, Hashable, Codable {
+public struct TableRef: Sendable, Equatable, Hashable {
     /// Schema name (optional)
     public let schema: String?
 
@@ -19,17 +19,30 @@ public struct TableRef: Sendable, Equatable, Hashable, Codable {
     /// Alias (optional)
     public let alias: String?
 
-    public init(schema: String? = nil, table: String, alias: String? = nil) {
+    /// Typed values for the table's compiled dynamic directory components.
+    public let partitions: [DatabaseObjectField]
+
+    public init(
+        schema: String? = nil,
+        table: String,
+        alias: String? = nil,
+        partitions: [DatabaseObjectField] = []
+    ) {
         self.schema = schema
         self.table = table
         self.alias = alias
+        self.partitions = partitions
     }
 
     /// Create a simple table reference
-    public init(_ table: String) {
+    public init(
+        _ table: String,
+        partitions: [DatabaseObjectField] = []
+    ) {
         self.schema = nil
         self.table = table
         self.alias = nil
+        self.partitions = partitions
     }
 
     /// Returns the effective name (alias if present, otherwise table name)
@@ -69,7 +82,7 @@ extension TableRef {
 }
 
 /// JOIN type
-public enum JoinType: String, Sendable, Equatable, Hashable, Codable {
+public enum JoinType: String, Sendable, Equatable, Hashable {
     case inner
     case left
     case right
@@ -86,7 +99,7 @@ public enum JoinType: String, Sendable, Equatable, Hashable, Codable {
 }
 
 /// JOIN clause
-public struct JoinClause: Sendable, Equatable, Hashable, Codable {
+public struct JoinClause: Sendable, Equatable, Hashable {
     public let type: JoinType
     public let left: DataSource
     public let right: DataSource
@@ -110,7 +123,7 @@ public enum JoinCondition: Sendable, Equatable, Hashable {
 }
 
 /// Named subquery (WITH clause / CTE)
-public struct NamedSubquery: Sendable, Equatable, Hashable, Codable {
+public struct NamedSubquery: Sendable, Equatable, Hashable {
     public let name: String
     public let columns: [String]?
     public let query: SelectQuery
@@ -130,13 +143,13 @@ public struct NamedSubquery: Sendable, Equatable, Hashable, Codable {
 }
 
 /// CTE materialization hint
-public enum Materialization: String, Sendable, Equatable, Hashable, Codable {
+public enum Materialization: String, Sendable, Equatable, Hashable {
     case materialized
     case notMaterialized
 }
 
 /// Projection item (SELECT clause item)
-public struct ProjectionItem: Sendable, Equatable, Hashable, Codable {
+public struct ProjectionItem: Sendable, Equatable, Hashable {
     public let expression: Expression
     public let alias: String?
 
@@ -175,7 +188,7 @@ public enum Projection: Sendable, Equatable, Hashable {
 ///
 /// Allows `QueryIR` to address extensible logical sources without enumerating
 /// feature-specific cases in `DataSource`.
-public struct LogicalSourceRef: Sendable, Equatable, Hashable, Codable {
+public struct LogicalSourceRef: Sendable, Equatable, Hashable {
     public let kindIdentifier: String
     public let identifier: String
     public let alias: String?
@@ -195,7 +208,7 @@ public struct LogicalSourceRef: Sendable, Equatable, Hashable, Codable {
     }
 }
 
-public enum BuiltinLogicalSourceKind {
+public enum LogicalSourceKind {
     public static let polymorphic = "polymorphic"
 }
 
@@ -262,20 +275,27 @@ public indirect enum DataSource: Sendable, Equatable, Hashable {
 // GraphPattern -> SPARQL/GraphPattern.swift
 
 /// Placeholder for GraphTableSource (defined in SQL/GraphTable.swift)
-public struct GraphTableSource: Sendable, Equatable, Hashable, Codable {
+public struct GraphTableSource: Sendable, Equatable, Hashable {
     public let graphName: String
     public let matchPattern: MatchPattern
     public let columns: [GraphTableColumn]?
+    public let alias: String?
 
-    public init(graphName: String, matchPattern: MatchPattern, columns: [GraphTableColumn]? = nil) {
+    public init(
+        graphName: String,
+        matchPattern: MatchPattern,
+        columns: [GraphTableColumn]? = nil,
+        alias: String? = nil
+    ) {
         self.graphName = graphName
         self.matchPattern = matchPattern
         self.columns = columns
+        self.alias = alias
     }
 }
 
 /// Column definition for GRAPH_TABLE
-public struct GraphTableColumn: Sendable, Equatable, Hashable, Codable {
+public struct GraphTableColumn: Sendable, Equatable, Hashable {
     public let expression: Expression
     public let alias: String
 
@@ -286,7 +306,7 @@ public struct GraphTableColumn: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Placeholder for MatchPattern (defined in SQL/MatchPattern.swift)
-public struct MatchPattern: Sendable, Equatable, Hashable, Codable {
+public struct MatchPattern: Sendable, Equatable, Hashable {
     public let paths: [PathPattern]
     public let `where`: Expression?
 
@@ -297,7 +317,7 @@ public struct MatchPattern: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Placeholder for PathPattern (defined in SQL/PathPattern.swift)
-public struct PathPattern: Sendable, Equatable, Hashable, Codable {
+public struct PathPattern: Sendable, Equatable, Hashable {
     public let pathVariable: String?
     public let elements: [PathElement]
     public let mode: PathMode?
@@ -318,7 +338,7 @@ public enum PathElement: Sendable, Equatable, Hashable {
 }
 
 /// Property binding for graph patterns (key-value pair)
-public struct PropertyBinding: Sendable, Equatable, Hashable, Codable {
+public struct PropertyBinding: Sendable, Equatable, Hashable {
     public let key: String
     public let value: Expression
 
@@ -329,7 +349,7 @@ public struct PropertyBinding: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Node pattern
-public struct NodePattern: Sendable, Equatable, Hashable, Codable {
+public struct NodePattern: Sendable, Equatable, Hashable {
     public let variable: String?
     public let labels: [String]?
     public let properties: [PropertyBinding]?
@@ -342,7 +362,7 @@ public struct NodePattern: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Edge pattern
-public struct EdgePattern: Sendable, Equatable, Hashable, Codable {
+public struct EdgePattern: Sendable, Equatable, Hashable {
     public let variable: String?
     public let labels: [String]?
     public let properties: [PropertyBinding]?
@@ -362,7 +382,7 @@ public struct EdgePattern: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Edge direction
-public enum EdgeDirection: String, Sendable, Equatable, Hashable, Codable {
+public enum EdgeDirection: String, Sendable, Equatable, Hashable {
     /// Outgoing edge: ->
     case outgoing
 
@@ -420,7 +440,7 @@ public enum PathMode: Sendable, Equatable, Hashable {
 
 /// Placeholder for GraphPattern (defined in SPARQL/GraphPattern.swift)
 public indirect enum GraphPattern: Sendable, Equatable, Hashable {
-    case basic([TriplePattern])
+    case basic(BasicGraphPattern)
     case join(GraphPattern, GraphPattern)
     case optional(GraphPattern, GraphPattern)
     case union(GraphPattern, GraphPattern)
@@ -432,12 +452,11 @@ public indirect enum GraphPattern: Sendable, Equatable, Hashable {
     case values(variables: [String], bindings: [[Literal?]])
     case subquery(SelectQuery)
     case groupBy(GraphPattern, expressions: [Expression], aggregates: [AggregateBinding])
-    case propertyPath(subject: SPARQLTerm, path: PropertyPath, object: SPARQLTerm)
     case lateral(GraphPattern, GraphPattern)
 }
 
 /// Placeholder for TriplePattern (defined in SPARQL/TriplePattern.swift)
-public struct TriplePattern: Sendable, Equatable, Hashable, Codable {
+public struct TriplePattern: Sendable, Equatable, Hashable {
     public let subject: SPARQLTerm
     public let predicate: SPARQLTerm
     public let object: SPARQLTerm
@@ -454,23 +473,9 @@ public struct TriplePattern: Sendable, Equatable, Hashable, Codable {
 public indirect enum SPARQLTerm: Sendable, Equatable, Hashable {
     case variable(String)
     case iri(String)
-    case prefixedName(prefix: String, local: String)
     case literal(Literal)
     case blankNode(String)
-    case quotedTriple(subject: SPARQLTerm, predicate: SPARQLTerm, object: SPARQLTerm)
+    case tripleTerm(subject: SPARQLTerm, predicate: SPARQLTerm, object: SPARQLTerm)
     /// Reified triple (SPARQL 1.2) — << subject predicate object ~reifier >>
     case reifiedTriple(subject: SPARQLTerm, predicate: SPARQLTerm, object: SPARQLTerm, reifier: SPARQLTerm)
-}
-
-/// Placeholder for PropertyPath (defined in SPARQL/PropertyPath.swift)
-public indirect enum PropertyPath: Sendable, Equatable, Hashable {
-    case iri(String)
-    case inverse(PropertyPath)
-    case sequence(PropertyPath, PropertyPath)
-    case alternative(PropertyPath, PropertyPath)
-    case zeroOrMore(PropertyPath)
-    case oneOrMore(PropertyPath)
-    case zeroOrOne(PropertyPath)
-    case negation([String])
-    case range(PropertyPath, min: Int?, max: Int?)
 }

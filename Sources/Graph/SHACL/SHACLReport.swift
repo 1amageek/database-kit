@@ -4,8 +4,6 @@
 // Reference: W3C SHACL §3.6 (Validation Report)
 // https://www.w3.org/TR/shacl/#validation-report
 
-import Foundation
-
 /// SHACL Validation Report
 ///
 /// The result of validating a data graph against a shapes graph.
@@ -68,24 +66,15 @@ extension SHACLValidationReport {
     }
 
     /// Results grouped by focus node
-    public var resultsByFocusNode: [String: [SHACLValidationResult]] {
+    public var resultsByFocusNode: [RDFTerm: [SHACLValidationResult]] {
         Dictionary(grouping: results, by: \.focusNode)
     }
 
-    /// Results grouped by source shape IRI
-    public var resultsBySourceShape: [String: [SHACLValidationResult]] {
-        var grouped: [String: [SHACLValidationResult]] = [:]
-        for result in results {
-            let key = result.sourceShape ?? "_:unknown"
-            grouped[key, default: []].append(result)
-        }
-        return grouped
+    /// Results grouped by their optional canonical source-shape identifier.
+    public var resultsBySourceShape: [RDFTerm?: [SHACLValidationResult]] {
+        Dictionary(grouping: results, by: \.sourceShape)
     }
 
-    /// Merge with another report
-    public func merged(with other: SHACLValidationReport) -> SHACLValidationReport {
-        SHACLValidationReport(results: results + other.results)
-    }
 }
 
 // MARK: - SHACLValidationResult
@@ -98,7 +87,7 @@ extension SHACLValidationReport {
 public struct SHACLValidationResult: Sendable, Codable {
 
     /// sh:focusNode — the node that was validated
-    public let focusNode: String
+    public let focusNode: RDFTerm
 
     /// sh:resultPath — the property path (for property shape results)
     public let resultPath: SHACLPath?
@@ -109,8 +98,8 @@ public struct SHACLValidationResult: Sendable, Codable {
     /// sh:sourceConstraintComponent — IRI of the constraint component
     public let sourceConstraintComponent: String
 
-    /// sh:sourceShape — IRI of the shape that produced this result
-    public let sourceShape: String?
+    /// sh:sourceShape — RDF node of the shape that produced this result
+    public let sourceShape: RDFTerm?
 
     /// sh:resultMessage — human-readable descriptions
     public let resultMessage: [String]
@@ -119,11 +108,11 @@ public struct SHACLValidationResult: Sendable, Codable {
     public let resultSeverity: SHACLSeverity
 
     public init(
-        focusNode: String,
+        focusNode: RDFTerm,
         resultPath: SHACLPath? = nil,
         value: RDFTerm? = nil,
         sourceConstraintComponent: String,
-        sourceShape: String? = nil,
+        sourceShape: RDFTerm? = nil,
         resultMessage: [String] = [],
         resultSeverity: SHACLSeverity = .violation
     ) {

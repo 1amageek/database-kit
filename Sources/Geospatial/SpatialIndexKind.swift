@@ -4,8 +4,8 @@
 // Defines metadata for geospatial indexes. This file is FDB-independent
 // and can be used on all platforms including iOS clients.
 
-import Foundation
 import Core
+import DatabaseValue
 
 /// Spatial encoding type
 public enum SpatialEncoding: String, Sendable, Codable, Hashable {
@@ -69,7 +69,9 @@ public struct SpatialIndexKind<Root: Persistable>: IndexKind {
 
     /// Default index name: "{TypeName}_spatial_{fields}"
     public var indexName: String {
-        let flattenedNames = fieldNames.map { $0.replacingOccurrences(of: ".", with: "_") }
+        let flattenedNames = fieldNames.map {
+            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+        }
         return "\(Root.persistableType)_spatial_\(flattenedNames.joined(separator: "_"))"
     }
 
@@ -109,6 +111,13 @@ public struct SpatialIndexKind<Root: Persistable>: IndexKind {
 // MARK: - Hashable Conformance
 
 extension SpatialIndexKind {
+    public var metadata: [String: IndexMetadataValue] {
+        [
+            "encoding": .string(encoding.rawValue),
+            "level": .int(level),
+        ]
+    }
+
     public func hash(into hasher: inout Hasher) {
         hasher.combine(Self.identifier)
         hasher.combine(fieldNames)

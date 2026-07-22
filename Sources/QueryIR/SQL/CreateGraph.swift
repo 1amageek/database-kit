@@ -4,7 +4,6 @@
 /// Reference:
 /// - ISO/IEC 9075-16:2023 (SQL/PGQ)
 
-import Foundation
 
 // Note: Core CreateGraphStatement, VertexTableDefinition, EdgeTableDefinition,
 // VertexReference, LabelExpression, and PropertiesSpec types are defined in QueryStatement.swift
@@ -233,13 +232,13 @@ extension EdgeTableDefinition {
 
         result += " KEY (\(keyColumns.joined(separator: ", ")))"
 
-        result += " SOURCE KEY (\(sourceVertex.keyColumns.map(\.source).joined(separator: ", ")))"
+        result += " SOURCE KEY (\(sourceVertex.keyColumns.map { $0.source }.joined(separator: ", ")))"
         result += " REFERENCES \(sourceVertex.tableName)"
-        result += " (\(sourceVertex.keyColumns.map(\.target).joined(separator: ", ")))"
+        result += " (\(sourceVertex.keyColumns.map { $0.target }.joined(separator: ", ")))"
 
-        result += " DESTINATION KEY (\(destinationVertex.keyColumns.map(\.source).joined(separator: ", ")))"
+        result += " DESTINATION KEY (\(destinationVertex.keyColumns.map { $0.source }.joined(separator: ", ")))"
         result += " REFERENCES \(destinationVertex.tableName)"
-        result += " (\(destinationVertex.keyColumns.map(\.target).joined(separator: ", ")))"
+        result += " (\(destinationVertex.keyColumns.map { $0.target }.joined(separator: ", ")))"
 
         if let label = labelExpression {
             result += " LABEL \(label.toSQL())"

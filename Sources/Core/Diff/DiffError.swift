@@ -3,7 +3,6 @@
 //
 // Errors that can occur during diff computation.
 
-import Foundation
 
 // MARK: - DiffError
 
@@ -110,52 +109,6 @@ extension DiffError: CustomStringConvertible {
 
         case .insufficientVersionHistory(let id, let required, let available):
             return "Insufficient version history for '\(id)': requires \(required) versions, only \(available) available"
-        }
-    }
-}
-
-// MARK: - LocalizedError
-
-extension DiffError: LocalizedError {
-    public var errorDescription: String? {
-        description
-    }
-
-    public var failureReason: String? {
-        switch self {
-        case .modelNotFoundAtVersion:
-            return "The specified version does not exist in the version history"
-        case .fieldNotFound:
-            return "The field does not exist or is not accessible"
-        case .conversionFailed:
-            return "The field value type is not supported for diff comparison"
-        case .typeMismatch:
-            return "Cannot compare models of different types"
-        case .invalidFieldPath:
-            return "The field path format is invalid"
-        case .versionHistoryNotAvailable:
-            return "The model type does not have version tracking enabled"
-        case .insufficientVersionHistory:
-            return "Not enough versions exist to perform the requested diff"
-        }
-    }
-
-    public var recoverySuggestion: String? {
-        switch self {
-        case .modelNotFoundAtVersion:
-            return "Verify the version identifier and ensure the model was saved at that version"
-        case .fieldNotFound:
-            return "Check that the field name is correct and included in allFields"
-        case .conversionFailed:
-            return "Ensure the field type conforms to FieldValueConvertible or can be converted to a supported type"
-        case .typeMismatch:
-            return "Ensure both models are of the same type before comparing"
-        case .invalidFieldPath:
-            return "Use valid field paths (e.g., 'name' or 'address.city')"
-        case .versionHistoryNotAvailable:
-            return "Add VersionIndexKind to the model's index descriptors"
-        case .insufficientVersionHistory:
-            return "Wait for more versions to be saved or use a different comparison method"
         }
     }
 }

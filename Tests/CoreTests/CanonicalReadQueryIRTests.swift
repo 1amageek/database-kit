@@ -1,7 +1,6 @@
 import Testing
 import Foundation
 import QueryIR
-import DatabaseClientProtocol
 import Core
 
 protocol CanonicalReadDocument: Polymorphable {
@@ -11,8 +10,8 @@ protocol CanonicalReadDocument: Polymorphable {
 
 extension CanonicalReadDocument {
     static var polymorphableType: String { "CanonicalReadDocument" }
-    static var polymorphicDirectoryPathComponents: [any DirectoryPathElement] {
-        [Path("canonical-read-documents")]
+    static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
+        [.staticPath("canonical-read-documents")]
     }
 }
 
@@ -73,8 +72,8 @@ protocol IndexedCanonicalReadDocument: Polymorphable {
 
 extension IndexedCanonicalReadDocument {
     static var polymorphableType: String { "IndexedCanonicalReadDocument" }
-    static var polymorphicDirectoryPathComponents: [any DirectoryPathElement] {
-        [Path("indexed-canonical-read-documents")]
+    static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
+        [.staticPath("indexed-canonical-read-documents")]
     }
     static var polymorphicIndexDescriptors: [IndexDescriptor] {
         [
@@ -180,93 +179,6 @@ enum CanonicalReadIndexedSchema: VersionedSchema {
 
 @Suite("Canonical Read QueryIR")
 struct CanonicalReadQueryIRTests {
-    @Test("QueryParameterValue preserves structured arrays and objects")
-    func queryParameterValueRoundTrip() throws {
-        let original = QueryParameterValue.object([
-            "vector": .array([.double(0.1), .double(0.2), .double(0.3)]),
-            "options": .object([
-                "k": .int(10),
-                "metric": .string("cosine"),
-                "includeScores": .bool(true)
-            ])
-        ])
-
-        let data = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(QueryParameterValue.self, from: data)
-        #expect(decoded == original)
-    }
-
-    @Test("SelectQuery with accessPath round-trips through QueryRequest")
-    func canonicalQueryRequestRoundTrip() throws {
-        let selectQuery = SelectQuery(
-            projection: .all,
-            source: .table(TableRef(table: "Document")),
-            accessPath: .index(
-                IndexScanSource(
-                    indexName: "Document_vector_embedding",
-                    kindIdentifier: "vector",
-                    parameters: [
-                        "fieldName": .string("embedding"),
-                        "dimensions": .int(3),
-                        "queryVector": .array([.double(0.1), .double(0.2), .double(0.3)]),
-                        "k": .int(5),
-                        "metric": .string("cosine")
-                    ]
-                )
-            ),
-            limit: 5
-        )
-
-        let original = QueryRequest(
-            statement: .select(selectQuery),
-            options: ReadExecutionOptions(
-                consistency: .snapshot,
-                pageSize: 20,
-                continuation: QueryContinuation("cursor-token")
-            ),
-            partitionValues: ["tenantID": "tenant-1"]
-        )
-
-        let data = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(QueryRequest.self, from: data)
-
-        guard case .select(let decodedSelectQuery) = decoded.statement else {
-            Issue.record("Expected select statement")
-            return
-        }
-
-        #expect(decodedSelectQuery == selectQuery)
-        #expect(decoded.options.consistency == .snapshot)
-        #expect(decoded.options.pageSize == 20)
-        #expect(decoded.options.continuation?.token == "cursor-token")
-        #expect(decoded.partitionValues == ["tenantID": "tenant-1"])
-    }
-
-    @Test("SelectQuery with logical source round-trips through QueryRequest")
-    func logicalSourceRoundTrip() throws {
-        let selectQuery = SelectQuery(
-            projection: .all,
-            source: .logical(
-                LogicalSourceRef(
-                    kindIdentifier: BuiltinLogicalSourceKind.polymorphic,
-                    identifier: "CanonicalReadDocument",
-                    alias: "docs"
-                )
-            ),
-            filter: .equal(.column(ColumnRef(column: "title")), .literal(.string("Hello")))
-        )
-
-        let request = QueryRequest(statement: .select(selectQuery))
-        let data = try JSONEncoder().encode(request)
-        let decoded = try JSONDecoder().decode(QueryRequest.self, from: data)
-
-        guard case .select(let decodedSelectQuery) = decoded.statement else {
-            Issue.record("Expected select statement")
-            return
-        }
-        #expect(decodedSelectQuery == selectQuery)
-    }
-
     @Test("Schema builds polymorphic group catalog")
     func schemaBuildsPolymorphicGroupCatalog() throws {
         let schema = Schema([CanonicalReadArticle.self, CanonicalReadReport.self])
@@ -277,7 +189,7 @@ struct CanonicalReadQueryIRTests {
         #expect(schema.polymorphicIndexCatalog(identifier: "CanonicalReadDocument").isEmpty)
     }
 
-    @Test("Schema preserves concrete KeyPaths for polymorphic index descriptors")
+    @Test("Schema materializes canonical polymorphic index descriptors")
     func schemaPreservesConcretePolymorphicIndexDescriptors() throws {
         let schema = Schema([
             IndexedCanonicalReadArticle.self,
@@ -305,18 +217,17 @@ struct CanonicalReadQueryIRTests {
 
         let articleDescriptor = try #require(articleDescriptors.first)
         let reportDescriptor = try #require(reportDescriptors.first)
-        let articleKeyPath = try #require(articleDescriptor.keyPaths.first)
-        let reportKeyPath = try #require(reportDescriptor.keyPaths.first)
-
         #expect(articleDescriptor.name == "IndexedCanonicalReadDocument_title")
         #expect(articleDescriptor.fieldNames == ["title"])
-        #expect(articleKeyPath is PartialKeyPath<IndexedCanonicalReadArticle>)
-        #expect(!(articleKeyPath is PartialKeyPath<IndexedCanonicalReadReport>))
+        #expect(articleDescriptor.kind.identifier == "scalar")
+        #expect(articleDescriptor.kind.subspaceStructure == .flat)
+        #expect(articleDescriptor.kind.metadata.isEmpty)
 
         #expect(reportDescriptor.name == "IndexedCanonicalReadDocument_title")
         #expect(reportDescriptor.fieldNames == ["title"])
-        #expect(reportKeyPath is PartialKeyPath<IndexedCanonicalReadReport>)
-        #expect(!(reportKeyPath is PartialKeyPath<IndexedCanonicalReadArticle>))
+        #expect(reportDescriptor.kind.identifier == "scalar")
+        #expect(reportDescriptor.kind.subspaceStructure == .flat)
+        #expect(reportDescriptor.kind.metadata.isEmpty)
     }
 
     @Test("Schema preserves all concrete polymorphic descriptors per member type")
@@ -347,19 +258,17 @@ struct CanonicalReadQueryIRTests {
         #expect(reportDescriptors.map(\.fieldNames) == [["title"], ["id"]])
 
         for descriptor in articleDescriptors {
-            let keyPath = try #require(descriptor.keyPaths.first)
-            #expect(keyPath is PartialKeyPath<IndexedCanonicalReadArticle>)
-            #expect(!(keyPath is PartialKeyPath<IndexedCanonicalReadReport>))
-            #expect(descriptor.kind is ScalarIndexKind<IndexedCanonicalReadArticle>)
-            #expect(!(descriptor.kind is ScalarIndexKind<IndexedCanonicalReadReport>))
+            #expect(descriptor.kind.identifier == "scalar")
+            #expect(descriptor.kind.subspaceStructure == .flat)
+            #expect(descriptor.kind.fieldNames == descriptor.fieldNames)
+            #expect(descriptor.kind.metadata.isEmpty)
         }
 
         for descriptor in reportDescriptors {
-            let keyPath = try #require(descriptor.keyPaths.first)
-            #expect(keyPath is PartialKeyPath<IndexedCanonicalReadReport>)
-            #expect(!(keyPath is PartialKeyPath<IndexedCanonicalReadArticle>))
-            #expect(descriptor.kind is ScalarIndexKind<IndexedCanonicalReadReport>)
-            #expect(!(descriptor.kind is ScalarIndexKind<IndexedCanonicalReadArticle>))
+            #expect(descriptor.kind.identifier == "scalar")
+            #expect(descriptor.kind.subspaceStructure == .flat)
+            #expect(descriptor.kind.fieldNames == descriptor.fieldNames)
+            #expect(descriptor.kind.metadata.isEmpty)
         }
     }
 
@@ -377,37 +286,8 @@ struct CanonicalReadQueryIRTests {
         ).added == expectedNames)
     }
 
-    @Test("QueryResponse preserves row annotations and metadata")
-    func canonicalQueryResponseRoundTrip() throws {
-        let original = QueryResponse(
-            rows: [
-                QueryRow(
-                    fields: ["id": .string("doc-1"), "title": .string("Vector Search")],
-                    annotations: ["distance": .double(0.12), "rank": .int64(1)],
-                    version: RecordVersionToken("row-version-1")
-                )
-            ],
-            continuation: QueryContinuation("next-page"),
-            metadata: [
-                "fulltext.totalCount": .int64(42),
-                "fulltext.facets.category": .array([
-                    .array([.string("search"), .int64(10)]),
-                    .array([.string("database"), .int64(8)])
-                ])
-            ],
-            affectedRows: nil
-        )
-
-        let data = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(QueryResponse.self, from: data)
-        #expect(decoded.rows == original.rows)
-        #expect(decoded.rows.first?.version?.value == "row-version-1")
-        #expect(decoded.continuation == original.continuation)
-        #expect(decoded.metadata == original.metadata)
-    }
-
-    @Test("SelectQuery replacing helpers preserve unrelated fields")
-    func selectQueryReplacingHelpers() {
+    @Test("SelectQuery replacement operations preserve unrelated fields")
+    func selectQueryReplacementMethodsPreserveFields() {
         let original = SelectQuery(
             projection: .all,
             source: .table(TableRef(table: "Document")),
@@ -424,8 +304,10 @@ struct CanonicalReadQueryIRTests {
             distinct: true,
             subqueries: [NamedSubquery(name: "docs", query: SelectQuery(projection: .all, source: .table(TableRef(table: "Document"))))],
             reduced: true,
-            from: ["graph-a"],
-            fromNamed: ["graph-b"]
+            dataset: .explicit(
+                defaultGraphs: ["graph-a"],
+                namedGraphs: ["graph-b"]
+            )
         )
 
         let updated = original
@@ -437,8 +319,7 @@ struct CanonicalReadQueryIRTests {
         #expect(updated.source == original.source)
         #expect(updated.accessPath == original.accessPath)
         #expect(updated.subqueries == original.subqueries)
-        #expect(updated.from == original.from)
-        #expect(updated.fromNamed == original.fromNamed)
+        #expect(updated.dataset == original.dataset)
         #expect(updated.distinct == original.distinct)
         #expect(updated.reduced == original.reduced)
         #expect(updated.orderBy == nil)

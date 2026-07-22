@@ -12,8 +12,8 @@ struct DirectoryMacroE2ETests {
 
         let components = StaticDirectoryRecord.directoryPathComponents
         #expect(components.count == 2)
-        #expect((components[0] as? Path)?.value == "macro-e2e")
-        #expect((components[1] as? Path)?.value == "static-records")
+        #expect(components[0] == .staticPath("macro-e2e"))
+        #expect(components[1] == .staticPath("static-records"))
 
         let schema = Schema([StaticDirectoryRecord.self])
         let entity = try #require(schema.entity(for: StaticDirectoryRecord.self))
@@ -36,12 +36,9 @@ struct DirectoryMacroE2ETests {
 
         let components = PartitionedDirectoryRecord.directoryPathComponents
         #expect(components.count == 3)
-        #expect((components[0] as? Path)?.value == "tenants")
-        #expect((components[2] as? Path)?.value == "partitioned-records")
-
-        let dynamicComponent = try #require(components[1] as? Field<PartitionedDirectoryRecord>)
-        #expect(dynamicComponent.value == \PartitionedDirectoryRecord.tenantID)
-        #expect(PartitionedDirectoryRecord.fieldName(for: dynamicComponent.value) == "tenantID")
+        #expect(components[0] == .staticPath("tenants"))
+        #expect(components[1] == .dynamicField(fieldName: "tenantID"))
+        #expect(components[2] == .staticPath("partitioned-records"))
 
         let schema = Schema([PartitionedDirectoryRecord.self])
         let entity = try #require(schema.entity(for: PartitionedDirectoryRecord.self))

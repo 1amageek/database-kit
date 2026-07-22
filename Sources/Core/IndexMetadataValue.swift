@@ -4,8 +4,6 @@
 /// Used for both IndexKind-specific metadata (e.g., dimensions, metric)
 /// and CommonIndexOptions (e.g., unique, sparse, storedFieldNames).
 
-import Foundation
-
 public enum IndexMetadataValue: Sendable, Hashable, Codable {
     case string(String)
     case int(Int)
@@ -13,27 +11,7 @@ public enum IndexMetadataValue: Sendable, Hashable, Codable {
     case bool(Bool)
     case stringArray([String])
     case intArray([Int])
-
-    // MARK: - Init from Any
-
-    public init?(from any: Any) {
-        switch any {
-        case let s as String:
-            self = .string(s)
-        case let i as Int:
-            self = .int(i)
-        case let d as Double:
-            self = .double(d)
-        case let b as Bool:
-            self = .bool(b)
-        case let arr as [String]:
-            self = .stringArray(arr)
-        case let arr as [Int]:
-            self = .intArray(arr)
-        default:
-            return nil
-        }
-    }
+    case rdfTerm(DatabaseRDFTerm)
 
     // MARK: - Codable
 
@@ -42,7 +20,7 @@ public enum IndexMetadataValue: Sendable, Hashable, Codable {
     }
 
     private enum ValueType: String, Codable {
-        case string, int, double, bool, stringArray, intArray
+        case string, int, double, bool, stringArray, intArray, rdfTerm
     }
 
     public init(from decoder: Decoder) throws {
@@ -68,6 +46,9 @@ public enum IndexMetadataValue: Sendable, Hashable, Codable {
         case .intArray:
             let value = try container.decode([Int].self, forKey: .value)
             self = .intArray(value)
+        case .rdfTerm:
+            let value = try container.decode(DatabaseRDFTerm.self, forKey: .value)
+            self = .rdfTerm(value)
         }
     }
 
@@ -92,6 +73,9 @@ public enum IndexMetadataValue: Sendable, Hashable, Codable {
             try container.encode(value, forKey: .value)
         case .intArray(let value):
             try container.encode(ValueType.intArray, forKey: .type)
+            try container.encode(value, forKey: .value)
+        case .rdfTerm(let value):
+            try container.encode(ValueType.rdfTerm, forKey: .type)
             try container.encode(value, forKey: .value)
         }
     }
@@ -127,4 +111,11 @@ public enum IndexMetadataValue: Sendable, Hashable, Codable {
         if case .intArray(let v) = self { return v }
         return nil
     }
+
+    public var rdfTermValue: DatabaseRDFTerm? {
+        if case .rdfTerm(let value) = self { return value }
+        return nil
+    }
 }
+import DatabaseValue
+import DatabaseValueCodable

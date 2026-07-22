@@ -1,7 +1,6 @@
 // AuthContext.swift
 // Core - Authentication context protocol for security evaluation
 
-import Foundation
 
 /// Authentication context protocol
 ///

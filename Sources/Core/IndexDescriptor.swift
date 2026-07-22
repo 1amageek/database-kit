@@ -34,7 +34,7 @@
 /// // - [\User.address.city]
 /// // - [\User.period.lowerBound]
 /// ```
-public struct IndexDescriptor: Descriptor, @unchecked Sendable {
+public struct IndexDescriptor: Descriptor, Sendable {
     /// Index name (unique identifier)
     ///
     /// **Naming convention**: "{RecordType}_{field1}_{field2}_..."
@@ -48,21 +48,6 @@ public struct IndexDescriptor: Descriptor, @unchecked Sendable {
     /// Changing it breaks compatibility with existing data.
     public let name: String
 
-    /// Indexed field KeyPaths
-    ///
-    /// **Benefits of KeyPath storage**:
-    /// - Type-safe field access
-    /// - Refactoring-friendly (IDE renames propagate)
-    /// - Direct access without string parsing
-    /// - Supports nested fields (\.address.city)
-    /// - Supports Range bounds (\.period.lowerBound)
-    ///
-    /// **Examples**:
-    /// - [\User.email]
-    /// - [\User.address.city]
-    /// - [\Product.category, \Product.price]
-    public let keyPaths: [AnyKeyPath]
-
     /// Index kind
     ///
     /// **Kind examples**:
@@ -74,7 +59,7 @@ public struct IndexDescriptor: Descriptor, @unchecked Sendable {
     /// ```swift
     /// let kind: any IndexKind = ScalarIndexKind()
     /// ```
-    public let kind: any IndexKind
+    public let kind: IndexKindMetadata
 
     /// Common options
     ///
@@ -92,15 +77,6 @@ public struct IndexDescriptor: Descriptor, @unchecked Sendable {
     ///
     /// **Example**: `["email"]`, `["category", "price"]`
     public let fieldNames: [String]
-
-    /// KeyPaths of fields stored in the index value (for covering index / index-only scan)
-    ///
-    /// **Benefits**:
-    /// - Type-safe field access
-    /// - Refactoring-friendly (IDE renames propagate)
-    ///
-    /// **Example**: `[\Product.name, \Product.price]`
-    public let storedKeyPaths: [AnyKeyPath]
 
     /// Field names stored in the index value (for covering index / index-only scan)
     ///
@@ -128,20 +104,33 @@ public struct IndexDescriptor: Descriptor, @unchecked Sendable {
     ///   - keyPaths: Array of KeyPaths to indexed fields
     ///   - kind: Index kind metadata
     ///   - commonOptions: Common options (default: empty)
-    public init<Root: Persistable>(
+    public init<Root: Persistable, Kind: IndexKind>(
         name: String,
         keyPaths: [PartialKeyPath<Root>],
-        kind: any IndexKind,
+        kind: borrowing Kind,
         commonOptions: CommonIndexOptions = .init(),
-        storedKeyPaths: [PartialKeyPath<Root>] = [],
         storedFieldNames: [String] = []
     ) {
         self.name = name
-        self.keyPaths = keyPaths
+        self.fieldNames = keyPaths.map { Root.fieldName(for: $0) }
+        self.kind = IndexKindMetadata(kind)
+        self.commonOptions = commonOptions
+        self.storedFieldNames = storedFieldNames
+    }
+
+    /// Creates a descriptor from canonical index metadata while preserving
+    /// compile-time validation of the indexed key paths.
+    public init<Root: Persistable>(
+        name: String,
+        keyPaths: [PartialKeyPath<Root>],
+        kind: IndexKindMetadata,
+        commonOptions: CommonIndexOptions = .init(),
+        storedFieldNames: [String] = []
+    ) {
+        self.name = name
         self.fieldNames = keyPaths.map { Root.fieldName(for: $0) }
         self.kind = kind
         self.commonOptions = commonOptions
-        self.storedKeyPaths = storedKeyPaths
         self.storedFieldNames = storedFieldNames
     }
 
@@ -188,7 +177,7 @@ extension IndexDescriptor {
     /// }
     /// ```
     public var kindIdentifier: String {
-        type(of: kind).identifier
+        kind.identifier
     }
 
     /// Whether this index supports index-only scan (covering index)
@@ -218,11 +207,10 @@ extension IndexDescriptor: Hashable {
 
 extension IndexDescriptor: CustomStringConvertible {
     public var description: String {
-        let keyPathsDesc = keyPaths.map { String(describing: $0) }.joined(separator: ", ")
         var parts = [
             "IndexDescriptor(name: \(name)",
-            "kind: \(type(of: kind).identifier)",
-            "keyPaths: [\(keyPathsDesc)]"
+            "kind: \(kind.identifier)",
+            "fields: [\(fieldNames.joined(separator: ", "))]"
         ]
 
         if isUnique {

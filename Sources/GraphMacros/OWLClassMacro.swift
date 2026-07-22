@@ -1,4 +1,5 @@
 import Foundation
+import DatabaseValue
 import SwiftCompilerPlugin
 import SwiftSyntax
 import SwiftSyntaxBuilder
@@ -39,65 +40,161 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
                 Diagnostic(
                     node: Syntax(node),
                     message: OWLClassMacroErrorMessage(
-                        "@OWLClass requires an IRI string argument. " +
-                        "Example: @OWLClass(\"http://example.org/onto#Employee\")"
+                        "@OWLClass requires a class IRI and an individualIRIBase"
                     )
                 )
             ])
         }
 
-        let iriExpr = firstArg.expression.description.trimmingCharacters(in: .whitespaces)
-        guard iriExpr.hasPrefix("\"") && iriExpr.hasSuffix("\"") else {
+        guard let rawIRI = Self.plainStringLiteral(firstArg.expression) else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(firstArg),
                     message: OWLClassMacroErrorMessage(
-                        "@OWLClass argument must be a string literal (IRI). " +
-                        "Found: \(iriExpr)"
+                        "@OWLClass class IRI must be a plain string literal"
                     )
                 )
             ])
         }
-        let rawIRI = String(iriExpr.dropFirst().dropLast())
-        let namespace = Self.extractNamespace(from: rawIRI)
-        let iri = Self.resolveClassIRI(rawIRI, namespace: namespace)
-
-        // Extract optional `graph:` argument. Baked into the generated
-        // OWLTripleIndexKind so every individual of this class materializes
-        // into the specified named graph.
-        var graphName = "default"
-        for arg in labeledList.dropFirst() {
-            guard arg.label?.text == "graph" else { continue }
-            let graphExpr = arg.expression.description.trimmingCharacters(in: .whitespaces)
-            guard graphExpr.hasPrefix("\"") && graphExpr.hasSuffix("\"") else {
-                throw DiagnosticsError(diagnostics: [
-                    Diagnostic(
-                        node: Syntax(arg),
-                        message: OWLClassMacroErrorMessage(
-                            "@OWLClass 'graph:' argument must be a string literal. Found: \(graphExpr)"
-                        )
+        guard DatabaseRDFIRIValidator.isAbsolute(rawIRI) else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(firstArg),
+                    message: OWLClassMacroErrorMessage(
+                        "@OWLClass class IRI must be absolute"
                     )
-                ])
+                )
+            ])
+        }
+
+        var individualIRIBase: String?
+        var graphIRI: String?
+        for arg in labeledList.dropFirst() {
+            switch arg.label?.text {
+            case "individualIRIBase":
+                guard let value = Self.plainStringLiteral(arg.expression) else {
+                    throw DiagnosticsError(diagnostics: [
+                        Diagnostic(
+                            node: Syntax(arg),
+                            message: OWLClassMacroErrorMessage(
+                                "@OWLClass 'individualIRIBase:' must be a string literal"
+                            )
+                        )
+                    ])
+                }
+                individualIRIBase = value
+            case "graph":
+                let expression = arg.expression.description
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if expression == "nil" {
+                    graphIRI = nil
+                    continue
+                }
+                guard let value = Self.plainStringLiteral(arg.expression) else {
+                    throw DiagnosticsError(diagnostics: [
+                        Diagnostic(
+                            node: Syntax(arg),
+                            message: OWLClassMacroErrorMessage(
+                                "@OWLClass 'graph:' must be a string literal or nil"
+                            )
+                        )
+                    ])
+                }
+                graphIRI = value
+            default:
+                continue
             }
-            graphName = String(graphExpr.dropFirst().dropLast())
+        }
+
+        guard let individualIRIBase else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: OWLClassMacroErrorMessage(
+                        "@OWLClass requires an explicit individualIRIBase"
+                    )
+                )
+            ])
+        }
+
+        guard !individualIRIBase.isEmpty else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: OWLClassMacroErrorMessage(
+                        "@OWLClass 'individualIRIBase:' must not be empty"
+                    )
+                )
+            ])
+        }
+        guard DatabaseRDFIRIValidator.isAbsolute(individualIRIBase) else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: OWLClassMacroErrorMessage(
+                        "@OWLClass 'individualIRIBase:' must be an absolute IRI"
+                    )
+                )
+            ])
+        }
+
+        if let graphIRI, graphIRI.isEmpty {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: OWLClassMacroErrorMessage(
+                        "@OWLClass 'graph:' must not be empty"
+                    )
+                )
+            ])
+        }
+        if let graphIRI, !DatabaseRDFIRIValidator.isAbsolute(graphIRI) {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: OWLClassMacroErrorMessage(
+                        "@OWLClass 'graph:' must be an absolute IRI"
+                    )
+                )
+            ])
         }
 
         let structName = structDecl.name.text
 
-        // Collect @OWLDataProperty / @OWLProperty annotated fields
+        // Collect @OWLDataProperty annotated fields.
         var ontologyProperties: [(fieldName: String, iri: String, label: String?, targetTypeName: String?, targetFieldName: String?)] = []
 
         for member in structDecl.memberBlock.members {
             if let varDecl = member.decl.as(VariableDeclSyntax.self) {
                 guard let propertyAttr = getOWLDataPropertyAttribute(varDecl) else { continue }
                 let info = extractOWLDataPropertyInfo(from: propertyAttr)
+                guard DatabaseRDFIRIValidator.isAbsolute(info.iri) else {
+                    throw DiagnosticsError(diagnostics: [
+                        Diagnostic(
+                            node: Syntax(propertyAttr),
+                            message: OWLClassMacroErrorMessage(
+                                "@OWLDataProperty IRI must be absolute"
+                            )
+                        )
+                    ])
+                }
+                if info.targetTypeName != nil, info.targetFieldName != "id" {
+                    throw DiagnosticsError(diagnostics: [
+                        Diagnostic(
+                            node: Syntax(propertyAttr),
+                            message: OWLClassMacroErrorMessage(
+                                "OWL object properties must reference the target id field"
+                            )
+                        )
+                    ])
+                }
 
                 for binding in varDecl.bindings {
                     if let pattern = binding.pattern.as(IdentifierPatternSyntax.self) {
                         let fieldName = pattern.identifier.text
                         ontologyProperties.append((
                             fieldName: fieldName,
-                            iri: Self.resolvePropertyIRI(info.iri, namespace: namespace),
+                            iri: info.iri,
                             label: info.label,
                             targetTypeName: info.targetTypeName,
                             targetFieldName: info.targetFieldName
@@ -111,7 +208,7 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
 
         // Generate ontologyClassIRI
         let ontologyClassDecl: DeclSyntax = """
-            public static var ontologyClassIRI: String { "\(raw: iri)" }
+            public static var ontologyClassIRI: String { "\(raw: rawIRI)" }
             """
         decls.append(ontologyClassDecl)
 
@@ -145,60 +242,106 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(descriptorsDecl)
 
-        // Generate _owlTripleDescriptors for OWLTripleIndexKind
-        // This is merged into `descriptors` via the OWLClassEntity constrained protocol extension.
-        let owlTripleDecl: DeclSyntax = """
-            public static var _owlTripleDescriptors: [any Descriptor] {
-                [IndexDescriptor(name: "\(raw: structName)_owlTriple", keyPaths: [] as [PartialKeyPath<\(raw: structName)>], kind: OWLTripleIndexKind<\(raw: structName)>(graph: "\(raw: graphName)"))]
+        let individualIRIBaseDecl: DeclSyntax = """
+            public static var ontologyIndividualIRIBase: String { "\(raw: individualIRIBase)" }
+            """
+        decls.append(individualIRIBaseDecl)
+
+        let graphExpression = graphIRI.map { "RDFTerm.iri(\"\($0)\")" } ?? "nil"
+        let ontologyGraphDecl: DeclSyntax = """
+            public static var ontologyGraph: RDFTerm? { \(raw: graphExpression) }
+            """
+        decls.append(ontologyGraphDecl)
+
+        let subjectDecl: DeclSyntax = """
+            public func ontologySubject() throws -> RDFTerm {
+                try OWLIndividualIRIBuilder.term(
+                    baseIRI: Self.ontologyIndividualIRIBase,
+                    persistableType: Self.persistableType,
+                    identifier: self.id
+                )
             }
             """
-        decls.append(owlTripleDecl)
+        decls.append(subjectDecl)
+
+        var projectionStatements: [String] = []
+        for property in ontologyProperties {
+            let objectsExpression: String
+            if let targetTypeName = property.targetTypeName {
+                objectsExpression = """
+                try OWLIndividualIRIBuilder.terms(
+                                baseIRI: Self.ontologyIndividualIRIBase,
+                                persistableType: \(targetTypeName).persistableType,
+                                value: self.\(property.fieldName)
+                            )
+                """
+            } else {
+                objectsExpression = "try self.\(property.fieldName).owlDataPropertyTerms()"
+            }
+
+            projectionStatements.append(
+                """
+                for object in \(objectsExpression) {
+                            quads.append(
+                                RDFQuad(
+                                    subject: subject,
+                                    predicate: .iri("\(property.iri)"),
+                                    object: object,
+                                    graph: Self.ontologyGraph
+                                )
+                            )
+                        }
+                """
+            )
+        }
+
+        let projectionBody = projectionStatements.joined(separator: "\n        ")
+        let quadsBinding = ontologyProperties.isEmpty ? "let" : "var"
+        let quadsDecl: DeclSyntax = """
+            public func ontologyQuads() throws -> [RDFQuad] {
+                let subject = try ontologySubject()
+                \(raw: quadsBinding) quads = [
+                    RDFQuad(
+                        subject: subject,
+                        predicate: OWLRDFVocabulary.rdfType,
+                        object: .iri(Self.ontologyClassIRI),
+                        graph: Self.ontologyGraph
+                    )
+                ]
+                \(raw: projectionBody)
+                for quad in quads {
+                    try quad.validate()
+                }
+                return quads
+            }
+            """
+        decls.append(quadsDecl)
+
+        let graphArgument = graphIRI.map { ", graph: .iri(\"\($0)\")" } ?? ""
+        let owlRDFDecl: DeclSyntax = """
+            public static var _owlRDFIndexDescriptors: [IndexDescriptor] {
+                [IndexDescriptor(name: \(raw: structName).persistableType + "_owl_rdf", keyPaths: [] as [PartialKeyPath<\(raw: structName)>], kind: OWLClassRDFIndexKind<\(raw: structName)>(individualIRIBase: "\(raw: individualIRIBase)"\(raw: graphArgument)))]
+            }
+
+            public static var _owlRDFDescriptors: [any Descriptor] {
+                _owlRDFIndexDescriptors.map { $0 as any Descriptor }
+            }
+            """
+        decls.append(owlRDFDecl)
 
         return decls
     }
 
     // MARK: - IRI Resolution
 
-    /// Extract namespace from the `@OWLClass` IRI.
-    ///
-    /// - CURIE `"ex:Employee"` → `"ex:"`
-    /// - Full IRI `"http://example.org/onto#Employee"` → `"http://example.org/onto#"`
-    /// - Full IRI `"http://example.org/onto/Employee"` → `"http://example.org/onto/"`
-    private static func extractNamespace(from iri: String) -> String {
-        if let colonIndex = iri.firstIndex(of: ":") {
-            let afterColon = iri[iri.index(after: colonIndex)...]
-            if !afterColon.hasPrefix("//") {
-                return String(iri[...colonIndex])
-            }
+    private static func plainStringLiteral(_ expression: ExprSyntax) -> String? {
+        guard let literal = expression.as(StringLiteralExprSyntax.self),
+              literal.segments.count == 1,
+              let segment = literal.segments.first?.as(StringSegmentSyntax.self),
+              !segment.content.text.contains("\\") else {
+            return nil
         }
-        if let hashIndex = iri.lastIndex(of: "#") {
-            return String(iri[...hashIndex])
-        }
-        if let slashIndex = iri.lastIndex(of: "/") {
-            return String(iri[...slashIndex])
-        }
-        return "ex:"
-    }
-
-    /// Resolve class IRI with namespace.
-    ///
-    /// Bare names (no `:`, `#`, `/`) get the default namespace `"ex:"` prepended.
-    private static func resolveClassIRI(_ rawIRI: String, namespace: String) -> String {
-        if rawIRI.contains(":") || rawIRI.contains("#") || rawIRI.contains("/") {
-            return rawIRI
-        }
-        return namespace + rawIRI
-    }
-
-    /// Resolve property IRI with namespace.
-    ///
-    /// - Contains `"://"` → full IRI → keep as-is
-    /// - Contains `":"` → CURIE → keep as-is
-    /// - Otherwise → local name → prepend namespace
-    private static func resolvePropertyIRI(_ rawIRI: String, namespace: String) -> String {
-        if rawIRI.contains("://") { return rawIRI }
-        if rawIRI.contains(":") { return rawIRI }
-        return namespace + rawIRI
+        return segment.content.text
     }
 
     // MARK: - ExtensionMacro

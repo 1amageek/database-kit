@@ -1,7 +1,6 @@
 // SecurityQuery.swift
 // Core - Query information for security evaluation
 
-import Foundation
 
 /// Query information for security evaluation
 ///

@@ -6,7 +6,6 @@
 /// - W3C SPARQL 1.1 (NCName validation)
 /// - W3C XML Namespaces (NCName production)
 
-import Foundation
 
 // MARK: - SQL Escaping
 
@@ -17,7 +16,7 @@ public enum SQLEscape {
     ///
     /// Reference: ISO/IEC 9075:2023 Section 5.2 <delimited identifier>
     public static func identifier(_ name: String) -> String {
-        "\"\(name.replacingOccurrences(of: "\"", with: "\"\""))\""
+        "\"\(escape(name, character: "\"", replacement: "\"\""))\""
     }
 
     /// Escape SQL string literal
@@ -25,21 +24,46 @@ public enum SQLEscape {
     ///
     /// Reference: ISO/IEC 9075:2023 Section 5.3 <character string literal>
     public static func string(_ value: String) -> String {
-        "'\(value.replacingOccurrences(of: "'", with: "''"))'"
+        "'\(escape(value, character: "'", replacement: "''"))'"
     }
 
     /// Quote identifier only if it contains special characters
     /// Returns unquoted if it's a simple identifier (letters, digits, underscore)
     public static func identifierIfNeeded(_ name: String) -> String {
         // SQL standard simple identifier: starts with letter, contains only letters, digits, underscore
-        let simpleIdentifierPattern = "^[a-zA-Z_][a-zA-Z0-9_]*$"
-        if name.range(of: simpleIdentifierPattern, options: .regularExpression) != nil {
+        if isUnquotedIdentifier(name) {
             // Also check against reserved words
             if !sqlReservedWords.contains(name.uppercased()) {
                 return name
             }
         }
         return identifier(name)
+    }
+
+    private static func isUnquotedIdentifier(_ value: String) -> Bool {
+        guard let first = value.unicodeScalars.first, isLetter(first) || first.value == 0x5F else {
+            return false
+        }
+        return value.unicodeScalars.dropFirst().allSatisfy {
+            isLetter($0) || isDigit($0) || $0.value == 0x5F
+        }
+    }
+
+    private static func isLetter(_ scalar: Unicode.Scalar) -> Bool {
+        (0x41...0x5A).contains(scalar.value) || (0x61...0x7A).contains(scalar.value)
+    }
+
+    private static func isDigit(_ scalar: Unicode.Scalar) -> Bool {
+        (0x30...0x39).contains(scalar.value)
+    }
+
+    private static func escape(_ value: String, character: Character, replacement: String) -> String {
+        var result = ""
+        result.reserveCapacity(value.count)
+        for current in value {
+            result += current == character ? replacement : String(current)
+        }
+        return result
     }
 
     /// Common SQL reserved words that require quoting
@@ -73,8 +97,7 @@ public enum SPARQLEscape {
             throw SPARQLEscapeError.emptyNCName
         }
 
-        let pattern = "^[a-zA-Z_][a-zA-Z0-9_.-]*$"
-        guard name.range(of: pattern, options: .regularExpression) != nil else {
+        guard isNCName(name) else {
             throw SPARQLEscapeError.invalidNCName(name)
         }
 
@@ -83,7 +106,13 @@ public enum SPARQLEscape {
 
     /// Validate NCName and return it, or return nil if invalid
     public static func ncNameOrNil(_ name: String) -> String? {
-        try? ncName(name)
+        guard isNCName(name) else { return nil }
+        return name
+    }
+
+    public static func localNameOrNil(_ name: String) -> String? {
+        guard name.unicodeScalars.allSatisfy(isNameCharacter) else { return nil }
+        return name
     }
 
     /// Escape IRI for SPARQL
@@ -92,16 +121,22 @@ public enum SPARQLEscape {
     /// Reference: RFC 3987 (IRI), SPARQL 1.1 Section 19.5
     public static func iri(_ value: String) -> String {
         // Escape characters not allowed in IRIs: < > " { } | ^ ` \
-        let escaped = value
-            .replacingOccurrences(of: "\\", with: "%5C")
-            .replacingOccurrences(of: "<", with: "%3C")
-            .replacingOccurrences(of: ">", with: "%3E")
-            .replacingOccurrences(of: "\"", with: "%22")
-            .replacingOccurrences(of: "{", with: "%7B")
-            .replacingOccurrences(of: "}", with: "%7D")
-            .replacingOccurrences(of: "|", with: "%7C")
-            .replacingOccurrences(of: "^", with: "%5E")
-            .replacingOccurrences(of: "`", with: "%60")
+        var escaped = ""
+        escaped.reserveCapacity(value.count)
+        for character in value {
+            switch character {
+            case "\\": escaped += "%5C"
+            case "<": escaped += "%3C"
+            case ">": escaped += "%3E"
+            case "\"": escaped += "%22"
+            case "{": escaped += "%7B"
+            case "}": escaped += "%7D"
+            case "|": escaped += "%7C"
+            case "^": escaped += "%5E"
+            case "`": escaped += "%60"
+            default: escaped.append(character)
+            }
+        }
         return "<\(escaped)>"
     }
 
@@ -110,12 +145,18 @@ public enum SPARQLEscape {
     ///
     /// Reference: SPARQL 1.1 Section 19.5
     public static func string(_ value: String) -> String {
-        let escaped = value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\r", with: "\\r")
-            .replacingOccurrences(of: "\t", with: "\\t")
+        var escaped = ""
+        escaped.reserveCapacity(value.count)
+        for character in value {
+            switch character {
+            case "\\": escaped += "\\\\"
+            case "\"": escaped += "\\\""
+            case "\n": escaped += "\\n"
+            case "\r": escaped += "\\r"
+            case "\t": escaped += "\\t"
+            default: escaped.append(character)
+            }
+        }
         return "\"\(escaped)\""
     }
 
@@ -126,12 +167,30 @@ public enum SPARQLEscape {
         // Local part can be empty or valid NCName characters
         if !local.isEmpty {
             // Local part allows more characters than prefix
-            let localPattern = "^[a-zA-Z0-9_.-]*$"
-            guard local.range(of: localPattern, options: .regularExpression) != nil else {
+            guard local.unicodeScalars.allSatisfy(isNameCharacter) else {
                 throw SPARQLEscapeError.invalidLocalName(local)
             }
         }
         return "\(validatedPrefix):\(local)"
+    }
+
+    private static func isNCName(_ value: String) -> Bool {
+        guard let first = value.unicodeScalars.first, isLetter(first) || first.value == 0x5F else {
+            return false
+        }
+        return value.unicodeScalars.dropFirst().allSatisfy(isNameCharacter)
+    }
+
+    private static func isNameCharacter(_ scalar: Unicode.Scalar) -> Bool {
+        isLetter(scalar)
+            || (0x30...0x39).contains(scalar.value)
+            || scalar.value == 0x5F
+            || scalar.value == 0x2E
+            || scalar.value == 0x2D
+    }
+
+    private static func isLetter(_ scalar: Unicode.Scalar) -> Bool {
+        (0x41...0x5A).contains(scalar.value) || (0x61...0x7A).contains(scalar.value)
     }
 }
 

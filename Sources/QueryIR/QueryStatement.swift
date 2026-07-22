@@ -5,7 +5,6 @@
 /// - ISO/IEC 9075:2023 (SQL statements)
 /// - W3C SPARQL 1.1/1.2 (Query forms)
 
-import Foundation
 
 /// Top-level query statement
 public enum QueryStatement: Sendable, Equatable, Hashable {
@@ -35,26 +34,8 @@ public enum QueryStatement: Sendable, Equatable, Hashable {
 
     // MARK: - SPARQL Update
 
-    /// SPARQL INSERT DATA
-    case insertData(InsertDataQuery)
-
-    /// SPARQL DELETE DATA
-    case deleteData(DeleteDataQuery)
-
-    /// SPARQL DELETE/INSERT WHERE
-    case deleteInsert(DeleteInsertQuery)
-
-    /// SPARQL LOAD
-    case load(LoadQuery)
-
-    /// SPARQL CLEAR
-    case clear(ClearQuery)
-
-    /// SPARQL CREATE GRAPH
-    case createSPARQLGraph(String, silent: Bool)
-
-    /// SPARQL DROP GRAPH
-    case dropSPARQLGraph(String, silent: Bool)
+    /// A non-empty, ordered SPARQL Update request.
+    case sparqlUpdate(SPARQLUpdateRequest)
 
     // MARK: - SPARQL Query Forms
 
@@ -71,7 +52,7 @@ public enum QueryStatement: Sendable, Equatable, Hashable {
 // MARK: - Common Wrapper Types
 
 /// Column assignment (SET column = value)
-public struct Assignment: Sendable, Equatable, Hashable, Codable {
+public struct Assignment: Sendable, Equatable, Hashable {
     public let column: String
     public let value: Expression
 
@@ -82,7 +63,7 @@ public struct Assignment: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Key column mapping (source → target)
-public struct KeyColumnMapping: Sendable, Equatable, Hashable, Codable {
+public struct KeyColumnMapping: Sendable, Equatable, Hashable {
     public let source: String
     public let target: String
 
@@ -95,7 +76,7 @@ public struct KeyColumnMapping: Sendable, Equatable, Hashable, Codable {
 // MARK: - SQL DML Statements
 
 /// INSERT query
-public struct InsertQuery: Sendable, Equatable, Hashable, Codable {
+public struct InsertQuery: Sendable, Equatable, Hashable {
     public let target: TableRef
     public let columns: [String]?
     public let source: InsertSource
@@ -139,7 +120,7 @@ public enum OnConflictAction: Sendable, Equatable, Hashable {
 }
 
 /// UPDATE query
-public struct UpdateQuery: Sendable, Equatable, Hashable, Codable {
+public struct UpdateQuery: Sendable, Equatable, Hashable {
     public let target: TableRef
     public let assignments: [Assignment]
     public let from: DataSource?
@@ -162,7 +143,7 @@ public struct UpdateQuery: Sendable, Equatable, Hashable, Codable {
 }
 
 /// DELETE query
-public struct DeleteQuery: Sendable, Equatable, Hashable, Codable {
+public struct DeleteQuery: Sendable, Equatable, Hashable {
     public let target: TableRef
     public let using: DataSource?
     public let filter: Expression?
@@ -184,7 +165,7 @@ public struct DeleteQuery: Sendable, Equatable, Hashable, Codable {
 // MARK: - SQL/PGQ Graph Definition
 
 /// CREATE PROPERTY GRAPH statement
-public struct CreateGraphStatement: Sendable, Equatable, Hashable, Codable {
+public struct CreateGraphStatement: Sendable, Equatable, Hashable {
     public let graphName: String
     public let ifNotExists: Bool
     public let vertexTables: [VertexTableDefinition]
@@ -204,7 +185,7 @@ public struct CreateGraphStatement: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Vertex table definition
-public struct VertexTableDefinition: Sendable, Equatable, Hashable, Codable {
+public struct VertexTableDefinition: Sendable, Equatable, Hashable {
     public let tableName: String
     public let alias: String?
     public let keyColumns: [String]
@@ -227,7 +208,7 @@ public struct VertexTableDefinition: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Edge table definition
-public struct EdgeTableDefinition: Sendable, Equatable, Hashable, Codable {
+public struct EdgeTableDefinition: Sendable, Equatable, Hashable {
     public let tableName: String
     public let alias: String?
     public let keyColumns: [String]
@@ -256,7 +237,7 @@ public struct EdgeTableDefinition: Sendable, Equatable, Hashable, Codable {
 }
 
 /// Vertex reference (for edge source/destination)
-public struct VertexReference: Sendable, Equatable, Hashable, Codable {
+public struct VertexReference: Sendable, Equatable, Hashable {
     public let tableName: String
     public let keyColumns: [KeyColumnMapping]
 
@@ -289,142 +270,62 @@ public enum PropertiesSpec: Sendable, Equatable, Hashable {
     case allExcept([String])
 }
 
-// MARK: - SPARQL Update Statements
-
-/// SPARQL INSERT DATA
-public struct InsertDataQuery: Sendable, Equatable, Hashable, Codable {
-    public let quads: [Quad]
-
-    public init(quads: [Quad]) {
-        self.quads = quads
-    }
-}
-
-/// SPARQL DELETE DATA
-public struct DeleteDataQuery: Sendable, Equatable, Hashable, Codable {
-    public let quads: [Quad]
-
-    public init(quads: [Quad]) {
-        self.quads = quads
-    }
-}
-
-/// SPARQL DELETE/INSERT WHERE
-public struct DeleteInsertQuery: Sendable, Equatable, Hashable, Codable {
-    public let deletePattern: [Quad]?
-    public let insertPattern: [Quad]?
-    public let using: [GraphRef]?
-    public let wherePattern: GraphPattern
-
-    public init(
-        deletePattern: [Quad]?,
-        insertPattern: [Quad]?,
-        using: [GraphRef]? = nil,
-        wherePattern: GraphPattern
-    ) {
-        self.deletePattern = deletePattern
-        self.insertPattern = insertPattern
-        self.using = using
-        self.wherePattern = wherePattern
-    }
-}
-
-/// SPARQL quad (triple + graph)
-public struct Quad: Sendable, Equatable, Hashable, Codable {
-    public let graph: SPARQLTerm?
-    public let triple: TriplePattern
-
-    public init(graph: SPARQLTerm? = nil, triple: TriplePattern) {
-        self.graph = graph
-        self.triple = triple
-    }
-}
-
-/// Graph reference for USING clause
-public struct GraphRef: Sendable, Equatable, Hashable, Codable {
-    public let iri: String
-    public let isNamed: Bool
-
-    public init(iri: String, isNamed: Bool = false) {
-        self.iri = iri
-        self.isNamed = isNamed
-    }
-}
-
-/// SPARQL LOAD
-public struct LoadQuery: Sendable, Equatable, Hashable, Codable {
-    public let source: String
-    public let destination: String?
-    public let silent: Bool
-
-    public init(source: String, destination: String? = nil, silent: Bool = false) {
-        self.source = source
-        self.destination = destination
-        self.silent = silent
-    }
-}
-
-/// SPARQL CLEAR
-public struct ClearQuery: Sendable, Equatable, Hashable, Codable {
-    public let target: ClearTarget
-    public let silent: Bool
-
-    public init(target: ClearTarget, silent: Bool = false) {
-        self.target = target
-        self.silent = silent
-    }
-}
-
-/// CLEAR target
-public enum ClearTarget: Sendable, Equatable, Hashable {
-    case graph(String)
-    case `default`
-    case named
-    case all
-}
-
 // MARK: - SPARQL Query Forms
 
 /// SPARQL CONSTRUCT query
-public struct ConstructQuery: Sendable, Equatable, Hashable, Codable {
+public struct ConstructQuery: Sendable, Equatable, Hashable {
     public let template: [TriplePattern]
     public let pattern: GraphPattern
-    public let orderBy: [SortKey]?
-    public let limit: Int?
-    public let offset: Int?
+    public let dataset: SPARQLDataset
+    public let modifiers: SPARQLSolutionModifiers
 
     public init(
         template: [TriplePattern],
         pattern: GraphPattern,
-        orderBy: [SortKey]? = nil,
-        limit: Int? = nil,
-        offset: Int? = nil
+        dataset: SPARQLDataset = .implicit,
+        modifiers: SPARQLSolutionModifiers = .none
     ) {
         self.template = template
         self.pattern = pattern
-        self.orderBy = orderBy
-        self.limit = limit
-        self.offset = offset
+        self.dataset = dataset
+        self.modifiers = modifiers
     }
 }
 
 /// SPARQL ASK query
-public struct AskQuery: Sendable, Equatable, Hashable, Codable {
+public struct AskQuery: Sendable, Equatable, Hashable {
     public let pattern: GraphPattern
+    public let dataset: SPARQLDataset
+    public let modifiers: SPARQLSolutionModifiers
 
-    public init(pattern: GraphPattern) {
+    public init(
+        pattern: GraphPattern,
+        dataset: SPARQLDataset = .implicit,
+        modifiers: SPARQLSolutionModifiers = .none
+    ) {
         self.pattern = pattern
+        self.dataset = dataset
+        self.modifiers = modifiers
     }
 }
 
 /// SPARQL DESCRIBE query
-public struct DescribeQuery: Sendable, Equatable, Hashable, Codable {
-    public let resources: [SPARQLTerm]
+public struct DescribeQuery: Sendable, Equatable, Hashable {
+    public let selection: DescribeSelection
     public let pattern: GraphPattern?
+    public let dataset: SPARQLDataset
+    public let modifiers: SPARQLSolutionModifiers
 
-    public init(resources: [SPARQLTerm], pattern: GraphPattern? = nil) {
-        self.resources = resources
+    public init(
+        selection: DescribeSelection,
+        pattern: GraphPattern? = nil,
+        dataset: SPARQLDataset = .implicit,
+        modifiers: SPARQLSolutionModifiers = .none
+    ) {
+        self.selection = selection
         self.pattern = pattern
+        self.dataset = dataset
+        self.modifiers = modifiers
     }
 }
 
@@ -444,7 +345,7 @@ extension QueryStatement {
     /// Returns true if this is a data modification statement
     public var isModification: Bool {
         switch self {
-        case .insert, .update, .delete, .insertData, .deleteData, .deleteInsert, .load, .clear:
+        case .insert, .update, .delete, .sparqlUpdate:
             return true
         default:
             return false
@@ -454,7 +355,7 @@ extension QueryStatement {
     /// Returns true if this is a schema definition statement
     public var isSchemaDefinition: Bool {
         switch self {
-        case .createGraph, .dropGraph, .createSPARQLGraph, .dropSPARQLGraph:
+        case .createGraph, .dropGraph:
             return true
         default:
             return false

@@ -6,8 +6,11 @@
 // Reference: W3C OWL 2 Web Ontology Language
 // https://www.w3.org/TR/owl2-syntax/#Individuals
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
-
+#endif
 /// OWL Named Individual
 ///
 /// Represents a named individual (instance) in an OWL ontology.

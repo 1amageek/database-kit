@@ -3,7 +3,11 @@
 //
 // Represents the complete diff result between two model instances.
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
 
 // MARK: - VersionInfo
 
@@ -38,7 +42,9 @@ public struct VersionInfo: Sendable, Codable, Hashable {
 ///
 /// **Usage**:
 /// ```swift
-/// let diff = newUser.diff(from: oldUser)
+/// import DatabaseEngine
+///
+/// let diff = try ModelDiffBuilder.diff(old: oldUser, new: newUser)
 ///
 /// // Check if there are any changes
 /// if !diff.isEmpty {

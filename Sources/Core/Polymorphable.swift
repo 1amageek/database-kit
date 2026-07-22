@@ -4,7 +4,6 @@
 // Enables multiple Persistable types to share a directory and indexes,
 // allowing them to be queried together via a common protocol.
 
-import Foundation
 
 /// Polymorphable protocol - Defines a group of persistable types that share storage
 ///
@@ -47,7 +46,7 @@ import Foundation
 ///     var id: String = ULID().ulidString
 ///     var title: String
 ///     var data: Data
-///     // No #Directory: uses default [Path("Report")]
+///     // No #Directory: uses default [.staticPath("Report")]
 /// }
 /// ```
 ///
@@ -105,12 +104,12 @@ public protocol Polymorphable: Persistable {
     /// **Example**:
     /// ```swift
     /// #Directory<Document>("app", "documents")
-    /// // → [Path("app"), Path("documents")]
+    /// // → [.staticPath("app"), .staticPath("documents")]
     /// ```
     ///
     /// **Note**: Polymorphic protocols cannot use dynamic `Field` components
     /// since they don't have instance values.
-    static var polymorphicDirectoryPathComponents: [any DirectoryPathElement] { get }
+    static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] { get }
 
     /// Directory layer type for polymorphic shared storage
     ///
@@ -143,8 +142,8 @@ public extension Polymorphable {
     static var polymorphicDirectoryLayer: DirectoryLayer { .default }
 
     /// Default implementation uses polymorphableType as directory
-    static var polymorphicDirectoryPathComponents: [any DirectoryPathElement] {
-        [Path(polymorphableType)]
+    static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
+        [.staticPath(polymorphableType)]
     }
 }
 

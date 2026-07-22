@@ -101,6 +101,14 @@ public protocol IndexKind: Sendable, Codable, Hashable {
     /// Order matters for composite indexes.
     var fieldNames: [String] { get }
 
+    /// Canonical, Foundation-free metadata consumed after the concrete generic
+    /// index kind crosses a schema or runtime boundary.
+    ///
+    /// Implementations must include every configuration value that changes
+    /// storage layout, maintenance, or query behavior. Field names are carried
+    /// separately by `fieldNames` and must not be duplicated here.
+    var metadata: [String: IndexMetadataValue] { get }
+
     /// Validate whether this index kind supports specified types
     ///
     /// **Parameters**:
@@ -110,39 +118,8 @@ public protocol IndexKind: Sendable, Codable, Hashable {
     static func validateTypes(_ types: [Any.Type]) throws
 }
 
-// MARK: - ValueTypedIndexKind
-
-/// Protocol for index kinds that have a value type parameter
-///
-/// **Purpose**: Provides access to value type information for type-erased IndexKind
-///
-/// **Conforming Types**:
-/// - SumIndexKind (Value: Numeric)
-/// - AverageIndexKind (Value: Numeric)
-/// - MinIndexKind (Value: Comparable)
-/// - MaxIndexKind (Value: Comparable)
-/// - RankIndexKind (Score: Comparable & Numeric)
-/// - TimeWindowLeaderboardIndexKind (Score: Comparable & Numeric)
-///
-/// **Usage**:
-/// ```swift
-/// if let valueTyped = descriptor.kind as? ValueTypedIndexKind {
-///     let typeName = valueTyped.valueTypeName  // "Int64", "Double", etc.
-///     switch typeName {
-///     case "Int64", "Int", "Int32":
-///         // Handle integer types
-///     case "Double", "Float":
-///         // Handle floating-point types
-///     default:
-///         // Unknown type
-///     }
-/// }
-/// ```
-public protocol ValueTypedIndexKind: IndexKind {
-    /// The value type name as a string (e.g., "Int64", "Double")
-    ///
-    /// Used for type dispatch when IndexKind is type-erased (any IndexKind).
-    var valueTypeName: String { get }
+extension IndexKind {
+    public var metadata: [String: IndexMetadataValue] { [:] }
 }
 
 /// Index type validation error

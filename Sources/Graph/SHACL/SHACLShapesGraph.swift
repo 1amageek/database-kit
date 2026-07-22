@@ -4,8 +4,6 @@
 // Reference: W3C SHACL §2.1 (Shapes Graph)
 // https://www.w3.org/TR/shacl/#shapes-graph
 
-import Foundation
-
 /// SHACL Shapes Graph — a collection of shapes
 ///
 /// A shapes graph defines the constraints that a data graph must satisfy.
@@ -108,9 +106,9 @@ extension SHACLShapesGraph {
         shapes.filter { !$0.isDeactivated }
     }
 
-    /// Find a shape by IRI
-    public func findShape(iri: String) -> SHACLShape? {
-        shapes.first { $0.iri == iri }
+    /// Find a shape by its canonical RDF node identifier.
+    public func findShape(identifier: RDFTerm) -> SHACLShape? {
+        shapes.first { $0.identifier == identifier }
     }
 
     /// All target class IRIs referenced in this graph

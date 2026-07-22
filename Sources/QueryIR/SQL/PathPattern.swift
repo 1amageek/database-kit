@@ -5,7 +5,6 @@
 /// - ISO/IEC 9075-16:2023 (SQL/PGQ)
 /// - GQL (Graph Query Language) specification
 
-import Foundation
 
 // Note: Core PathPattern, PathElement, NodePattern, EdgePattern types
 // are defined in DataSource.swift. This file provides additional
@@ -38,7 +37,7 @@ extension PathPattern {
                 }
             case .alternation(let alts):
                 // Minimum of all alternatives
-                count += alts.map(\.minLength).min() ?? 0
+                count += alts.map { $0.minLength }.min() ?? 0
             }
         }
         return count
@@ -101,7 +100,7 @@ extension PathPattern {
             case .quantified(let inner, _):
                 count += inner.nodeCount
             case .alternation(let alts):
-                count += alts.map(\.nodeCount).max() ?? 0
+                count += alts.map { $0.nodeCount }.max() ?? 0
             }
         }
         return count
@@ -119,7 +118,7 @@ extension PathPattern {
             case .quantified(let inner, _):
                 count += inner.edgeCount
             case .alternation(let alts):
-                count += alts.map(\.edgeCount).max() ?? 0
+                count += alts.map { $0.edgeCount }.max() ?? 0
             }
         }
         return count
@@ -356,4 +355,3 @@ extension PathPattern {
         return unique
     }
 }
-

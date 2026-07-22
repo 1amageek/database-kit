@@ -23,18 +23,23 @@ public struct FieldSchema: Sendable, Codable, Equatable, Hashable {
     /// Whether the field is an Array
     public let isArray: Bool
 
+    /// Canonical target entity for a typed reference field.
+    public let referenceTargetEntity: String?
+
     public init(
         name: String,
         fieldNumber: Int,
         type: FieldSchemaType,
         isOptional: Bool = false,
-        isArray: Bool = false
+        isArray: Bool = false,
+        referenceTargetEntity: String? = nil
     ) {
         self.name = name
         self.fieldNumber = fieldNumber
         self.type = type
         self.isOptional = isOptional
         self.isArray = isArray
+        self.referenceTargetEntity = referenceTargetEntity
     }
 }
 
@@ -60,6 +65,8 @@ public enum FieldSchemaType: String, Sendable, Codable, Equatable {
     case date
     case uuid
     case data
+    case rdfTerm
+    case reference
     /// Nested Persistable type (encoded as length-delimited Protobuf)
     case nested
     /// Enum type (encoded as varint or string depending on raw value)
@@ -74,6 +81,9 @@ public enum FieldSchemaType: String, Sendable, Codable, Equatable {
     /// - Parameter type: The Swift type to classify
     /// - Returns: `.enum` if the type conforms to `RawRepresentable`, `.nested` otherwise
     public static func resolve(_ type: Any.Type) -> FieldSchemaType {
+        if type is any DatabaseRecordReferenceValue.Type {
+            return .reference
+        }
         if type is any RawRepresentable.Type {
             return .enum
         }

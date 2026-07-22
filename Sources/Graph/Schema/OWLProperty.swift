@@ -7,8 +7,6 @@
 // https://www.w3.org/TR/owl2-syntax/#Object_Properties
 // https://www.w3.org/TR/owl2-syntax/#Data_Properties
 
-import Foundation
-
 // MARK: - Property Characteristic
 
 /// OWL Property Characteristics

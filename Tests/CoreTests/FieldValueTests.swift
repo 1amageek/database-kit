@@ -1,9 +1,116 @@
 import Testing
 import Foundation
+import DatabaseValue
 @testable import Core
 
 @Suite("FieldValue Tests")
 struct FieldValueTests {
+    @Test("Unsigned Swift scalars preserve their exact values")
+    func unsignedIntegerInitializersPreserveExactValues() {
+        #expect(FieldValue(UInt.max) == .uint64(UInt64(UInt.max)))
+        #expect(FieldValue(UInt8.max) == .uint64(UInt64(UInt8.max)))
+        #expect(FieldValue(UInt16.max) == .uint64(UInt64(UInt16.max)))
+        #expect(FieldValue(UInt32.max) == .uint64(UInt64(UInt32.max)))
+        #expect(FieldValue(UInt64.max) == .uint64(UInt64.max))
+
+        #expect(UInt.max.toFieldValue() == .uint64(UInt64(UInt.max)))
+        #expect(UInt8.max.toFieldValue() == .uint64(UInt64(UInt8.max)))
+        #expect(UInt16.max.toFieldValue() == .uint64(UInt64(UInt16.max)))
+        #expect(UInt32.max.toFieldValue() == .uint64(UInt64(UInt32.max)))
+        #expect(UInt64.max.toFieldValue() == .uint64(UInt64.max))
+    }
+
+    @Test("UInt64 survives DatabaseValue and Codable round trips")
+    func uint64RoundTripsWithoutNarrowing() throws {
+        let original = FieldValue.array([
+            .uint64(0),
+            .uint64(UInt64(Int64.max)),
+            .uint64(UInt64(Int64.max) + 1),
+            .uint64(UInt64.max),
+        ])
+        let databaseValue = original.asDatabaseValue
+
+        #expect(FieldValue(databaseValue: databaseValue) == original)
+        #expect(
+            FieldValue(databaseValue: databaseValue)?.asDatabaseValue
+                == databaseValue
+        )
+
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(FieldValue.self, from: encoded)
+        #expect(decoded == original)
+        #expect(decoded.asDatabaseValue == databaseValue)
+    }
+
+    @Test("Signed, unsigned, and exact Double equality share hashes")
+    func crossTypeNumericEqualityAndHashingAreExact() throws {
+        let zero: [FieldValue] = [.int64(0), .uint64(0), .double(-0.0)]
+        #expect(Set(zero).count == 1)
+        #expect(try Set(zero.map { try $0.stableHash() }).count == 1)
+
+        let signedBoundary: [FieldValue] = [
+            .int64(Int64.max),
+            .uint64(UInt64(Int64.max)),
+        ]
+        #expect(Set(signedBoundary).count == 1)
+        #expect(
+            try Set(signedBoundary.map { try $0.stableHash() }).count == 1
+        )
+
+        let unsignedDoubleBoundary = UInt64(1) << 63
+        let unsignedAndDouble: [FieldValue] = [
+            .uint64(unsignedDoubleBoundary),
+            .double(Double(unsignedDoubleBoundary)),
+        ]
+        #expect(Set(unsignedAndDouble).count == 1)
+        #expect(
+            try Set(unsignedAndDouble.map { try $0.stableHash() }).count == 1
+        )
+    }
+
+    @Test("Adjacent UInt64 values above 2^53 remain distinct")
+    func adjacentLargeUnsignedValuesRemainDistinct() throws {
+        let exactDoubleBoundary = UInt64(1) << 53
+        let adjacent = exactDoubleBoundary + 1
+        let rounded = Double(adjacent)
+
+        #expect(rounded == Double(exactDoubleBoundary))
+        #expect(FieldValue.uint64(adjacent) != .double(rounded))
+        #expect(FieldValue.uint64(exactDoubleBoundary) == .double(rounded))
+        #expect(FieldValue.uint64(exactDoubleBoundary) < .uint64(adjacent))
+        #expect(FieldValue.double(rounded) < .uint64(adjacent))
+        #expect(
+            FieldValue.uint64(adjacent).compare(to: .double(rounded))
+                == .orderedDescending
+        )
+
+        #expect(
+            try FieldValue.uint64(exactDoubleBoundary).stableHash()
+                != FieldValue.uint64(adjacent).stableHash()
+        )
+        #expect(
+            Set([
+                FieldValue.uint64(exactDoubleBoundary),
+                .uint64(adjacent),
+            ]).count == 2
+        )
+    }
+
+    @Test("UInt64 upper boundary has exact ordering")
+    func uint64UpperBoundaryOrderingIsExact() throws {
+        let penultimate = FieldValue.uint64(UInt64.max - 1)
+        let maximum = FieldValue.uint64(UInt64.max)
+        let roundedBeyondMaximum = FieldValue.double(Double(UInt64.max))
+
+        #expect(FieldValue.int64(-1) < .uint64(0))
+        #expect(FieldValue.int64(Int64.max) < .uint64(UInt64(Int64.max) + 1))
+        #expect(penultimate < maximum)
+        #expect(maximum < roundedBeyondMaximum)
+        #expect(maximum != roundedBeyondMaximum)
+        #expect(maximum.compare(to: penultimate) == .orderedDescending)
+        #expect(maximum.compare(to: roundedBeyondMaximum) == .orderedAscending)
+        #expect(try penultimate.stableHash() != maximum.stableHash())
+    }
 
     // MARK: - Initialization
 
@@ -43,7 +150,7 @@ struct FieldValueTests {
 
     @Test("Init from Data")
     func testInitData() {
-        let data = Data([1, 2, 3, 4])
+        let data: DatabaseBytes = [1, 2, 3, 4]
         let value = FieldValue.data(data)
 
         #expect(value.dataValue == data)
@@ -143,6 +250,16 @@ struct FieldValueTests {
         #expect(!(b < a))
     }
 
+    @Test("String equality and ordering use exact UTF-8 code units")
+    func stringComparisonUsesExactUTF8CodeUnits() {
+        let composed = FieldValue.string("\u{00e9}")
+        let decomposed = FieldValue.string("e\u{0301}")
+
+        #expect(composed != decomposed)
+        #expect(decomposed < composed)
+        #expect(decomposed.compare(to: composed) == .orderedAscending)
+    }
+
     @Test("Bool comparison (false < true)")
     func testBoolComparison() {
         let falseVal = FieldValue.bool(false)
@@ -154,8 +271,8 @@ struct FieldValueTests {
 
     @Test("Data comparison (lexicographic)")
     func testDataComparison() {
-        let a = FieldValue.data(Data([1, 2, 3]))
-        let b = FieldValue.data(Data([1, 2, 4]))
+        let a = FieldValue.data([1, 2, 3])
+        let b = FieldValue.data([1, 2, 4])
 
         #expect(a < b)
     }
@@ -232,7 +349,7 @@ struct FieldValueTests {
             .double(3.14),
             .string("hello"),
             .bool(true),
-            .data(Data([1, 2, 3])),
+            .data([1, 2, 3]),
             .null
         ]
 
@@ -274,7 +391,7 @@ struct FieldValueTests {
 
     @Test("Data description")
     func testDataDescription() {
-        let value = FieldValue.data(Data([1, 2, 3]))
+        let value = FieldValue.data([1, 2, 3])
         #expect(value.description == "data(3 bytes)")
     }
 
@@ -287,41 +404,90 @@ struct FieldValueTests {
     // MARK: - Stable Hash
 
     @Test("Stable hash is deterministic")
-    func testStableHashDeterministic() {
+    func testStableHashDeterministic() throws {
         let value = FieldValue.string("test")
 
-        let hash1 = value.stableHash()
-        let hash2 = value.stableHash()
+        let hash1 = try value.stableHash()
+        let hash2 = try value.stableHash()
 
         #expect(hash1 == hash2)
     }
 
     @Test("Different types produce different hashes")
-    func testStableHashDifferentTypes() {
+    func testStableHashDifferentTypes() throws {
         let intVal = FieldValue.int64(1)
         let strVal = FieldValue.string("1")
 
-        #expect(intVal.stableHash() != strVal.stableHash())
+        #expect(try intVal.stableHash() != strVal.stableHash())
+    }
+
+    @Test("RDF stable hash is deterministic and semantic")
+    func testRDFStableHash() throws {
+        let first = FieldValue.rdfTerm(.iri("urn:database:first"))
+        let same = FieldValue.rdfTerm(.iri("urn:database:first"))
+        let different = FieldValue.rdfTerm(.blankNode("urn:database:first"))
+
+        #expect(try first.stableHash() == same.stableHash())
+        #expect(try first.stableHash() != different.stableHash())
+    }
+
+    @Test("RDF language-tag identity and stable hash are consistent")
+    func testRDFLanguageTagStableHash() throws {
+        let uppercase = FieldValue.rdfTerm(.literal(DatabaseRDFLiteral(
+            lexicalForm: "hello",
+            language: try DatabaseRDFLanguageTag("EN-Latn-US")
+        )))
+        let lowercase = FieldValue.rdfTerm(.literal(DatabaseRDFLiteral(
+            lexicalForm: "hello",
+            language: try DatabaseRDFLanguageTag("en-latn-us")
+        )))
+
+        #expect(uppercase == lowercase)
+        #expect(try uppercase.stableHash() == lowercase.stableHash())
     }
 
     @Test("Stable hash for all types")
-    func testStableHashAllTypes() {
+    func testStableHashAllTypes() throws {
         let values: [FieldValue] = [
             .int64(42),
             .double(3.14),
             .string("hello"),
             .bool(true),
-            .data(Data([1, 2, 3])),
+            .data([1, 2, 3]),
             .null
         ]
 
         var hashes: Set<UInt64> = []
         for value in values {
-            let hash = value.stableHash()
+            let hash = try value.stableHash()
             hashes.insert(hash)
         }
 
         // All values should have unique hashes
         #expect(hashes.count == values.count)
+    }
+
+    @Test("invalid RDF values fail canonical hashing")
+    func invalidRDFHashFails() {
+        let value = FieldValue.rdfTerm(.iri("relative"))
+
+        #expect(
+            throws: DatabaseRDFTermCodecError.invalidIRI(.missingScheme)
+        ) {
+            _ = try value.stableHash()
+        }
+    }
+
+    @Test("cross-type numeric equality is exact and hash-consistent")
+    func numericEqualityAndHashAreExact() throws {
+        let exactInteger = FieldValue.int64(42)
+        let exactDouble = FieldValue.double(42)
+        let roundedInteger = FieldValue.int64(9_007_199_254_740_993)
+        let roundedDouble = FieldValue.double(9_007_199_254_740_992)
+
+        #expect(exactInteger == exactDouble)
+        #expect(try exactInteger.stableHash() == exactDouble.stableHash())
+        #expect(roundedInteger != roundedDouble)
+        #expect(try roundedInteger.stableHash() != roundedDouble.stableHash())
     }
 }

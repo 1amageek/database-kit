@@ -1,4 +1,10 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
+import DatabaseValue
+import DatabaseValueCodable
 
 #if canImport(ObjectiveC)
 import class Foundation.NSNull
@@ -11,6 +17,7 @@ import class Foundation.NSNull
 ///
 /// **Supported Types**:
 /// - `int64`: 64-bit signed integer
+/// - `uint64`: 64-bit unsigned integer
 /// - `double`: 64-bit floating point
 /// - `string`: UTF-8 string
 /// - `bool`: Boolean value
@@ -33,10 +40,12 @@ import class Foundation.NSNull
 /// ```
 public enum FieldValue: Sendable, Codable {
     case int64(Int64)
+    case uint64(UInt64)
     case double(Double)
     case string(String)
     case bool(Bool)
-    case data(Data)
+    case data(DatabaseBytes)
+    case rdfTerm(DatabaseRDFTerm)
     case null
     case array([FieldValue])
 
@@ -58,15 +67,15 @@ public enum FieldValue: Sendable, Codable {
         case let v as Int8:
             self = .int64(Int64(v))
         case let v as UInt64:
-            self = .int64(Int64(bitPattern: v))
+            self = .uint64(v)
         case let v as UInt:
-            self = .int64(Int64(v))
+            self = .uint64(UInt64(v))
         case let v as UInt32:
-            self = .int64(Int64(v))
+            self = .uint64(UInt64(v))
         case let v as UInt16:
-            self = .int64(Int64(v))
+            self = .uint64(UInt64(v))
         case let v as UInt8:
-            self = .int64(Int64(v))
+            self = .uint64(UInt64(v))
         case let v as Double:
             self = .double(v)
         case let v as Float:
@@ -75,8 +84,18 @@ public enum FieldValue: Sendable, Codable {
             self = .string(v)
         case let v as Bool:
             self = .bool(v)
-        case let v as Data:
+        case let v as DatabaseBytes:
             self = .data(v)
+        case let v as Data:
+            self = .data(
+                DatabaseBytes(retaining: RetainedDataByteOwner(data: v))
+            )
+        case let v as [UInt8]:
+            self = .data(DatabaseBytes(v))
+        case let v as Date:
+            self = .double(v.timeIntervalSince1970)
+        case let v as DatabaseRDFTerm:
+            self = .rdfTerm(v)
         #if canImport(ObjectiveC)
         case is NSNull:
             self = .null
@@ -96,10 +115,10 @@ public enum FieldValue: Sendable, Codable {
         return false
     }
 
-    /// Returns true if this is a numeric value (int64 or double)
+    /// Returns true if this is a numeric value.
     public var isNumeric: Bool {
         switch self {
-        case .int64, .double:
+        case .int64, .uint64, .double:
             return true
         default:
             return false
@@ -111,6 +130,12 @@ public enum FieldValue: Sendable, Codable {
     /// Get the value as Int64, or nil if not an integer
     public var int64Value: Int64? {
         if case .int64(let v) = self { return v }
+        return nil
+    }
+
+    /// Get the value as UInt64, or nil if not an unsigned integer.
+    public var uint64Value: UInt64? {
+        if case .uint64(let value) = self { return value }
         return nil
     }
 
@@ -133,8 +158,13 @@ public enum FieldValue: Sendable, Codable {
     }
 
     /// Get the value as Data, or nil if not binary data
-    public var dataValue: Data? {
+    public var dataValue: DatabaseBytes? {
         if case .data(let v) = self { return v }
+        return nil
+    }
+
+    public var rdfTermValue: DatabaseRDFTerm? {
+        if case .rdfTerm(let value) = self { return value }
         return nil
     }
 
@@ -149,6 +179,8 @@ public enum FieldValue: Sendable, Codable {
         switch self {
         case .int64(let v):
             return Double(v)
+        case .uint64(let value):
+            return Double(value)
         case .double(let v):
             return v
         default:
@@ -160,31 +192,32 @@ public enum FieldValue: Sendable, Codable {
 // MARK: - Equatable
 
 extension FieldValue: Equatable {
-    /// Cross-type numeric equality
-    ///
-    /// Unlike Swift's synthesized enum Equatable (which requires matching cases),
-    /// this implementation treats numerically equivalent int64 and double as equal:
-    /// `.int64(42) == .double(42.0)` → `true`
-    ///
-    /// This is consistent with the Comparable implementation and with SPARQL/SQL
-    /// numeric semantics where integer 42 equals double 42.0.
-    ///
-    /// **Precision**: For Int64 values beyond ±2^53, `Double(largeInt64)` is rounded,
-    /// so `Double(largeInt64) == Double(otherLargeInt64)` may spuriously return true.
-    /// However, `.int64(largeValue) == .double(Double(largeValue))` correctly evaluates
-    /// because the Double side is already the rounded value.
+    /// Cross-type numeric equality without a lossy integer-to-double conversion.
     public static func == (lhs: FieldValue, rhs: FieldValue) -> Bool {
         switch (lhs, rhs) {
         case (.int64(let l), .int64(let r)): return l == r
+        case (.uint64(let l), .uint64(let r)): return l == r
         case (.double(let l), .double(let r)): return l == r
-        case (.string(let l), .string(let r)): return l == r
+        case (.string(let l), .string(let r)):
+            return Self.utf8Equal(l, r)
         case (.bool(let l), .bool(let r)): return l == r
         case (.data(let l), .data(let r)): return l == r
+        case (.rdfTerm(let l), .rdfTerm(let r)): return l == r
         case (.null, .null): return true
         case (.array(let l), .array(let r)): return l == r
         // Cross-type numeric equality
-        case (.int64(let l), .double(let r)): return Double(l) == r
-        case (.double(let l), .int64(let r)): return l == Double(r)
+        case (.int64(let l), .double(let r)):
+            return Self.integer(l, equals: r)
+        case (.double(let l), .int64(let r)):
+            return Self.integer(r, equals: l)
+        case (.uint64(let l), .double(let r)):
+            return Self.unsignedInteger(l, equals: r)
+        case (.double(let l), .uint64(let r)):
+            return Self.unsignedInteger(r, equals: l)
+        case (.int64(let l), .uint64(let r)):
+            return l >= 0 && UInt64(l) == r
+        case (.uint64(let l), .int64(let r)):
+            return r >= 0 && l == UInt64(r)
         default: return false
         }
     }
@@ -196,32 +229,65 @@ extension FieldValue: Hashable {
     /// Cross-type consistent hashing
     ///
     /// Must be consistent with Equatable: if `a == b`, then `a.hashValue == b.hashValue`.
-    /// Since `.int64(42) == .double(42.0)`, both must produce the same hash.
-    /// Achieved by hashing all numeric types (int64, double) with a shared discriminator
-    /// and converting int64 to Double for the hash value.
+    /// Numerically equal signed, unsigned, and exactly integral floating-point
+    /// values use one canonical integer representation. Integer values are never
+    /// converted to `Double`, so adjacent values above 2^53 remain distinct inputs.
     public func hash(into hasher: inout Hasher) {
         switch self {
         case .int64(let v):
-            hasher.combine(0)
-            hasher.combine(Double(v))
+            Self.hashInteger(v, into: &hasher)
+        case .uint64(let value):
+            Self.hashUnsignedInteger(value, into: &hasher)
         case .double(let v):
-            hasher.combine(0)
-            hasher.combine(v)
+            if let integer = Int64(exactly: v) {
+                Self.hashInteger(integer, into: &hasher)
+            } else if let integer = UInt64(exactly: v) {
+                Self.hashUnsignedInteger(integer, into: &hasher)
+            } else {
+                hasher.combine(0)
+                hasher.combine(2)
+                hasher.combine(v.bitPattern)
+            }
         case .string(let v):
             hasher.combine(1)
-            hasher.combine(v)
+            hasher.combine(v.utf8.count)
+            for byte in v.utf8 {
+                hasher.combine(byte)
+            }
         case .bool(let v):
             hasher.combine(2)
             hasher.combine(v)
         case .data(let v):
             hasher.combine(3)
             hasher.combine(v)
-        case .null:
+        case .rdfTerm(let value):
             hasher.combine(4)
-        case .array(let v):
+            hasher.combine(value)
+        case .null:
             hasher.combine(5)
+        case .array(let v):
+            hasher.combine(6)
             for element in v { hasher.combine(element) }
         }
+    }
+
+    private static func hashInteger(_ value: Int64, into hasher: inout Hasher) {
+        if value >= 0 {
+            hashUnsignedInteger(UInt64(value), into: &hasher)
+            return
+        }
+        hasher.combine(0)
+        hasher.combine(0)
+        hasher.combine(value)
+    }
+
+    private static func hashUnsignedInteger(
+        _ value: UInt64,
+        into hasher: inout Hasher
+    ) {
+        hasher.combine(0)
+        hasher.combine(1)
+        hasher.combine(value)
     }
 }
 
@@ -233,20 +299,38 @@ extension FieldValue: Comparable {
         // Same type comparisons
         case (.int64(let l), .int64(let r)):
             return l < r
+        case (.uint64(let l), .uint64(let r)):
+            return l < r
         case (.double(let l), .double(let r)):
             return l < r
         case (.string(let l), .string(let r)):
-            return l < r
+            return Self.utf8LessThan(l, r)
         case (.bool(let l), .bool(let r)):
             return !l && r  // false < true
         case (.data(let l), .data(let r)):
             return l.lexicographicallyPrecedes(r)
+        case (.rdfTerm(let l), .rdfTerm(let r)):
+            return l < r
 
         // Cross-type numeric comparisons
         case (.int64(let l), .double(let r)):
-            return Double(l) < r
+            return Self.integer(l, isLessThan: r)
         case (.double(let l), .int64(let r)):
-            return l < Double(r)
+            guard !l.isNaN, !Self.integer(r, equals: l) else {
+                return false
+            }
+            return !Self.integer(r, isLessThan: l)
+        case (.uint64(let l), .double(let r)):
+            return Self.unsignedInteger(l, isLessThan: r)
+        case (.double(let l), .uint64(let r)):
+            guard !l.isNaN, !Self.unsignedInteger(r, equals: l) else {
+                return false
+            }
+            return !Self.unsignedInteger(r, isLessThan: l)
+        case (.int64(let l), .uint64(let r)):
+            return l < 0 || UInt64(l) < r
+        case (.uint64(let l), .int64(let r)):
+            return r >= 0 && l < UInt64(r)
 
         // Null handling: null is less than everything else
         case (.null, .null):
@@ -268,11 +352,86 @@ extension FieldValue: Comparable {
         case .null: return 0
         case .bool: return 1
         case .int64: return 2
-        case .double: return 3
-        case .string: return 4
-        case .data: return 5
-        case .array: return 6
+        case .uint64: return 3
+        case .double: return 4
+        case .string: return 5
+        case .rdfTerm: return 6
+        case .data: return 7
+        case .array: return 8
         }
+    }
+
+    private static func integer(_ integer: Int64, equals value: Double) -> Bool {
+        guard value.isFinite, let exactInteger = Int64(exactly: value) else {
+            return false
+        }
+        return integer == exactInteger
+    }
+
+    private static func integer(
+        _ integer: Int64,
+        isLessThan value: Double
+    ) -> Bool {
+        guard !value.isNaN else {
+            return false
+        }
+        if value == .infinity {
+            return true
+        }
+        if value == -.infinity {
+            return false
+        }
+
+        let upperExclusive = 9_223_372_036_854_775_808.0
+        let lowerInclusive = -9_223_372_036_854_775_808.0
+        if value >= upperExclusive {
+            return true
+        }
+        if value < lowerInclusive {
+            return false
+        }
+
+        let truncated = Int64(value)
+        if integer != truncated {
+            return integer < truncated
+        }
+        return value > Double(truncated)
+    }
+
+    private static func unsignedInteger(
+        _ integer: UInt64,
+        equals value: Double
+    ) -> Bool {
+        guard value.isFinite, let exactInteger = UInt64(exactly: value) else {
+            return false
+        }
+        return integer == exactInteger
+    }
+
+    private static func unsignedInteger(
+        _ integer: UInt64,
+        isLessThan value: Double
+    ) -> Bool {
+        guard !value.isNaN else {
+            return false
+        }
+        if value == .infinity {
+            return true
+        }
+        if value == -.infinity || value <= 0 {
+            return false
+        }
+
+        let upperExclusive = 18_446_744_073_709_551_616.0
+        if value >= upperExclusive {
+            return true
+        }
+
+        let truncated = UInt64(value)
+        if integer != truncated {
+            return integer < truncated
+        }
+        return value > Double(truncated)
     }
 }
 
@@ -283,6 +442,8 @@ extension FieldValue: CustomStringConvertible {
         switch self {
         case .int64(let v):
             return "int64(\(v))"
+        case .uint64(let value):
+            return "uint64(\(value))"
         case .double(let v):
             return "double(\(v))"
         case .string(let v):
@@ -291,6 +452,8 @@ extension FieldValue: CustomStringConvertible {
             return "bool(\(v))"
         case .data(let v):
             return "data(\(v.count) bytes)"
+        case .rdfTerm(let value):
+            return "rdfTerm(\(value))"
         case .null:
             return "null"
         case .array(let v):
@@ -299,100 +462,24 @@ extension FieldValue: CustomStringConvertible {
     }
 }
 
-// MARK: - Stable Hash
+// MARK: - Codable
 
 extension FieldValue {
-    /// Compute a stable 64-bit hash for HyperLogLog
-    ///
-    /// This hash function is:
-    /// - **Deterministic**: Same value always produces same hash
-    /// - **Uniformly distributed**: Minimizes hash collisions
-    /// - **Stable across runs**: Same value produces same hash even after restart
-    ///
-    /// - Returns: 64-bit hash value
-    public func stableHash() -> UInt64 {
-        var hasher = StableHasher()
-
-        switch self {
-        case .int64(let value):
-            hasher.combine(Int64(0))  // Type discriminator
-            hasher.combine(value)
-
-        case .double(let value):
-            hasher.combine(Int64(1))  // Type discriminator
-            hasher.combine(value.bitPattern)
-
-        case .string(let value):
-            hasher.combine(Int64(2))  // Type discriminator
-            hasher.combine(value)
-
-        case .bool(let value):
-            hasher.combine(Int64(3))  // Type discriminator
-            hasher.combine(value)
-
-        case .data(let value):
-            hasher.combine(Int64(4))  // Type discriminator
-            hasher.combine(value)
-
-        case .null:
-            hasher.combine(Int64(5))  // Type discriminator
-
-        case .array(let values):
-            hasher.combine(Int64(6))  // Type discriminator
-            hasher.combine(Int64(values.count))
-            for element in values {
-                hasher.combine(element.stableHash())
-            }
+    public init(from decoder: any Decoder) throws {
+        let value = try DatabaseValue(from: decoder)
+        guard let decoded = FieldValue(databaseValue: value) else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Unsupported DatabaseValue for FieldValue"
+                )
+            )
         }
-
-        return hasher.finalize()
-    }
-}
-
-// MARK: - StableHasher
-
-/// A hasher that produces stable, deterministic hashes
-///
-/// Unlike Swift's built-in Hasher, this produces the same hash value
-/// across different runs of the program, which is essential for
-/// database statistics that need to be persisted.
-private struct StableHasher {
-    private var state: UInt64 = 0xcbf29ce484222325  // FNV-1a offset basis
-
-    mutating func combine(_ value: Int64) {
-        combine(UInt64(bitPattern: value))
+        self = decoded
     }
 
-    mutating func combine(_ value: UInt64) {
-        // FNV-1a hash algorithm
-        let bytes = withUnsafeBytes(of: value) { Array($0) }
-        for byte in bytes {
-            state ^= UInt64(byte)
-            state = state &* 0x100000001b3  // FNV-1a prime
-        }
-    }
-
-    mutating func combine(_ value: String) {
-        let bytes = value.utf8
-        for byte in bytes {
-            state ^= UInt64(byte)
-            state = state &* 0x100000001b3
-        }
-    }
-
-    mutating func combine(_ value: Bool) {
-        combine(value ? Int64(1) : Int64(0))
-    }
-
-    mutating func combine(_ value: Data) {
-        for byte in value {
-            state ^= UInt64(byte)
-            state = state &* 0x100000001b3
-        }
-    }
-
-    func finalize() -> UInt64 {
-        return state
+    public func encode(to encoder: any Encoder) throws {
+        try asDatabaseValue.encode(to: encoder)
     }
 }
 
@@ -419,24 +506,22 @@ extension FieldValue {
     ///
     /// Used for histogram bucket width calculation.
     public func numericDifference(from other: FieldValue) -> Double? {
-        switch (self, other) {
-        case (.int64(let a), .int64(let b)):
-            return Double(a - b)
-        case (.double(let a), .double(let b)):
-            return a - b
-        case (.int64(let a), .double(let b)):
-            return Double(a) - b
-        case (.double(let a), .int64(let b)):
-            return a - Double(b)
-        default:
+        guard let lhs = asDouble, let rhs = other.asDouble else {
             return nil
         }
+        return lhs - rhs
     }
 
     /// Compare two FieldValues for ordering
     ///
     /// Returns nil if the values are not comparable (different types except numeric)
     public func compare(to other: FieldValue) -> ComparisonResult? {
+        if isNumeric && other.isNumeric {
+            if self == other { return .orderedSame }
+            if self < other { return .orderedAscending }
+            if other < self { return .orderedDescending }
+            return nil
+        }
         switch (self, other) {
         case (.null, .null):
             return .orderedSame
@@ -449,30 +534,11 @@ extension FieldValue {
             if a == b { return .orderedSame }
             return a ? .orderedDescending : .orderedAscending
 
-        case (.int64(let a), .int64(let b)):
-            if a < b { return .orderedAscending }
-            if a > b { return .orderedDescending }
-            return .orderedSame
-
-        case (.double(let a), .double(let b)):
-            if a < b { return .orderedAscending }
-            if a > b { return .orderedDescending }
-            return .orderedSame
-
-        case (.int64(let a), .double(let b)):
-            let da = Double(a)
-            if da < b { return .orderedAscending }
-            if da > b { return .orderedDescending }
-            return .orderedSame
-
-        case (.double(let a), .int64(let b)):
-            let db = Double(b)
-            if a < db { return .orderedAscending }
-            if a > db { return .orderedDescending }
-            return .orderedSame
-
         case (.string(let a), .string(let b)):
-            return a.compare(b)
+            if Self.utf8Equal(a, b) { return .orderedSame }
+            return Self.utf8LessThan(a, b)
+                ? .orderedAscending
+                : .orderedDescending
 
         case (.data(let a), .data(let b)):
             for (i, byte) in a.enumerated() {
@@ -483,9 +549,23 @@ extension FieldValue {
             if a.count < b.count { return .orderedAscending }
             return .orderedSame
 
+        case (.rdfTerm(let a), .rdfTerm(let b)):
+            if a == b { return .orderedSame }
+            return a < b ? .orderedAscending : .orderedDescending
+
         default:
             return nil  // Incompatible types
         }
+    }
+
+    /// Database string semantics use the exact UTF-8 code units stored on the
+    /// wire. Locale and Unicode normalization must not alter persistent order.
+    private static func utf8Equal(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.utf8.elementsEqual(rhs.utf8)
+    }
+
+    private static func utf8LessThan(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.utf8.lexicographicallyPrecedes(rhs.utf8)
     }
 }
 
@@ -527,23 +607,23 @@ extension Int64: FieldValueConvertible {
 }
 
 extension UInt: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+    public func toFieldValue() -> FieldValue { .uint64(UInt64(self)) }
 }
 
 extension UInt8: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+    public func toFieldValue() -> FieldValue { .uint64(UInt64(self)) }
 }
 
 extension UInt16: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+    public func toFieldValue() -> FieldValue { .uint64(UInt64(self)) }
 }
 
 extension UInt32: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+    public func toFieldValue() -> FieldValue { .uint64(UInt64(self)) }
 }
 
 extension UInt64: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .int64(Int64(bitPattern: self)) }
+    public func toFieldValue() -> FieldValue { .uint64(self) }
 }
 
 extension Float: FieldValueConvertible {
@@ -559,7 +639,21 @@ extension String: FieldValueConvertible {
 }
 
 extension Data: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .data(self) }
+    public func toFieldValue() -> FieldValue {
+        .data(DatabaseBytes(retaining: RetainedDataByteOwner(data: self)))
+    }
+}
+
+extension DatabaseRDFTerm: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .rdfTerm(self) }
+}
+
+extension UUID: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .string(uuidString.lowercased()) }
+}
+
+extension Date: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .double(timeIntervalSince1970) }
 }
 
 extension Array: FieldValueConvertible where Element: FieldValueConvertible {

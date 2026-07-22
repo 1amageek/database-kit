@@ -115,6 +115,36 @@ fileprivate struct ExplicitFieldNumberRecord: Codable {
 @Suite("Protobuf Encoder/Decoder Tests")
 struct ProtobufEncoderDecoderTests {
 
+    @Test("Truncated varint tags are rejected")
+    func truncatedVarintTagIsRejected() {
+        #expect(throws: DecodingError.self) {
+            _ = try ProtobufDecoder().decode(
+                ExplicitFieldNumberRecord.self,
+                from: Data([0x80])
+            )
+        }
+    }
+
+    @Test("Truncated length-delimited fields are rejected")
+    func truncatedLengthDelimitedFieldIsRejected() {
+        #expect(throws: DecodingError.self) {
+            _ = try ProtobufDecoder().decode(
+                ExplicitFieldNumberRecord.self,
+                from: Data([0x12, 0x03, 0x61])
+            )
+        }
+    }
+
+    @Test("Unsupported wire types are rejected")
+    func unsupportedWireTypeIsRejected() {
+        #expect(throws: DecodingError.self) {
+            _ = try ProtobufDecoder().decode(
+                ExplicitFieldNumberRecord.self,
+                from: Data([0x0b])
+            )
+        }
+    }
+
     // MARK: - Basic Type Tests
 
     @Test("Simple record encoding and decoding")

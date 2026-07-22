@@ -4,8 +4,6 @@
 // Reference: W3C SHACL §2.3.1 (SHACL Property Paths)
 // https://www.w3.org/TR/shacl/#property-paths
 
-import Foundation
-
 /// SHACL Property Path
 ///
 /// Defines the path from a focus node to value nodes.

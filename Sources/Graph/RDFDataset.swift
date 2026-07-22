@@ -1,52 +1,16 @@
 // RDFDataset.swift
 // Graph - RDF dataset model for TriG / N-Quads I/O
 
-import Foundation
+import DatabaseValue
+import DatabaseValueCodable
 
-/// RDF literal value used by dataset codecs.
-///
-/// `RDFTerm` keeps using `OWLLiteral` for source compatibility. This value type
-/// provides a graph-oriented name and bridges to `OWLLiteral` where needed.
-public struct RDFLiteral: Sendable, Hashable, Codable {
-    public var lexicalForm: String
-    public var datatype: String
-    public var language: String?
+/// The canonical RDF literal used by dataset codecs.
+public typealias RDFLiteral = DatabaseRDFLiteral
 
-    public init(lexicalForm: String, datatype: String = XSDDatatype.string.iri, language: String? = nil) {
-        self.lexicalForm = lexicalForm
-        self.datatype = datatype
-        self.language = language
-    }
-
-    public init(_ literal: OWLLiteral) {
-        self.lexicalForm = literal.lexicalForm
-        self.datatype = literal.datatype
-        self.language = literal.language
-    }
-
-    public var owlLiteral: OWLLiteral {
-        OWLLiteral(lexicalForm: lexicalForm, datatype: datatype, language: language)
-    }
-}
-
-extension OWLLiteral {
-    public init(_ literal: RDFLiteral) {
-        self.init(
-            lexicalForm: literal.lexicalForm,
-            datatype: literal.datatype,
-            language: literal.language
-        )
-    }
-}
-
-extension RDFTerm {
-    public static func literal(_ literal: RDFLiteral) -> RDFTerm {
-        .literal(literal.owlLiteral)
-    }
-
-    public var rdfLiteral: RDFLiteral? {
+extension DatabaseRDFTerm {
+    public var rdfLiteral: DatabaseRDFLiteral? {
         guard case .literal(let literal) = self else { return nil }
-        return RDFLiteral(literal)
+        return literal
     }
 }
 
@@ -86,6 +50,10 @@ public struct RDFQuad: Sendable, Hashable, Codable {
         if let graph, !graph.isRDFGraphName {
             throw RDFDatasetValidationError.invalidGraphName(graph)
         }
+        try subject.validateRDFLexicalForm()
+        try predicate.validateRDFLexicalForm()
+        try object.validateRDFLexicalForm()
+        try graph?.validateRDFLexicalForm()
     }
 }
 
@@ -138,6 +106,9 @@ public enum RDFDatasetValidationError: Error, Sendable, Equatable, CustomStringC
     case invalidPredicate(RDFTerm)
     case invalidObject(RDFTerm)
     case invalidGraphName(RDFTerm)
+    case invalidIRI(String)
+    case invalidBlankNodeIdentifier(String)
+    case invalidLiteralDatatype(String)
 
     public var description: String {
         switch self {
@@ -149,6 +120,37 @@ public enum RDFDatasetValidationError: Error, Sendable, Equatable, CustomStringC
             return "RDF object must be an IRI, blank node, or literal, got \(term)"
         case .invalidGraphName(let term):
             return "RDF graph name must be an IRI or blank node, got \(term)"
+        case .invalidIRI(let value):
+            return "RDF IRI must be absolute: \(value)"
+        case .invalidBlankNodeIdentifier(let value):
+            return "RDF blank node identifier must not be empty: \(value)"
+        case .invalidLiteralDatatype(let value):
+            return "RDF literal datatype must be an absolute IRI: \(value)"
+        }
+    }
+}
+
+private extension DatabaseRDFTerm {
+    func validateRDFLexicalForm() throws {
+        switch self {
+        case .iri(let value):
+            guard DatabaseRDFIRIValidator.isAbsolute(value) else {
+                throw RDFDatasetValidationError.invalidIRI(value)
+            }
+        case .blankNode(let identifier):
+            guard !identifier.isEmpty else {
+                throw RDFDatasetValidationError.invalidBlankNodeIdentifier(identifier)
+            }
+        case .literal(let literal):
+            guard DatabaseRDFIRIValidator.isAbsolute(literal.datatype) else {
+                throw RDFDatasetValidationError.invalidLiteralDatatype(
+                    literal.datatype
+                )
+            }
+        case .tripleTerm(let subject, let predicate, let object):
+            try subject.validateRDFLexicalForm()
+            try predicate.validateRDFLexicalForm()
+            try object.validateRDFLexicalForm()
         }
     }
 }
@@ -157,25 +159,32 @@ extension RDFTerm {
     public var isRDFSubject: Bool {
         switch self {
         case .iri, .blankNode: return true
-        case .literal: return false
+        case .literal, .tripleTerm: return false
         }
     }
 
     public var isRDFPredicate: Bool {
         switch self {
         case .iri: return true
-        case .blankNode, .literal: return false
+        case .blankNode, .literal, .tripleTerm: return false
         }
     }
 
     public var isRDFObject: Bool {
-        true
+        switch self {
+        case .iri, .blankNode, .literal:
+            return true
+        case .tripleTerm(let subject, let predicate, let object):
+            return subject.isRDFSubject
+                && predicate.isRDFPredicate
+                && object.isRDFObject
+        }
     }
 
     public var isRDFGraphName: Bool {
         switch self {
         case .iri, .blankNode: return true
-        case .literal: return false
+        case .literal, .tripleTerm: return false
         }
     }
 }

@@ -64,15 +64,15 @@ struct SchemaEvolutionTests {
     }
 
     @Test("Append-only field additions decode missing fields using defaults")
-    func appendOnlyFieldAdditionUsesDefaultsWhenDecodingLegacyPayload() throws {
+    func appendOnlyFieldAdditionUsesDefaultsWhenDecodingSourceSchemaPayload() throws {
         let encoder = ProtobufEncoder()
         let decoder = ProtobufDecoder()
-        let legacy = SchemaEvolutionUserV1(name: "Alice", email: "alice@example.com")
+        let sourceRecord = SchemaEvolutionUserV1(name: "Alice", email: "alice@example.com")
 
-        let data = try encoder.encode(legacy)
+        let data = try encoder.encode(sourceRecord)
         let decoded = try decoder.decode(SchemaEvolutionUserV2AppendOnly.self, from: data)
 
-        #expect(decoded.id == legacy.id)
+        #expect(decoded.id == sourceRecord.id)
         #expect(decoded.name == "Alice")
         #expect(decoded.email == "alice@example.com")
         #expect(decoded.age == 0)

@@ -13,7 +13,7 @@ import SwiftDiagnostics
 ///
 /// **Generated code includes**:
 /// - `static var polymorphableType: String`
-/// - `static var directoryPathComponents: [any DirectoryPathElement]`
+/// - `static var directoryPathComponents: [DirectoryPathComponent]`
 /// - `static var directoryLayer: DirectoryLayer`
 /// - `static var indexDescriptors: [IndexDescriptor]`
 ///
@@ -80,7 +80,7 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
         // Parse #Directory and #Index macros from protocol body
         var directoryPathComponents: [String] = []
         var directoryLayerValue: String = ".default"
-        var indexDescriptors: [String] = []
+        var indexDescriptors: [ExprSyntax] = []
 
         for member in protocolDecl.memberBlock.members {
             // Check for #Directory freestanding macro
@@ -98,41 +98,52 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
             }
         }
 
-        // Build extension body with implementations
-        var extensionBody: [String] = []
+        // Build extension members as independent syntax nodes so SwiftSyntax owns
+        // indentation and trivia for each declaration.
+        var extensionMembers: [DeclSyntax] = []
 
         // polymorphableType
-        extensionBody.append("""
-            public static var polymorphableType: String { "\(protocolName)" }
+        extensionMembers.append("""
+            public static var polymorphableType: String { "\(raw: protocolName)" }
         """)
 
         // polymorphicDirectoryPathComponents - shared directory for all conforming types
         if !directoryPathComponents.isEmpty {
             let componentsArray = directoryPathComponents.joined(separator: ", ")
-            extensionBody.append("""
-                public static var polymorphicDirectoryPathComponents: [any DirectoryPathElement] { [\(componentsArray)] }
+            extensionMembers.append("""
+                public static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] { [\(raw: componentsArray)] }
             """)
         } else {
             // Default: use polymorphableType as path
-            extensionBody.append("""
-                public static var polymorphicDirectoryPathComponents: [any DirectoryPathElement] { [Path(polymorphableType)] }
+            extensionMembers.append("""
+                public static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] { [.staticPath(polymorphableType)] }
             """)
         }
 
         // polymorphicDirectoryLayer
         // Use Core.DirectoryLayer to disambiguate from FoundationDB.DirectoryLayer
-        extensionBody.append("""
-            public static var polymorphicDirectoryLayer: Core.DirectoryLayer { \(directoryLayerValue) }
+        extensionMembers.append("""
+            public static var polymorphicDirectoryLayer: Core.DirectoryLayer { \(raw: directoryLayerValue) }
         """)
 
         // polymorphicIndexDescriptors
         if !indexDescriptors.isEmpty {
-            let descriptorsArray = indexDescriptors.joined(separator: ",\n            ")
-            extensionBody.append("""
+            let descriptorsArray = ArrayExprSyntax {
+                for (index, descriptor) in indexDescriptors.enumerated() {
+                    ArrayElementSyntax(
+                        leadingTrivia: .spaces(4),
+                        expression: descriptor.trimmed,
+                        trailingComma: index == indexDescriptors.index(before: indexDescriptors.endIndex)
+                            ? nil
+                            : .commaToken(trailingTrivia: .newline)
+                    )
+                }
+            }
+            .with(\.leftSquare, .leftSquareToken(trailingTrivia: .newline))
+            .with(\.rightSquare, .rightSquareToken(leadingTrivia: .newline))
+            extensionMembers.append("""
                 public static var polymorphicIndexDescriptors: [IndexDescriptor] {
-                    [
-                        \(descriptorsArray)
-                    ]
+                    \(descriptorsArray)
                 }
             """)
         }
@@ -141,18 +152,12 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
         // Note: The protocol must explicitly inherit from Polymorphable
         // e.g., `protocol Document: Polymorphable { ... }`
         // This extension only provides default implementations
-        let bodyString = extensionBody.joined(separator: "\n    ")
-        let conformanceExt: DeclSyntax = """
-            extension \(type.trimmed) {
-                \(raw: bodyString)
+        let extensionDecl = try ExtensionDeclSyntax("extension \(type.trimmed)") {
+            for member in extensionMembers {
+                member
             }
-            """
-
-        if let extensionDecl = conformanceExt.as(ExtensionDeclSyntax.self) {
-            return [extensionDecl]
         }
-
-        return []
+        return [extensionDecl]
     }
 }
 
@@ -228,22 +233,23 @@ private func parseDirectoryMacro(_ macroDecl: MacroExpansionDeclSyntax) -> (comp
 
         let expr = arg.expression
 
-        // String literal → Path("value")
+        // Compile a string literal into a canonical static path component.
         if let stringLiteral = expr.as(StringLiteralExprSyntax.self),
            let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
             let pathValue = segment.content.text
-            directoryPathComponents.append("Path(\"\(pathValue)\")")
+            directoryPathComponents.append(".staticPath(\"\(pathValue)\")")
         }
     }
 
     return (directoryPathComponents, directoryLayerValue)
 }
 
-/// Parse #Index macro and generate IndexDescriptor string
-private func parseIndexMacro(_ macroDecl: MacroExpansionDeclSyntax, protocolName: String) -> String? {
+/// Parse #Index macro and generate an IndexDescriptor expression.
+private func parseIndexMacro(_ macroDecl: MacroExpansionDeclSyntax, protocolName: String) -> ExprSyntax? {
     var keyPaths: [String] = []
     var storedFieldKeyPaths: [String] = []
     var indexKindExpr: String?
+    var indexKindName: String?
     var isUnique = false
     var indexName: String?
 
@@ -251,6 +257,8 @@ private func parseIndexMacro(_ macroDecl: MacroExpansionDeclSyntax, protocolName
         // First unlabeled argument: IndexKind expression
         if arg.label == nil {
             if let funcCall = arg.expression.as(FunctionCallExprSyntax.self) {
+                indexKindName = funcCall.calledExpression.description
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 // Extract KeyPaths from function arguments
                 for funcArg in funcCall.arguments {
                     keyPaths.append(contentsOf: collectKeyPathStrings(from: funcArg.expression))
@@ -278,7 +286,11 @@ private func parseIndexMacro(_ macroDecl: MacroExpansionDeclSyntax, protocolName
         }
     }
 
-    guard !keyPaths.isEmpty else { return nil }
+    let isCountIndex = indexKindName?
+        .components(separatedBy: "<")
+        .first?
+        .trimmingCharacters(in: .whitespacesAndNewlines) == "CountIndexKind"
+    guard !keyPaths.isEmpty || isCountIndex else { return nil }
 
     // Generate index name if not provided
     let finalIndexName: String
@@ -286,10 +298,22 @@ private func parseIndexMacro(_ macroDecl: MacroExpansionDeclSyntax, protocolName
         finalIndexName = customName
     } else {
         let flattenedKeyPaths = keyPaths.map { $0.replacingOccurrences(of: ".", with: "_") }
-        finalIndexName = "\(protocolName)_\(flattenedKeyPaths.joined(separator: "_"))"
+        if isCountIndex, flattenedKeyPaths.isEmpty {
+            finalIndexName = "\(protocolName)_count"
+        } else {
+            finalIndexName = "\(protocolName)_\(flattenedKeyPaths.joined(separator: "_"))"
+        }
     }
 
-    let keyPathsLiterals = keyPaths.map { "\\Self.\($0)" }.joined(separator: ", ")
+    let keyPathsExpression: String
+    if keyPaths.isEmpty {
+        keyPathsExpression = "[PartialKeyPath<Self>]()"
+    } else {
+        let keyPathsLiterals = keyPaths
+            .map { "\\Self.\($0)" }
+            .joined(separator: ", ")
+        keyPathsExpression = "[\(keyPathsLiterals)]"
+    }
     let kindInit = rewriteIndexKindExpression(
         indexKindExpr ?? "ScalarIndexKind(fields: [])",
         protocolName: protocolName
@@ -297,26 +321,26 @@ private func parseIndexMacro(_ macroDecl: MacroExpansionDeclSyntax, protocolName
     let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
 
     if storedFieldKeyPaths.isEmpty {
-        return """
+        let expression: ExprSyntax = """
             IndexDescriptor(
-                name: "\(finalIndexName)",
-                keyPaths: [\(keyPathsLiterals)],
-                kind: \(kindInit),
-                commonOptions: \(optionsInit)
+                name: "\(raw: finalIndexName)",
+                keyPaths: \(raw: keyPathsExpression),
+                kind: \(raw: kindInit),
+                commonOptions: \(raw: optionsInit)
             )
         """
+        return expression
     }
 
-    let storedKeyPathsLiterals = storedFieldKeyPaths.map { "\\Self.\($0)" }.joined(separator: ", ")
     let storedFieldNamesLiterals = storedFieldKeyPaths.map { "\"\($0)\"" }.joined(separator: ", ")
-    return """
+    let expression: ExprSyntax = """
         IndexDescriptor(
-            name: "\(finalIndexName)",
-            keyPaths: [\(keyPathsLiterals)],
-            kind: \(kindInit),
-            commonOptions: \(optionsInit),
-            storedKeyPaths: [\(storedKeyPathsLiterals)],
-            storedFieldNames: [\(storedFieldNamesLiterals)]
+            name: "\(raw: finalIndexName)",
+            keyPaths: \(raw: keyPathsExpression),
+            kind: \(raw: kindInit),
+            commonOptions: \(raw: optionsInit),
+            storedFieldNames: [\(raw: storedFieldNamesLiterals)]
         )
     """
+    return expression
 }

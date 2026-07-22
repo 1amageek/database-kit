@@ -5,11 +5,10 @@
 /// - ISO/IEC 9075:2023 (SELECT statement)
 /// - W3C SPARQL 1.1/1.2 (SELECT query)
 
-import Foundation
 
 /// Unified SELECT query representation
 /// This structure can represent both SQL SELECT and SPARQL SELECT queries
-public struct SelectQuery: Sendable, Equatable, Hashable, Codable {
+public struct SelectQuery: Sendable, Equatable, Hashable {
     /// Projection (SELECT clause)
     public let projection: Projection
 
@@ -46,11 +45,8 @@ public struct SelectQuery: Sendable, Equatable, Hashable, Codable {
     /// REDUCED flag (SPARQL)
     public let reduced: Bool
 
-    /// Dataset clauses (SPARQL FROM)
-    public let from: [String]?
-
-    /// Named graph dataset clauses (SPARQL FROM NAMED)
-    public let fromNamed: [String]?
+    /// SPARQL dataset selection. SQL queries use `.implicit`.
+    public let dataset: SPARQLDataset
 
     public init(
         projection: Projection,
@@ -65,8 +61,7 @@ public struct SelectQuery: Sendable, Equatable, Hashable, Codable {
         distinct: Bool = false,
         subqueries: [NamedSubquery]? = nil,
         reduced: Bool = false,
-        from: [String]? = nil,
-        fromNamed: [String]? = nil
+        dataset: SPARQLDataset = .implicit
     ) {
         self.projection = projection
         self.source = source
@@ -80,8 +75,7 @@ public struct SelectQuery: Sendable, Equatable, Hashable, Codable {
         self.distinct = distinct
         self.subqueries = subqueries
         self.reduced = reduced
-        self.from = from
-        self.fromNamed = fromNamed
+        self.dataset = dataset
     }
 }
 
@@ -102,8 +96,7 @@ extension SelectQuery {
             distinct: distinct,
             subqueries: subqueries,
             reduced: reduced,
-            from: from,
-            fromNamed: fromNamed
+            dataset: dataset
         )
     }
 
@@ -121,8 +114,7 @@ extension SelectQuery {
             distinct: distinct,
             subqueries: subqueries,
             reduced: reduced,
-            from: from,
-            fromNamed: fromNamed
+            dataset: dataset
         )
     }
 
@@ -140,8 +132,7 @@ extension SelectQuery {
             distinct: distinct,
             subqueries: subqueries,
             reduced: reduced,
-            from: from,
-            fromNamed: fromNamed
+            dataset: dataset
         )
     }
 
@@ -159,8 +150,7 @@ extension SelectQuery {
             distinct: distinct,
             subqueries: subqueries,
             reduced: reduced,
-            from: from,
-            fromNamed: fromNamed
+            dataset: dataset
         )
     }
 
@@ -178,8 +168,7 @@ extension SelectQuery {
             distinct: distinct,
             subqueries: subqueries,
             reduced: reduced,
-            from: from,
-            fromNamed: fromNamed
+            dataset: dataset
         )
     }
 
@@ -197,8 +186,7 @@ extension SelectQuery {
             distinct: distinct,
             subqueries: subqueries,
             reduced: reduced,
-            from: from,
-            fromNamed: fromNamed
+            dataset: dataset
         )
     }
 
@@ -216,8 +204,7 @@ extension SelectQuery {
             distinct: distinct,
             subqueries: subqueries,
             reduced: reduced,
-            from: from,
-            fromNamed: fromNamed
+            dataset: dataset
         )
     }
 
@@ -235,8 +222,7 @@ extension SelectQuery {
             distinct: distinct,
             subqueries: subqueries,
             reduced: reduced,
-            from: from,
-            fromNamed: fromNamed
+            dataset: dataset
         )
     }
 
@@ -254,8 +240,7 @@ extension SelectQuery {
             distinct: distinct,
             subqueries: subqueries,
             reduced: reduced,
-            from: from,
-            fromNamed: fromNamed
+            dataset: dataset
         )
     }
 
@@ -281,8 +266,7 @@ extension SelectQuery {
             distinct: distinct ?? self.distinct,
             subqueries: subqueries,
             reduced: reduced ?? self.reduced,
-            from: from,
-            fromNamed: fromNamed
+            dataset: dataset
         )
     }
 }
@@ -384,9 +368,19 @@ extension SelectQuery {
 
     private func collectVariables(from pattern: GraphPattern, into vars: inout Set<String>) {
         switch pattern {
-        case .basic(let triples):
-            for triple in triples {
-                collectVariables(from: triple, into: &vars)
+        case .basic(let basicGraphPattern):
+            for element in basicGraphPattern.elements {
+                switch element {
+                case .triple(let triple):
+                    collectVariables(from: triple, into: &vars)
+                case .propertyPath(let pathPattern):
+                    if case .variable(let variable) = pathPattern.subject {
+                        vars.insert(variable)
+                    }
+                    if case .variable(let variable) = pathPattern.object {
+                        vars.insert(variable)
+                    }
+                }
             }
         case .join(let left, let right), .optional(let left, let right),
              .union(let left, let right), .minus(let left, let right),
@@ -410,9 +404,6 @@ extension SelectQuery {
             vars.formUnion(query.referencedVariables)
         case .groupBy(let pattern, _, _):
             collectVariables(from: pattern, into: &vars)
-        case .propertyPath(let subject, _, let object):
-            if case .variable(let v) = subject { vars.insert(v) }
-            if case .variable(let v) = object { vars.insert(v) }
         }
     }
 

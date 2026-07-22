@@ -1,7 +1,7 @@
 // RDFSyntax.swift
 // Graph - shared concrete RDF syntax helpers
 
-import Foundation
+import DatabaseValue
 
 public enum RDFSyntaxError: Error, Sendable, Equatable, CustomStringConvertible {
     case unexpectedToken(expected: String, found: String, line: Int)
@@ -46,6 +46,8 @@ enum RDFSyntaxFormatter {
             return "_:\(id)"
         case .literal(let literal):
             return formatLiteral(literal, usePrefixes: false, prefixes: [:])
+        case .tripleTerm(let subject, let predicate, let object):
+            return "<<( \(formatNQuadsTerm(subject)) \(formatNQuadsTerm(predicate)) \(formatNQuadsTerm(object)) )>>"
         }
     }
 
@@ -57,6 +59,8 @@ enum RDFSyntaxFormatter {
             return "_:\(id)"
         case .literal(let literal):
             return formatLiteral(literal, usePrefixes: true, prefixes: prefixes)
+        case .tripleTerm(let subject, let predicate, let object):
+            return "<<( \(formatTriGTerm(subject, prefixes: prefixes)) \(formatTriGTerm(predicate, prefixes: prefixes)) \(formatTriGTerm(object, prefixes: prefixes)) )>>"
         }
     }
 
@@ -68,6 +72,9 @@ enum RDFSyntaxFormatter {
         var result = "\"\(escapeString(literal.lexicalForm))\""
         if let language = literal.language {
             result += "@\(language)"
+            if let direction = literal.direction {
+                result += "--\(direction)"
+            }
             return result
         }
 
@@ -78,7 +85,9 @@ enum RDFSyntaxFormatter {
 
         if usePrefixes, let compact = compactIRI(datatype, prefixes: prefixes) {
             result += "^^\(compact)"
-        } else if datatype.contains(":") && !datatype.contains("://") && !datatype.hasPrefix("urn:") {
+        } else if DatabaseText.contains(":", in: datatype),
+                  !DatabaseText.contains("://", in: datatype),
+                  !datatype.hasPrefix("urn:") {
             result += "^^\(datatype)"
         } else {
             result += "^^<\(escapeIRI(datatype))>"
@@ -97,19 +106,7 @@ enum RDFSyntaxFormatter {
     }
 
     static func escapeIRI(_ value: String) -> String {
-        var result = ""
-        result.reserveCapacity(value.count)
-        for ch in value {
-            switch ch {
-            case "\\": result += "\\\\"
-            case ">": result += "\\>"
-            case "\n": result += "\\n"
-            case "\r": result += "\\r"
-            case "\t": result += "\\t"
-            default: result.append(ch)
-            }
-        }
-        return result
+        escape(value, escapesQuotationMark: false, escapesClosingAngle: true)
     }
 
     static func unescapeIRI(_ value: String) -> String {
@@ -117,16 +114,45 @@ enum RDFSyntaxFormatter {
     }
 
     static func escapeString(_ value: String) -> String {
+        escape(value, escapesQuotationMark: true, escapesClosingAngle: false)
+    }
+
+    private static func escape(
+        _ value: String,
+        escapesQuotationMark: Bool,
+        escapesClosingAngle: Bool
+    ) -> String {
+        var escapeCount = 0
+        for character in value {
+            switch character {
+            case "\\", "\n", "\r", "\t":
+                escapeCount += 1
+            case "\"" where escapesQuotationMark:
+                escapeCount += 1
+            case ">" where escapesClosingAngle:
+                escapeCount += 1
+            default:
+                continue
+            }
+        }
+        let (capacity, overflow) = value.utf8.count
+            .addingReportingOverflow(escapeCount)
+        precondition(!overflow, "Escaped RDF text exceeds the supported size")
+
         var result = ""
-        result.reserveCapacity(value.count)
-        for ch in value {
-            switch ch {
+        result.reserveCapacity(capacity)
+        for character in value {
+            switch character {
             case "\\": result += "\\\\"
-            case "\"": result += "\\\""
             case "\n": result += "\\n"
             case "\r": result += "\\r"
             case "\t": result += "\\t"
-            default: result.append(ch)
+            case "\"" where escapesQuotationMark:
+                result += "\\\""
+            case ">" where escapesClosingAngle:
+                result += "\\>"
+            default:
+                result.append(character)
             }
         }
         return result

@@ -1,7 +1,6 @@
 // FieldAccessLevel.swift
 // Core - Field-level access control
 
-import Foundation
 
 /// Field access level for field-level security
 ///

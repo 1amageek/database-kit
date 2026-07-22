@@ -35,20 +35,3 @@ public macro OWLDataProperty(
     label: String? = nil,
     to keyPath: AnyKeyPath
 ) = #externalMacro(module: "GraphMacros", type: "OWLDataPropertyMacro")
-
-/// Backward compatibility
-@available(*, deprecated, renamed: "OWLDataProperty")
-@attached(peer)
-public macro OWLProperty(
-    _ iri: String,
-    label: String? = nil
-) = #externalMacro(module: "GraphMacros", type: "OWLDataPropertyMacro")
-
-/// Backward compatibility
-@available(*, deprecated, renamed: "OWLDataProperty")
-@attached(peer)
-public macro OWLProperty(
-    _ iri: String,
-    label: String? = nil,
-    to keyPath: AnyKeyPath
-) = #externalMacro(module: "GraphMacros", type: "OWLDataPropertyMacro")

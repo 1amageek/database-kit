@@ -6,7 +6,7 @@
 // Reference: W3C RDF 1.1 Turtle
 // https://www.w3.org/TR/turtle/
 
-import Foundation
+import DatabaseValue
 
 /// Encodes an OWLOntology into Turtle (RDF) format.
 ///
@@ -470,7 +470,8 @@ private struct TurtleWriter {
 
     private func formatIRI(_ iri: String) -> String {
         // Already prefixed (contains ":" but not "://")
-        if iri.contains(":") && !iri.contains("://") {
+        if DatabaseText.contains(":", in: iri),
+           !DatabaseText.contains("://", in: iri) {
             return iri
         }
         // Try to compact full IRI
@@ -644,12 +645,7 @@ private struct TurtleWriter {
     }
 
     private func escapeTurtleString(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\r", with: "\\r")
-            .replacingOccurrences(of: "\t", with: "\\t")
+        RDFSyntaxFormatter.escapeString(value)
     }
 
     // MARK: - Property Characteristics

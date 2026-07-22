@@ -3,14 +3,17 @@
 extension Persistable {
     /// Get field names for directory Field components
     public static var directoryFieldNames: [String] {
-        directoryPathComponents.compactMap { component -> String? in
-            guard let dynamicElement = component as? any DynamicDirectoryElement else { return nil }
-            return fieldName(for: dynamicElement.anyKeyPath)
+        directoryPathComponents.compactMap { component in
+            guard case .dynamicField(let fieldName) = component else { return nil }
+            return fieldName
         }
     }
 
     /// Returns true if directoryPathComponents contains any dynamic Field element
     public static var hasDynamicDirectory: Bool {
-        directoryPathComponents.contains { $0 is any DynamicDirectoryElement }
+        directoryPathComponents.contains {
+            if case .dynamicField = $0 { return true }
+            return false
+        }
     }
 }

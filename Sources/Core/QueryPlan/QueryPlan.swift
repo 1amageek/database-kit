@@ -1,5 +1,3 @@
-import Foundation
-
 /// クエリ実行計画
 public struct QueryPlan: Sendable, Codable, Hashable {
     /// 計画タイプ
@@ -83,7 +81,7 @@ public struct QueryExecutionStats: Sendable, Codable, Hashable {
     public let actualRows: Int64
 
     /// 実行時間（秒）
-    public let executionTime: TimeInterval
+    public let executionTime: Double
 
     /// 読み取りバイト数
     public let bytesRead: Int64
@@ -102,7 +100,7 @@ public struct QueryExecutionStats: Sendable, Codable, Hashable {
     public init(
         plan: QueryPlan,
         actualRows: Int64,
-        executionTime: TimeInterval,
+        executionTime: Double,
         bytesRead: Int64,
         transactionRetries: Int = 0,
         readVersion: UInt64? = nil,

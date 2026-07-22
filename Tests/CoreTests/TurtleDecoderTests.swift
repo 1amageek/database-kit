@@ -282,7 +282,10 @@ struct TurtleDecoderTests {
             if case .dataPropertyAssertion(_, _, let value) = axiom { return value }
             return nil
         }
-        #expect(assertions.first?.datatype == "xsd:date")
+        #expect(
+            assertions.first?.datatype
+                == "http://www.w3.org/2001/XMLSchema#date"
+        )
     }
 
     @Test("Language-tagged literal is decoded")
@@ -386,6 +389,35 @@ struct TurtleDecoderTests {
         let ont = try TurtleDecoder().decode(from: turtle)
         #expect(ont.objectProperties.count == 1)
         #expect(ont.objectProperties.first?.characteristics.contains(.transitive) == true)
+    }
+
+    @Test("RDF dataset is decoded without text serialization")
+    func rdfDatasetDecode() throws {
+        let dataset = RDFDataset(
+            prefixes: ["ex": "http://example.org/"],
+            quads: [
+                RDFQuad(
+                    subject: .iri("http://example.org/schema"),
+                    predicate: .iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                    object: .iri("http://www.w3.org/2002/07/owl#Ontology"),
+                    graph: .iri("urn:ontology-graph")
+                ),
+                RDFQuad(
+                    subject: .iri("http://example.org/Person"),
+                    predicate: .iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+                    object: .iri("http://www.w3.org/2002/07/owl#Class"),
+                    graph: .iri("urn:ontology-graph")
+                )
+            ]
+        )
+
+        let ontology = try TurtleDecoder().decode(
+            from: dataset,
+            fallbackIRI: "urn:fallback"
+        )
+
+        #expect(ontology.iri == "http://example.org/schema")
+        #expect(ontology.classes.map(\.iri) == ["ex:Person"])
     }
 
     // MARK: - Error Cases

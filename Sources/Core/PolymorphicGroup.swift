@@ -1,4 +1,3 @@
-import Foundation
 
 /// Wire-safe metadata for a protocol-oriented polymorphic source.
 ///
@@ -7,16 +6,16 @@ import Foundation
 /// concrete `Persistable` types.
 public struct PolymorphicGroup: Sendable, Codable, Equatable, Hashable {
     public let identifier: String
-    public let directoryComponents: [DirectoryComponentCatalog]
+    public let directoryComponents: [DirectoryPathComponent]
     public let directoryLayer: DirectoryLayer
-    public let indexes: [AnyIndexDescriptor]
+    public let indexes: [IndexDescriptorMetadata]
     public let memberTypeNames: [String]
 
     public init(
         identifier: String,
-        directoryComponents: [DirectoryComponentCatalog],
+        directoryComponents: [DirectoryPathComponent],
         directoryLayer: DirectoryLayer = .default,
-        indexes: [AnyIndexDescriptor] = [],
+        indexes: [IndexDescriptorMetadata] = [],
         memberTypeNames: [String] = []
     ) {
         self.identifier = identifier
@@ -38,16 +37,8 @@ public struct PolymorphicGroup: Sendable, Codable, Equatable, Hashable {
     }
 
     static func extractDirectoryComponents(
-        from components: [any DirectoryPathElement]
-    ) -> [DirectoryComponentCatalog] {
-        components.map { component in
-            if let path = component as? Path {
-                return .staticPath(path.value)
-            }
-            if let value = component as? String {
-                return .staticPath(value)
-            }
-            return .staticPath("_unknown")
-        }
+        from components: [DirectoryPathComponent]
+    ) -> [DirectoryPathComponent] {
+        components
     }
 }

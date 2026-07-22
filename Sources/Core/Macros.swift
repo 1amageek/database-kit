@@ -45,7 +45,7 @@
 /// - If user defines `id` field: uses that type and default value
 /// - If user omits `id` field: macro adds `var id: String = ULID().ulidString`
 /// - `id` is NOT included in the generated initializer
-@attached(member, names: named(id), named(persistableType), named(allFields), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys), arbitrary)
+@attached(member, names: named(id), named(persistableType), named(allFields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys), arbitrary)
 @attached(extension, conformances: Persistable, Codable, Sendable)
 public macro Persistable() = #externalMacro(module: "CoreMacros", type: "PersistableMacro")
 
@@ -59,7 +59,7 @@ public macro Persistable() = #externalMacro(module: "CoreMacros", type: "Persist
 /// }
 /// // persistableType = "User"
 /// ```
-@attached(member, names: named(id), named(persistableType), named(allFields), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys), arbitrary)
+@attached(member, names: named(id), named(persistableType), named(allFields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys), arbitrary)
 @attached(extension, conformances: Persistable, Codable, Sendable)
 public macro Persistable(type: String) = #externalMacro(module: "CoreMacros", type: "PersistableMacro")
 
@@ -132,6 +132,15 @@ public macro Index(
     name: String? = nil
 ) = #externalMacro(module: "CoreMacros", type: "IndexMacro")
 
+/// Declares an index from canonical metadata produced by a typed factory.
+@freestanding(declaration)
+public macro Index(
+    _ type: IndexKindMetadata,
+    storedFields: [AnyKeyPath] = [],
+    unique: Bool = false,
+    name: String? = nil
+) = #externalMacro(module: "CoreMacros", type: "IndexMacro")
+
 /// #Directory macro declaration
 ///
 /// Declares directory path for a persistable type (for FDBRuntime).
@@ -150,7 +159,7 @@ public macro Directory<T>(_ elements: Any..., layer: DirectoryLayer = .default) 
 /// Directory layer type
 ///
 /// Used by #Directory macro to specify the directory layer type.
-public enum DirectoryLayer: String, Sendable, Codable {
+public enum DirectoryLayer: String, Sendable, Codable, Hashable {
     /// Default directory
     case `default` = "default"
 
@@ -158,8 +167,8 @@ public enum DirectoryLayer: String, Sendable, Codable {
     case partition = "partition"
 }
 
-// Note: Field<Root> is defined in DirectoryPathElement.swift
-// It conforms to DirectoryPathElement protocol for type-safe directory paths.
+// Field<Root> is a typed macro-input marker. The macro emits canonical
+// DirectoryPathComponent values for runtime consumption.
 
 // MARK: - @Polymorphable Macro
 
@@ -209,7 +218,7 @@ public enum DirectoryLayer: String, Sendable, Codable {
 ///
 /// **Generated code**:
 /// - `static var polymorphableType: String` - Protocol name identifier
-/// - `static var polymorphicDirectoryPathComponents: [any DirectoryPathElement]` - Shared directory
+/// - `static var polymorphicDirectoryPathComponents: [DirectoryPathComponent]` - Shared directory
 /// - `static var polymorphicDirectoryLayer: DirectoryLayer` - Directory layer type
 /// - `static var polymorphicIndexDescriptors: [IndexDescriptor]` - Shared indexes
 ///

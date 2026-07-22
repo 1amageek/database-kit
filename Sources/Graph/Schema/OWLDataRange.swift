@@ -6,8 +6,6 @@
 // Reference: W3C OWL 2 Web Ontology Language
 // https://www.w3.org/TR/owl2-syntax/#Data_Ranges
 
-import Foundation
-
 /// OWL Data Range
 ///
 /// Represents the range of values for data properties.

@@ -1,4 +1,8 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
 
 /// インデックスのビルド状態
 public enum IndexBuildState: String, Sendable, Codable, Hashable {

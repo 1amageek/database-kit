@@ -8,49 +8,49 @@ struct HyperLogLogTests {
     // MARK: - Initialization
 
     @Test("Empty HyperLogLog has zero cardinality")
-    func testEmptyCardinality() {
+    func testEmptyCardinality() throws {
         let hll = HyperLogLog()
-        #expect(hll.cardinality() == 0)
+        #expect(try hll.cardinality() == 0)
         #expect(hll.isEmpty == true)
     }
 
     // MARK: - Basic Operations
 
     @Test("Single element cardinality")
-    func testSingleElement() {
+    func testSingleElement() throws {
         var hll = HyperLogLog()
-        hll.add(.string("test"))
+        try hll.add(.string("test"))
 
-        let cardinality = hll.cardinality()
+        let cardinality = try hll.cardinality()
         #expect(cardinality >= 1)
         #expect(hll.isEmpty == false)
     }
 
     @Test("Same element added multiple times")
-    func testDuplicateElements() {
+    func testDuplicateElements() throws {
         var hll = HyperLogLog()
 
         for _ in 0..<100 {
-            hll.add(.string("same"))
+            try hll.add(.string("same"))
         }
 
-        let cardinality = hll.cardinality()
+        let cardinality = try hll.cardinality()
         // Should be approximately 1, with some tolerance for HLL error
         #expect(cardinality >= 1)
         #expect(cardinality <= 3)  // Allow some error margin
     }
 
     @Test("Multiple distinct elements")
-    func testDistinctElements() {
+    func testDistinctElements() throws {
         var hll = HyperLogLog()
         let expectedCount = 10000
 
         // Use string values for better hash distribution
         for i in 0..<expectedCount {
-            hll.add(.string("user_\(i)_email@example.com"))
+            try hll.add(.string("user_\(i)_email@example.com"))
         }
 
-        let cardinality = hll.cardinality()
+        let cardinality = try hll.cardinality()
 
         // HyperLogLog has ~2% error rate, but allow 20% margin for hash quality variations
         let lowerBound = Int64(Double(expectedCount) * 0.80)
@@ -63,17 +63,17 @@ struct HyperLogLogTests {
     // MARK: - Different Field Types
 
     @Test("Add different field value types")
-    func testDifferentTypes() {
+    func testDifferentTypes() throws {
         var hll = HyperLogLog()
 
-        hll.add(.int64(42))
-        hll.add(.double(3.14))
-        hll.add(.string("hello"))
-        hll.add(.bool(true))
-        hll.add(.data(Data([1, 2, 3])))
-        hll.add(.null)
+        try hll.add(.int64(42))
+        try hll.add(.double(3.14))
+        try hll.add(.string("hello"))
+        try hll.add(.bool(true))
+        try hll.add(.data([1, 2, 3]))
+        try hll.add(.null)
 
-        let cardinality = hll.cardinality()
+        let cardinality = try hll.cardinality()
         #expect(cardinality >= 4)  // At least 4 distinct values
         #expect(cardinality <= 8)  // Allow some error margin
     }
@@ -81,24 +81,24 @@ struct HyperLogLogTests {
     // MARK: - Merge Operations
 
     @Test("Merge two HyperLogLogs")
-    func testMerge() {
+    func testMerge() throws {
         var hll1 = HyperLogLog()
         var hll2 = HyperLogLog()
 
         // Add 5000 unique to hll1
         for i in 0..<5000 {
-            hll1.add(.string("set1_user_\(i)"))
+            try hll1.add(.string("set1_user_\(i)"))
         }
 
         // Add 5000 unique to hll2 (different range)
         for i in 0..<5000 {
-            hll2.add(.string("set2_user_\(i)"))
+            try hll2.add(.string("set2_user_\(i)"))
         }
 
         // Merge
-        hll1.merge(hll2)
+        try hll1.merge(hll2)
 
-        let cardinality = hll1.cardinality()
+        let cardinality = try hll1.cardinality()
 
         // Should be approximately 10000, allow 25% margin
         let lowerBound: Int64 = 7500
@@ -109,24 +109,24 @@ struct HyperLogLogTests {
     }
 
     @Test("Merge with overlapping elements")
-    func testMergeOverlapping() {
+    func testMergeOverlapping() throws {
         var hll1 = HyperLogLog()
         var hll2 = HyperLogLog()
 
         // Add unique users to hll1 (shared prefix "common_")
         for i in 0..<5000 {
-            hll1.add(.string("common_user_\(i)"))
+            try hll1.add(.string("common_user_\(i)"))
         }
 
         // Add some overlapping and some new users to hll2
         for i in 2500..<7500 {
-            hll2.add(.string("common_user_\(i)"))
+            try hll2.add(.string("common_user_\(i)"))
         }
 
         // Merge
-        hll1.merge(hll2)
+        try hll1.merge(hll2)
 
-        let cardinality = hll1.cardinality()
+        let cardinality = try hll1.cardinality()
 
         // Union is 0-7499 = 7500 distinct elements, allow 25% margin
         let lowerBound: Int64 = 5625
@@ -137,21 +137,21 @@ struct HyperLogLogTests {
     }
 
     @Test("Static merged function")
-    func testStaticMerged() {
+    func testStaticMerged() throws {
         var hll1 = HyperLogLog()
         var hll2 = HyperLogLog()
 
         for i in 0..<100 {
-            hll1.add(.int64(Int64(i)))
+            try hll1.add(.int64(Int64(i)))
         }
 
         for i in 100..<200 {
-            hll2.add(.int64(Int64(i)))
+            try hll2.add(.int64(Int64(i)))
         }
 
-        let merged = HyperLogLog.merged(hll1, hll2)
+        let merged = try HyperLogLog.merged(hll1, hll2)
 
-        let cardinality = merged.cardinality()
+        let cardinality = try merged.cardinality()
         #expect(cardinality >= 180)
         #expect(cardinality <= 220)
     }
@@ -159,11 +159,11 @@ struct HyperLogLogTests {
     // MARK: - Reset
 
     @Test("Reset clears the estimator")
-    func testReset() {
+    func testReset() throws {
         var hll = HyperLogLog()
 
         for i in 0..<100 {
-            hll.add(.int64(Int64(i)))
+            try hll.add(.int64(Int64(i)))
         }
 
         #expect(hll.isEmpty == false)
@@ -171,7 +171,7 @@ struct HyperLogLogTests {
         hll.reset()
 
         #expect(hll.isEmpty == true)
-        #expect(hll.cardinality() == 0)
+        #expect(try hll.cardinality() == 0)
     }
 
     // MARK: - Codable
@@ -181,10 +181,10 @@ struct HyperLogLogTests {
         var original = HyperLogLog()
 
         for i in 0..<500 {
-            original.add(.int64(Int64(i)))
+            try original.add(.int64(Int64(i)))
         }
 
-        let originalCardinality = original.cardinality()
+        let originalCardinality = try original.cardinality()
 
         // Encode
         let encoder = JSONEncoder()
@@ -194,7 +194,7 @@ struct HyperLogLogTests {
         let decoder = JSONDecoder()
         let restored = try decoder.decode(HyperLogLog.self, from: data)
 
-        let restoredCardinality = restored.cardinality()
+        let restoredCardinality = try restored.cardinality()
 
         #expect(originalCardinality == restoredCardinality)
     }
@@ -219,14 +219,31 @@ struct HyperLogLogTests {
         #expect(hll.memorySizeInBytes == 16384)
     }
 
+    @Test("Impossible register state fails instead of trapping")
+    func testCardinalityOutOfRange() throws {
+        let precision = 4
+        let maximumRegister = UInt8(65 - precision)
+        let hll = try HyperLogLog(
+            precision: precision,
+            registers: [UInt8](
+                repeating: maximumRegister,
+                count: 1 << precision
+            )
+        )
+
+        #expect(throws: HyperLogLogError.cardinalityOutOfRange) {
+            try hll.cardinality()
+        }
+    }
+
     // MARK: - Description
 
     @Test("CustomStringConvertible")
-    func testDescription() {
+    func testDescription() throws {
         var hll = HyperLogLog()
 
         for i in 0..<100 {
-            hll.add(.int64(Int64(i)))
+            try hll.add(.int64(Int64(i)))
         }
 
         let description = hll.description
@@ -238,23 +255,23 @@ struct HyperLogLogTests {
     // MARK: - Hash Stability
 
     @Test("Same value produces same hash")
-    func testHashStability() {
+    func testHashStability() throws {
         let value1 = FieldValue.string("test")
         let value2 = FieldValue.string("test")
 
-        let hash1 = value1.stableHash()
-        let hash2 = value2.stableHash()
+        let hash1 = try value1.stableHash()
+        let hash2 = try value2.stableHash()
 
         #expect(hash1 == hash2)
     }
 
     @Test("Different values produce different hashes")
-    func testHashDifference() {
+    func testHashDifference() throws {
         let value1 = FieldValue.string("test1")
         let value2 = FieldValue.string("test2")
 
-        let hash1 = value1.stableHash()
-        let hash2 = value2.stableHash()
+        let hash1 = try value1.stableHash()
+        let hash2 = try value2.stableHash()
 
         #expect(hash1 != hash2)
     }

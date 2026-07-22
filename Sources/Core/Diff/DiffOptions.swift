@@ -3,7 +3,6 @@
 //
 // Configures how diffs are computed between model instances.
 
-import Foundation
 
 // MARK: - DiffOptions
 
@@ -14,8 +13,10 @@ import Foundation
 ///
 /// **Basic Usage**:
 /// ```swift
+/// import DatabaseEngine
+///
 /// // Default options (suitable for most cases)
-/// let diff = newUser.diff(from: oldUser)
+/// let diff = try ModelDiffBuilder.diff(old: oldUser, new: newUser)
 ///
 /// // With custom options
 /// var options = DiffOptions()
