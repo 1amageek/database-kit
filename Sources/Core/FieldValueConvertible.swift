@@ -87,6 +87,17 @@ extension Array: FieldValueConvertible where Element: FieldValueConvertible {
     }
 }
 
+extension Optional: FieldValueConvertible where Wrapped: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue {
+        switch self {
+        case .some(let value):
+            return value.toFieldValue()
+        case .none:
+            return .null
+        }
+    }
+}
+
 extension FieldValue: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { self }
 }

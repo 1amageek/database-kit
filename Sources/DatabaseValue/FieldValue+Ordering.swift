@@ -21,7 +21,7 @@ extension FieldValue: Comparable {
             .decimal(let leftCoefficient, let leftScale),
             .decimal(let rightCoefficient, let rightScale)
         ):
-            return DatabaseExactDecimal(
+            let numericComparison = DatabaseExactDecimal(
                 coefficient: leftCoefficient,
                 scale: leftScale
             ).compare(
@@ -29,7 +29,14 @@ extension FieldValue: Comparable {
                     coefficient: rightCoefficient,
                     scale: rightScale
                 )
-            ) < 0
+            )
+            if numericComparison != 0 {
+                return numericComparison < 0
+            }
+            if leftCoefficient != rightCoefficient {
+                return leftCoefficient < rightCoefficient
+            }
+            return leftScale < rightScale
         case (.string(let left), .string(let right)):
             return DatabaseStringIdentity.less(left, right)
         case (.bytes(let left), .bytes(let right)):

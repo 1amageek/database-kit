@@ -184,6 +184,15 @@ struct FieldValueTests {
         #expect(value.doubleValue != nil)
     }
 
+    @Test("Optional conversion preserves value and absence")
+    func optionalConversionPreservesValueAndAbsence() {
+        let present: String? = "calendar"
+        let absent: String? = nil
+
+        #expect(present.toFieldValue() == .string("calendar"))
+        #expect(absent.toFieldValue() == .null)
+    }
+
     // MARK: - Numeric projection
 
     @Test("numericDoubleValue for int64")
@@ -223,6 +232,19 @@ struct FieldValueTests {
 
         #expect(a < b)
         #expect(!(b < a))
+    }
+
+    @Test("Decimal ordering preserves exact storage identity")
+    func decimalOrderingPreservesExactStorageIdentity() {
+        let onePointZero = FieldValue.decimal(coefficient: 10, scale: 1)
+        let onePointZeroZero = FieldValue.decimal(
+            coefficient: 100,
+            scale: 2
+        )
+
+        #expect(onePointZero != onePointZeroZero)
+        #expect(onePointZero < onePointZeroZero)
+        #expect(!(onePointZeroZero < onePointZero))
     }
 
     @Test("String comparison")
