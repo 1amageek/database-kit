@@ -12,8 +12,8 @@
 ///
 /// **Design Principles**:
 /// - No associated type: enables `[any IndexConfiguration]` without wrapping
-/// - KeyPath specified via AnyKeyPath for protocol conformance
-/// - Concrete types use generics for type safety
+/// - Concrete initializers resolve typed key paths through compiled schema metadata
+/// - The stored contract contains only semantic, Sendable values
 /// - Multiple configurations per index supported (e.g., multi-language full-text)
 ///
 /// **When to use IndexConfiguration**:
@@ -31,8 +31,7 @@
 /// public struct VectorIndexConfiguration<Model: Persistable>: IndexConfiguration {
 ///     public static var kindIdentifier: String { "vector" }
 ///
-///     private let _keyPath: KeyPath<Model, [Float]>
-///     public var keyPath: AnyKeyPath { _keyPath }
+///     public let fieldName: String
 ///     public var modelTypeName: String { String(describing: Model.self) }
 ///
 ///     public let dimensions: Int
@@ -60,10 +59,12 @@ public protocol IndexConfiguration: Sendable {
     /// - "com.mycompany.custom" for custom IndexKinds
     static var kindIdentifier: String { get }
 
-    /// Target field's KeyPath (type-erased)
+    /// Canonical target field name from the model's compiled schema.
     ///
-    /// Must match the keyPath defined in the model via `#Index` macro.
-    var keyPath: AnyKeyPath { get }
+    /// Concrete initializers accept a typed key path and resolve it immediately.
+    /// Runtime configuration does not retain key paths or infer names from their
+    /// debug representation.
+    var fieldName: String { get }
 
     /// Target model's type name
     ///
@@ -73,7 +74,6 @@ public protocol IndexConfiguration: Sendable {
     /// Computed index name
     ///
     /// Format: `{modelTypeName}_{fieldName}`
-    /// Default implementation extracts fieldName from keyPath.
     var indexName: String { get }
 
     /// Optional subspace key for data isolation
@@ -98,19 +98,7 @@ public protocol IndexConfiguration: Sendable {
 
 extension IndexConfiguration {
     /// Computed index name
-    ///
-    /// **Note**: This is a fallback. Concrete implementations should provide
-    /// a more reliable way to extract field name from keyPath.
     public var indexName: String {
-        // Extract field name from keyPath string representation
-        // KeyPath<Model, Type> typically shows as \Model.fieldName
-        let keyPathString = String(describing: keyPath)
-        let fieldName: String
-        if let dotIndex = keyPathString.lastIndex(of: ".") {
-            fieldName = String(keyPathString[keyPathString.index(after: dotIndex)...])
-        } else {
-            fieldName = keyPathString
-        }
         return "\(modelTypeName)_\(fieldName)"
     }
 
