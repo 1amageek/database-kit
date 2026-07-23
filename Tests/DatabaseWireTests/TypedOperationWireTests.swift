@@ -475,7 +475,7 @@ struct TypedOperationWireTests {
             )
         )
         try expectRoundTrip(
-            JobStatusOperation.Response(
+            try JobStatusOperation.Response(
                 state: .committingOutcome,
                 job: job,
                 completedWorkUnits: 50,
@@ -483,14 +483,14 @@ struct TypedOperationWireTests {
                 executionCount: 7,
                 currentSliceAttempt: 2,
                 terminalOutcomeCommitAttempt: 3,
-                terminalOutcomeCommitError: DatabaseRemoteError(
+                lastTerminalOutcomeCommitError: DatabaseRemoteError(
                     category: .internalFailure,
                     code: "JOB_TERMINAL_OUTCOME_COMMIT_FAILED",
                     message: "Outcome commit will be retried",
                     retryability: .backoff
                 ),
                 nextAttemptAt: .init(secondsSinceUnixEpoch: 1_784_131_100),
-                updatedAt: .init(secondsSinceUnixEpoch: 1_784_131_200)
+                updatedAt: .init(secondsSinceUnixEpoch: 1_784_131_000)
             )
         )
         try expectRoundTrip(
@@ -522,12 +522,145 @@ struct TypedOperationWireTests {
         )
         try expectRoundTrip(JobCancelOperation.Request(job: job))
         try expectRoundTrip(
-            JobCancelOperation.Response(
+            try JobCancelOperation.Response(
+                job: job,
+                state: .committingOutcome,
+                accepted: true
+            )
+        )
+    }
+
+    @Test("job status rejects impossible state combinations")
+    func jobStatusRejectsImpossibleCombinations() throws {
+        let operation = try DatabaseJobOperationIdentifier(
+            family: .maintenanceExecute,
+            kind: "database.test.status"
+        )
+        let job = DatabaseJobIdentity(jobID: jobID, operation: operation)
+        let now = DatabaseTimestamp(secondsSinceUnixEpoch: 1_784_131_200)
+        let past = DatabaseTimestamp(secondsSinceUnixEpoch: 1_784_131_199)
+        #expect(throws: DatabaseWireError.invalidJobStatus) {
+            try JobStatusOperation.Response(
+                state: .pending,
+                job: job,
+                completedWorkUnits: 0,
+                executionCount: 0,
+                currentSliceAttempt: 0,
+                updatedAt: now
+            )
+        }
+        #expect(throws: DatabaseWireError.invalidJobStatus) {
+            try JobStatusOperation.Response(
+                state: .running,
+                job: job,
+                completedWorkUnits: 0,
+                executionCount: 1,
+                currentSliceAttempt: 0,
+                updatedAt: now
+            )
+        }
+        #expect(throws: DatabaseWireError.invalidJobStatus) {
+            try JobStatusOperation.Response(
+                state: .committingOutcome,
+                job: job,
+                completedWorkUnits: 1,
+                executionCount: 1,
+                currentSliceAttempt: 1,
+                terminalOutcomeCommitAttempt: 0,
+                updatedAt: now
+            )
+        }
+        #expect(throws: DatabaseWireError.invalidJobStatus) {
+            try JobStatusOperation.Response(
+                state: .failed,
+                job: job,
+                completedWorkUnits: 1,
+                executionCount: 1,
+                currentSliceAttempt: 1,
+                terminalOutcomeCommitAttempt: 0,
+                updatedAt: now
+            )
+        }
+        #expect(throws: DatabaseWireError.invalidJobStatus) {
+            try JobStatusOperation.Response(
+                state: .succeeded,
+                job: job,
+                completedWorkUnits: 2,
+                totalWorkUnits: 1,
+                executionCount: 1,
+                currentSliceAttempt: 1,
+                updatedAt: now
+            )
+        }
+        #expect(throws: DatabaseWireError.invalidJobStatus) {
+            try JobStatusOperation.Response(
+                state: .pending,
+                job: job,
+                completedWorkUnits: 0,
+                executionCount: 0,
+                currentSliceAttempt: 0,
+                nextAttemptAt: past,
+                updatedAt: now
+            )
+        }
+
+        let pending = try JobStatusOperation.Response(
+            state: .pending,
+            job: job,
+            completedWorkUnits: 0,
+            executionCount: 0,
+            currentSliceAttempt: 0,
+            nextAttemptAt: now,
+            updatedAt: now
+        )
+        var invalidBytes = [UInt8](
+            try DatabaseEnvelopeCodec.encode(pending)
+        )
+        invalidBytes[0] = JobStatusOperation.State.failed.rawValue
+        #expect(throws: DatabaseWireError.invalidJobStatus) {
+            try DatabaseEnvelopeCodec.decode(
+                JobStatusOperation.Response.self,
+                from: DatabaseBytes(invalidBytes)
+            )
+        }
+    }
+
+    @Test("job cancellation rejects impossible response combinations")
+    func jobCancellationRejectsImpossibleCombinations() throws {
+        let operation = try DatabaseJobOperationIdentifier(
+            family: .maintenanceExecute,
+            kind: "database.test.cancel"
+        )
+        let job = DatabaseJobIdentity(jobID: jobID, operation: operation)
+
+        #expect(throws: DatabaseWireError.invalidJobCancellationResponse) {
+            try JobCancelOperation.Response(
                 job: job,
                 state: .cancelled,
                 accepted: true
             )
-        )
+        }
+        #expect(throws: DatabaseWireError.invalidJobCancellationResponse) {
+            try JobCancelOperation.Response(
+                job: job,
+                state: .pending,
+                accepted: false
+            )
+        }
+
+        let invalidWire = try DatabaseWireWriter.encode {
+            (writer: inout DatabaseWireWriter)
+                throws(DatabaseWireError) -> Void in
+            try job.encode(into: &writer)
+            writer.writeUInt8(JobStatusOperation.State.failed.rawValue)
+            writer.writeBool(true)
+        }
+        #expect(throws: DatabaseWireError.invalidJobCancellationResponse) {
+            try DatabaseEnvelopeCodec.decode(
+                JobCancelOperation.Response.self,
+                from: invalidWire
+            )
+        }
     }
 
     @Test("capabilities advertise a canonical exact job operation set")

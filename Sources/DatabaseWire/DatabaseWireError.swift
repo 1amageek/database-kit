@@ -24,6 +24,8 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidJobOperationKind
     case nonCanonicalJobOperationSet
     case mismatchedJobOperationIdentifier
+    case invalidJobStatus
+    case invalidJobCancellationResponse
     case invalidCommandIdentifier(expected: String, actual: String)
     case invalidMessageKind(UInt8)
     case invalidErrorCategory(UInt8)

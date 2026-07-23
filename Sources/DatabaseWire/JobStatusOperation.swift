@@ -53,7 +53,7 @@ public enum JobStatusOperation: DatabaseOperation {
         public let executionCount: UInt64
         public let currentSliceAttempt: UInt32
         public let terminalOutcomeCommitAttempt: UInt64
-        public let terminalOutcomeCommitError: DatabaseRemoteError?
+        public let lastTerminalOutcomeCommitError: DatabaseRemoteError?
         public let cancellationRequested: Bool
         public let nextAttemptAt: DatabaseTimestamp?
         public let updatedAt: DatabaseTimestamp
@@ -68,11 +68,24 @@ public enum JobStatusOperation: DatabaseOperation {
             executionCount: UInt64,
             currentSliceAttempt: UInt32,
             terminalOutcomeCommitAttempt: UInt64 = 0,
-            terminalOutcomeCommitError: DatabaseRemoteError? = nil,
+            lastTerminalOutcomeCommitError: DatabaseRemoteError? = nil,
             cancellationRequested: Bool = false,
             nextAttemptAt: DatabaseTimestamp? = nil,
             updatedAt: DatabaseTimestamp
-        ) {
+        ) throws(DatabaseWireError) {
+            try Self.validate(
+                state: state,
+                completedWorkUnits: completedWorkUnits,
+                totalWorkUnits: totalWorkUnits,
+                executionCount: executionCount,
+                currentSliceAttempt: currentSliceAttempt,
+                terminalOutcomeCommitAttempt: terminalOutcomeCommitAttempt,
+                lastTerminalOutcomeCommitError:
+                    lastTerminalOutcomeCommitError,
+                cancellationRequested: cancellationRequested,
+                nextAttemptAt: nextAttemptAt,
+                updatedAt: updatedAt
+            )
             self.state = state
             self.job = job
             self.completedWorkUnits = completedWorkUnits
@@ -80,7 +93,7 @@ public enum JobStatusOperation: DatabaseOperation {
             self.executionCount = executionCount
             self.currentSliceAttempt = currentSliceAttempt
             self.terminalOutcomeCommitAttempt = terminalOutcomeCommitAttempt
-            self.terminalOutcomeCommitError = terminalOutcomeCommitError
+            self.lastTerminalOutcomeCommitError = lastTerminalOutcomeCommitError
             self.cancellationRequested = cancellationRequested
             self.nextAttemptAt = nextAttemptAt
             self.updatedAt = updatedAt
@@ -97,9 +110,9 @@ public enum JobStatusOperation: DatabaseOperation {
             writer.writeUInt64(executionCount)
             writer.writeUInt32(currentSliceAttempt)
             writer.writeUInt64(terminalOutcomeCommitAttempt)
-            writer.writeBool(terminalOutcomeCommitError != nil)
-            if let terminalOutcomeCommitError {
-                try terminalOutcomeCommitError.encode(into: &writer)
+            writer.writeBool(lastTerminalOutcomeCommitError != nil)
+            if let lastTerminalOutcomeCommitError {
+                try lastTerminalOutcomeCommitError.encode(into: &writer)
             }
             writer.writeBool(cancellationRequested)
             writer.writeBool(nextAttemptAt != nil)
@@ -118,7 +131,7 @@ public enum JobStatusOperation: DatabaseOperation {
             let totalWorkUnits = try reader.readBool()
                 ? try reader.readUInt64()
                 : nil
-            self.init(
+            try self.init(
                 state: state,
                 job: job,
                 completedWorkUnits: completedWorkUnits,
@@ -126,7 +139,7 @@ public enum JobStatusOperation: DatabaseOperation {
                 executionCount: try reader.readUInt64(),
                 currentSliceAttempt: try reader.readUInt32(),
                 terminalOutcomeCommitAttempt: try reader.readUInt64(),
-                terminalOutcomeCommitError: try reader.readBool()
+                lastTerminalOutcomeCommitError: try reader.readBool()
                     ? try DatabaseRemoteError(from: &reader)
                     : nil,
                 cancellationRequested: try reader.readBool(),
@@ -135,6 +148,66 @@ public enum JobStatusOperation: DatabaseOperation {
                     : nil,
                 updatedAt: try DatabaseTimestamp(from: &reader)
             )
+        }
+
+        private static func validate(
+            state: State,
+            completedWorkUnits: UInt64,
+            totalWorkUnits: UInt64?,
+            executionCount: UInt64,
+            currentSliceAttempt: UInt32,
+            terminalOutcomeCommitAttempt: UInt64,
+            lastTerminalOutcomeCommitError: DatabaseRemoteError?,
+            cancellationRequested: Bool,
+            nextAttemptAt: DatabaseTimestamp?,
+            updatedAt: DatabaseTimestamp
+        ) throws(DatabaseWireError) {
+            guard executionCount >= UInt64(currentSliceAttempt),
+                  totalWorkUnits.map({ $0 >= completedWorkUnits }) ?? true,
+                  nextAttemptAt.map({ $0 >= updatedAt }) ?? true else {
+                throw .invalidJobStatus
+            }
+            let hasCommitDiagnostic = lastTerminalOutcomeCommitError != nil
+            switch state {
+            case .pending:
+                guard terminalOutcomeCommitAttempt == 0,
+                      !hasCommitDiagnostic,
+                      !cancellationRequested,
+                      nextAttemptAt != nil else {
+                    throw .invalidJobStatus
+                }
+            case .running:
+                guard currentSliceAttempt > 0,
+                      terminalOutcomeCommitAttempt == 0,
+                      !hasCommitDiagnostic,
+                      nextAttemptAt == nil else {
+                    throw .invalidJobStatus
+                }
+            case .committingOutcome:
+                guard !cancellationRequested,
+                      terminalOutcomeCommitAttempt > 0 || nextAttemptAt != nil,
+                      terminalOutcomeCommitAttempt > 0
+                        || !hasCommitDiagnostic,
+                      nextAttemptAt == nil
+                        || (terminalOutcomeCommitAttempt == 0)
+                            == !hasCommitDiagnostic else {
+                    throw .invalidJobStatus
+                }
+            case .succeeded:
+                guard terminalOutcomeCommitAttempt == 0,
+                      !hasCommitDiagnostic,
+                      !cancellationRequested,
+                      nextAttemptAt == nil else {
+                    throw .invalidJobStatus
+                }
+            case .failed, .cancelled:
+                guard terminalOutcomeCommitAttempt > 0,
+                      !hasCommitDiagnostic,
+                      !cancellationRequested,
+                      nextAttemptAt == nil else {
+                    throw .invalidJobStatus
+                }
+            }
         }
     }
 }

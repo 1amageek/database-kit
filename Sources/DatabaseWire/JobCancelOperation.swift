@@ -35,7 +35,22 @@ public enum JobCancelOperation: DatabaseOperation {
             job: DatabaseJobIdentity,
             state: JobStatusOperation.State,
             accepted: Bool
-        ) {
+        ) throws(DatabaseWireError) {
+            switch (accepted, state) {
+            case (true, .running),
+                 (true, .committingOutcome),
+                 (false, .running),
+                 (false, .committingOutcome),
+                 (false, .succeeded),
+                 (false, .failed),
+                 (false, .cancelled):
+                break
+            case (_, .pending),
+                 (true, .succeeded),
+                 (true, .failed),
+                 (true, .cancelled):
+                throw .invalidJobCancellationResponse
+            }
             self.job = job
             self.state = state
             self.accepted = accepted
@@ -57,7 +72,7 @@ public enum JobCancelOperation: DatabaseOperation {
             guard let state = JobStatusOperation.State(rawValue: rawValue) else {
                 throw .invalidValueTag(rawValue)
             }
-            self.init(
+            try self.init(
                 job: job,
                 state: state,
                 accepted: try reader.readBool()
