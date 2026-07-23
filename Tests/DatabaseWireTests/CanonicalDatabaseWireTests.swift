@@ -332,6 +332,47 @@ struct CanonicalDatabaseWireTests {
         }
     }
 
+    @Test("wire strings decode every canonical UTF-8 width")
+    func wireStringsDecodeCanonicalUTF8() throws {
+        let encodedStrings: [([UInt8], String)] = [
+            ([], ""),
+            ([0x00, 0x41, 0x7F], "\0A\u{7F}"),
+            ([0xC2, 0x80, 0xDF, 0xBF], "\u{80}\u{7FF}"),
+            ([0xE0, 0xA0, 0x80, 0xE6, 0x9D, 0xB1], "\u{800}東"),
+            ([0xF0, 0x90, 0x80, 0x80, 0xF4, 0x8F, 0xBF, 0xBF],
+             "\u{10000}\u{10FFFF}"),
+        ]
+
+        for (encoded, expected) in encodedStrings {
+            var reader = DatabaseWireReader(lengthPrefixed(encoded))
+            #expect(try reader.readString() == expected)
+            try reader.ensureFullyRead()
+        }
+    }
+
+    @Test("wire strings reject every noncanonical UTF-8 family")
+    func wireStringsRejectInvalidUTF8() {
+        let invalidStrings: [[UInt8]] = [
+            [0x80],
+            [0xC0, 0x80],
+            [0xC2],
+            [0xE0, 0x9F, 0xBF],
+            [0xED, 0xA0, 0x80],
+            [0xE2, 0x82],
+            [0xF0, 0x8F, 0xBF, 0xBF],
+            [0xF4, 0x90, 0x80, 0x80],
+            [0xF0, 0x90, 0x80],
+            [0xF5, 0x80, 0x80, 0x80],
+        ]
+
+        for encoded in invalidStrings {
+            var reader = DatabaseWireReader(lengthPrefixed(encoded))
+            #expect(throws: DatabaseWireError.invalidUTF8) {
+                _ = try reader.readString()
+            }
+        }
+    }
+
     @Test("encoder and decoder enforce identical value object budgets")
     func valueObjectBudgetsAreSymmetric() throws {
         let value = DatabaseValue.array([.null, .null])
@@ -470,5 +511,15 @@ struct CanonicalDatabaseWireTests {
                 DatabaseEnvelopeCodec.encode(response: response)
             ) == response
         )
+    }
+
+    private func lengthPrefixed(_ bytes: [UInt8]) -> [UInt8] {
+        let count = UInt32(bytes.count)
+        return [
+            UInt8(truncatingIfNeeded: count),
+            UInt8(truncatingIfNeeded: count >> 8),
+            UInt8(truncatingIfNeeded: count >> 16),
+            UInt8(truncatingIfNeeded: count >> 24),
+        ] + bytes
     }
 }

@@ -609,7 +609,7 @@ public enum DatabaseRDFTermCodec {
             }
 
             guard escapedZeroCount > 0 else {
-                guard let value = String(validating: encoded, as: UTF8.self) else {
+                guard let value = DatabaseUTF8Decoder.decode(encoded) else {
                     throw .invalidUTF8
                 }
                 return value
@@ -632,7 +632,7 @@ public enum DatabaseRDFTermCodec {
                     destination += 1
                 }
             }
-            guard let value = String(validating: decoded, as: UTF8.self) else {
+            guard let value = DatabaseUTF8Decoder.decode(decoded) else {
                 throw .invalidUTF8
             }
             return value

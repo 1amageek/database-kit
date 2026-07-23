@@ -192,7 +192,7 @@ public struct DatabaseWireReader: Sendable {
         }
         let encoded = bytes.slice(offset..<(offset + count))
         offset += count
-        guard let value = String(validating: encoded, as: UTF8.self) else {
+        guard let value = DatabaseUTF8Decoder.decode(encoded) else {
             throw DatabaseWireError.invalidUTF8
         }
         return value
