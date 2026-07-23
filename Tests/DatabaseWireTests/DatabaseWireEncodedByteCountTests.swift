@@ -146,6 +146,73 @@ struct DatabaseWireEncodedByteCountTests {
         }
         #expect(source.borrowCount == 0)
     }
+
+    @Test("emitted spans match the canonical encoding")
+    func emittedSpansMatchCanonicalEncoding() throws {
+        let expected = try DatabaseWireWriter.encode {
+            (writer: inout DatabaseWireWriter)
+                throws(DatabaseWireError) -> Void in
+            writer.writeUInt64(0x0102_0304_0506_0708)
+            try writer.writeString("calendar")
+            try writer.writeBytes([0x10, 0x20, 0x30])
+        }
+        var emitted: [UInt8] = []
+        var encodingPassCount = 0
+
+        try DatabaseWireWriter.emit(
+            consume: { span in
+                emitted.append(contentsOf: span)
+            }
+        ) {
+            (writer: inout DatabaseWireWriter)
+                throws(DatabaseWireError) -> Void in
+            encodingPassCount += 1
+            writer.writeUInt64(0x0102_0304_0506_0708)
+            try writer.writeString("calendar")
+            try writer.writeBytes([0x10, 0x20, 0x30])
+        }
+
+        #expect(emitted == Array(expected))
+        #expect(encodingPassCount == 2)
+    }
+
+    @Test("emission borrows a payload only during the output pass")
+    func emissionBorrowsPayloadOnlyDuringOutputPass() throws {
+        let source = BorrowObservedByteOwner(count: 0)
+        let payload = DatabaseBytes(retaining: source)
+        var emittedByteCount = 0
+
+        try DatabaseWireWriter.emit(
+            consume: { span in
+                emittedByteCount += span.count
+            }
+        ) {
+            (writer: inout DatabaseWireWriter)
+                throws(DatabaseWireError) -> Void in
+            try writer.writeBytes(payload)
+        }
+
+        #expect(source.borrowCount == 1)
+        #expect(emittedByteCount == 4)
+    }
+
+    @Test("emission rejects output that diverges from its measured size")
+    func emissionRejectsDivergentOutputSize() {
+        var encodingPassCount = 0
+
+        #expect(throws: DatabaseWireError.byteCountOverflow) {
+            try DatabaseWireWriter.emit(consume: { _ in }) {
+                (writer: inout DatabaseWireWriter)
+                    throws(DatabaseWireError) -> Void in
+                encodingPassCount += 1
+                writer.writeUInt8(0)
+                if encodingPassCount == 2 {
+                    writer.writeUInt8(1)
+                }
+            }
+        }
+        #expect(encodingPassCount == 2)
+    }
 }
 
 private final class BorrowObservedByteOwner: DatabaseByteOwner {

@@ -220,6 +220,56 @@ public struct DatabaseWireWriter {
         }
     }
 
+    /// Lends each canonical encoded span directly to a synchronous consumer.
+    ///
+    /// This overload performs no output allocation. The consumer must not
+    /// retain the borrowed pointer beyond the call.
+    public static func emit(
+        limits: DatabaseWireLimits = .default,
+        consume: (UnsafeRawBufferPointer) -> Void,
+        _ encode: (
+            inout DatabaseWireWriter
+        ) throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) {
+        let byteCount = try Self.encodedByteCount(
+            limits: limits,
+            encode
+        )
+
+        let result: Result<Void, DatabaseWireError> = withoutActuallyEscaping(
+            consume
+        ) { escapingConsume in
+            Self.result {
+                () throws(DatabaseWireError) -> Void in
+                var writer = DatabaseWireWriter(
+                    borrowedSink: escapingConsume,
+                    limits: limits
+                )
+                try encode(&writer)
+                try writer.ensureNoDeferredError()
+                guard writer.writtenByteCount == byteCount else {
+                    throw DatabaseWireError.byteCountOverflow
+                }
+            }
+        }
+        switch result {
+        case .success:
+            return
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    private static func result<Success, Failure: Error>(
+        of operation: () throws(Failure) -> Success
+    ) -> Result<Success, Failure> {
+        do {
+            return .success(try operation())
+        } catch {
+            return .failure(error)
+        }
+    }
+
     public mutating func writeUInt8(_ value: UInt8) {
         if isMeasuring {
             recordMeasuredBytes(1)
