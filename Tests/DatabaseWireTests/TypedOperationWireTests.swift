@@ -355,7 +355,7 @@ struct TypedOperationWireTests {
                                 ),
                             ],
                             state: .ready,
-                            indexedRecordCount: 10
+                            indexedEntityCount: 10
                         ),
                     ]
                 )

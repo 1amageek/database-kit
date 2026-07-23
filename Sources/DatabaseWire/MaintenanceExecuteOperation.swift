@@ -211,7 +211,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
         public let index: String
         public let partitions: [DatabaseObjectField]
         public let state: IndexState
-        public let indexedRecordCount: UInt64
+        public let indexedEntityCount: UInt64
         public let detail: String?
 
         public init(
@@ -219,14 +219,14 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
             index: String,
             partitions: [DatabaseObjectField],
             state: IndexState,
-            indexedRecordCount: UInt64,
+            indexedEntityCount: UInt64,
             detail: String? = nil
         ) {
             self.entity = entity
             self.index = index
             self.partitions = partitions
             self.state = state
-            self.indexedRecordCount = indexedRecordCount
+            self.indexedEntityCount = indexedEntityCount
             self.detail = detail
         }
 
@@ -240,7 +240,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
                 try partition.encode(into: &writer)
             }
             writer.writeUInt8(state.rawValue)
-            writer.writeUInt64(indexedRecordCount)
+            writer.writeUInt64(indexedEntityCount)
             try writer.writeOptionalString(detail)
         }
 
@@ -260,7 +260,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
                 index: index,
                 partitions: partitions,
                 state: try IndexState(from: &reader),
-                indexedRecordCount: try reader.readUInt64(),
+                indexedEntityCount: try reader.readUInt64(),
                 detail: try reader.readOptionalString()
             )
         }
