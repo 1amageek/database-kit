@@ -6,11 +6,11 @@ public struct QueryPlan: Sendable, Codable, Hashable {
     /// 選択されたインデックス（使用する場合）
     public let selectedIndex: String?
 
-    /// 推定コスト
-    public let estimatedCost: Double
+    /// Estimated cost, or `nil` when no statistics-backed cost model ran.
+    public let estimatedCost: Double?
 
-    /// 推定行数
-    public let estimatedRows: Int64
+    /// Estimated row count, or `nil` when row-count statistics are unavailable.
+    public let estimatedRows: Int64?
 
     /// インデックスで処理される条件
     public let indexConditions: [String]
@@ -27,8 +27,8 @@ public struct QueryPlan: Sendable, Codable, Hashable {
     public init(
         planType: PlanType,
         selectedIndex: String? = nil,
-        estimatedCost: Double,
-        estimatedRows: Int64,
+        estimatedCost: Double? = nil,
+        estimatedRows: Int64? = nil,
         indexConditions: [String] = [],
         filterConditions: [String] = [],
         sortRequired: Bool = false,
@@ -53,8 +53,8 @@ public struct AlternativePlan: Sendable, Codable, Hashable {
     /// 選択されたインデックス
     public let selectedIndex: String?
 
-    /// 推定コスト
-    public let estimatedCost: Double
+    /// Estimated cost, or `nil` when no statistics-backed cost model ran.
+    public let estimatedCost: Double?
 
     /// 選択されなかった理由
     public let reason: String
@@ -62,7 +62,7 @@ public struct AlternativePlan: Sendable, Codable, Hashable {
     public init(
         planType: PlanType,
         selectedIndex: String? = nil,
-        estimatedCost: Double,
+        estimatedCost: Double? = nil,
         reason: String
     ) {
         self.planType = planType
@@ -83,11 +83,11 @@ public struct QueryExecutionStats: Sendable, Codable, Hashable {
     /// 実行時間（秒）
     public let executionTime: Double
 
-    /// 読み取りバイト数
-    public let bytesRead: Int64
+    /// Bytes read, or `nil` when execution instrumentation did not measure it.
+    public let bytesRead: Int64?
 
-    /// トランザクションリトライ回数
-    public let transactionRetries: Int
+    /// Transaction retry count, or `nil` when it was not measured.
+    public let transactionRetries: Int?
 
     // MARK: - FDB固有
 
@@ -101,8 +101,8 @@ public struct QueryExecutionStats: Sendable, Codable, Hashable {
         plan: QueryPlan,
         actualRows: Int64,
         executionTime: Double,
-        bytesRead: Int64,
-        transactionRetries: Int = 0,
+        bytesRead: Int64? = nil,
+        transactionRetries: Int? = nil,
         readVersion: UInt64? = nil,
         conflictRanges: Int? = nil
     ) {
