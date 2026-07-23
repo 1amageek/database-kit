@@ -112,20 +112,36 @@ public struct DatabaseWireWriter {
         return arrayBytes.count
     }
 
-    public static func encode(
+    /// Returns the canonical encoded byte count after applying all writer and
+    /// frame limits, without allocating output storage.
+    ///
+    /// The encoding closure runs exactly once. Writer byte-payload operations
+    /// use declared lengths and do not borrow their owners while counting.
+    public static func encodedByteCount(
         limits: DatabaseWireLimits = .default,
         _ encode: (inout DatabaseWireWriter) throws(DatabaseWireError) -> Void
-    ) throws(DatabaseWireError) -> DatabaseBytes {
-        var measuringWriter = DatabaseWireWriter(measuring: limits)
-        try encode(&measuringWriter)
-        try measuringWriter.ensureNoDeferredError()
-        let byteCount = measuringWriter.writtenByteCount
+    ) throws(DatabaseWireError) -> Int {
+        var writer = DatabaseWireWriter(measuring: limits)
+        try encode(&writer)
+        try writer.ensureNoDeferredError()
+        let byteCount = writer.writtenByteCount
         guard byteCount <= limits.maximumFrameBytes else {
             throw .frameTooLarge(
                 actual: byteCount,
                 maximum: limits.maximumFrameBytes
             )
         }
+        return byteCount
+    }
+
+    public static func encode(
+        limits: DatabaseWireLimits = .default,
+        _ encode: (inout DatabaseWireWriter) throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) -> DatabaseBytes {
+        let byteCount = try Self.encodedByteCount(
+            limits: limits,
+            encode
+        )
 
         return try DatabaseBytes.copying(count: byteCount) {
             (output: UnsafeMutableRawBufferPointer) throws(DatabaseWireError) -> Void in
@@ -184,16 +200,10 @@ public struct DatabaseWireWriter {
             inout DatabaseWireWriter
         ) throws(DatabaseWireError) -> Void
     ) throws {
-        var measuringWriter = DatabaseWireWriter(measuring: limits)
-        try encode(&measuringWriter)
-        try measuringWriter.ensureNoDeferredError()
-        let byteCount = measuringWriter.writtenByteCount
-        guard byteCount <= limits.maximumFrameBytes else {
-            throw DatabaseWireError.frameTooLarge(
-                actual: byteCount,
-                maximum: limits.maximumFrameBytes
-            )
-        }
+        let byteCount = try Self.encodedByteCount(
+            limits: limits,
+            encode
+        )
 
         try prepare(byteCount)
 
