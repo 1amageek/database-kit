@@ -476,17 +476,17 @@ struct TypedOperationWireTests {
         )
         try expectRoundTrip(
             try JobStatusOperation.Response(
-                state: .committingOutcome,
+                state: .committingUnsuccessfulOutcome,
                 job: job,
                 completedWorkUnits: 50,
                 totalWorkUnits: 100,
                 executionCount: 7,
                 currentSliceAttempt: 2,
-                terminalOutcomeCommitAttempt: 3,
-                lastTerminalOutcomeCommitError: DatabaseRemoteError(
+                unsuccessfulOutcomeCommitAttempt: 3,
+                lastUnsuccessfulOutcomeCommitError: DatabaseRemoteError(
                     category: .internalFailure,
-                    code: "JOB_TERMINAL_OUTCOME_COMMIT_FAILED",
-                    message: "Outcome commit will be retried",
+                    code: "JOB_UNSUCCESSFUL_OUTCOME_COMMIT_FAILED",
+                    message: "Unsuccessful outcome commit will be retried",
                     retryability: .backoff
                 ),
                 nextAttemptAt: .init(secondsSinceUnixEpoch: 1_784_131_100),
@@ -524,7 +524,7 @@ struct TypedOperationWireTests {
         try expectRoundTrip(
             try JobCancelOperation.Response(
                 job: job,
-                state: .committingOutcome,
+                state: .committingUnsuccessfulOutcome,
                 accepted: true
             )
         )
@@ -561,12 +561,12 @@ struct TypedOperationWireTests {
         }
         #expect(throws: DatabaseWireError.invalidJobStatus) {
             try JobStatusOperation.Response(
-                state: .committingOutcome,
+                state: .committingUnsuccessfulOutcome,
                 job: job,
                 completedWorkUnits: 1,
                 executionCount: 1,
                 currentSliceAttempt: 1,
-                terminalOutcomeCommitAttempt: 0,
+                unsuccessfulOutcomeCommitAttempt: 0,
                 updatedAt: now
             )
         }
@@ -577,7 +577,7 @@ struct TypedOperationWireTests {
                 completedWorkUnits: 1,
                 executionCount: 1,
                 currentSliceAttempt: 1,
-                terminalOutcomeCommitAttempt: 0,
+                unsuccessfulOutcomeCommitAttempt: 0,
                 updatedAt: now
             )
         }

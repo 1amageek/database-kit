@@ -38,9 +38,9 @@ public enum JobCancelOperation: DatabaseOperation {
         ) throws(DatabaseWireError) {
             switch (accepted, state) {
             case (true, .running),
-                 (true, .committingOutcome),
+                 (true, .committingUnsuccessfulOutcome),
                  (false, .running),
-                 (false, .committingOutcome),
+                 (false, .committingUnsuccessfulOutcome),
                  (false, .succeeded),
                  (false, .failed),
                  (false, .cancelled):

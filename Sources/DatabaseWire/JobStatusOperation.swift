@@ -6,7 +6,7 @@ public enum JobStatusOperation: DatabaseOperation {
     public enum State: UInt8, Sendable, Hashable {
         case pending = 1
         case running = 2
-        case committingOutcome = 3
+        case committingUnsuccessfulOutcome = 3
         case succeeded = 4
         case failed = 5
         case cancelled = 6
@@ -52,8 +52,8 @@ public enum JobStatusOperation: DatabaseOperation {
         public let totalWorkUnits: UInt64?
         public let executionCount: UInt64
         public let currentSliceAttempt: UInt32
-        public let terminalOutcomeCommitAttempt: UInt64
-        public let lastTerminalOutcomeCommitError: DatabaseRemoteError?
+        public let unsuccessfulOutcomeCommitAttempt: UInt64
+        public let lastUnsuccessfulOutcomeCommitError: DatabaseRemoteError?
         public let cancellationRequested: Bool
         public let nextAttemptAt: DatabaseTimestamp?
         public let updatedAt: DatabaseTimestamp
@@ -67,8 +67,8 @@ public enum JobStatusOperation: DatabaseOperation {
             totalWorkUnits: UInt64? = nil,
             executionCount: UInt64,
             currentSliceAttempt: UInt32,
-            terminalOutcomeCommitAttempt: UInt64 = 0,
-            lastTerminalOutcomeCommitError: DatabaseRemoteError? = nil,
+            unsuccessfulOutcomeCommitAttempt: UInt64 = 0,
+            lastUnsuccessfulOutcomeCommitError: DatabaseRemoteError? = nil,
             cancellationRequested: Bool = false,
             nextAttemptAt: DatabaseTimestamp? = nil,
             updatedAt: DatabaseTimestamp
@@ -79,9 +79,10 @@ public enum JobStatusOperation: DatabaseOperation {
                 totalWorkUnits: totalWorkUnits,
                 executionCount: executionCount,
                 currentSliceAttempt: currentSliceAttempt,
-                terminalOutcomeCommitAttempt: terminalOutcomeCommitAttempt,
-                lastTerminalOutcomeCommitError:
-                    lastTerminalOutcomeCommitError,
+                unsuccessfulOutcomeCommitAttempt:
+                    unsuccessfulOutcomeCommitAttempt,
+                lastUnsuccessfulOutcomeCommitError:
+                    lastUnsuccessfulOutcomeCommitError,
                 cancellationRequested: cancellationRequested,
                 nextAttemptAt: nextAttemptAt,
                 updatedAt: updatedAt
@@ -92,8 +93,10 @@ public enum JobStatusOperation: DatabaseOperation {
             self.totalWorkUnits = totalWorkUnits
             self.executionCount = executionCount
             self.currentSliceAttempt = currentSliceAttempt
-            self.terminalOutcomeCommitAttempt = terminalOutcomeCommitAttempt
-            self.lastTerminalOutcomeCommitError = lastTerminalOutcomeCommitError
+            self.unsuccessfulOutcomeCommitAttempt =
+                unsuccessfulOutcomeCommitAttempt
+            self.lastUnsuccessfulOutcomeCommitError =
+                lastUnsuccessfulOutcomeCommitError
             self.cancellationRequested = cancellationRequested
             self.nextAttemptAt = nextAttemptAt
             self.updatedAt = updatedAt
@@ -109,10 +112,10 @@ public enum JobStatusOperation: DatabaseOperation {
             if let totalWorkUnits { writer.writeUInt64(totalWorkUnits) }
             writer.writeUInt64(executionCount)
             writer.writeUInt32(currentSliceAttempt)
-            writer.writeUInt64(terminalOutcomeCommitAttempt)
-            writer.writeBool(lastTerminalOutcomeCommitError != nil)
-            if let lastTerminalOutcomeCommitError {
-                try lastTerminalOutcomeCommitError.encode(into: &writer)
+            writer.writeUInt64(unsuccessfulOutcomeCommitAttempt)
+            writer.writeBool(lastUnsuccessfulOutcomeCommitError != nil)
+            if let lastUnsuccessfulOutcomeCommitError {
+                try lastUnsuccessfulOutcomeCommitError.encode(into: &writer)
             }
             writer.writeBool(cancellationRequested)
             writer.writeBool(nextAttemptAt != nil)
@@ -138,8 +141,8 @@ public enum JobStatusOperation: DatabaseOperation {
                 totalWorkUnits: totalWorkUnits,
                 executionCount: try reader.readUInt64(),
                 currentSliceAttempt: try reader.readUInt32(),
-                terminalOutcomeCommitAttempt: try reader.readUInt64(),
-                lastTerminalOutcomeCommitError: try reader.readBool()
+                unsuccessfulOutcomeCommitAttempt: try reader.readUInt64(),
+                lastUnsuccessfulOutcomeCommitError: try reader.readBool()
                     ? try DatabaseRemoteError(from: &reader)
                     : nil,
                 cancellationRequested: try reader.readBool(),
@@ -156,8 +159,8 @@ public enum JobStatusOperation: DatabaseOperation {
             totalWorkUnits: UInt64?,
             executionCount: UInt64,
             currentSliceAttempt: UInt32,
-            terminalOutcomeCommitAttempt: UInt64,
-            lastTerminalOutcomeCommitError: DatabaseRemoteError?,
+            unsuccessfulOutcomeCommitAttempt: UInt64,
+            lastUnsuccessfulOutcomeCommitError: DatabaseRemoteError?,
             cancellationRequested: Bool,
             nextAttemptAt: DatabaseTimestamp?,
             updatedAt: DatabaseTimestamp
@@ -167,42 +170,44 @@ public enum JobStatusOperation: DatabaseOperation {
                   nextAttemptAt.map({ $0 >= updatedAt }) ?? true else {
                 throw .invalidJobStatus
             }
-            let hasCommitDiagnostic = lastTerminalOutcomeCommitError != nil
+            let hasUnsuccessfulOutcomeCommitDiagnostic =
+                lastUnsuccessfulOutcomeCommitError != nil
             switch state {
             case .pending:
-                guard terminalOutcomeCommitAttempt == 0,
-                      !hasCommitDiagnostic,
+                guard unsuccessfulOutcomeCommitAttempt == 0,
+                      !hasUnsuccessfulOutcomeCommitDiagnostic,
                       !cancellationRequested,
                       nextAttemptAt != nil else {
                     throw .invalidJobStatus
                 }
             case .running:
                 guard currentSliceAttempt > 0,
-                      terminalOutcomeCommitAttempt == 0,
-                      !hasCommitDiagnostic,
+                      unsuccessfulOutcomeCommitAttempt == 0,
+                      !hasUnsuccessfulOutcomeCommitDiagnostic,
                       nextAttemptAt == nil else {
                     throw .invalidJobStatus
                 }
-            case .committingOutcome:
+            case .committingUnsuccessfulOutcome:
                 guard !cancellationRequested,
-                      terminalOutcomeCommitAttempt > 0 || nextAttemptAt != nil,
-                      terminalOutcomeCommitAttempt > 0
-                        || !hasCommitDiagnostic,
+                      unsuccessfulOutcomeCommitAttempt > 0
+                        || nextAttemptAt != nil,
+                      unsuccessfulOutcomeCommitAttempt > 0
+                        || !hasUnsuccessfulOutcomeCommitDiagnostic,
                       nextAttemptAt == nil
-                        || (terminalOutcomeCommitAttempt == 0)
-                            == !hasCommitDiagnostic else {
+                        || (unsuccessfulOutcomeCommitAttempt == 0)
+                            == !hasUnsuccessfulOutcomeCommitDiagnostic else {
                     throw .invalidJobStatus
                 }
             case .succeeded:
-                guard terminalOutcomeCommitAttempt == 0,
-                      !hasCommitDiagnostic,
+                guard unsuccessfulOutcomeCommitAttempt == 0,
+                      !hasUnsuccessfulOutcomeCommitDiagnostic,
                       !cancellationRequested,
                       nextAttemptAt == nil else {
                     throw .invalidJobStatus
                 }
             case .failed, .cancelled:
-                guard terminalOutcomeCommitAttempt > 0,
-                      !hasCommitDiagnostic,
+                guard unsuccessfulOutcomeCommitAttempt > 0,
+                      !hasUnsuccessfulOutcomeCommitDiagnostic,
                       !cancellationRequested,
                       nextAttemptAt == nil else {
                     throw .invalidJobStatus
