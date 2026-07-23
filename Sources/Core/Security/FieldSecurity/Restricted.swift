@@ -47,8 +47,8 @@ public protocol RestrictedProtocol: Sendable {
 /// ```
 ///
 /// **Evaluation**:
-/// - Use `FDBContext.fetchSecure()` to automatically mask restricted fields
-/// - Use `FDBContext.saveSecure()` to validate write permissions
+/// - Use `DatabaseContext.fetchSecure()` to automatically mask restricted fields
+/// - Use `DatabaseContext.saveSecure()` to validate write permissions
 @propertyWrapper
 public struct Restricted<Value: Sendable>: Sendable, RestrictedProtocol {
     private var value: Value
