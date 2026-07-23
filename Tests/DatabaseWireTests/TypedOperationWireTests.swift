@@ -476,13 +476,19 @@ struct TypedOperationWireTests {
         )
         try expectRoundTrip(
             JobStatusOperation.Response(
-                state: .running,
+                state: .committingOutcome,
                 job: job,
                 completedWorkUnits: 50,
                 totalWorkUnits: 100,
                 executionCount: 7,
                 currentSliceAttempt: 2,
-                cancellationRequested: true,
+                terminalOutcomeCommitAttempt: 3,
+                terminalOutcomeCommitError: DatabaseRemoteError(
+                    category: .internalFailure,
+                    code: "JOB_TERMINAL_OUTCOME_COMMIT_FAILED",
+                    message: "Outcome commit will be retried",
+                    retryability: .backoff
+                ),
                 nextAttemptAt: .init(secondsSinceUnixEpoch: 1_784_131_100),
                 updatedAt: .init(secondsSinceUnixEpoch: 1_784_131_200)
             )

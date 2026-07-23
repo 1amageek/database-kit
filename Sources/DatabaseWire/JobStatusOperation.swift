@@ -6,9 +6,10 @@ public enum JobStatusOperation: DatabaseOperation {
     public enum State: UInt8, Sendable, Hashable {
         case pending = 1
         case running = 2
-        case succeeded = 3
-        case failed = 4
-        case cancelled = 5
+        case committingOutcome = 3
+        case succeeded = 4
+        case failed = 5
+        case cancelled = 6
 
         fileprivate init(
             from reader: inout DatabaseWireReader
@@ -51,6 +52,8 @@ public enum JobStatusOperation: DatabaseOperation {
         public let totalWorkUnits: UInt64?
         public let executionCount: UInt64
         public let currentSliceAttempt: UInt32
+        public let terminalOutcomeCommitAttempt: UInt64
+        public let terminalOutcomeCommitError: DatabaseRemoteError?
         public let cancellationRequested: Bool
         public let nextAttemptAt: DatabaseTimestamp?
         public let updatedAt: DatabaseTimestamp
@@ -64,6 +67,8 @@ public enum JobStatusOperation: DatabaseOperation {
             totalWorkUnits: UInt64? = nil,
             executionCount: UInt64,
             currentSliceAttempt: UInt32,
+            terminalOutcomeCommitAttempt: UInt64 = 0,
+            terminalOutcomeCommitError: DatabaseRemoteError? = nil,
             cancellationRequested: Bool = false,
             nextAttemptAt: DatabaseTimestamp? = nil,
             updatedAt: DatabaseTimestamp
@@ -74,6 +79,8 @@ public enum JobStatusOperation: DatabaseOperation {
             self.totalWorkUnits = totalWorkUnits
             self.executionCount = executionCount
             self.currentSliceAttempt = currentSliceAttempt
+            self.terminalOutcomeCommitAttempt = terminalOutcomeCommitAttempt
+            self.terminalOutcomeCommitError = terminalOutcomeCommitError
             self.cancellationRequested = cancellationRequested
             self.nextAttemptAt = nextAttemptAt
             self.updatedAt = updatedAt
@@ -89,6 +96,11 @@ public enum JobStatusOperation: DatabaseOperation {
             if let totalWorkUnits { writer.writeUInt64(totalWorkUnits) }
             writer.writeUInt64(executionCount)
             writer.writeUInt32(currentSliceAttempt)
+            writer.writeUInt64(terminalOutcomeCommitAttempt)
+            writer.writeBool(terminalOutcomeCommitError != nil)
+            if let terminalOutcomeCommitError {
+                try terminalOutcomeCommitError.encode(into: &writer)
+            }
             writer.writeBool(cancellationRequested)
             writer.writeBool(nextAttemptAt != nil)
             if let nextAttemptAt {
@@ -113,6 +125,10 @@ public enum JobStatusOperation: DatabaseOperation {
                 totalWorkUnits: totalWorkUnits,
                 executionCount: try reader.readUInt64(),
                 currentSliceAttempt: try reader.readUInt32(),
+                terminalOutcomeCommitAttempt: try reader.readUInt64(),
+                terminalOutcomeCommitError: try reader.readBool()
+                    ? try DatabaseRemoteError(from: &reader)
+                    : nil,
                 cancellationRequested: try reader.readBool(),
                 nextAttemptAt: try reader.readBool()
                     ? try DatabaseTimestamp(from: &reader)
