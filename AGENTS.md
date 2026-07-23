@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-- This package owns the Foundation-independent database value model, record identity, QueryIR, and the canonical DatabaseWire v1 contract.
+- This package owns the Foundation-independent database value model, persistable identity, QueryIR, and the canonical DatabaseWire v1 contract.
 - It does not own transport, database execution, storage, application schemas, or platform adapters.
 - DatabaseWire is deterministic and bounded. Every decoder must reject truncated, oversized, invalid, unknown, or trailing input explicitly.
 

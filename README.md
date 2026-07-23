@@ -42,7 +42,7 @@ dependencies: [
 
 | Module | Description |
 |--------|-------------|
-| `DatabaseValue` | Foundation-independent values, record identity, RDF terms, and owned/borrowed bytes |
+| `DatabaseValue` | Foundation-independent values, persistable identity, RDF terms, and owned/borrowed bytes |
 | `DatabaseValueCodable` | Optional Foundation Codable adapters for database values |
 | `DatabaseDigest` | Foundation-independent canonical SHA-256 digest support |
 | `Core` | `@Persistable` macro, `IndexKind` protocol, Schema, Protobuf serialization |
