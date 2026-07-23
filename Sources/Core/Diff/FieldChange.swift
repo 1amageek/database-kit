@@ -3,6 +3,9 @@
 //
 // Represents a single field change in a model diff.
 
+import DatabaseValue
+import DatabaseValueCodable
+
 
 // MARK: - ChangeType
 

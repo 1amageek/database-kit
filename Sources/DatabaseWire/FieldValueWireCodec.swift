@@ -1,14 +1,14 @@
 import DatabaseValue
 
-/// Encodes and decodes the recursive DatabaseValue wire component without
+/// Encodes and decodes the recursive FieldValue wire component without
 /// growing the process stack recursively.
 ///
 /// Each open container owns one cursor frame. Collection elements are visited
 /// one at a time, so traversal metadata is proportional to nesting depth rather
 /// than the total number of values.
-enum DatabaseValueWireCodec {
+enum FieldValueWireCodec {
     static func encode(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         try encode(.value(value), into: &writer)
@@ -33,7 +33,7 @@ enum DatabaseValueWireCodec {
 
     static func decodeValue(
         from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> DatabaseValue {
+    ) throws(DatabaseWireError) -> FieldValue {
         switch try decode(.value, from: &reader) {
         case .value(let value):
             return value
@@ -65,16 +65,16 @@ enum DatabaseValueWireCodec {
     }
 }
 
-private extension DatabaseValueWireCodec {
+private extension FieldValueWireCodec {
     enum EncodingNode {
-        case value(DatabaseValue)
+        case value(FieldValue)
         case field(DatabaseObjectField)
         case identifier(PersistableIdentifierValue)
         case identity(PersistableIdentity, closesValue: Bool)
     }
 
     enum EncodingFrame {
-        case array([DatabaseValue], nextIndex: Int)
+        case array([FieldValue], nextIndex: Int)
         case object([DatabaseObjectField], nextIndex: Int)
         case identifierComposite([PersistableIdentifierValue], nextIndex: Int)
         case identityIdentifier(PersistableIdentity, closesValue: Bool)
@@ -319,7 +319,7 @@ private extension DatabaseValueWireCodec {
     }
 
     enum DecodedNode {
-        case value(DatabaseValue)
+        case value(FieldValue)
         case field(DatabaseObjectField)
         case identifier(PersistableIdentifierValue)
         case identity(PersistableIdentity)
@@ -327,7 +327,7 @@ private extension DatabaseValueWireCodec {
 
     enum DecodingFrame {
         case field(number: UInt32, name: String)
-        case array(values: [DatabaseValue], remaining: Int)
+        case array(values: [FieldValue], remaining: Int)
         case object(fields: [DatabaseObjectField], remaining: Int)
         case reference
         case identifierComposite(
@@ -417,7 +417,7 @@ private extension DatabaseValueWireCodec {
                             openValueCount -= 1
                             continue
                         }
-                        var values: [DatabaseValue] = []
+                        var values: [FieldValue] = []
                         values.reserveCapacity(count)
                         frames.append(
                             .array(values: values, remaining: count)
@@ -678,7 +678,7 @@ private extension DatabaseValueWireCodec {
 
     static func takeValue(
         _ node: consuming DecodedNode
-    ) -> DatabaseValue {
+    ) -> FieldValue {
         switch consume node {
         case .value(let value):
             return value

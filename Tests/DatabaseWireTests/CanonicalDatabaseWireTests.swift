@@ -75,8 +75,8 @@ struct CanonicalDatabaseWireTests {
         #expect(try DatabaseEnvelopeCodec.decodeRequest(encoded) == request)
     }
 
-    @Test("DatabaseValue preserves every canonical value family")
-    func databaseValueRoundTrips() throws {
+    @Test("FieldValue preserves every canonical value family")
+    func fieldValueRoundTrips() throws {
         let identity = PersistableIdentity(
             entity: "Event",
             id: .composite([.string("event-1"), .uint64(7)]),
@@ -84,7 +84,7 @@ struct CanonicalDatabaseWireTests {
                 DatabaseObjectField(number: 1, name: "snapshot", value: .string("snapshot-a")),
             ]
         )
-        let value = DatabaseValue.object([
+        let value = FieldValue.object([
             DatabaseObjectField(number: 1, name: "null", value: .null),
             DatabaseObjectField(number: 2, name: "bool", value: .bool(true)),
             DatabaseObjectField(number: 3, name: "signed", value: .int64(-42)),
@@ -128,7 +128,7 @@ struct CanonicalDatabaseWireTests {
         try value.encode(into: &writer)
         var reader = DatabaseWireReader(writer.bytes)
 
-        #expect(try DatabaseValue(from: &reader) == value)
+        #expect(try FieldValue(from: &reader) == value)
         try reader.ensureFullyRead()
     }
 
@@ -323,12 +323,12 @@ struct CanonicalDatabaseWireTests {
             _ = try countReader.readCount()
         }
 
-        let nested = DatabaseValue.array([.array([.array([.null])])])
+        let nested = FieldValue.array([.array([.array([.null])])])
         var writer = DatabaseWireWriter()
         try nested.encode(into: &writer)
         var nestedReader = DatabaseWireReader(writer.bytes, limits: limits)
         #expect(throws: DatabaseWireError.nestingTooDeep(actual: 3, maximum: 2)) {
-            _ = try DatabaseValue(from: &nestedReader)
+            _ = try FieldValue(from: &nestedReader)
         }
     }
 
@@ -375,7 +375,7 @@ struct CanonicalDatabaseWireTests {
 
     @Test("encoder and decoder enforce identical value object budgets")
     func valueObjectBudgetsAreSymmetric() throws {
-        let value = DatabaseValue.array([.null, .null])
+        let value = FieldValue.array([.null, .null])
         let acceptedLimits = try DatabaseWireLimits(
             maximumFrameBytes: 1_024,
             maximumStringBytes: 32,
@@ -393,7 +393,7 @@ struct CanonicalDatabaseWireTests {
             encoded,
             limits: acceptedLimits
         )
-        #expect(try DatabaseValue(from: &acceptedReader) == value)
+        #expect(try FieldValue(from: &acceptedReader) == value)
         try acceptedReader.ensureFullyRead()
 
         let rejectedLimits = try DatabaseWireLimits(
@@ -427,13 +427,13 @@ struct CanonicalDatabaseWireTests {
                 maximum: 4
             )
         ) {
-            _ = try DatabaseValue(from: &rejectedReader)
+            _ = try FieldValue(from: &rejectedReader)
         }
     }
 
     @Test("canonical RDF consumes the enclosing wire budget")
     func canonicalRDFUsesGlobalBudget() throws {
-        let value = DatabaseValue.rdfTerm(.tripleTerm(
+        let value = FieldValue.rdfTerm(.tripleTerm(
             subject: .iri("urn:subject"),
             predicate: .iri("urn:predicate"),
             object: .iri("urn:object")
@@ -455,7 +455,7 @@ struct CanonicalDatabaseWireTests {
             encoded,
             limits: acceptedLimits
         )
-        #expect(try DatabaseValue(from: &acceptedReader) == value)
+        #expect(try FieldValue(from: &acceptedReader) == value)
 
         let rejectedLimits = try DatabaseWireLimits(
             maximumFrameBytes: 1_024,
@@ -487,7 +487,7 @@ struct CanonicalDatabaseWireTests {
                 maximum: 4
             )
         ) {
-            _ = try DatabaseValue(from: &rejectedReader)
+            _ = try FieldValue(from: &rejectedReader)
         }
     }
 

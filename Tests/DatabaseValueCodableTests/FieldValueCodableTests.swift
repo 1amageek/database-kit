@@ -4,7 +4,7 @@ import DatabaseValue
 import DatabaseValueCodable
 
 @Suite("Database Value Codable Adapter")
-struct DatabaseValueCodableTests {
+struct FieldValueCodableTests {
     @Test("Canonical value types round-trip through JSON")
     func roundTrip() throws {
         let literal = try DatabaseRDFLiteral(
@@ -17,10 +17,23 @@ struct DatabaseValueCodableTests {
             object: .literal(literal)
         )
         let version = DatabaseSchemaVersion(1, 2, 3)
+        let fieldValue = FieldValue.object([
+            DatabaseObjectField(
+                number: 1,
+                name: "term",
+                value: .rdfTerm(term)
+            ),
+            DatabaseObjectField(
+                number: 2,
+                name: "unsigned",
+                value: .uint64(UInt64.max)
+            ),
+        ])
 
         try expectRoundTrip(literal)
         try expectRoundTrip(term)
         try expectRoundTrip(version)
+        try expectRoundTrip(fieldValue)
     }
 
     private func expectRoundTrip<Value: Codable & Equatable>(

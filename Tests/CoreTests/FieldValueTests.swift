@@ -7,12 +7,6 @@ import DatabaseValue
 struct FieldValueTests {
     @Test("Unsigned Swift scalars preserve their exact values")
     func unsignedIntegerInitializersPreserveExactValues() {
-        #expect(FieldValue(UInt.max) == .uint64(UInt64(UInt.max)))
-        #expect(FieldValue(UInt8.max) == .uint64(UInt64(UInt8.max)))
-        #expect(FieldValue(UInt16.max) == .uint64(UInt64(UInt16.max)))
-        #expect(FieldValue(UInt32.max) == .uint64(UInt64(UInt32.max)))
-        #expect(FieldValue(UInt64.max) == .uint64(UInt64.max))
-
         #expect(UInt.max.toFieldValue() == .uint64(UInt64(UInt.max)))
         #expect(UInt8.max.toFieldValue() == .uint64(UInt64(UInt8.max)))
         #expect(UInt16.max.toFieldValue() == .uint64(UInt64(UInt16.max)))
@@ -20,7 +14,7 @@ struct FieldValueTests {
         #expect(UInt64.max.toFieldValue() == .uint64(UInt64.max))
     }
 
-    @Test("UInt64 survives DatabaseValue and Codable round trips")
+    @Test("UInt64 survives FieldValue and Codable round trips")
     func uint64RoundTripsWithoutNarrowing() throws {
         let original = FieldValue.array([
             .uint64(0),
@@ -28,33 +22,25 @@ struct FieldValueTests {
             .uint64(UInt64(Int64.max) + 1),
             .uint64(UInt64.max),
         ])
-        let databaseValue = original.asDatabaseValue
-
-        #expect(FieldValue(databaseValue: databaseValue) == original)
-        #expect(
-            FieldValue(databaseValue: databaseValue)?.asDatabaseValue
-                == databaseValue
-        )
 
         let encoded = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(FieldValue.self, from: encoded)
         #expect(decoded == original)
-        #expect(decoded.asDatabaseValue == databaseValue)
     }
 
-    @Test("Signed, unsigned, and exact Double equality share hashes")
-    func crossTypeNumericEqualityAndHashingAreExact() throws {
+    @Test("Stored numeric types preserve distinct identity and hashes")
+    func storedNumericIdentityIsExact() throws {
         let zero: [FieldValue] = [.int64(0), .uint64(0), .double(-0.0)]
-        #expect(Set(zero).count == 1)
-        #expect(try Set(zero.map { try $0.stableHash() }).count == 1)
+        #expect(Set(zero).count == 3)
+        #expect(try Set(zero.map { try $0.stableHash() }).count == 3)
 
         let signedBoundary: [FieldValue] = [
             .int64(Int64.max),
             .uint64(UInt64(Int64.max)),
         ]
-        #expect(Set(signedBoundary).count == 1)
+        #expect(Set(signedBoundary).count == 2)
         #expect(
-            try Set(signedBoundary.map { try $0.stableHash() }).count == 1
+            try Set(signedBoundary.map { try $0.stableHash() }).count == 2
         )
 
         let unsignedDoubleBoundary = UInt64(1) << 63
@@ -62,9 +48,16 @@ struct FieldValueTests {
             .uint64(unsignedDoubleBoundary),
             .double(Double(unsignedDoubleBoundary)),
         ]
-        #expect(Set(unsignedAndDouble).count == 1)
+        #expect(Set(unsignedAndDouble).count == 2)
         #expect(
-            try Set(unsignedAndDouble.map { try $0.stableHash() }).count == 1
+            try Set(unsignedAndDouble.map { try $0.stableHash() }).count == 2
+        )
+
+        #expect(FieldValue.int64(0).compare(to: .uint64(0)) == .orderedSame)
+        #expect(
+            FieldValue.uint64(unsignedDoubleBoundary).compare(
+                to: .double(Double(unsignedDoubleBoundary))
+            ) == .orderedSame
         )
     }
 
@@ -76,9 +69,13 @@ struct FieldValueTests {
 
         #expect(rounded == Double(exactDoubleBoundary))
         #expect(FieldValue.uint64(adjacent) != .double(rounded))
-        #expect(FieldValue.uint64(exactDoubleBoundary) == .double(rounded))
+        #expect(FieldValue.uint64(exactDoubleBoundary) != .double(rounded))
         #expect(FieldValue.uint64(exactDoubleBoundary) < .uint64(adjacent))
-        #expect(FieldValue.double(rounded) < .uint64(adjacent))
+        #expect(FieldValue.uint64(adjacent) < .double(rounded))
+        #expect(
+            FieldValue.uint64(exactDoubleBoundary).compare(to: .double(rounded))
+                == .orderedSame
+        )
         #expect(
             FieldValue.uint64(adjacent).compare(to: .double(rounded))
                 == .orderedDescending
@@ -151,9 +148,9 @@ struct FieldValueTests {
     @Test("Init from Data")
     func testInitData() {
         let data: DatabaseBytes = [1, 2, 3, 4]
-        let value = FieldValue.data(data)
+        let value = FieldValue.bytes(data)
 
-        #expect(value.dataValue == data)
+        #expect(value.bytesValue == data)
         #expect(value.isNumeric == false)
     }
 
@@ -167,57 +164,44 @@ struct FieldValueTests {
         #expect(value.stringValue == nil)
     }
 
-    // MARK: - Convenience Initializer
+    // MARK: - Conversion
 
-    @Test("Convenience init from Int")
-    func testConvenienceInitInt() {
-        let value = FieldValue(42 as Int)
-        #expect(value?.int64Value == 42)
+    @Test("Convert from Int")
+    func testConvertInt() {
+        let value = (42 as Int).toFieldValue()
+        #expect(value.int64Value == 42)
     }
 
-    @Test("Convenience init from Int32")
-    func testConvenienceInitInt32() {
-        let value = FieldValue(Int32(42))
-        #expect(value?.int64Value == 42)
+    @Test("Convert from Int32")
+    func testConvertInt32() {
+        let value = Int32(42).toFieldValue()
+        #expect(value.int64Value == 42)
     }
 
-    @Test("Convenience init from Float")
-    func testConvenienceInitFloat() {
-        let value = FieldValue(Float(3.14))
-        #expect(value?.doubleValue != nil)
+    @Test("Convert from Float")
+    func testConvertFloat() {
+        let value = Float(3.14).toFieldValue()
+        #expect(value.doubleValue != nil)
     }
 
-    @Test("Convenience init from NSNull")
-    func testConvenienceInitNSNull() {
-        let value = FieldValue(NSNull())
-        #expect(value?.isNull == true)
-    }
+    // MARK: - Numeric projection
 
-    @Test("Convenience init from unsupported type returns nil")
-    func testConvenienceInitUnsupported() {
-        struct CustomType {}
-        let value = FieldValue(CustomType())
-        #expect(value == nil)
-    }
-
-    // MARK: - asDouble
-
-    @Test("asDouble for int64")
-    func testAsDoubleInt64() {
+    @Test("numericDoubleValue for int64")
+    func testNumericDoubleValueInt64() {
         let value = FieldValue.int64(42)
-        #expect(value.asDouble == 42.0)
+        #expect(value.numericDoubleValue == 42.0)
     }
 
-    @Test("asDouble for double")
-    func testAsDoubleDouble() {
+    @Test("numericDoubleValue for double")
+    func testNumericDoubleValueDouble() {
         let value = FieldValue.double(3.14)
-        #expect(value.asDouble == 3.14)
+        #expect(value.numericDoubleValue == 3.14)
     }
 
-    @Test("asDouble for non-numeric returns nil")
-    func testAsDoubleNonNumeric() {
+    @Test("numericDoubleValue for non-numeric returns nil")
+    func testNumericDoubleValueNonNumeric() {
         let value = FieldValue.string("hello")
-        #expect(value.asDouble == nil)
+        #expect(value.numericDoubleValue == nil)
     }
 
     // MARK: - Comparable
@@ -271,8 +255,8 @@ struct FieldValueTests {
 
     @Test("Data comparison (lexicographic)")
     func testDataComparison() {
-        let a = FieldValue.data([1, 2, 3])
-        let b = FieldValue.data([1, 2, 4])
+        let a = FieldValue.bytes([1, 2, 3])
+        let b = FieldValue.bytes([1, 2, 4])
 
         #expect(a < b)
     }
@@ -349,7 +333,7 @@ struct FieldValueTests {
             .double(3.14),
             .string("hello"),
             .bool(true),
-            .data([1, 2, 3]),
+            .bytes([1, 2, 3]),
             .null
         ]
 
@@ -361,44 +345,6 @@ struct FieldValueTests {
             let restored = try decoder.decode(FieldValue.self, from: data)
             #expect(original == restored)
         }
-    }
-
-    // MARK: - Description
-
-    @Test("Int64 description")
-    func testInt64Description() {
-        let value = FieldValue.int64(42)
-        #expect(value.description == "int64(42)")
-    }
-
-    @Test("Double description")
-    func testDoubleDescription() {
-        let value = FieldValue.double(3.14)
-        #expect(value.description == "double(3.14)")
-    }
-
-    @Test("String description")
-    func testStringDescription() {
-        let value = FieldValue.string("hello")
-        #expect(value.description == "string(\"hello\")")
-    }
-
-    @Test("Bool description")
-    func testBoolDescription() {
-        let value = FieldValue.bool(true)
-        #expect(value.description == "bool(true)")
-    }
-
-    @Test("Data description")
-    func testDataDescription() {
-        let value = FieldValue.data([1, 2, 3])
-        #expect(value.description == "data(3 bytes)")
-    }
-
-    @Test("Null description")
-    func testNullDescription() {
-        let value = FieldValue.null
-        #expect(value.description == "null")
     }
 
     // MARK: - Stable Hash
@@ -453,7 +399,7 @@ struct FieldValueTests {
             .double(3.14),
             .string("hello"),
             .bool(true),
-            .data([1, 2, 3]),
+            .bytes([1, 2, 3]),
             .null
         ]
 
@@ -478,16 +424,18 @@ struct FieldValueTests {
         }
     }
 
-    @Test("cross-type numeric equality is exact and hash-consistent")
-    func numericEqualityAndHashAreExact() throws {
+    @Test("query numeric comparison does not alter stored identity")
+    func queryNumericComparisonPreservesStoredIdentity() throws {
         let exactInteger = FieldValue.int64(42)
         let exactDouble = FieldValue.double(42)
         let roundedInteger = FieldValue.int64(9_007_199_254_740_993)
         let roundedDouble = FieldValue.double(9_007_199_254_740_992)
 
-        #expect(exactInteger == exactDouble)
-        #expect(try exactInteger.stableHash() == exactDouble.stableHash())
+        #expect(exactInteger != exactDouble)
+        #expect(try exactInteger.stableHash() != exactDouble.stableHash())
+        #expect(exactInteger.compare(to: exactDouble) == .orderedSame)
         #expect(roundedInteger != roundedDouble)
         #expect(try roundedInteger.stableHash() != roundedDouble.stableHash())
+        #expect(roundedInteger.compare(to: roundedDouble) == .orderedDescending)
     }
 }

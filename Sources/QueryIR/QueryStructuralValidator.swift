@@ -48,8 +48,8 @@ public enum QueryStructuralValidator {
 
     static func validateBoundStructure(
         _ statement: QueryStatement,
-        positionalParameters: [UInt32: DatabaseValue],
-        namedParameters: [String: DatabaseValue],
+        positionalParameters: [UInt32: FieldValue],
+        namedParameters: [String: FieldValue],
         limits: QueryStructuralLimits
     ) throws(QueryStructuralValidationError) {
         var validation = ValidationTraversal(
@@ -135,8 +135,8 @@ private extension QueryStructuralValidator {
         case dataType(DataType, depth: UInt64)
         case term(SPARQLTerm, depth: UInt64)
         case literal(Literal, depth: UInt64)
-        case boundParameterLiteral(DatabaseValue, depth: UInt64)
-        case databaseValue(DatabaseValue, depth: UInt64)
+        case boundParameterLiteral(FieldValue, depth: UInt64)
+        case fieldValue(FieldValue, depth: UInt64)
         case persistableIdentifier(PersistableIdentifierValue, depth: UInt64)
         case rdfTerm(DatabaseRDFTerm, depth: UInt64)
         case propertyPath(PropertyPath, depth: UInt64)
@@ -148,10 +148,10 @@ private extension QueryStructuralValidator {
     }
 
     struct ParameterValues {
-        let positions: [UInt32: DatabaseValue]
-        let names: [String: DatabaseValue]
+        let positions: [UInt32: FieldValue]
+        let names: [String: FieldValue]
 
-        func value(for reference: QueryParameterReference) -> DatabaseValue? {
+        func value(for reference: QueryParameterReference) -> FieldValue? {
             switch reference {
             case .position(let position):
                 return positions[position]
@@ -819,12 +819,12 @@ private extension QueryStructuralValidator {
                         break
                     }
 
-                case .databaseValue(let value, _):
+                case .fieldValue(let value, _):
                     switch value {
                     case .array(let values):
                         try consumeCollection(values.count)
                         for value in values.reversed() {
-                            validationSteps.append(.databaseValue(value, depth: childDepth))
+                            validationSteps.append(.fieldValue(value, depth: childDepth))
                         }
                     case .object(let fields):
                         try appendDatabaseFields(fields, depth: childDepth, to: &validationSteps)
@@ -968,7 +968,7 @@ private extension QueryStructuralValidator {
             var validationSteps: [ValidationStep] = []
             validationSteps.reserveCapacity(fields.count)
             for field in fields.reversed() {
-                validationSteps.append(.databaseValue(field.value, depth: 0))
+                validationSteps.append(.fieldValue(field.value, depth: 0))
             }
             try validate(consume validationSteps)
         }
@@ -1001,7 +1001,7 @@ private extension QueryStructuralValidator {
                  .dataType(_, let depth), .term(_, let depth),
                  .literal(_, let depth),
                  .boundParameterLiteral(_, let depth),
-                 .databaseValue(_, let depth),
+                 .fieldValue(_, let depth),
                  .persistableIdentifier(_, let depth),
                  .rdfTerm(_, let depth), .propertyPath(_, let depth),
                  .triple(_, let depth), .quad(_, let depth),
@@ -1057,7 +1057,7 @@ private extension QueryStructuralValidator {
         ) throws(QueryStructuralValidationError) {
             try consumeCollection(fields.count)
             for field in fields.reversed() {
-                validationSteps.append(.databaseValue(field.value, depth: depth))
+                validationSteps.append(.fieldValue(field.value, depth: depth))
             }
         }
 
@@ -1071,7 +1071,7 @@ private extension QueryStructuralValidator {
                 lhs.key < rhs.key
             }
             for (_, parameter) in orderedParameters.reversed() {
-                validationSteps.append(.databaseValue(parameter, depth: depth))
+                validationSteps.append(.fieldValue(parameter, depth: depth))
             }
         }
 

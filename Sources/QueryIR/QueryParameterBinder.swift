@@ -2,8 +2,8 @@ import DatabaseValue
 
 /// Resolves canonical wire parameters into an immutable QueryIR statement.
 public struct QueryParameterBinder: Sendable {
-    private let positions: [UInt32: DatabaseValue]
-    private let names: [String: DatabaseValue]
+    private let positions: [UInt32: FieldValue]
+    private let names: [String: FieldValue]
     private let structuralLimits: QueryStructuralLimits
 
     public init(
@@ -14,8 +14,8 @@ public struct QueryParameterBinder: Sendable {
             parameters: parameters,
             limits: structuralLimits
         )
-        var positions: [UInt32: DatabaseValue] = [:]
-        var names: [String: DatabaseValue] = [:]
+        var positions: [UInt32: FieldValue] = [:]
+        var names: [String: FieldValue] = [:]
 
         for parameter in parameters {
             guard parameter.number > 0 else {

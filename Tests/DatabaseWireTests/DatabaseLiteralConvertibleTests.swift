@@ -27,7 +27,7 @@ struct DatabaseLiteralConvertibleTests {
 
     @Test("database arrays retain exact scalar representations")
     func databaseArrayConversion() throws {
-        let value = DatabaseValue.array([
+        let value = FieldValue.array([
             .int64(Int64.min),
             .uint64(UInt64.max),
             .decimal(coefficient: 123, scale: 2),
@@ -45,8 +45,8 @@ struct DatabaseLiteralConvertibleTests {
 
     @Test("database objects fail instead of silently producing a literal")
     func databaseObjectConversionFails() {
-        #expect(throws: DatabaseLiteralConversionError.unsupportedDatabaseValue) {
-            try DatabaseValue.object([]).databaseLiteral
+        #expect(throws: DatabaseLiteralConversionError.unsupportedFieldValue) {
+            try FieldValue.object([]).databaseLiteral
         }
     }
 

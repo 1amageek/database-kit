@@ -6,10 +6,10 @@ import FoundationEssentials
 import Foundation
 #endif
 
-public enum DatabaseValueCodableDecoder {
+public enum FieldValueCodableDecoder {
     public static func decode<Value: Decodable>(
         _ type: Value.Type,
-        from value: DatabaseValue
+        from value: FieldValue
     ) throws -> Value {
         try DatabaseValueDecoding.decode(type, from: value, codingPath: [])
     }
@@ -18,7 +18,7 @@ public enum DatabaseValueCodableDecoder {
 private enum DatabaseValueDecoding {
     static func decode<Value: Decodable>(
         _ type: Value.Type,
-        from value: DatabaseValue,
+        from value: FieldValue,
         codingPath: [CodingKey]
     ) throws -> Value {
         if type == Data.self, case .bytes(let bytes) = value {
@@ -45,7 +45,7 @@ private enum DatabaseValueDecoding {
 
     static func typeMismatch<Value>(
         _ type: Value.Type,
-        value: DatabaseValue,
+        value: FieldValue,
         codingPath: [CodingKey]
     ) -> DecodingError {
         .typeMismatch(
@@ -72,7 +72,7 @@ private enum DatabaseValueDecoding {
     }
 
     private static func decodeDate(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         codingPath: [CodingKey]
     ) throws -> Date {
         switch value {
@@ -125,11 +125,11 @@ private enum DatabaseValueDecoding {
 }
 
 private final class DatabaseValueDecoder: Decoder {
-    let value: DatabaseValue
+    let value: FieldValue
     let codingPath: [CodingKey]
     let userInfo: [CodingUserInfoKey: Any] = [:]
 
-    init(value: DatabaseValue, codingPath: [CodingKey]) {
+    init(value: FieldValue, codingPath: [CodingKey]) {
         self.value = value
         self.codingPath = codingPath
     }
@@ -139,7 +139,7 @@ private final class DatabaseValueDecoder: Decoder {
     ) throws -> KeyedDecodingContainer<Key> {
         guard case .object(let fields) = value else {
             throw DatabaseValueDecoding.typeMismatch(
-                [String: DatabaseValue].self,
+                [String: FieldValue].self,
                 value: value,
                 codingPath: codingPath
             )
@@ -155,7 +155,7 @@ private final class DatabaseValueDecoder: Decoder {
     func unkeyedContainer() throws -> UnkeyedDecodingContainer {
         guard case .array(let values) = value else {
             throw DatabaseValueDecoding.typeMismatch(
-                [DatabaseValue].self,
+                [FieldValue].self,
                 value: value,
                 codingPath: codingPath
             )
@@ -174,10 +174,10 @@ private final class DatabaseValueDecoder: Decoder {
 private struct DatabaseValueKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
     let codingPath: [CodingKey]
     let allKeys: [Key]
-    private let values: [String: DatabaseValue]
+    private let values: [String: FieldValue]
 
     init(fields: [DatabaseObjectField], codingPath: [CodingKey]) throws {
-        var mapped: [String: DatabaseValue] = [:]
+        var mapped: [String: FieldValue] = [:]
         var keys: [Key] = []
         for field in fields {
             guard mapped.updateValue(field.value, forKey: field.name) == nil else {
@@ -245,7 +245,7 @@ private struct DatabaseValueKeyedDecodingContainer<Key: CodingKey>: KeyedDecodin
 }
 
 private struct DatabaseValueUnkeyedDecodingContainer: UnkeyedDecodingContainer {
-    let values: [DatabaseValue]
+    let values: [FieldValue]
     let codingPath: [CodingKey]
     var currentIndex = 0
     var count: Int? { values.count }
@@ -295,14 +295,14 @@ private struct DatabaseValueUnkeyedDecodingContainer: UnkeyedDecodingContainer {
 
     private func endError() -> DecodingError {
         .valueNotFound(
-            DatabaseValue.self,
+            FieldValue.self,
             .init(codingPath: codingPath, debugDescription: "Unkeyed container is at end")
         )
     }
 }
 
 private struct DatabaseValueSingleValueDecodingContainer: SingleValueDecodingContainer {
-    let value: DatabaseValue
+    let value: FieldValue
     let codingPath: [CodingKey]
 
     func decodeNil() -> Bool {

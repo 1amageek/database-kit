@@ -2,11 +2,11 @@ import DatabaseValue
 import DatabaseWire
 import Testing
 
-@Suite("Iterative DatabaseValue Wire")
-struct DatabaseValueWireIterationTests {
+@Suite("Iterative FieldValue Wire")
+struct FieldValueWireIterationTests {
     @Test("recursive value component preserves its canonical byte layout")
     func recursiveValueComponentPreservesCanonicalBytes() throws {
-        let value = DatabaseValue.reference(
+        let value = FieldValue.reference(
             PersistableIdentity(
                 entity: "E",
                 id: .composite([.string("id")]),
@@ -43,7 +43,7 @@ struct DatabaseValueWireIterationTests {
         #expect(encoded == expected)
 
         var reader = DatabaseWireReader(encoded)
-        let decoded = try DatabaseValue(from: &reader)
+        let decoded = try FieldValue(from: &reader)
         try reader.ensureFullyRead()
 
         #expect(try Self.encode(decoded) == expected)
@@ -70,7 +70,7 @@ struct DatabaseValueWireIterationTests {
         #expect(encoded.count == encodedByteCount)
 
         var reader = DatabaseWireReader(encoded, limits: limits)
-        let decoded = try DatabaseValue(from: &reader)
+        let decoded = try FieldValue(from: &reader)
         try reader.ensureFullyRead()
 
         let reencoded = try Self.encode(decoded, limits: limits)
@@ -103,7 +103,7 @@ struct DatabaseValueWireIterationTests {
                 maximum: valueDepth - 1
             )
         ) {
-            _ = try DatabaseValue(from: &rejectedReader)
+            _ = try FieldValue(from: &rejectedReader)
         }
 
     }
@@ -131,7 +131,7 @@ struct DatabaseValueWireIterationTests {
 
     @Test("collection and object limits reject the exact first excess")
     func collectionAndObjectLimitsRejectExactFirstExcess() throws {
-        let value = DatabaseValue.array([.null, .null])
+        let value = FieldValue.array([.null, .null])
         let acceptedLimits = try DatabaseWireLimits(
             maximumFrameBytes: 7,
             maximumStringBytes: 0,
@@ -142,7 +142,7 @@ struct DatabaseValueWireIterationTests {
         )
         let encoded = try Self.encode(value, limits: acceptedLimits)
         var reader = DatabaseWireReader(encoded, limits: acceptedLimits)
-        let decoded = try DatabaseValue(from: &reader)
+        let decoded = try FieldValue(from: &reader)
         try reader.ensureFullyRead()
         #expect(try Self.encode(decoded, limits: acceptedLimits) == encoded)
 
@@ -172,7 +172,7 @@ struct DatabaseValueWireIterationTests {
                 maximum: 1
             )
         ) {
-            _ = try DatabaseValue(from: &collectionReader)
+            _ = try FieldValue(from: &collectionReader)
         }
 
         let objectLimits = try DatabaseWireLimits(
@@ -201,14 +201,14 @@ struct DatabaseValueWireIterationTests {
                 maximum: 4
             )
         ) {
-            _ = try DatabaseValue(from: &objectReader)
+            _ = try FieldValue(from: &objectReader)
         }
     }
 }
 
-private extension DatabaseValueWireIterationTests {
+private extension FieldValueWireIterationTests {
     static func encode(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> DatabaseBytes {
         try DatabaseWireWriter.encode(limits: limits) {
@@ -217,8 +217,8 @@ private extension DatabaseValueWireIterationTests {
         }
     }
 
-    static func makeDeepMixedValue(layerCount: Int) -> DatabaseValue {
-        var value = DatabaseValue.null
+    static func makeDeepMixedValue(layerCount: Int) -> FieldValue {
+        var value = FieldValue.null
         for index in 0..<layerCount {
             switch index % 3 {
             case 0:

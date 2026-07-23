@@ -1,4 +1,8 @@
-public indirect enum DatabaseValue: Sendable, Hashable {
+/// Canonical database field value shared by schemas, queries, wire frames, and runtimes.
+///
+/// The enum preserves the declared storage type. Query-language numeric coercion
+/// belongs to the query evaluator and must not change value identity or hashing.
+public indirect enum FieldValue: Sendable {
     case null
     case bool(Bool)
     case int64(Int64)
@@ -10,7 +14,7 @@ public indirect enum DatabaseValue: Sendable, Hashable {
     case date(DatabaseDate)
     case timestamp(DatabaseTimestamp)
     case uuid(DatabaseUUID)
-    case array([DatabaseValue])
+    case array([FieldValue])
     case object([DatabaseObjectField])
     case reference(PersistableIdentity)
     case rdfTerm(DatabaseRDFTerm)

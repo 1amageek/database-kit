@@ -6,14 +6,14 @@ import DatabaseValue
 /// process-stack recursion so an admitted query cannot exhaust the stack.
 /// Unchanged subtrees retain their original copy-on-write storage.
 struct QueryParameterBindingTraversal {
-    private let positions: [UInt32: DatabaseValue]
-    private let names: [String: DatabaseValue]
+    private let positions: [UInt32: FieldValue]
+    private let names: [String: FieldValue]
     private var bindingSteps: [BindingStep] = []
     private var results: [BindingResult] = []
 
     init(
-        positions: [UInt32: DatabaseValue],
-        names: [String: DatabaseValue]
+        positions: [UInt32: FieldValue],
+        names: [String: FieldValue]
     ) {
         self.positions = positions
         self.names = names
@@ -86,7 +86,7 @@ private extension QueryParameterBindingTraversal {
     }
 
     enum LiteralBindingStep {
-        case value(DatabaseValue)
+        case value(FieldValue)
         case assembleArray(Int)
     }
 
@@ -1915,7 +1915,7 @@ private extension QueryParameterBindingTraversal {
     func literal(
         for reference: QueryParameterReference
     ) throws(QueryParameterBindingError) -> Literal {
-        let value: DatabaseValue
+        let value: FieldValue
         switch reference {
         case .position(let position):
             guard position > 0 else {

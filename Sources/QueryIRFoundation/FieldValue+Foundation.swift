@@ -1,8 +1,8 @@
 import DatabaseValue
 import Foundation
 
-extension DatabaseValue {
-    public static func bytes(_ value: Data) -> DatabaseValue {
+extension FieldValue {
+    public static func bytes(_ value: Data) -> FieldValue {
         .bytes(
             DatabaseBytes(
                 retaining: RetainedDataByteOwner(data: value)

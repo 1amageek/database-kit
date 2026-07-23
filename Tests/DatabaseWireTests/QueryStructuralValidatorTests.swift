@@ -234,7 +234,7 @@ struct QueryStructuralValidatorTests {
 
     @Test("Parameter values are bounded before recursive binding")
     func parameterValueDepthOverflow() {
-        var value = DatabaseValue.object([])
+        var value = FieldValue.object([])
         for _ in 0..<4 {
             value = .array([value])
         }

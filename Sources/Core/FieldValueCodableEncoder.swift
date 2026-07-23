@@ -6,14 +6,14 @@ import FoundationEssentials
 import Foundation
 #endif
 
-public enum DatabaseValueCodableEncoder {
-    public static func encode(_ value: any Encodable) throws -> DatabaseValue {
+public enum FieldValueCodableEncoder {
+    public static func encode(_ value: any Encodable) throws -> FieldValue {
         try DatabaseValueEncoding.encode(value)
     }
 }
 
 private enum DatabaseValueEncoding {
-    static func encode(_ value: any Encodable) throws -> DatabaseValue {
+    static func encode(_ value: any Encodable) throws -> FieldValue {
         switch value {
         case let scalar as Bool: return .bool(scalar)
         case let scalar as Int: return .int64(Int64(scalar))
@@ -88,18 +88,18 @@ private enum DatabaseValueEncoding {
 }
 
 private final class DatabaseValueEncoder: Encoder {
-    var encodedValue: DatabaseValue? {
+    var encodedValue: FieldValue? {
         didSet {
             if let encodedValue { commitValue(encodedValue) }
         }
     }
     let codingPath: [CodingKey]
     let userInfo: [CodingUserInfoKey: Any] = [:]
-    private let commitValue: (DatabaseValue) -> Void
+    private let commitValue: (FieldValue) -> Void
 
     init(
         codingPath: [CodingKey] = [],
-        commitValue: @escaping (DatabaseValue) -> Void = { _ in }
+        commitValue: @escaping (FieldValue) -> Void = { _ in }
     ) {
         self.codingPath = codingPath
         self.commitValue = commitValue
@@ -137,14 +137,14 @@ private final class DatabaseValueEncoder: Encoder {
 }
 
 private final class DatabaseObjectEncodingState {
-    private var entries: [(name: String, number: UInt32, value: DatabaseValue)] = []
-    private let commitObject: (DatabaseValue) -> Void
+    private var entries: [(name: String, number: UInt32, value: FieldValue)] = []
+    private let commitObject: (FieldValue) -> Void
 
-    init(commitObject: @escaping (DatabaseValue) -> Void) {
+    init(commitObject: @escaping (FieldValue) -> Void) {
         self.commitObject = commitObject
     }
 
-    func set(_ value: DatabaseValue, for key: some CodingKey) {
+    func set(_ value: FieldValue, for key: some CodingKey) {
         if let index = entries.firstIndex(where: { $0.name == key.stringValue }) {
             entries[index].value = value
         } else {
@@ -203,21 +203,21 @@ private struct DatabaseValueKeyedEncodingContainer<Key: CodingKey>: KeyedEncodin
 }
 
 private final class DatabaseArrayEncodingState {
-    private var values: [DatabaseValue] = []
-    private let commitArray: (DatabaseValue) -> Void
+    private var values: [FieldValue] = []
+    private let commitArray: (FieldValue) -> Void
 
-    init(commitArray: @escaping (DatabaseValue) -> Void) {
+    init(commitArray: @escaping (FieldValue) -> Void) {
         self.commitArray = commitArray
     }
 
     var count: Int { values.count }
 
-    func append(_ value: DatabaseValue) {
+    func append(_ value: FieldValue) {
         values.append(value)
         commitArray(.array(values))
     }
 
-    func replace(at index: Int, with value: DatabaseValue) {
+    func replace(at index: Int, with value: FieldValue) {
         values[index] = value
         commitArray(.array(values))
     }

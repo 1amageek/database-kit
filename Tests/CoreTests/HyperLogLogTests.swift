@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import DatabaseValue
 @testable import Core
 
 @Suite("HyperLogLog Tests")
@@ -70,7 +71,7 @@ struct HyperLogLogTests {
         try hll.add(.double(3.14))
         try hll.add(.string("hello"))
         try hll.add(.bool(true))
-        try hll.add(.data([1, 2, 3]))
+        try hll.add(.bytes([1, 2, 3]))
         try hll.add(.null)
 
         let cardinality = try hll.cardinality()

@@ -1,6 +1,6 @@
 public enum DatabaseLiteralConversionError: Error, Sendable, Equatable {
     /// The value belongs to the database value model but has no QueryIR literal representation.
-    case unsupportedDatabaseValue
+    case unsupportedFieldValue
 
     /// The exact decimal value exceeds the coefficient or scale supported by QueryIR.
     case decimalOutOfRange
@@ -18,7 +18,7 @@ public enum DatabaseLiteralConversionError: Error, Sendable, Equatable {
 extension DatabaseLiteralConversionError: CustomStringConvertible {
     public var description: String {
         switch self {
-        case .unsupportedDatabaseValue:
+        case .unsupportedFieldValue:
             return "The database value cannot be represented as a QueryIR literal"
         case .decimalOutOfRange:
             return "The exact decimal value exceeds the QueryIR decimal range"

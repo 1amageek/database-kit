@@ -169,7 +169,7 @@ struct QueryParameterBinderTests {
     func deepExpressionAndParameterArrayBindIteratively() throws {
         let nestingCount = 256
         var expression = Expression.parameter(.position(1))
-        var parameterValue = DatabaseValue.int64(7)
+        var parameterValue = FieldValue.int64(7)
         for _ in 0..<nestingCount {
             expression = .not(expression)
             parameterValue = .array([parameterValue])

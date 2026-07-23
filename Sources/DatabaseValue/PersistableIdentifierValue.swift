@@ -4,7 +4,7 @@
 /// scalar identifier distinct from a one-component composite identifier while
 /// allowing the storage key codec to emit the final key without intermediate
 /// byte materialization.
-public indirect enum PersistableIdentifierValue: Sendable, Hashable {
+public indirect enum PersistableIdentifierValue: Sendable {
     case bool(Bool)
     case int64(Int64)
     case uint64(UInt64)

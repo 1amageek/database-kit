@@ -54,7 +54,7 @@ extension DatabaseExactDecimal: DatabaseLiteralConvertible {
     }
 }
 
-extension DatabaseValue: DatabaseLiteralConvertible {
+extension FieldValue: DatabaseLiteralConvertible {
     public var databaseLiteral: Literal {
         get throws(DatabaseLiteralConversionError) {
             switch self {
@@ -90,7 +90,7 @@ extension DatabaseValue: DatabaseLiteralConvertible {
             case .rdfTerm(let value):
                 return .rdfTerm(value)
             case .object, .reference:
-                throw .unsupportedDatabaseValue
+                throw .unsupportedFieldValue
             }
         }
     }

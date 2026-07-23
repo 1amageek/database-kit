@@ -1,7 +1,7 @@
 import DatabaseValue
 
 public struct PersistableFieldDecoder: Sendable {
-    private let valuesByName: [String: DatabaseValue]
+    private let valuesByName: [String: FieldValue]
 
     public init(
         entity: String,
@@ -24,7 +24,7 @@ public struct PersistableFieldDecoder: Sendable {
         }
 
         var seenNumbers = Set<UInt32>()
-        var values: [String: DatabaseValue] = [:]
+        var values: [String: FieldValue] = [:]
         for field in fields {
             guard seenNumbers.insert(field.number).inserted else {
                 throw PersistableDecodingError.duplicateFieldNumber(field.number)
@@ -89,7 +89,7 @@ public struct PersistableFieldDecoder: Sendable {
         _ type: Value.Type,
         for field: String
     ) throws -> Value {
-        try DatabaseValueCodableDecoder.decode(
+        try FieldValueCodableDecoder.decode(
             type,
             from: requiredValue(for: field)
         )
@@ -199,7 +199,7 @@ public struct PersistableFieldDecoder: Sendable {
         for field: String
     ) throws -> Value? {
         guard let value = optionalValue(for: field) else { return nil }
-        return try DatabaseValueCodableDecoder.decode(type, from: value)
+        return try FieldValueCodableDecoder.decode(type, from: value)
     }
 
     public func decodeIfPresent<Value: RawRepresentable>(
@@ -267,21 +267,21 @@ public struct PersistableFieldDecoder: Sendable {
         }
     }
 
-    private func requiredValue(for field: String) throws -> DatabaseValue {
+    private func requiredValue(for field: String) throws -> FieldValue {
         guard let value = optionalValue(for: field) else {
             throw PersistableDecodingError.missingRequiredField(field)
         }
         return value
     }
 
-    private func requiredArray(for field: String) throws -> [DatabaseValue] {
+    private func requiredArray(for field: String) throws -> [FieldValue] {
         guard case .array(let values) = try requiredValue(for: field) else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an array")
         }
         return values
     }
 
-    private func optionalArray(for field: String) throws -> [DatabaseValue]? {
+    private func optionalArray(for field: String) throws -> [FieldValue]? {
         guard let value = optionalValue(for: field) else { return nil }
         guard case .array(let values) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an array")
@@ -289,7 +289,7 @@ public struct PersistableFieldDecoder: Sendable {
         return values
     }
 
-    private func optionalValue(for field: String) -> DatabaseValue? {
+    private func optionalValue(for field: String) -> FieldValue? {
         guard let value = valuesByName[field] else { return nil }
         if case .null = value { return nil }
         return value

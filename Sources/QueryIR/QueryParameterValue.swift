@@ -1,3 +1,3 @@
 import DatabaseValue
 
-public typealias QueryParameterValue = DatabaseValue
+public typealias QueryParameterValue = FieldValue

@@ -1,6 +1,6 @@
 import DatabaseValue
 
-extension DatabaseValue: Codable {
+extension FieldValue: Codable {
     private enum CodingKeys: String, CodingKey {
         case kind
         case bool
@@ -91,7 +91,7 @@ extension DatabaseValue: Codable {
                 )
             )
         case .array:
-            self = .array(try container.decode([DatabaseValue].self, forKey: .values))
+            self = .array(try container.decode([FieldValue].self, forKey: .values))
         case .object:
             self = .object(try container.decode([DatabaseObjectField].self, forKey: .fields))
         case .reference:

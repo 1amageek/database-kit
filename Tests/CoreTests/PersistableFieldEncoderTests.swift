@@ -49,11 +49,11 @@ struct PersistableFieldEncoderTests {
         let fields = try PersistableFieldEncoder.encode(document)
         let byName = Dictionary(uniqueKeysWithValues: fields.map { ($0.name, $0.value) })
         guard case .object = byName["value"] else {
-            Issue.record("Nested value must use DatabaseValue.object")
+            Issue.record("Nested value must use FieldValue.object")
             return
         }
         guard case .array(let encodedHistory) = byName["history"] else {
-            Issue.record("Nested collection must use DatabaseValue.array")
+            Issue.record("Nested collection must use FieldValue.array")
             return
         }
         #expect(encodedHistory.count == history.count)

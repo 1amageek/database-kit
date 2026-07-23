@@ -18,7 +18,7 @@ public struct DatabaseExactDecimal: Sendable, Hashable {
         }
     }
 
-    public init?(_ value: DatabaseValue) {
+    public init?(_ value: FieldValue) {
         switch value {
         case .int64(let coefficient):
             self.init(coefficient: coefficient, scale: 0)
@@ -32,7 +32,7 @@ public struct DatabaseExactDecimal: Sendable, Hashable {
         }
     }
 
-    public var databaseValue: DatabaseValue {
+    public var fieldValue: FieldValue {
         .decimal(coefficient: coefficient, scale: scale)
     }
 

@@ -8,14 +8,14 @@ import Foundation
 
 public protocol PersistableScalarDecodable: Sendable, Decodable {
     static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> Self
 }
 
 extension Bool: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> Bool {
         guard case .bool(let scalar) = value else {
@@ -27,7 +27,7 @@ extension Bool: PersistableScalarDecodable {
 
 extension Int: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> Int {
         guard case .int64(let scalar) = value, let result = Int(exactly: scalar) else {
@@ -39,7 +39,7 @@ extension Int: PersistableScalarDecodable {
 
 extension Int8: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> Int8 {
         guard case .int64(let scalar) = value, let result = Int8(exactly: scalar) else {
@@ -51,7 +51,7 @@ extension Int8: PersistableScalarDecodable {
 
 extension Int16: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> Int16 {
         guard case .int64(let scalar) = value, let result = Int16(exactly: scalar) else {
@@ -63,7 +63,7 @@ extension Int16: PersistableScalarDecodable {
 
 extension Int32: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> Int32 {
         guard case .int64(let scalar) = value, let result = Int32(exactly: scalar) else {
@@ -75,7 +75,7 @@ extension Int32: PersistableScalarDecodable {
 
 extension Int64: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> Int64 {
         guard case .int64(let scalar) = value else {
@@ -87,7 +87,7 @@ extension Int64: PersistableScalarDecodable {
 
 extension UInt: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> UInt {
         guard case .uint64(let scalar) = value, let result = UInt(exactly: scalar) else {
@@ -99,7 +99,7 @@ extension UInt: PersistableScalarDecodable {
 
 extension UInt8: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> UInt8 {
         guard case .uint64(let scalar) = value, let result = UInt8(exactly: scalar) else {
@@ -111,7 +111,7 @@ extension UInt8: PersistableScalarDecodable {
 
 extension UInt16: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> UInt16 {
         guard case .uint64(let scalar) = value, let result = UInt16(exactly: scalar) else {
@@ -123,7 +123,7 @@ extension UInt16: PersistableScalarDecodable {
 
 extension UInt32: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> UInt32 {
         guard case .uint64(let scalar) = value, let result = UInt32(exactly: scalar) else {
@@ -135,7 +135,7 @@ extension UInt32: PersistableScalarDecodable {
 
 extension UInt64: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> UInt64 {
         guard case .uint64(let scalar) = value else {
@@ -147,7 +147,7 @@ extension UInt64: PersistableScalarDecodable {
 
 extension Float: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> Float {
         guard case .double(let scalar) = value, let result = Float(exactly: scalar) else {
@@ -159,7 +159,7 @@ extension Float: PersistableScalarDecodable {
 
 extension Double: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> Double {
         guard case .double(let scalar) = value else {
@@ -171,7 +171,7 @@ extension Double: PersistableScalarDecodable {
 
 extension String: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> String {
         guard case .string(let scalar) = value else {
@@ -183,7 +183,7 @@ extension String: PersistableScalarDecodable {
 
 extension Data: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> Data {
         guard case .bytes(let scalar) = value else {
@@ -195,7 +195,7 @@ extension Data: PersistableScalarDecodable {
 
 extension UUID: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> UUID {
         guard case .uuid(let scalar) = value else {
@@ -212,7 +212,7 @@ extension UUID: PersistableScalarDecodable {
 
 extension Date: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> Date {
         let seconds: Double
@@ -237,7 +237,7 @@ extension Date: PersistableScalarDecodable {
 
 extension DatabaseRDFTerm: PersistableScalarDecodable {
     public static func decodePersistedScalar(
-        _ value: DatabaseValue,
+        _ value: FieldValue,
         field: String
     ) throws -> DatabaseRDFTerm {
         guard case .rdfTerm(let scalar) = value else {

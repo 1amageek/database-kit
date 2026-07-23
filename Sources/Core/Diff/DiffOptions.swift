@@ -3,6 +3,8 @@
 //
 // Configures how diffs are computed between model instances.
 
+import DatabaseValue
+
 
 // MARK: - DiffOptions
 
@@ -36,7 +38,8 @@
 /// var options = DiffOptions()
 /// options.customComparators["timestamp"] = { old, new in
 ///     // Custom equality check (e.g., ignore sub-second precision)
-///     guard let oldDouble = old.asDouble, let newDouble = new.asDouble else { return false }
+///     guard let oldDouble = old.numericDoubleValue,
+///           let newDouble = new.numericDoubleValue else { return false }
 ///     return abs(oldDouble - newDouble) < 1.0
 /// }
 /// ```
@@ -98,7 +101,8 @@ public struct DiffOptions: Sendable {
     /// **Example**: Ignore sub-second timestamp differences
     /// ```swift
     /// options.customComparators["timestamp"] = { old, new in
-    ///     guard let o = old.asDouble, let n = new.asDouble else { return old == new }
+    ///     guard let o = old.numericDoubleValue,
+    ///           let n = new.numericDoubleValue else { return old == new }
     ///     return abs(o - n) < 1.0  // Within 1 second
     /// }
     /// ```

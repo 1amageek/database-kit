@@ -1,4 +1,11 @@
-extension DatabaseValue {
+extension FieldValue {
+    public var isNull: Bool {
+        if case .null = self {
+            return true
+        }
+        return false
+    }
+
     public var boolValue: Bool? {
         guard case .bool(let value) = self else { return nil }
         return value
@@ -95,7 +102,7 @@ extension DatabaseValue {
         return value
     }
 
-    public var arrayValue: [DatabaseValue]? {
+    public var arrayValue: [FieldValue]? {
         guard case .array(let value) = self else { return nil }
         return value
     }

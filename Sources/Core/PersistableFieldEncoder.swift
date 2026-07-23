@@ -54,7 +54,7 @@ public enum PersistableFieldEncoder {
         _ raw: (any Sendable)?,
         schema: FieldSchema,
         entity: String
-    ) throws -> DatabaseValue {
+    ) throws -> FieldValue {
         guard let raw else { return .null }
         if schema.isArray {
             let mirror = Mirror(reflecting: raw)
@@ -88,15 +88,15 @@ public enum PersistableFieldEncoder {
         type: FieldSchemaType,
         entity: String,
         field: String
-    ) throws -> DatabaseValue {
-        let value: DatabaseValue?
+    ) throws -> FieldValue {
+        let value: FieldValue?
         switch type {
         case .bool:
-            value = (raw as? Bool).map(DatabaseValue.bool)
+            value = (raw as? Bool).map(FieldValue.bool)
         case .int, .int8, .int16, .int32, .int64:
-            value = signedInteger(raw).map(DatabaseValue.int64)
+            value = signedInteger(raw).map(FieldValue.int64)
         case .uint, .uint8, .uint16, .uint32, .uint64:
-            value = unsignedInteger(raw).map(DatabaseValue.uint64)
+            value = unsignedInteger(raw).map(FieldValue.uint64)
         case .double, .float:
             if let scalar = raw as? Double {
                 value = .double(scalar)
@@ -106,10 +106,10 @@ public enum PersistableFieldEncoder {
                 value = nil
             }
         case .string:
-            value = (raw as? String).map(DatabaseValue.string)
+            value = (raw as? String).map(FieldValue.string)
         case .uuid:
             if let scalar = raw as? UUID {
-                value = databaseUUID(scalar).map(DatabaseValue.uuid)
+                value = databaseUUID(scalar).map(FieldValue.uuid)
             } else {
                 value = nil
             }
@@ -126,13 +126,13 @@ public enum PersistableFieldEncoder {
                 value = nil
             }
         case .rdfTerm:
-            value = (raw as? DatabaseRDFTerm).map(DatabaseValue.rdfTerm)
+            value = (raw as? DatabaseRDFTerm).map(FieldValue.rdfTerm)
         case .reference:
             value = (raw as? any PersistableReferenceValue).map {
                 .reference($0.persistableIdentity)
             }
         case .date:
-            value = (raw as? Date).flatMap { databaseTimestamp($0).map(DatabaseValue.timestamp) }
+            value = (raw as? Date).flatMap { databaseTimestamp($0).map(FieldValue.timestamp) }
         case .enum:
             if let representable = raw as? any RawRepresentable {
                 value = enumValue(representable.rawValue)
@@ -143,7 +143,7 @@ public enum PersistableFieldEncoder {
             if let nested = raw as? any Persistable {
                 value = .object(try encode(nested))
             } else if let nested = raw as? any Encodable {
-                let encoded = try DatabaseValueCodableEncoder.encode(nested)
+                let encoded = try FieldValueCodableEncoder.encode(nested)
                 if case .object = encoded {
                     value = encoded
                 } else {
@@ -185,7 +185,7 @@ public enum PersistableFieldEncoder {
         }
     }
 
-    private static func enumValue(_ raw: Any) -> DatabaseValue? {
+    private static func enumValue(_ raw: Any) -> FieldValue? {
         if let value = raw as? String { return .string(value) }
         if let value = signedInteger(raw) { return .int64(value) }
         if let value = unsignedInteger(raw) { return .uint64(value) }

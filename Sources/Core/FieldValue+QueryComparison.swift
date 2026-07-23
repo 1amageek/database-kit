@@ -1,0 +1,253 @@
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
+import DatabaseValue
+
+extension FieldValue {
+    public var isNumeric: Bool {
+        switch self {
+        case .int64, .uint64, .double, .decimal:
+            return true
+        default:
+            return false
+        }
+    }
+
+    public func isEqual(to other: FieldValue) -> Bool {
+        compare(to: other) == .orderedSame
+    }
+
+    public func isLessThan(_ other: FieldValue) -> Bool {
+        compare(to: other) == .orderedAscending
+    }
+
+    public func numericDifference(from other: FieldValue) -> Double? {
+        guard let left = numericDoubleValue,
+              let right = other.numericDoubleValue else {
+            return nil
+        }
+        return left - right
+    }
+
+    /// Query comparison for scalar field values.
+    ///
+    /// Persisted value identity remains exact; numeric coercion is applied only
+    /// while evaluating a query comparison.
+    public func compare(to other: FieldValue) -> ComparisonResult? {
+        if isNumeric, other.isNumeric {
+            return compareNumeric(to: other)
+        }
+        switch (self, other) {
+        case (.null, .null):
+            return .orderedSame
+        case (.null, _):
+            return .orderedAscending
+        case (_, .null):
+            return .orderedDescending
+        case (.bool(let left), .bool(let right)):
+            if left == right { return .orderedSame }
+            return left ? .orderedDescending : .orderedAscending
+        case (.string(let left), .string(let right)):
+            if utf8Equal(left, right) {
+                return .orderedSame
+            }
+            return utf8LessThan(left, right)
+                ? .orderedAscending
+                : .orderedDescending
+        case (.bytes(let left), .bytes(let right)):
+            if left == right { return .orderedSame }
+            return left.lexicographicallyPrecedes(right)
+                ? .orderedAscending
+                : .orderedDescending
+        case (.date(let left), .date(let right)):
+            return order(left, right)
+        case (.timestamp(let left), .timestamp(let right)):
+            return order(left, right)
+        case (.uuid(let left), .uuid(let right)):
+            return order(left, right)
+        case (.rdfTerm(let left), .rdfTerm(let right)):
+            return order(left, right)
+        default:
+            return nil
+        }
+    }
+
+    private func compareNumeric(to other: FieldValue) -> ComparisonResult? {
+        switch (self, other) {
+        case (.int64(let left), .int64(let right)):
+            return order(left, right)
+        case (.uint64(let left), .uint64(let right)):
+            return order(left, right)
+        case (.double(let left), .double(let right)):
+            guard !left.isNaN, !right.isNaN else { return nil }
+            return order(left, right)
+        case (.int64(let left), .uint64(let right)):
+            if left < 0 { return .orderedAscending }
+            return order(UInt64(left), right)
+        case (.uint64(let left), .int64(let right)):
+            if right < 0 { return .orderedDescending }
+            return order(left, UInt64(right))
+        case (.int64(let left), .double(let right)):
+            return Self.compare(left, to: right)
+        case (.double(let left), .int64(let right)):
+            return Self.compare(right, to: left)?.reversed
+        case (.uint64(let left), .double(let right)):
+            return Self.compare(left, to: right)
+        case (.double(let left), .uint64(let right)):
+            return Self.compare(right, to: left)?.reversed
+        case (
+            .decimal(let leftCoefficient, let leftScale),
+            .decimal(let rightCoefficient, let rightScale)
+        ):
+            return comparisonResult(
+                DatabaseExactDecimal(
+                    coefficient: leftCoefficient,
+                    scale: leftScale
+                ).compare(
+                    to: DatabaseExactDecimal(
+                        coefficient: rightCoefficient,
+                        scale: rightScale
+                    )
+                )
+            )
+        case (.decimal, .int64), (.decimal, .uint64),
+             (.int64, .decimal), (.uint64, .decimal):
+            guard let left = DatabaseExactDecimal(self),
+                  let right = DatabaseExactDecimal(other) else {
+                return Self.compareFiniteNumericFallback(self, other)
+            }
+            return comparisonResult(left.compare(to: right))
+        case (.decimal, .double), (.double, .decimal):
+            return Self.compareFiniteNumericFallback(self, other)
+        default:
+            return nil
+        }
+    }
+
+    private func comparisonResult(_ value: Int) -> ComparisonResult {
+        if value < 0 { return .orderedAscending }
+        if value > 0 { return .orderedDescending }
+        return .orderedSame
+    }
+
+    private func order<Value: Comparable>(
+        _ left: Value,
+        _ right: Value
+    ) -> ComparisonResult {
+        if left < right { return .orderedAscending }
+        if right < left { return .orderedDescending }
+        return .orderedSame
+    }
+
+    private static func compare(
+        _ integer: Int64,
+        to value: Double
+    ) -> ComparisonResult? {
+        guard !value.isNaN else { return nil }
+        if value == .infinity { return .orderedAscending }
+        if value == -.infinity { return .orderedDescending }
+
+        let upperExclusive = 9_223_372_036_854_775_808.0
+        let lowerInclusive = -9_223_372_036_854_775_808.0
+        if value >= upperExclusive { return .orderedAscending }
+        if value < lowerInclusive { return .orderedDescending }
+
+        let truncated = Int64(value)
+        if integer < truncated { return .orderedAscending }
+        if integer > truncated { return .orderedDescending }
+        if value > Double(truncated) { return .orderedAscending }
+        return .orderedSame
+    }
+
+    private static func compare(
+        _ integer: UInt64,
+        to value: Double
+    ) -> ComparisonResult? {
+        guard !value.isNaN else { return nil }
+        if value == .infinity { return .orderedAscending }
+        if value == -.infinity || value < 0 { return .orderedDescending }
+
+        let upperExclusive = 18_446_744_073_709_551_616.0
+        if value >= upperExclusive { return .orderedAscending }
+
+        let truncated = UInt64(value)
+        if integer < truncated { return .orderedAscending }
+        if integer > truncated { return .orderedDescending }
+        if value > Double(truncated) { return .orderedAscending }
+        return .orderedSame
+    }
+
+    private static func compareFiniteNumericFallback(
+        _ left: FieldValue,
+        _ right: FieldValue
+    ) -> ComparisonResult? {
+        guard let left = left.numericDoubleValue,
+              let right = right.numericDoubleValue,
+              left.isFinite,
+              right.isFinite else {
+            return nil
+        }
+        if left < right { return .orderedAscending }
+        if left > right { return .orderedDescending }
+        return .orderedSame
+    }
+
+    private func utf8Equal(_ left: String, _ right: String) -> Bool {
+        left.utf8.elementsEqual(right.utf8)
+    }
+
+    private func utf8LessThan(_ left: String, _ right: String) -> Bool {
+        left.utf8.lexicographicallyPrecedes(right.utf8)
+    }
+}
+
+private extension ComparisonResult {
+    var reversed: ComparisonResult {
+        switch self {
+        case .orderedAscending:
+            return .orderedDescending
+        case .orderedSame:
+            return .orderedSame
+        case .orderedDescending:
+            return .orderedAscending
+        }
+    }
+}
+
+extension FieldValue: ExpressibleByBooleanLiteral {
+    public init(booleanLiteral value: Bool) {
+        self = .bool(value)
+    }
+}
+
+extension FieldValue: ExpressibleByIntegerLiteral {
+    public init(integerLiteral value: Int64) {
+        self = .int64(value)
+    }
+}
+
+extension FieldValue: ExpressibleByFloatLiteral {
+    public init(floatLiteral value: Double) {
+        self = .double(value)
+    }
+}
+
+extension FieldValue: ExpressibleByStringLiteral {
+    public init(stringLiteral value: String) {
+        self = .string(value)
+    }
+}
+
+extension FieldValue: ExpressibleByArrayLiteral {
+    public init(arrayLiteral elements: FieldValue...) {
+        self = .array(elements)
+    }
+}
+
+extension FieldValue: ExpressibleByNilLiteral {
+    public init(nilLiteral: ()) {
+        self = .null
+    }
+}

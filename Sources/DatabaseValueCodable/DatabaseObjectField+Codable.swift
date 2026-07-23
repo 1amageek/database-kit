@@ -12,7 +12,7 @@ extension DatabaseObjectField: Codable {
         self.init(
             number: try container.decode(UInt32.self, forKey: .number),
             name: try container.decode(String.self, forKey: .name),
-            value: try container.decode(DatabaseValue.self, forKey: .value)
+            value: try container.decode(FieldValue.self, forKey: .value)
         )
     }
 

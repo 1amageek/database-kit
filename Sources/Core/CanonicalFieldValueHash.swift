@@ -24,54 +24,121 @@ public enum CanonicalFieldValueHash {
             stream.update(byte: 0x02)
             stream.updateLittleEndian(value)
         case .uint64(let value):
-            appendUnsignedInteger(value, to: &stream)
+            stream.update(byte: 0x03)
+            stream.updateLittleEndian(value)
         case .double(let value):
-            if let exactInteger = Int64(exactly: value) {
-                stream.update(byte: 0x02)
-                stream.updateLittleEndian(exactInteger)
-            } else if let exactInteger = UInt64(exactly: value) {
-                appendUnsignedInteger(exactInteger, to: &stream)
-            } else {
-                stream.update(byte: 0x03)
-                let bits = value == 0 ? UInt64(0) : value.bitPattern
-                stream.updateLittleEndian(bits)
-            }
-        case .string(let value):
             stream.update(byte: 0x04)
-            stream.updateLittleEndian(UInt64(value.utf8.count))
-            stream.update(value.utf8)
-        case .data(let value):
+            let bits = value == 0 ? UInt64(0) : value.bitPattern
+            stream.updateLittleEndian(bits)
+        case .decimal(let coefficient, let scale):
             stream.update(byte: 0x05)
+            let value = DatabaseExactDecimal(
+                coefficient: coefficient,
+                scale: scale
+            )
+            stream.updateLittleEndian(value.coefficient)
+            stream.updateLittleEndian(value.scale)
+        case .string(let value):
+            stream.update(byte: 0x06)
+            append(value, to: &stream)
+        case .bytes(let value):
+            stream.update(byte: 0x07)
             stream.updateLittleEndian(UInt64(value.count))
             value.withUnsafeBytes { bytes in
-                stream.update(bytes)
+                for byte in bytes {
+                    stream.update(byte: byte)
+                }
+            }
+        case .date(let value):
+            stream.update(byte: 0x08)
+            stream.updateLittleEndian(value.year)
+            stream.update(byte: value.month)
+            stream.update(byte: value.day)
+        case .timestamp(let value):
+            stream.update(byte: 0x09)
+            stream.updateLittleEndian(value.secondsSinceUnixEpoch)
+            stream.updateLittleEndian(value.nanoseconds)
+        case .uuid(let value):
+            stream.update(byte: 0x0A)
+            stream.updateLittleEndian(value.high)
+            stream.updateLittleEndian(value.low)
+        case .array(let values):
+            stream.update(byte: 0x0B)
+            stream.updateLittleEndian(UInt64(values.count))
+            for value in values {
+                try append(value, to: &stream)
+            }
+        case .object(let fields):
+            stream.update(byte: 0x0C)
+            stream.updateLittleEndian(UInt64(fields.count))
+            for field in fields {
+                stream.updateLittleEndian(field.number)
+                append(field.name, to: &stream)
+                try append(field.value, to: &stream)
+            }
+        case .reference(let identity):
+            stream.update(byte: 0x0D)
+            append(identity.entity, to: &stream)
+            append(identity.id, to: &stream)
+            stream.updateLittleEndian(UInt64(identity.partitions.count))
+            for partition in identity.partitions {
+                stream.updateLittleEndian(partition.number)
+                append(partition.name, to: &stream)
+                try append(partition.value, to: &stream)
             }
         case .rdfTerm(let term):
-            stream.update(byte: 0x06)
+            stream.update(byte: 0x0E)
             let plan = try DatabaseRDFTermCodec.encodingPlan(term)
             stream.updateLittleEndian(UInt64(plan.byteCount))
             var sink = RDFSink(stream: stream)
             try DatabaseRDFTermCodec.encode(plan, into: &sink)
             stream = sink.stream
-        case .array(let values):
-            stream.update(byte: 0x07)
-            stream.updateLittleEndian(UInt64(values.count))
-            for value in values {
-                try append(value, to: &stream)
-            }
         }
     }
 
-    private static func appendUnsignedInteger(
-        _ value: UInt64,
+    private static func append(
+        _ value: String,
         to stream: inout Stream
     ) {
-        if value <= UInt64(Int64.max) {
-            stream.update(byte: 0x02)
-            stream.updateLittleEndian(Int64(value))
-        } else {
-            stream.update(byte: 0x08)
+        stream.updateLittleEndian(UInt64(value.utf8.count))
+        stream.update(value.utf8)
+    }
+
+    private static func append(
+        _ value: PersistableIdentifierValue,
+        to stream: inout Stream
+    ) {
+        switch value {
+        case .bool(let value):
+            stream.update(byte: 0x00)
+            stream.update(byte: value ? 1 : 0)
+        case .int64(let value):
+            stream.update(byte: 0x01)
             stream.updateLittleEndian(value)
+        case .uint64(let value):
+            stream.update(byte: 0x02)
+            stream.updateLittleEndian(value)
+        case .string(let value):
+            stream.update(byte: 0x03)
+            append(value, to: &stream)
+        case .bytes(let value):
+            stream.update(byte: 0x04)
+            stream.updateLittleEndian(UInt64(value.count))
+            value.withUnsafeBytes { bytes in
+                for byte in bytes {
+                    stream.update(byte: byte)
+                }
+            }
+        case .uuid(let value):
+            stream.update(byte: 0x05)
+            stream.updateLittleEndian(value.high)
+            stream.updateLittleEndian(value.low)
+        case .composite(let values):
+            stream.update(byte: 0x06)
+            stream.updateLittleEndian(UInt64(values.count))
+            for value in values {
+                append(value, to: &stream)
+            }
         }
     }
 

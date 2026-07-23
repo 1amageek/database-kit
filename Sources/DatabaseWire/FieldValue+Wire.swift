@@ -1,11 +1,11 @@
 public import DatabaseValue
 
-extension DatabaseValue {
+extension FieldValue {
     public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
-        try DatabaseValueWireCodec.encode(self, into: &writer)
+        try FieldValueWireCodec.encode(self, into: &writer)
     }
 
     public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-        self = try DatabaseValueWireCodec.decodeValue(from: &reader)
+        self = try FieldValueWireCodec.decodeValue(from: &reader)
     }
 }

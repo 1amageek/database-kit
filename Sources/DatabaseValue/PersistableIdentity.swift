@@ -1,4 +1,4 @@
-public struct PersistableIdentity: Sendable, Hashable {
+public struct PersistableIdentity: Sendable {
     public let entity: String
     public let id: PersistableIdentifierValue
     public let partitions: [DatabaseObjectField]
