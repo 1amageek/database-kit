@@ -220,12 +220,14 @@ public struct DatabaseWireWriter {
         }
     }
 
-    /// Lends each canonical encoded span directly to a synchronous consumer.
+    /// Measures first, reports the exact byte count, and then lends each
+    /// encoded span directly to a synchronous consumer.
     ///
-    /// This overload performs no output allocation. The consumer must not
-    /// retain the borrowed pointer beyond the call.
+    /// `willEmit` completes before `consume` is called. Buffers passed to
+    /// `consume` are valid only until that call returns.
     public static func emit(
         limits: DatabaseWireLimits = .default,
+        willEmit: (Int) -> Void,
         consume: (UnsafeRawBufferPointer) -> Void,
         _ encode: (
             inout DatabaseWireWriter
@@ -235,6 +237,7 @@ public struct DatabaseWireWriter {
             limits: limits,
             encode
         )
+        willEmit(byteCount)
 
         let result: Result<Void, DatabaseWireError> = withoutActuallyEscaping(
             consume
@@ -258,6 +261,25 @@ public struct DatabaseWireWriter {
         case .failure(let error):
             throw error
         }
+    }
+
+    /// Lends each canonical encoded span directly to a synchronous consumer.
+    ///
+    /// This overload performs no output allocation. The consumer must not
+    /// retain the borrowed pointer beyond the call.
+    public static func emit(
+        limits: DatabaseWireLimits = .default,
+        consume: (UnsafeRawBufferPointer) -> Void,
+        _ encode: (
+            inout DatabaseWireWriter
+        ) throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) {
+        try Self.emit(
+            limits: limits,
+            willEmit: { _ in },
+            consume: consume,
+            encode
+        )
     }
 
     private static func result<Success, Failure: Error>(

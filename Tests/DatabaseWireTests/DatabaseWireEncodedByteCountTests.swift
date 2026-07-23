@@ -176,6 +176,33 @@ struct DatabaseWireEncodedByteCountTests {
         #expect(encodingPassCount == 2)
     }
 
+    @Test("byte count is reported before the first emitted span")
+    func byteCountPrecedesEmission() throws {
+        var reportedByteCount: Int?
+        var consumedByteCount = 0
+        var encodingPassCount = 0
+
+        try DatabaseWireWriter.emit(
+            willEmit: { byteCount in
+                #expect(consumedByteCount == 0)
+                reportedByteCount = byteCount
+            },
+            consume: { span in
+                #expect(reportedByteCount != nil)
+                consumedByteCount += span.count
+            }
+        ) {
+            (writer: inout DatabaseWireWriter)
+                throws(DatabaseWireError) -> Void in
+            encodingPassCount += 1
+            writer.writeUInt64(0x0102_0304_0506_0708)
+            try writer.writeString("calendar")
+        }
+
+        #expect(reportedByteCount == consumedByteCount)
+        #expect(encodingPassCount == 2)
+    }
+
     @Test("emission borrows a payload only during the output pass")
     func emissionBorrowsPayloadOnlyDuringOutputPass() throws {
         let source = BorrowObservedByteOwner(count: 0)
