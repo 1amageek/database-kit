@@ -1,5 +1,5 @@
 // IndexConfiguration.swift
-// FDBModel - Protocol for defining runtime index configuration
+// Core - Protocol for defining runtime index configuration
 //
 // Provides runtime configuration for indexes that need heavy parameters
 // (HNSW, full-text search, etc.) separate from compile-time IndexKind metadata.
@@ -41,7 +41,7 @@
 ///
 /// **Example - Full-text Index (multiple languages)**:
 /// ```swift
-/// FDBConfiguration(
+/// DBConfiguration(
 ///     indexConfigurations: [
 ///         FullTextIndexConfiguration<Article>(keyPath: \.content, language: "ja", ...),
 ///         FullTextIndexConfiguration<Article>(keyPath: \.content, language: "en", ...)
