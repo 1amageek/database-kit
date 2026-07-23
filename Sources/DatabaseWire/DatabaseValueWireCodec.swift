@@ -22,7 +22,7 @@ enum DatabaseValueWireCodec {
     }
 
     static func encode(
-        _ identity: RecordIdentity,
+        _ identity: PersistableIdentity,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         try encode(
@@ -55,7 +55,7 @@ enum DatabaseValueWireCodec {
 
     static func decodeIdentity(
         from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> RecordIdentity {
+    ) throws(DatabaseWireError) -> PersistableIdentity {
         switch try decode(.identity, from: &reader) {
         case .identity(let identity):
             return identity
@@ -69,17 +69,17 @@ private extension DatabaseValueWireCodec {
     enum EncodingNode {
         case value(DatabaseValue)
         case field(DatabaseObjectField)
-        case identifier(RecordIdentifierValue)
-        case identity(RecordIdentity, closesValue: Bool)
+        case identifier(PersistableIdentifierValue)
+        case identity(PersistableIdentity, closesValue: Bool)
     }
 
     enum EncodingFrame {
         case array([DatabaseValue], nextIndex: Int)
         case object([DatabaseObjectField], nextIndex: Int)
-        case identifierComposite([RecordIdentifierValue], nextIndex: Int)
-        case identityIdentifier(RecordIdentity, closesValue: Bool)
+        case identifierComposite([PersistableIdentifierValue], nextIndex: Int)
+        case identityIdentifier(PersistableIdentity, closesValue: Bool)
         case identityPartitions(
-            RecordIdentity,
+            PersistableIdentity,
             nextIndex: Int,
             closesValue: Bool
         )
@@ -199,7 +199,7 @@ private extension DatabaseValueWireCodec {
                         writer.writeUInt64(value.low)
                     case .composite(let components):
                         guard !components.isEmpty else {
-                            throw .emptyRecordIdentifierComposite
+                            throw .emptyPersistableIdentifierComposite
                         }
                         writer.writeUInt8(6)
                         try writer.writeCount(components.count)
@@ -217,11 +217,11 @@ private extension DatabaseValueWireCodec {
 
                 case .identity(let identity, let closesValue):
                     do {
-                        try RecordIdentifierValidator.validateStructure(
+                        try PersistableIdentifierValidator.validateStructure(
                             identity.id
                         )
                     } catch let error {
-                        throw .invalidRecordIdentifier(error)
+                        throw .invalidPersistableIdentifier(error)
                     }
                     try writer.writeString(identity.entity)
                     frames.append(
@@ -321,8 +321,8 @@ private extension DatabaseValueWireCodec {
     enum DecodedNode {
         case value(DatabaseValue)
         case field(DatabaseObjectField)
-        case identifier(RecordIdentifierValue)
-        case identity(RecordIdentity)
+        case identifier(PersistableIdentifierValue)
+        case identity(PersistableIdentity)
     }
 
     enum DecodingFrame {
@@ -331,13 +331,13 @@ private extension DatabaseValueWireCodec {
         case object(fields: [DatabaseObjectField], remaining: Int)
         case reference
         case identifierComposite(
-            values: [RecordIdentifierValue],
+            values: [PersistableIdentifierValue],
             remaining: Int
         )
         case identityIdentifier(entity: String)
         case identityPartitions(
             entity: String,
-            id: RecordIdentifierValue,
+            id: PersistableIdentifierValue,
             fields: [DatabaseObjectField],
             remaining: Int
         )
@@ -499,17 +499,17 @@ private extension DatabaseValueWireCodec {
                     case 6:
                         let count = try reader.readCount()
                         guard count > 0 else {
-                            throw .emptyRecordIdentifierComposite
+                            throw .emptyPersistableIdentifierComposite
                         }
-                        guard count <= RecordIdentifierLimits.default.maximumComponentCount else {
-                            throw .invalidRecordIdentifier(
+                        guard count <= PersistableIdentifierLimits.default.maximumComponentCount else {
+                            throw .invalidPersistableIdentifier(
                                 .componentCountExceeded(
                                     actual: count,
-                                    maximum: RecordIdentifierLimits.default.maximumComponentCount
+                                    maximum: PersistableIdentifierLimits.default.maximumComponentCount
                                 )
                             )
                         }
-                        var values: [RecordIdentifierValue] = []
+                        var values: [PersistableIdentifierValue] = []
                         values.reserveCapacity(count)
                         frames.append(
                             .identifierComposite(
@@ -520,7 +520,7 @@ private extension DatabaseValueWireCodec {
                         nextRequest = .identifier
                         continue
                     case let tag:
-                        throw .invalidRecordIdentifierTag(tag)
+                        throw .invalidPersistableIdentifierTag(tag)
                     }
 
                     reader.endNestedValue()
@@ -619,14 +619,14 @@ private extension DatabaseValueWireCodec {
             case .identityIdentifier(let entity):
                 let identifier = takeIdentifier(consume node)
                 do {
-                    try RecordIdentifierValidator.validateStructure(identifier)
+                    try PersistableIdentifierValidator.validateStructure(identifier)
                 } catch let error {
-                    throw .invalidRecordIdentifier(error)
+                    throw .invalidPersistableIdentifier(error)
                 }
                 let partitionCount = try reader.readCount()
                 guard partitionCount > 0 else {
                     completed = .identity(
-                        RecordIdentity(
+                        PersistableIdentity(
                             entity: entity,
                             id: consume identifier
                         )
@@ -655,7 +655,7 @@ private extension DatabaseValueWireCodec {
                 fields.append(consume field)
                 if remaining == 1 {
                     completed = .identity(
-                        RecordIdentity(
+                        PersistableIdentity(
                             entity: entity,
                             id: consume id,
                             partitions: consume fields
@@ -700,18 +700,18 @@ private extension DatabaseValueWireCodec {
 
     static func takeIdentifier(
         _ node: consuming DecodedNode
-    ) -> RecordIdentifierValue {
+    ) -> PersistableIdentifierValue {
         switch consume node {
         case .identifier(let identifier):
             return identifier
         case .value, .field, .identity:
-            preconditionFailure("Database value decoder expected a record identifier")
+            preconditionFailure("Database value decoder expected a persistable identifier")
         }
     }
 
     static func takeIdentity(
         _ node: consuming DecodedNode
-    ) -> RecordIdentity {
+    ) -> PersistableIdentity {
         switch consume node {
         case .identity(let identity):
             return identity

@@ -1,11 +1,11 @@
-public struct RecordIdentity: Sendable, Hashable {
+public struct PersistableIdentity: Sendable, Hashable {
     public let entity: String
-    public let id: RecordIdentifierValue
+    public let id: PersistableIdentifierValue
     public let partitions: [DatabaseObjectField]
 
     public init(
         entity: String,
-        id: RecordIdentifierValue,
+        id: PersistableIdentifierValue,
         partitions: [DatabaseObjectField] = []
     ) {
         self.entity = entity

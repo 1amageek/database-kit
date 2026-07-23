@@ -1,4 +1,4 @@
-/// Storage strategies that are valid for property-graph records.
+/// Storage strategies that are valid for property-graph entities.
 public enum PropertyGraphIndexStrategy: String, Sendable, Codable, CaseIterable {
     case adjacency
     case tripleStore

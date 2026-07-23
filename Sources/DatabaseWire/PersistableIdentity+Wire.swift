@@ -1,6 +1,6 @@
 public import DatabaseValue
 
-extension RecordIdentity {
+extension PersistableIdentity {
     public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
         try DatabaseValueWireCodec.encode(self, into: &writer)
     }

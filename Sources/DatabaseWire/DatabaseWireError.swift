@@ -31,9 +31,9 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidErrorCategory(UInt8)
     case invalidRetryability(UInt8)
     case invalidValueTag(UInt8)
-    case invalidRecordIdentifierTag(UInt8)
-    case emptyRecordIdentifierComposite
-    case invalidRecordIdentifier(RecordIdentifierValidationError)
+    case invalidPersistableIdentifierTag(UInt8)
+    case emptyPersistableIdentifierComposite
+    case invalidPersistableIdentifier(PersistableIdentifierValidationError)
     case invalidQueryLanguage(UInt8)
     case invalidQueryInput(UInt8)
     case invalidResultPayload(UInt8)

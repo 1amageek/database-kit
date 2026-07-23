@@ -1,12 +1,12 @@
 import DatabaseValue
 import DatabaseValueCodable
 
-/// A type-safe reference to a persisted record.
+/// A type-safe reference to a persisted entity.
 public struct DatabaseReference<Target: Persistable>: Sendable, Hashable, Codable {
-    public let identity: RecordIdentity
+    public let identity: PersistableIdentity
 
     public init(
-        identity: RecordIdentity
+        identity: PersistableIdentity
     ) throws(DatabaseReferenceError) {
         guard identity.entity == Target.persistableType else {
             throw .entityMismatch(
@@ -15,9 +15,9 @@ public struct DatabaseReference<Target: Persistable>: Sendable, Hashable, Codabl
             )
         }
         do {
-            try RecordIdentifierValidator.validate(
+            try PersistableIdentifierValidator.validate(
                 identity.id,
-                as: Target.recordIdentifierType
+                as: Target.persistableIdentifierType
             )
         } catch let error {
             throw .invalidIdentifier(
@@ -52,11 +52,11 @@ public struct DatabaseReference<Target: Persistable>: Sendable, Hashable, Codabl
     }
 }
 
-extension DatabaseReference: DatabaseRecordReferenceValue {
-    public var recordIdentity: RecordIdentity { identity }
+extension DatabaseReference: PersistableReferenceValue {
+    public var persistableIdentity: PersistableIdentity { identity }
 
-    public static func decodeDatabaseRecordReference(
-        _ identity: RecordIdentity
+    public static func decodePersistedReference(
+        _ identity: PersistableIdentity
     ) throws -> Self {
         try Self(identity: identity)
     }

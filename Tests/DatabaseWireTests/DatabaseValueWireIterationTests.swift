@@ -7,7 +7,7 @@ struct DatabaseValueWireIterationTests {
     @Test("recursive value component preserves its canonical byte layout")
     func recursiveValueComponentPreservesCanonicalBytes() throws {
         let value = DatabaseValue.reference(
-            RecordIdentity(
+            PersistableIdentity(
                 entity: "E",
                 id: .composite([.string("id")]),
                 partitions: [
@@ -233,7 +233,7 @@ private extension DatabaseValueWireIterationTests {
                 ])
             default:
                 value = .reference(
-                    RecordIdentity(
+                    PersistableIdentity(
                         entity: "",
                         id: .string(""),
                         partitions: [

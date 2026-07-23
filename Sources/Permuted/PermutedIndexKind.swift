@@ -147,7 +147,7 @@ public struct Permutation: Sendable, Equatable, Hashable, Codable, CustomStringC
 /// ```
 /// // Permuted index entries (reordered fields + primary key)
 /// Key: [indexSubspace][permuted_field_0][permuted_field_1]...[permuted_field_n][primaryKey]
-/// Value: '' (empty - data is stored in base record)
+/// Value: '' (empty - data is stored in base entity)
 /// ```
 ///
 /// **Usage**:

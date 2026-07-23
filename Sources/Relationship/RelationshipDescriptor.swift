@@ -1,6 +1,6 @@
 import Core
 
-/// Runtime metadata for a typed record relationship.
+/// Runtime metadata for a typed entity relationship.
 public struct RelationshipDescriptor: RuntimeMaintainedDescriptor, Sendable, Codable {
     public let ownerTypeName: String
     public let propertyName: String

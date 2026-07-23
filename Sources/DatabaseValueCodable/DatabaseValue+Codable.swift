@@ -95,7 +95,7 @@ extension DatabaseValue: Codable {
         case .object:
             self = .object(try container.decode([DatabaseObjectField].self, forKey: .fields))
         case .reference:
-            self = .reference(try container.decode(RecordIdentity.self, forKey: .identity))
+            self = .reference(try container.decode(PersistableIdentity.self, forKey: .identity))
         case .rdfTerm:
             self = .rdfTerm(try container.decode(DatabaseRDFTerm.self, forKey: .term))
         }

@@ -6,8 +6,8 @@ import DatabaseValue
 
 /// Declarative metadata for a property graph edge index.
 ///
-/// Records remain the source of truth. The execution layer maintains the
-/// selected derived orderings in the same transaction as record mutations.
+/// Entities remain the source of truth. The execution layer maintains the
+/// selected derived orderings in the same transaction as entity mutations.
 /// Every property-graph identity field is a `String`. RDF datasets use
 /// `RDFQuadIndexKind` because RDF term roles and default-graph semantics are
 /// different from property graph strings.

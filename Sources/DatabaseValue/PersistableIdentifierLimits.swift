@@ -1,5 +1,5 @@
-/// Resource limits shared by every record-identifier boundary.
-public struct RecordIdentifierLimits: Sendable, Hashable {
+/// Resource limits shared by every persistable-identifier boundary.
+public struct PersistableIdentifierLimits: Sendable, Hashable {
     public let maximumCompositeDepth: Int
     public let maximumComponentCount: Int
 
@@ -13,7 +13,7 @@ public struct RecordIdentifierLimits: Sendable, Hashable {
         self.maximumComponentCount = maximumComponentCount
     }
 
-    public static let `default` = RecordIdentifierLimits(
+    public static let `default` = PersistableIdentifierLimits(
         maximumCompositeDepth: 16,
         maximumComponentCount: 128
     )

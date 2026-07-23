@@ -30,7 +30,7 @@ extension OWLClassEntity {
     }
 }
 
-/// Merge record descriptors with the RDF projection declared by `@OWLClass`.
+/// Merge persistable descriptors with the RDF projection declared by `@OWLClass`.
 ///
 /// This constrained extension takes priority over the default `Persistable.descriptors`
 /// when the type conforms to `OWLClassEntity`, thanks to Swift protocol extension priority rules.

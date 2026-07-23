@@ -1,25 +1,25 @@
 import DatabaseValue
 
-public struct DatabaseRecordFieldDecoder: Sendable {
+public struct PersistableFieldDecoder: Sendable {
     private let valuesByName: [String: DatabaseValue]
 
     public init(
         entity: String,
-        fields: [DatabaseObjectField],
+        fields: [PersistableField],
         schemas: [FieldSchema]
     ) throws {
         guard !schemas.isEmpty else {
-            throw DatabaseRecordDecodingError.missingSchema(entity)
+            throw PersistableDecodingError.missingSchema(entity)
         }
 
         var schemasByNumber: [Int: FieldSchema] = [:]
         var schemasByName: [String: FieldSchema] = [:]
         for schema in schemas {
             guard schemasByNumber.updateValue(schema, forKey: schema.fieldNumber) == nil else {
-                throw DatabaseRecordDecodingError.duplicateSchemaFieldNumber(schema.fieldNumber)
+                throw PersistableDecodingError.duplicateSchemaFieldNumber(schema.fieldNumber)
             }
             guard schemasByName.updateValue(schema, forKey: schema.name) == nil else {
-                throw DatabaseRecordDecodingError.duplicateSchemaFieldName(schema.name)
+                throw PersistableDecodingError.duplicateSchemaFieldName(schema.name)
             }
         }
 
@@ -27,23 +27,23 @@ public struct DatabaseRecordFieldDecoder: Sendable {
         var values: [String: DatabaseValue] = [:]
         for field in fields {
             guard seenNumbers.insert(field.number).inserted else {
-                throw DatabaseRecordDecodingError.duplicateFieldNumber(field.number)
+                throw PersistableDecodingError.duplicateFieldNumber(field.number)
             }
             guard values[field.name] == nil else {
-                throw DatabaseRecordDecodingError.duplicateFieldName(field.name)
+                throw PersistableDecodingError.duplicateFieldName(field.name)
             }
 
             let numberSchema = schemasByNumber[Int(field.number)]
             let nameSchema = schemasByName[field.name]
             guard let schema = numberSchema ?? nameSchema else {
-                throw DatabaseRecordDecodingError.unknownField(
+                throw PersistableDecodingError.unknownField(
                     number: field.number,
                     name: field.name
                 )
             }
             guard numberSchema?.name == schema.name,
                   nameSchema?.fieldNumber == schema.fieldNumber else {
-                throw DatabaseRecordDecodingError.fieldIdentityMismatch(
+                throw PersistableDecodingError.fieldIdentityMismatch(
                     number: field.number,
                     name: field.name
                 )
@@ -53,11 +53,11 @@ public struct DatabaseRecordFieldDecoder: Sendable {
         self.valuesByName = values
     }
 
-    public func decode<Value: DatabaseRecordScalarDecodable>(
+    public func decode<Value: PersistableScalarDecodable>(
         _ type: Value.Type,
         for field: String
     ) throws -> Value {
-        try Value.decodeDatabaseRecordScalar(requiredValue(for: field), field: field)
+        try Value.decodePersistedScalar(requiredValue(for: field), field: field)
     }
 
     public func decode<Value: Persistable>(
@@ -66,23 +66,23 @@ public struct DatabaseRecordFieldDecoder: Sendable {
     ) throws -> Value {
         let value = try requiredValue(for: field)
         guard case .object(let fields) = value else {
-            throw DatabaseRecordDecodingError.invalidValue(field: field, expected: "an object")
+            throw PersistableDecodingError.invalidValue(field: field, expected: "an object")
         }
-        return try Value.decodeDatabaseRecord(fields)
+        return try Value.decodePersistedFields(fields)
     }
 
-    public func decode<Value: DatabaseRecordReferenceValue>(
+    public func decode<Value: PersistableReferenceValue>(
         _ type: Value.Type,
         for field: String
     ) throws -> Value {
         let value = try requiredValue(for: field)
         guard case .reference(let identity) = value else {
-            throw DatabaseRecordDecodingError.invalidValue(
+            throw PersistableDecodingError.invalidValue(
                 field: field,
-                expected: "a record reference"
+                expected: "a persistable reference"
             )
         }
-        return try Value.decodeDatabaseRecordReference(identity)
+        return try Value.decodePersistedReference(identity)
     }
 
     public func decode<Value: Decodable & Sendable>(
@@ -98,24 +98,24 @@ public struct DatabaseRecordFieldDecoder: Sendable {
     public func decode<Value: RawRepresentable>(
         _ type: Value.Type,
         for field: String
-    ) throws -> Value where Value.RawValue: DatabaseRecordScalarDecodable {
-        let rawValue = try Value.RawValue.decodeDatabaseRecordScalar(
+    ) throws -> Value where Value.RawValue: PersistableScalarDecodable {
+        let rawValue = try Value.RawValue.decodePersistedScalar(
             requiredValue(for: field),
             field: field
         )
         guard let value = Value(rawValue: rawValue) else {
-            throw DatabaseRecordDecodingError.invalidValue(field: field, expected: "a valid enum raw value")
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a valid enum raw value")
         }
         return value
     }
 
-    public func decode<Element: DatabaseRecordScalarDecodable>(
+    public func decode<Element: PersistableScalarDecodable>(
         _ type: [Element].Type,
         for field: String
     ) throws -> [Element] {
         let values = try requiredArray(for: field)
         return try values.map {
-            try Element.decodeDatabaseRecordScalar($0, field: field)
+            try Element.decodePersistedScalar($0, field: field)
         }
     }
 
@@ -126,47 +126,47 @@ public struct DatabaseRecordFieldDecoder: Sendable {
         let values = try requiredArray(for: field)
         return try values.map { value in
             guard case .object(let fields) = value else {
-                throw DatabaseRecordDecodingError.invalidValue(field: field, expected: "an array of objects")
+                throw PersistableDecodingError.invalidValue(field: field, expected: "an array of objects")
             }
-            return try Element.decodeDatabaseRecord(fields)
+            return try Element.decodePersistedFields(fields)
         }
     }
 
-    public func decode<Element: DatabaseRecordReferenceValue>(
+    public func decode<Element: PersistableReferenceValue>(
         _ type: [Element].Type,
         for field: String
     ) throws -> [Element] {
         try requiredArray(for: field).map { value in
             guard case .reference(let identity) = value else {
-                throw DatabaseRecordDecodingError.invalidValue(
+                throw PersistableDecodingError.invalidValue(
                     field: field,
-                    expected: "an array of record references"
+                    expected: "an array of persistable references"
                 )
             }
-            return try Element.decodeDatabaseRecordReference(identity)
+            return try Element.decodePersistedReference(identity)
         }
     }
 
     public func decode<Element: RawRepresentable>(
         _ type: [Element].Type,
         for field: String
-    ) throws -> [Element] where Element.RawValue: DatabaseRecordScalarDecodable {
+    ) throws -> [Element] where Element.RawValue: PersistableScalarDecodable {
         let values = try requiredArray(for: field)
         return try values.map { value in
-            let rawValue = try Element.RawValue.decodeDatabaseRecordScalar(value, field: field)
+            let rawValue = try Element.RawValue.decodePersistedScalar(value, field: field)
             guard let element = Element(rawValue: rawValue) else {
-                throw DatabaseRecordDecodingError.invalidValue(field: field, expected: "valid enum raw values")
+                throw PersistableDecodingError.invalidValue(field: field, expected: "valid enum raw values")
             }
             return element
         }
     }
 
-    public func decodeIfPresent<Value: DatabaseRecordScalarDecodable>(
+    public func decodeIfPresent<Value: PersistableScalarDecodable>(
         _ type: Value.Type,
         for field: String
     ) throws -> Value? {
         guard let value = optionalValue(for: field) else { return nil }
-        return try Value.decodeDatabaseRecordScalar(value, field: field)
+        return try Value.decodePersistedScalar(value, field: field)
     }
 
     public func decodeIfPresent<Value: Persistable>(
@@ -175,23 +175,23 @@ public struct DatabaseRecordFieldDecoder: Sendable {
     ) throws -> Value? {
         guard let value = optionalValue(for: field) else { return nil }
         guard case .object(let fields) = value else {
-            throw DatabaseRecordDecodingError.invalidValue(field: field, expected: "an object")
+            throw PersistableDecodingError.invalidValue(field: field, expected: "an object")
         }
-        return try Value.decodeDatabaseRecord(fields)
+        return try Value.decodePersistedFields(fields)
     }
 
-    public func decodeIfPresent<Value: DatabaseRecordReferenceValue>(
+    public func decodeIfPresent<Value: PersistableReferenceValue>(
         _ type: Value.Type,
         for field: String
     ) throws -> Value? {
         guard let value = optionalValue(for: field) else { return nil }
         guard case .reference(let identity) = value else {
-            throw DatabaseRecordDecodingError.invalidValue(
+            throw PersistableDecodingError.invalidValue(
                 field: field,
-                expected: "a record reference"
+                expected: "a persistable reference"
             )
         }
-        return try Value.decodeDatabaseRecordReference(identity)
+        return try Value.decodePersistedReference(identity)
     }
 
     public func decodeIfPresent<Value: Decodable & Sendable>(
@@ -205,22 +205,22 @@ public struct DatabaseRecordFieldDecoder: Sendable {
     public func decodeIfPresent<Value: RawRepresentable>(
         _ type: Value.Type,
         for field: String
-    ) throws -> Value? where Value.RawValue: DatabaseRecordScalarDecodable {
+    ) throws -> Value? where Value.RawValue: PersistableScalarDecodable {
         guard let value = optionalValue(for: field) else { return nil }
-        let rawValue = try Value.RawValue.decodeDatabaseRecordScalar(value, field: field)
+        let rawValue = try Value.RawValue.decodePersistedScalar(value, field: field)
         guard let decoded = Value(rawValue: rawValue) else {
-            throw DatabaseRecordDecodingError.invalidValue(field: field, expected: "a valid enum raw value")
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a valid enum raw value")
         }
         return decoded
     }
 
-    public func decodeIfPresent<Element: DatabaseRecordScalarDecodable>(
+    public func decodeIfPresent<Element: PersistableScalarDecodable>(
         _ type: [Element].Type,
         for field: String
     ) throws -> [Element]? {
         guard let values = try optionalArray(for: field) else { return nil }
         return try values.map {
-            try Element.decodeDatabaseRecordScalar($0, field: field)
+            try Element.decodePersistedScalar($0, field: field)
         }
     }
 
@@ -231,37 +231,37 @@ public struct DatabaseRecordFieldDecoder: Sendable {
         guard let values = try optionalArray(for: field) else { return nil }
         return try values.map { value in
             guard case .object(let fields) = value else {
-                throw DatabaseRecordDecodingError.invalidValue(field: field, expected: "an array of objects")
+                throw PersistableDecodingError.invalidValue(field: field, expected: "an array of objects")
             }
-            return try Element.decodeDatabaseRecord(fields)
+            return try Element.decodePersistedFields(fields)
         }
     }
 
-    public func decodeIfPresent<Element: DatabaseRecordReferenceValue>(
+    public func decodeIfPresent<Element: PersistableReferenceValue>(
         _ type: [Element].Type,
         for field: String
     ) throws -> [Element]? {
         guard let values = try optionalArray(for: field) else { return nil }
         return try values.map { value in
             guard case .reference(let identity) = value else {
-                throw DatabaseRecordDecodingError.invalidValue(
+                throw PersistableDecodingError.invalidValue(
                     field: field,
-                    expected: "an array of record references"
+                    expected: "an array of persistable references"
                 )
             }
-            return try Element.decodeDatabaseRecordReference(identity)
+            return try Element.decodePersistedReference(identity)
         }
     }
 
     public func decodeIfPresent<Element: RawRepresentable>(
         _ type: [Element].Type,
         for field: String
-    ) throws -> [Element]? where Element.RawValue: DatabaseRecordScalarDecodable {
+    ) throws -> [Element]? where Element.RawValue: PersistableScalarDecodable {
         guard let values = try optionalArray(for: field) else { return nil }
         return try values.map { value in
-            let rawValue = try Element.RawValue.decodeDatabaseRecordScalar(value, field: field)
+            let rawValue = try Element.RawValue.decodePersistedScalar(value, field: field)
             guard let element = Element(rawValue: rawValue) else {
-                throw DatabaseRecordDecodingError.invalidValue(field: field, expected: "valid enum raw values")
+                throw PersistableDecodingError.invalidValue(field: field, expected: "valid enum raw values")
             }
             return element
         }
@@ -269,14 +269,14 @@ public struct DatabaseRecordFieldDecoder: Sendable {
 
     private func requiredValue(for field: String) throws -> DatabaseValue {
         guard let value = optionalValue(for: field) else {
-            throw DatabaseRecordDecodingError.missingRequiredField(field)
+            throw PersistableDecodingError.missingRequiredField(field)
         }
         return value
     }
 
     private func requiredArray(for field: String) throws -> [DatabaseValue] {
         guard case .array(let values) = try requiredValue(for: field) else {
-            throw DatabaseRecordDecodingError.invalidValue(field: field, expected: "an array")
+            throw PersistableDecodingError.invalidValue(field: field, expected: "an array")
         }
         return values
     }
@@ -284,7 +284,7 @@ public struct DatabaseRecordFieldDecoder: Sendable {
     private func optionalArray(for field: String) throws -> [DatabaseValue]? {
         guard let value = optionalValue(for: field) else { return nil }
         guard case .array(let values) = value else {
-            throw DatabaseRecordDecodingError.invalidValue(field: field, expected: "an array")
+            throw PersistableDecodingError.invalidValue(field: field, expected: "an array")
         }
         return values
     }

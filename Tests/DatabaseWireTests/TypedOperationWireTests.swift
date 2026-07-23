@@ -223,7 +223,7 @@ struct TypedOperationWireTests {
 
     @Test("SHACL requests and responses retain data and focus selections")
     func shaclFamilyRoundTrips() throws {
-        let identity = RecordIdentity(
+        let identity = PersistableIdentity(
             entity: "Event",
             id: .string("event-1")
         )
@@ -242,7 +242,7 @@ struct TypedOperationWireTests {
                     index: "calendarGraph",
                     graph: .defaultGraph
                 ),
-                focus: .records([identity]),
+                focus: .entities([identity]),
                 entailment: .owl(ontology: "urn:calendar:ontology")
             ),
             .validate(

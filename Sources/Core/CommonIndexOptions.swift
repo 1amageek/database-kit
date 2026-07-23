@@ -18,8 +18,8 @@
 public struct CommonIndexOptions: Sendable, Codable, Hashable {
     /// Whether the index enforces uniqueness of indexed values.
     ///
-    /// - `true`: Index values must be unique across all records
-    /// - `false`: Multiple records can share the same index value (default)
+    /// - `true`: Index values must be unique across all entities
+    /// - `false`: Multiple entities can share the same index value (default)
     ///
     /// **Example**:
     /// ```swift

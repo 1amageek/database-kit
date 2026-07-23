@@ -4,7 +4,7 @@ public import DatabaseValue
 ///
 /// This protocol defines the metadata and serialization interface for persistable data models.
 /// It is storage-independent and can be used across all data model layers:
-/// - RecordLayer (RDB-like): Structured records
+/// - Entity layer (RDB-like): Structured entities
 /// - DocumentLayer (Document store): Flexible documents
 /// - VectorLayer (Vector search): Vector embeddings with similarity search
 /// - GraphLayer (Graph database): Nodes and edges with relationships
@@ -46,7 +46,7 @@ public protocol Persistable: Sendable, Codable {
     /// The type of the unique identifier
     ///
     /// The identifier must provide one canonical logical representation through
-    /// `RecordIdentifier`. Storage and DatabaseWire use that same representation,
+    /// `PersistableIdentifier`. Storage and DatabaseWire use that same representation,
     /// so identifier support is enforced at compile time instead of by a runtime
     /// cast in a storage adapter.
     ///
@@ -58,24 +58,24 @@ public protocol Persistable: Sendable, Codable {
     /// - `Bool`
     /// - `Data`, `[UInt8]`
     ///
-    /// Custom composite identifiers conform to `RecordIdentifier` and declare an
-    /// exact `RecordIdentifierType.composite` shape.
-    associatedtype ID: RecordIdentifier & Codable
+    /// Custom composite identifiers conform to `PersistableIdentifier` and declare an
+    /// exact `PersistableIdentifierType.composite` shape.
+    associatedtype ID: PersistableIdentifier & Codable
 
     /// Unique identifier for this instance
     ///
     /// - Auto-generated: `var id: String = ULID().ulidString`
-    /// - User-defined: Any type conforming to `RecordIdentifier`
+    /// - User-defined: Any type conforming to `PersistableIdentifier`
     ///
     /// **Important**: `id` is not included in the generated initializer.
     /// It is always auto-initialized with its default value.
     var id: ID { get }
 
     /// Identifier type exposed through the `Persistable` existential boundary.
-    static var recordIdentifierType: RecordIdentifierType { get }
+    static var persistableIdentifierType: PersistableIdentifierType { get }
 
     /// Identifier value exposed through the `Persistable` existential boundary.
-    var recordIdentifierValue: RecordIdentifierValue { get }
+    var persistableIdentifierValue: PersistableIdentifierValue { get }
 
     // MARK: - Metadata (Storage-independent)
 
@@ -191,8 +191,8 @@ public protocol Persistable: Sendable, Codable {
     /// ```
     static var fieldSchemas: [FieldSchema] { get }
 
-    /// Reconstruct a compiled record directly from canonical database values.
-    static func decodeDatabaseRecord(_ fields: [DatabaseObjectField]) throws -> Self
+    /// Reconstruct a compiled persistable directly from canonical database values.
+    static func decodePersistedFields(_ fields: [PersistableField]) throws -> Self
 
     /// Get field number for a field name (for Protobuf serialization)
     ///
@@ -315,12 +315,12 @@ public protocol Persistable: Sendable, Codable {
 // MARK: - Default Implementations
 
 public extension Persistable {
-    static var recordIdentifierType: RecordIdentifierType {
-        ID.recordIdentifierType
+    static var persistableIdentifierType: PersistableIdentifierType {
+        ID.persistableIdentifierType
     }
 
-    var recordIdentifierValue: RecordIdentifierValue {
-        id.recordIdentifierValue
+    var persistableIdentifierValue: PersistableIdentifierValue {
+        id.persistableIdentifierValue
     }
 
     /// Default: no macro-generated descriptors.
@@ -364,8 +364,8 @@ public extension Persistable {
     /// Default implementation returns empty array (no field schemas)
     static var fieldSchemas: [FieldSchema] { [] }
 
-    static func decodeDatabaseRecord(_ fields: [DatabaseObjectField]) throws -> Self {
-        throw DatabaseRecordDecodingError.missingCompiledDecoder(
+    static func decodePersistedFields(_ fields: [PersistableField]) throws -> Self {
+        throw PersistableDecodingError.missingCompiledDecoder(
             persistableType
         )
     }

@@ -20,10 +20,10 @@ public enum MutationExecuteOperation: DatabaseOperation {
 
     public struct Change: Sendable, Hashable {
         public let kind: Kind
-        public let identity: RecordIdentity
+        public let identity: PersistableIdentity
         public let fields: [DatabaseObjectField]
 
-        public init(kind: Kind, identity: RecordIdentity, fields: [DatabaseObjectField] = []) {
+        public init(kind: Kind, identity: PersistableIdentity, fields: [DatabaseObjectField] = []) {
             self.kind = kind
             self.identity = identity
             self.fields = fields
@@ -38,7 +38,7 @@ public enum MutationExecuteOperation: DatabaseOperation {
 
         fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let kind = try Kind(from: &reader)
-            let identity = try RecordIdentity(from: &reader)
+            let identity = try PersistableIdentity(from: &reader)
             let count = try reader.readCount()
             var fields: [DatabaseObjectField] = []
             fields.reserveCapacity(count)
@@ -48,12 +48,12 @@ public enum MutationExecuteOperation: DatabaseOperation {
     }
 
     public enum Input: Sendable, Hashable {
-        case records([Change])
+        case entities([Change])
         case statement(QueryExecuteOperation.Input, parameters: [DatabaseObjectField])
 
         fileprivate func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             switch self {
-            case .records(let changes):
+            case .entities(let changes):
                 writer.writeUInt8(1)
                 try writer.writeCount(changes.count)
                 for change in changes { try change.encode(into: &writer) }
@@ -72,7 +72,7 @@ public enum MutationExecuteOperation: DatabaseOperation {
                 var changes: [Change] = []
                 changes.reserveCapacity(count)
                 for _ in 0..<count { changes.append(try Change(from: &reader)) }
-                self = .records(changes)
+                self = .entities(changes)
             case 2:
                 let input = try QueryExecuteOperation.Input(from: &reader)
                 let count = try reader.readCount()
@@ -89,9 +89,9 @@ public enum MutationExecuteOperation: DatabaseOperation {
     }
 
     public enum Precondition: Sendable, Hashable {
-        case expectedVersion(identity: RecordIdentity, version: DatabaseBytes)
-        case mustExist(RecordIdentity)
-        case mustNotExist(RecordIdentity)
+        case expectedVersion(identity: PersistableIdentity, version: DatabaseBytes)
+        case mustExist(PersistableIdentity)
+        case mustNotExist(PersistableIdentity)
 
         fileprivate func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             switch self {
@@ -112,13 +112,13 @@ public enum MutationExecuteOperation: DatabaseOperation {
             switch try reader.readUInt8() {
             case 1:
                 self = .expectedVersion(
-                    identity: try RecordIdentity(from: &reader),
+                    identity: try PersistableIdentity(from: &reader),
                     version: try reader.readBytes()
                 )
             case 2:
-                self = .mustExist(try RecordIdentity(from: &reader))
+                self = .mustExist(try PersistableIdentity(from: &reader))
             case 3:
-                self = .mustNotExist(try RecordIdentity(from: &reader))
+                self = .mustNotExist(try PersistableIdentity(from: &reader))
             case let tag:
                 throw .invalidValueTag(tag)
             }
@@ -177,14 +177,14 @@ public enum MutationExecuteOperation: DatabaseOperation {
         }
     }
 
-    public struct RecordEffect: DatabaseWireValue, Hashable {
+    public struct EntityEffect: DatabaseWireValue, Hashable {
         public let kind: Kind
-        public let identity: RecordIdentity
+        public let identity: PersistableIdentity
         public let version: DatabaseBytes?
 
         public init(
             kind: Kind,
-            identity: RecordIdentity,
+            identity: PersistableIdentity,
             version: DatabaseBytes? = nil
         ) {
             self.kind = kind
@@ -201,7 +201,7 @@ public enum MutationExecuteOperation: DatabaseOperation {
         public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             self.init(
                 kind: try Kind(from: &reader),
-                identity: try RecordIdentity(from: &reader),
+                identity: try PersistableIdentity(from: &reader),
                 version: try reader.readOptionalBytes()
             )
         }
@@ -252,14 +252,14 @@ public enum MutationExecuteOperation: DatabaseOperation {
     }
 
     public enum Result: DatabaseWireValue, Hashable {
-        case records([RecordEffect])
+        case entities([EntityEffect])
         case rdf(RDFEffect)
 
         public func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             switch self {
-            case .records(let effects):
+            case .entities(let effects):
                 writer.writeUInt8(1)
                 try writer.writeCount(effects.count)
                 for effect in effects {
@@ -277,12 +277,12 @@ public enum MutationExecuteOperation: DatabaseOperation {
             switch try reader.readUInt8() {
             case 1:
                 let count = try reader.readCount()
-                var effects: [RecordEffect] = []
+                var effects: [EntityEffect] = []
                 effects.reserveCapacity(count)
                 for _ in 0..<count {
-                    effects.append(try RecordEffect(from: &reader))
+                    effects.append(try EntityEffect(from: &reader))
                 }
-                self = .records(effects)
+                self = .entities(effects)
             case 2:
                 self = .rdf(try RDFEffect(from: &reader))
             case let tag:

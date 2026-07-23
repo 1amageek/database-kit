@@ -81,7 +81,7 @@ public enum FieldSchemaType: String, Sendable, Codable, Equatable {
     /// - Parameter type: The Swift type to classify
     /// - Returns: `.enum` if the type conforms to `RawRepresentable`, `.nested` otherwise
     public static func resolve(_ type: Any.Type) -> FieldSchemaType {
-        if type is any DatabaseRecordReferenceValue.Type {
+        if type is any PersistableReferenceValue.Type {
             return .reference
         }
         if type is any RawRepresentable.Type {

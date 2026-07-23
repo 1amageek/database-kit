@@ -9,7 +9,7 @@ import SwiftDiagnostics
 /// Generates Persistable protocol conformance with metadata methods and ID management.
 ///
 /// **Supports all layers**:
-/// - RecordLayer (RDB): Structured records with indexes
+/// - Entity layer (RDB): Structured entities with indexes
 /// - DocumentLayer (DocumentDB): Flexible documents
 /// - GraphLayer (GraphDB): Define nodes with relationships
 ///
@@ -351,7 +351,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             return "try container.decode(\(fieldType).self, forKey: .\(fieldInfo.name))"
         }
 
-        func databaseRecordDecodeExpr(
+        func persistableFieldDecodeExpr(
             for fieldInfo: (name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)
         ) -> String {
             if fieldInfo.isTransient {
@@ -861,24 +861,24 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 
         let recordDecodeAssignments = fieldInfos
             .map { fieldInfo in
-                "self.\(fieldInfo.name) = \(databaseRecordDecodeExpr(for: fieldInfo))"
+                "self.\(fieldInfo.name) = \(persistableFieldDecodeExpr(for: fieldInfo))"
             }
             .joined(separator: "\n        ")
         let recordDecodableInitDecl: DeclSyntax = """
-            private init(_databaseRecordDecoder decoder: Core.DatabaseRecordFieldDecoder) throws {
+            private init(_persistableFieldDecoder decoder: Core.PersistableFieldDecoder) throws {
                 \(raw: recordDecodeAssignments)
             }
             """
         decls.append(recordDecodableInitDecl)
 
         let recordDecoderDecl: DeclSyntax = """
-            public static func decodeDatabaseRecord(_ fields: [Core.DatabaseRecordField]) throws -> Self {
-                let decoder = try Core.DatabaseRecordFieldDecoder(
+            public static func decodePersistedFields(_ fields: [Core.PersistableField]) throws -> Self {
+                let decoder = try Core.PersistableFieldDecoder(
                     entity: persistableType,
                     fields: fields,
                     schemas: fieldSchemas
                 )
-                return try Self(_databaseRecordDecoder: decoder)
+                return try Self(_persistableFieldDecoder: decoder)
             }
             """
         decls.append(recordDecoderDecl)

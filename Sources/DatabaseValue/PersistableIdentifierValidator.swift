@@ -1,10 +1,10 @@
 /// Validates identifier declarations and values with bounded, iterative walks.
-public enum RecordIdentifierValidator {
+public enum PersistableIdentifierValidator {
     public static func validate(
-        _ type: RecordIdentifierType,
-        limits: RecordIdentifierLimits = .default
-    ) throws(RecordIdentifierValidationError) {
-        var pending: [(type: RecordIdentifierType, depth: Int)] = [(type, 0)]
+        _ type: PersistableIdentifierType,
+        limits: PersistableIdentifierLimits = .default
+    ) throws(PersistableIdentifierValidationError) {
+        var pending: [(type: PersistableIdentifierType, depth: Int)] = [(type, 0)]
         var componentCount = 0
 
         while let node = pending.popLast() {
@@ -36,15 +36,15 @@ public enum RecordIdentifierValidator {
     }
 
     public static func validate(
-        _ value: RecordIdentifierValue,
-        as expectedType: RecordIdentifierType,
-        limits: RecordIdentifierLimits = .default
-    ) throws(RecordIdentifierValidationError) {
+        _ value: PersistableIdentifierValue,
+        as expectedType: PersistableIdentifierType,
+        limits: PersistableIdentifierLimits = .default
+    ) throws(PersistableIdentifierValidationError) {
         try validate(expectedType, limits: limits)
 
         var pending: [(
-            value: RecordIdentifierValue,
-            expectedType: RecordIdentifierType,
+            value: PersistableIdentifierValue,
+            expectedType: PersistableIdentifierType,
             depth: Int
         )] = [(value, expectedType, 0)]
         var componentCount = 0
@@ -95,10 +95,10 @@ public enum RecordIdentifierValidator {
     }
 
     public static func validateStructure(
-        _ value: RecordIdentifierValue,
-        limits: RecordIdentifierLimits = .default
-    ) throws(RecordIdentifierValidationError) {
-        var pending: [(value: RecordIdentifierValue, depth: Int)] = [(value, 0)]
+        _ value: PersistableIdentifierValue,
+        limits: PersistableIdentifierLimits = .default
+    ) throws(PersistableIdentifierValidationError) {
+        var pending: [(value: PersistableIdentifierValue, depth: Int)] = [(value, 0)]
         var componentCount = 0
 
         while let node = pending.popLast() {
@@ -131,8 +131,8 @@ public enum RecordIdentifierValidator {
 
     private static func checkedComponentCount(
         after componentCount: Int,
-        limits: RecordIdentifierLimits
-    ) throws(RecordIdentifierValidationError) -> Int {
+        limits: PersistableIdentifierLimits
+    ) throws(PersistableIdentifierValidationError) -> Int {
         let (nextCount, overflow) = componentCount.addingReportingOverflow(1)
         guard !overflow, nextCount <= limits.maximumComponentCount else {
             throw .componentCountExceeded(
@@ -146,8 +146,8 @@ public enum RecordIdentifierValidator {
     private static func validateScheduledComponentCount(
         _ scheduledCount: Int,
         currentCount: Int,
-        limits: RecordIdentifierLimits
-    ) throws(RecordIdentifierValidationError) {
+        limits: PersistableIdentifierLimits
+    ) throws(PersistableIdentifierValidationError) {
         let (total, overflow) = currentCount.addingReportingOverflow(
             scheduledCount
         )

@@ -4,7 +4,7 @@ public enum DatabaseReferenceError: Error, Sendable, Equatable {
     case entityMismatch(expected: String, actual: String)
     case invalidIdentifier(
         entity: String,
-        reason: RecordIdentifierValidationError
+        reason: PersistableIdentifierValidationError
     )
     case invalidPartitionFieldNumber(entity: String, field: String)
     case duplicatePartitionFieldNumber(entity: String, number: UInt32)

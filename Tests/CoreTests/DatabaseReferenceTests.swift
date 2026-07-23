@@ -7,7 +7,7 @@ import Testing
 struct DatabaseReferenceTests {
     @Test("References round-trip as canonical record identities")
     func recordRoundTrip() throws {
-        let firstIdentity = RecordIdentity(
+        let firstIdentity = PersistableIdentity(
             entity: DatabaseReferenceTarget.persistableType,
             id: .string("target-1"),
             partitions: [
@@ -18,7 +18,7 @@ struct DatabaseReferenceTests {
                 )
             ]
         )
-        let secondIdentity = RecordIdentity(
+        let secondIdentity = PersistableIdentity(
             entity: DatabaseReferenceTarget.persistableType,
             id: .string("target-2")
         )
@@ -30,7 +30,7 @@ struct DatabaseReferenceTests {
             many: [first, second]
         )
 
-        let fields = try DatabaseRecordEncoder.encode(owner)
+        let fields = try PersistableFieldEncoder.encode(owner)
         let values = Dictionary(uniqueKeysWithValues: fields.map { ($0.name, $0.value) })
 
         #expect(values["required"] == .reference(firstIdentity))
@@ -40,7 +40,7 @@ struct DatabaseReferenceTests {
             .reference(secondIdentity),
         ]))
 
-        let decoded = try DatabaseReferenceOwner.decodeDatabaseRecord(fields)
+        let decoded = try DatabaseReferenceOwner.decodePersistedFields(fields)
         #expect(decoded.required == first)
         #expect(decoded.optional == nil)
         #expect(decoded.many == [first, second])
@@ -50,7 +50,7 @@ struct DatabaseReferenceTests {
     func rejectsMismatchedEntity() {
         #expect(throws: DatabaseReferenceError.self) {
             try DatabaseReference<DatabaseReferenceTarget>(
-                identity: RecordIdentity(entity: "Other", id: .string("target-1"))
+                identity: PersistableIdentity(entity: "Other", id: .string("target-1"))
             )
         }
     }

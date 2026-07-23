@@ -117,7 +117,7 @@ struct QueryParameterBinderTests {
                 number: 1,
                 name: "reference",
                 value: .reference(
-                    RecordIdentity(
+                    PersistableIdentity(
                         entity: "Event",
                         id: .string("event-1")
                     )

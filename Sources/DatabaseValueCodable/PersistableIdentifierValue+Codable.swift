@@ -1,6 +1,6 @@
 import DatabaseValue
 
-extension RecordIdentifierValue: Codable {
+extension PersistableIdentifierValue: Codable {
     private enum CodingKeys: String, CodingKey {
         case kind
         case bool
@@ -49,14 +49,14 @@ extension RecordIdentifierValue: Codable {
             )
         case .composite:
             let components = try container.decode(
-                [RecordIdentifierValue].self,
+                [PersistableIdentifierValue].self,
                 forKey: .components
             )
             guard !components.isEmpty else {
                 throw DecodingError.dataCorruptedError(
                     forKey: .components,
                     in: container,
-                    debugDescription: "A composite record identifier must contain at least one component."
+                    debugDescription: "A composite persistable identifier must contain at least one component."
                 )
             }
             self = .composite(components)
@@ -92,7 +92,7 @@ extension RecordIdentifierValue: Codable {
                     self,
                     EncodingError.Context(
                         codingPath: encoder.codingPath,
-                        debugDescription: "A composite record identifier must contain at least one component."
+                        debugDescription: "A composite persistable identifier must contain at least one component."
                     )
                 )
             }

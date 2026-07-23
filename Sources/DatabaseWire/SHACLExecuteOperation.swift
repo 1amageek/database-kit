@@ -121,7 +121,7 @@ public enum SHACLExecuteOperation: DatabaseOperation {
     public enum Focus: Sendable, Hashable {
         case targets
         case nodes([DatabaseRDFTerm])
-        case records([RecordIdentity])
+        case entities([PersistableIdentity])
 
         fileprivate func encode(
             into writer: inout DatabaseWireWriter
@@ -135,7 +135,7 @@ public enum SHACLExecuteOperation: DatabaseOperation {
                 for node in nodes {
                     try node.encode(into: &writer)
                 }
-            case .records(let identities):
+            case .entities(let identities):
                 writer.writeUInt8(3)
                 try writer.writeCount(identities.count)
                 for identity in identities {
@@ -160,12 +160,12 @@ public enum SHACLExecuteOperation: DatabaseOperation {
                 self = .nodes(nodes)
             case 3:
                 let count = try reader.readCount()
-                var identities: [RecordIdentity] = []
+                var identities: [PersistableIdentity] = []
                 identities.reserveCapacity(count)
                 for _ in 0..<count {
-                    identities.append(try RecordIdentity(from: &reader))
+                    identities.append(try PersistableIdentity(from: &reader))
                 }
-                self = .records(identities)
+                self = .entities(identities)
             case let tag:
                 throw .invalidValueTag(tag)
             }

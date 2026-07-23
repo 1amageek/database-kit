@@ -3,8 +3,8 @@ import DatabaseValue
 
 /// Declarative metadata for a canonical RDF dataset index.
 ///
-/// Records remain the source of truth. The execution layer maintains six
-/// derived orderings in the same transaction as the record mutation.
+/// Entities remain the source of truth. The execution layer maintains six
+/// derived orderings in the same transaction as the entity mutation.
 public struct RDFQuadIndexKind<Root: Persistable>: IndexKind {
     public static var identifier: String { "rdf_quad" }
     public static var subspaceStructure: SubspaceStructure { .hierarchical }

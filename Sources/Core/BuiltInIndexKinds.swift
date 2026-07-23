@@ -83,7 +83,7 @@ public struct ScalarIndexKind<Root: Persistable>: IndexKind {
 
 // MARK: - CountIndexKind
 
-/// Aggregation index for counting records by grouping fields
+/// Aggregation index for counting entities by grouping fields
 ///
 /// **Usage**:
 /// ```swift
@@ -591,7 +591,7 @@ public enum VersionHistoryStrategy: Sendable, Hashable, Codable {
     case keepForDuration(Double)
 }
 
-/// Index for tracking record versions with history retention
+/// Index for tracking entity versions with history retention
 ///
 /// **Usage**:
 /// ```swift
@@ -652,7 +652,7 @@ public struct VersionIndexKind<Root: Persistable>: IndexKind {
 
 // MARK: - CountUpdatesIndexKind
 
-/// Index for tracking the number of times each record has been updated
+/// Index for tracking the number of times each entity has been updated
 ///
 /// **Usage**:
 /// ```swift
@@ -667,9 +667,9 @@ public struct VersionIndexKind<Root: Persistable>: IndexKind {
 /// **Key Structure**: `[indexSubspace][primaryKey] = Int64(updateCount)`
 ///
 /// **Supports**:
-/// - Get update count for a specific record
+/// - Get update count for a specific entity
 /// - Checked transactional increment on each update
-/// - Query records by update frequency
+/// - Query entities by update frequency
 ///
 /// **Reference**: FDB Record Layer COUNT_UPDATES index type
 public struct CountUpdatesIndexKind<Root: Persistable>: IndexKind {
@@ -712,7 +712,7 @@ public struct CountUpdatesIndexKind<Root: Persistable>: IndexKind {
 
 // MARK: - CountNotNullIndexKind
 
-/// Aggregation index for counting records where a field is not null
+/// Aggregation index for counting entities where a field is not null
 ///
 /// **Usage**:
 /// ```swift

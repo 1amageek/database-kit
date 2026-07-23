@@ -5,18 +5,18 @@ import FoundationEssentials
 import Foundation
 #endif
 
-extension Data: RecordIdentifier {
-    public static var recordIdentifierType: RecordIdentifierType { .bytes }
+extension Data: PersistableIdentifier {
+    public static var persistableIdentifierType: PersistableIdentifierType { .bytes }
 
-    public var recordIdentifierValue: RecordIdentifierValue {
+    public var persistableIdentifierValue: PersistableIdentifierValue {
         .bytes(DatabaseBytes(retaining: self))
     }
 }
 
-extension UUID: RecordIdentifier {
-    public static var recordIdentifierType: RecordIdentifierType { .uuid }
+extension UUID: PersistableIdentifier {
+    public static var persistableIdentifierType: PersistableIdentifierType { .uuid }
 
-    public var recordIdentifierValue: RecordIdentifierValue {
+    public var persistableIdentifierValue: PersistableIdentifierValue {
         let bytes = uuid
         let high = UInt64(bytes.0) << 56
             | UInt64(bytes.1) << 48

@@ -3,7 +3,7 @@
 /// Generates Persistable protocol conformance with metadata methods and ID management.
 ///
 /// **Supports all data model layers**:
-/// - RecordLayer (RDB): Structured records with indexes
+/// - Entity layer (RDB): Structured entities with indexes
 /// - DocumentLayer (DocumentDB): Flexible documents
 /// - VectorLayer (Vector search): Use #Index with VectorIndexKind
 /// - GraphLayer (GraphDB): Define nodes and edges with relationships

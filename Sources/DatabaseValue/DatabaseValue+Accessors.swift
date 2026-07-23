@@ -105,7 +105,7 @@ extension DatabaseValue {
         return value
     }
 
-    public var referenceValue: RecordIdentity? {
+    public var referenceValue: PersistableIdentity? {
         guard case .reference(let value) = self else { return nil }
         return value
     }

@@ -94,7 +94,7 @@ public enum GraphIndexStrategy: String, Sendable, Codable, CaseIterable {
     /// Canonical RDF dataset layout. Unscoped patterns use SPO/POS/OSP while
     /// graph-bound patterns use GSPO/GPOS/GOSP. This keeps both dataset-wide
     /// and named-graph reads prefix-addressable without duplicating RDF
-    /// semantics outside the record-layer index maintainer.
+    /// semantics outside the entity index maintainer.
     ///
     /// **Indexes**:
     /// - `[spo]/[from]/[edge]/[to]/[graph]`

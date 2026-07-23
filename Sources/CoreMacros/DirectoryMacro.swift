@@ -5,10 +5,10 @@ import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 import SwiftDiagnostics
 
-/// Implementation of the #Directory macro
+/// Implementation of its #Directory macro
 ///
 /// This freestanding declaration macro validates the directory path syntax and layer parameter,
-/// serving as a marker for the @Recordable macro. The @Recordable macro reads the #Directory
+/// serving as a marker for the @Persistable macro. The @Persistable macro reads its #Directory
 /// call from the AST to generate type-safe store() methods.
 ///
 /// **Path Elements**: The path is an array where each element can be:
@@ -22,7 +22,7 @@ import SwiftDiagnostics
 ///
 /// Usage:
 /// ```swift
-/// @Recordable
+/// @Persistable
 /// struct User {
 ///     #Directory<User>(["app", "users"], layer: .default)
 ///     #PrimaryKey<User>([\.userID])
@@ -34,7 +34,7 @@ import SwiftDiagnostics
 ///
 /// **Multi-tenant with Partition**:
 /// ```swift
-/// @Recordable
+/// @Persistable
 /// struct Order {
 ///     #Directory<Order>(
 ///         ["tenants", Field(\.accountID), "orders"],
@@ -49,7 +49,7 @@ import SwiftDiagnostics
 ///
 /// **Multi-level partitioning**:
 /// ```swift
-/// @Recordable
+/// @Persistable
 /// struct Message {
 ///     #Directory<Message>(
 ///         ["tenants", Field(\.accountID), "channels", Field(\.channelID), "messages"],
@@ -63,18 +63,18 @@ import SwiftDiagnostics
 /// }
 /// ```
 ///
-/// **Generated code** (by @Recordable macro):
+/// **Generated code** (by @Persistable macro):
 /// ```swift
 /// // Basic directory
 /// extension User {
 ///     static func openDirectory(database: any DatabaseProtocol) async throws -> DirectorySubspace
-///     static func store(database: any DatabaseProtocol, schema: Schema) async throws -> RecordStore<User>
+///     static func store(database: any DatabaseProtocol, schema: Schema) async throws -> PersistableStore<User>
 /// }
 ///
 /// // Partition directory
 /// extension Order {
 ///     static func openDirectory(accountID: String, database: any DatabaseProtocol) async throws -> DirectorySubspace
-///     static func store(accountID: String, database: any DatabaseProtocol, schema: Schema) async throws -> RecordStore<Order>
+///     static func store(accountID: String, database: any DatabaseProtocol, schema: Schema) async throws -> PersistableStore<Order>
 /// }
 /// ```
 ///
@@ -197,7 +197,7 @@ public struct DirectoryMacro: DeclarationMacro {
         }
 
         // This macro does not generate any declarations.
-        // The @Recordable macro reads the #Directory call directly from the AST.
+        // The @Persistable macro reads its #Directory call directly from the AST.
         return []
     }
 }

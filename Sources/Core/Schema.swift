@@ -6,7 +6,7 @@ public import DatabaseValue
 /// **Design**: FDBRuntime's type-independent schema definition
 /// - Uses Entity (metadata) with field names and IndexDescriptor
 /// - Uses IndexDescriptor (metadata) instead of Index (runtime)
-/// - Supports all upper layers (record-layer, graph-layer, document-layer)
+/// - Supports all upper layers (entity-layer, graph-layer, document-layer)
 ///
 /// **Example usage**:
 /// ```swift

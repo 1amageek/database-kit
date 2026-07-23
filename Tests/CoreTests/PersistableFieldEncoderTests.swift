@@ -3,22 +3,22 @@ import DatabaseValue
 import Foundation
 import Testing
 
-@Suite("Canonical database record encoder")
-struct DatabaseRecordEncoderTests {
-    @Test("Compiled records round-trip without JSON")
-    func compiledRecordRoundTrip() throws {
+@Suite("Persistable field encoding")
+struct PersistableFieldEncoderTests {
+    @Test("Compiled documents round-trip without JSON")
+    func compiledDocumentRoundTrip() throws {
         let externalID = try #require(
             UUID(uuidString: "00112233-4455-6677-8899-aabbccddeeff")
         )
         let occurredAt = Date(timeIntervalSince1970: 1_721_234_567.125)
-        let record = DatabaseRecordEncoderTestRecord(
+        let document = PersistableFieldEncoderTestDocument(
             title: "Runtime",
             externalID: externalID,
             occurredAt: occurredAt,
             values: [1, 4, 9]
         )
 
-        let fields = try DatabaseRecordEncoder.encode(record)
+        let fields = try PersistableFieldEncoder.encode(document)
         let byName = Dictionary(uniqueKeysWithValues: fields.map { ($0.name, $0.value) })
 
         #expect(byName["externalID"] == .uuid(DatabaseUUID(
@@ -28,25 +28,25 @@ struct DatabaseRecordEncoderTests {
         #expect(byName["note"] == .null)
         #expect(byName["values"] == .array([.uint64(1), .uint64(4), .uint64(9)]))
 
-        let decoded = try DatabaseRecordEncoderTestRecord.decodeDatabaseRecord(fields)
-        #expect(decoded.id == record.id)
-        #expect(decoded.title == record.title)
+        let decoded = try PersistableFieldEncoderTestDocument.decodePersistedFields(fields)
+        #expect(decoded.id == document.id)
+        #expect(decoded.title == document.title)
         #expect(decoded.externalID == externalID)
         #expect(decoded.occurredAt == occurredAt)
         #expect(decoded.note == nil)
-        #expect(decoded.values == record.values)
+        #expect(decoded.values == document.values)
     }
 
     @Test("Nested Codable values round-trip as canonical objects")
     func nestedValueRoundTrip() throws {
-        let current = DatabaseRecordNestedValue(label: "current", priority: 2)
+        let current = PersistableFieldNestedValue(label: "current", priority: 2)
         let history = [
-            DatabaseRecordNestedValue(label: "created", priority: 0),
-            DatabaseRecordNestedValue(label: "updated", priority: 1),
+            PersistableFieldNestedValue(label: "created", priority: 0),
+            PersistableFieldNestedValue(label: "updated", priority: 1),
         ]
-        let record = DatabaseRecordNestedTestRecord(value: current, history: history)
+        let document = PersistableFieldNestedTestDocument(value: current, history: history)
 
-        let fields = try DatabaseRecordEncoder.encode(record)
+        let fields = try PersistableFieldEncoder.encode(document)
         let byName = Dictionary(uniqueKeysWithValues: fields.map { ($0.name, $0.value) })
         guard case .object = byName["value"] else {
             Issue.record("Nested value must use DatabaseValue.object")
@@ -62,7 +62,7 @@ struct DatabaseRecordEncoderTests {
             return false
         })
 
-        let decoded = try DatabaseRecordNestedTestRecord.decodeDatabaseRecord(fields)
+        let decoded = try PersistableFieldNestedTestDocument.decodePersistedFields(fields)
         #expect(decoded.value == current)
         #expect(decoded.history == history)
     }

@@ -1,6 +1,6 @@
 import DatabaseValue
 
-extension RecordIdentity: Codable {
+extension PersistableIdentity: Codable {
     private enum CodingKeys: String, CodingKey {
         case entity
         case id
@@ -11,7 +11,7 @@ extension RecordIdentity: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             entity: try container.decode(String.self, forKey: .entity),
-            id: try container.decode(RecordIdentifierValue.self, forKey: .id),
+            id: try container.decode(PersistableIdentifierValue.self, forKey: .id),
             partitions: try container.decode([DatabaseObjectField].self, forKey: .partitions)
         )
     }

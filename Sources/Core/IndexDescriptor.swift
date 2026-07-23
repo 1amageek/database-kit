@@ -37,7 +37,7 @@
 public struct IndexDescriptor: Descriptor, Sendable {
     /// Index name (unique identifier)
     ///
-    /// **Naming convention**: "{RecordType}_{field1}_{field2}_..."
+    /// **Naming convention**: "{EntityType}_{field1}_{field2}_..."
     ///
     /// **Examples**:
     /// - "User_email"
@@ -82,7 +82,7 @@ public struct IndexDescriptor: Descriptor, Sendable {
     ///
     /// When a query only needs these fields plus the indexed fields,
     /// the executor can read values directly from the index without
-    /// looking up the primary record.
+    /// looking up the primary entity.
     ///
     /// **Example**: `["name", "price"]`
     public let storedFieldNames: [String]
@@ -183,7 +183,7 @@ extension IndexDescriptor {
     /// Whether this index supports index-only scan (covering index)
     ///
     /// An index is covering when it stores additional fields in its value,
-    /// allowing queries to be answered without looking up the primary record.
+    /// allowing queries to be answered without looking up the primary entity.
     public var isCovering: Bool {
         !storedFieldNames.isEmpty
     }

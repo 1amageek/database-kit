@@ -3,7 +3,7 @@
 /// Conformance is a compile-time persistence contract. The declared type and
 /// each produced value must agree so direct storage operations and DatabaseWire
 /// operations resolve to the same physical key.
-public protocol RecordIdentifier: Sendable, Hashable {
-    static var recordIdentifierType: RecordIdentifierType { get }
-    var recordIdentifierValue: RecordIdentifierValue { get }
+public protocol PersistableIdentifier: Sendable, Hashable {
+    static var persistableIdentifierType: PersistableIdentifierType { get }
+    var persistableIdentifierValue: PersistableIdentifierValue { get }
 }

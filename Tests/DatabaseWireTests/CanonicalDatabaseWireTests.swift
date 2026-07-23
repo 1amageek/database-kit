@@ -77,7 +77,7 @@ struct CanonicalDatabaseWireTests {
 
     @Test("DatabaseValue preserves every canonical value family")
     func databaseValueRoundTrips() throws {
-        let identity = RecordIdentity(
+        let identity = PersistableIdentity(
             entity: "Event",
             id: .composite([.string("event-1"), .uint64(7)]),
             partitions: [
@@ -212,12 +212,12 @@ struct CanonicalDatabaseWireTests {
 
     @Test("mutation requests and typed result families round-trip")
     func mutationFamiliesRoundTrip() throws {
-        let identity = RecordIdentity(
+        let identity = PersistableIdentity(
             entity: "Event",
             id: .string("event-1")
         )
         let request = MutationExecuteOperation.Request(
-            input: .records([
+            input: .entities([
                 MutationExecuteOperation.Change(
                     kind: .update,
                     identity: identity,
@@ -241,8 +241,8 @@ struct CanonicalDatabaseWireTests {
         )
         let recordResponse = MutationExecuteOperation.Response(
             commitVersion: 4,
-            result: .records([
-                MutationExecuteOperation.RecordEffect(
+            result: .entities([
+                MutationExecuteOperation.EntityEffect(
                     kind: .update,
                     identity: identity,
                     version: [1, 2, 3]

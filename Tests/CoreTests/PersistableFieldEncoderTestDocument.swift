@@ -2,7 +2,7 @@ import Core
 import Foundation
 
 @Persistable
-struct DatabaseRecordEncoderTestRecord {
+struct PersistableFieldEncoderTestDocument {
     var title: String
     var externalID: UUID
     var occurredAt: Date

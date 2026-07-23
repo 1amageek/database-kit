@@ -1,6 +1,6 @@
 import Foundation
 
-struct DatabaseRecordNestedValue: Sendable, Codable, Equatable {
+struct PersistableFieldNestedValue: Sendable, Codable, Equatable {
     let label: String
     let priority: Int64
 }

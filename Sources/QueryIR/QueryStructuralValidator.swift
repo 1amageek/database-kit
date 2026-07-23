@@ -137,7 +137,7 @@ private extension QueryStructuralValidator {
         case literal(Literal, depth: UInt64)
         case boundParameterLiteral(DatabaseValue, depth: UInt64)
         case databaseValue(DatabaseValue, depth: UInt64)
-        case recordIdentifier(RecordIdentifierValue, depth: UInt64)
+        case persistableIdentifier(PersistableIdentifierValue, depth: UInt64)
         case rdfTerm(DatabaseRDFTerm, depth: UInt64)
         case propertyPath(PropertyPath, depth: UInt64)
         case triple(TriplePattern, depth: UInt64)
@@ -830,14 +830,14 @@ private extension QueryStructuralValidator {
                         try appendDatabaseFields(fields, depth: childDepth, to: &validationSteps)
                     case .reference(let identity):
                         do {
-                            try RecordIdentifierValidator.validateStructure(
+                            try PersistableIdentifierValidator.validateStructure(
                                 identity.id
                             )
                         } catch let error {
-                            throw .invalidRecordIdentifier(error)
+                            throw .invalidPersistableIdentifier(error)
                         }
                         validationSteps.append(
-                            .recordIdentifier(identity.id, depth: childDepth)
+                            .persistableIdentifier(identity.id, depth: childDepth)
                         )
                         try appendDatabaseFields(
                             identity.partitions,
@@ -851,12 +851,12 @@ private extension QueryStructuralValidator {
                         break
                     }
 
-                case .recordIdentifier(let identifier, _):
+                case .persistableIdentifier(let identifier, _):
                     if case .composite(let components) = identifier {
                         try consumeCollection(components.count)
                         for component in components.reversed() {
                             validationSteps.append(
-                                .recordIdentifier(component, depth: childDepth)
+                                .persistableIdentifier(component, depth: childDepth)
                             )
                         }
                     }
@@ -1002,7 +1002,7 @@ private extension QueryStructuralValidator {
                  .literal(_, let depth),
                  .boundParameterLiteral(_, let depth),
                  .databaseValue(_, let depth),
-                 .recordIdentifier(_, let depth),
+                 .persistableIdentifier(_, let depth),
                  .rdfTerm(_, let depth), .propertyPath(_, let depth),
                  .triple(_, let depth), .quad(_, let depth),
                  .modifiers(_, let depth),

@@ -1,4 +1,4 @@
-public enum DatabaseRecordDecodingError: Error, Sendable, CustomStringConvertible {
+public enum PersistableDecodingError: Error, Sendable, CustomStringConvertible {
     case missingSchema(String)
     case missingCompiledDecoder(String)
     case duplicateSchemaFieldNumber(Int)
@@ -18,29 +18,29 @@ public enum DatabaseRecordDecodingError: Error, Sendable, CustomStringConvertibl
         case .missingSchema(let type):
             return "No static field schema is available for '\(type)'"
         case .missingCompiledDecoder(let type):
-            return "No macro-generated record decoder is available for '\(type)'"
+            return "No macro-generated persistable decoder is available for '\(type)'"
         case .duplicateSchemaFieldNumber(let number):
-            return "Static record schema contains duplicate field number \(number)"
+            return "Static persistable schema contains duplicate field number \(number)"
         case .duplicateSchemaFieldName(let name):
-            return "Static record schema contains duplicate field name '\(name)'"
+            return "Static persistable schema contains duplicate field name '\(name)'"
         case .duplicateFieldNumber(let number):
-            return "Record contains duplicate field number \(number)"
+            return "Persisted object contains duplicate field number \(number)"
         case .duplicateFieldName(let name):
-            return "Record contains duplicate field name '\(name)'"
+            return "Persisted object contains duplicate field name '\(name)'"
         case .unknownField(let number, let name):
-            return "Record field #\(number) '\(name)' is not declared by the schema"
+            return "Persisted field #\(number) '\(name)' is not declared by the schema"
         case .fieldIdentityMismatch(let number, let name):
-            return "Record field #\(number) and name '\(name)' resolve to different schema fields"
+            return "Persisted field #\(number) and name '\(name)' resolve to different schema fields"
         case .missingRequiredField(let field):
-            return "Required record field '\(field)' is missing"
+            return "Required persisted field '\(field)' is missing"
         case .invalidValue(let field, let expected):
-            return "Record field '\(field)' must be encoded as \(expected)"
+            return "Persisted field '\(field)' must be encoded as \(expected)"
         case .invalidDate(let field):
-            return "Record field '\(field)' contains an invalid date"
+            return "Persisted field '\(field)' contains an invalid date"
         case .invalidNestedFieldNumber(let number):
-            return "Nested record field number \(number) is invalid"
+            return "Nested persisted field number \(number) is invalid"
         case .unsupportedValue(let field):
-            return "Record field '\(field)' uses a value that cannot be decoded by the static schema"
+            return "Persisted field '\(field)' uses a value that cannot be decoded by the static schema"
         }
     }
 }

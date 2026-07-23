@@ -12,6 +12,6 @@ public indirect enum DatabaseValue: Sendable, Hashable {
     case uuid(DatabaseUUID)
     case array([DatabaseValue])
     case object([DatabaseObjectField])
-    case reference(RecordIdentity)
+    case reference(PersistableIdentity)
     case rdfTerm(DatabaseRDFTerm)
 }

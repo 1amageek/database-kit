@@ -5,38 +5,38 @@ import Foundation
 #endif
 import DatabaseValue
 
-public enum DatabaseRecordEncoder {
+public enum PersistableFieldEncoder {
     public static func encode(
         _ model: any Persistable
-    ) throws -> [DatabaseObjectField] {
+    ) throws -> [PersistableField] {
         let modelType = type(of: model)
         var seenNumbers = Set<Int>()
         var seenNames = Set<String>()
-        var fields: [DatabaseObjectField] = []
+        var fields: [PersistableField] = []
         fields.reserveCapacity(modelType.fieldSchemas.count)
 
         for schema in modelType.fieldSchemas.sorted(by: { $0.fieldNumber < $1.fieldNumber }) {
             guard schema.fieldNumber > 0,
                   let number = UInt32(exactly: schema.fieldNumber) else {
-                throw DatabaseRecordEncodingError.invalidSchema(
+                throw PersistableEncodingError.invalidSchema(
                     entity: modelType.persistableType,
                     reason: "field '\(schema.name)' has invalid number \(schema.fieldNumber)"
                 )
             }
             guard seenNumbers.insert(schema.fieldNumber).inserted else {
-                throw DatabaseRecordEncodingError.invalidSchema(
+                throw PersistableEncodingError.invalidSchema(
                     entity: modelType.persistableType,
                     reason: "field number \(schema.fieldNumber) is duplicated"
                 )
             }
             guard seenNames.insert(schema.name).inserted else {
-                throw DatabaseRecordEncodingError.invalidSchema(
+                throw PersistableEncodingError.invalidSchema(
                     entity: modelType.persistableType,
                     reason: "field name '\(schema.name)' is duplicated"
                 )
             }
             fields.append(
-                DatabaseObjectField(
+                PersistableField(
                     number: number,
                     name: schema.name,
                     value: try encodeValue(
@@ -59,7 +59,7 @@ public enum DatabaseRecordEncoder {
         if schema.isArray {
             let mirror = Mirror(reflecting: raw)
             guard mirror.displayStyle == .collection else {
-                throw DatabaseRecordEncodingError.fieldNotRepresentable(
+                throw PersistableEncodingError.fieldNotRepresentable(
                     entity: entity,
                     field: schema.name
                 )
@@ -128,8 +128,8 @@ public enum DatabaseRecordEncoder {
         case .rdfTerm:
             value = (raw as? DatabaseRDFTerm).map(DatabaseValue.rdfTerm)
         case .reference:
-            value = (raw as? any DatabaseRecordReferenceValue).map {
-                .reference($0.recordIdentity)
+            value = (raw as? any PersistableReferenceValue).map {
+                .reference($0.persistableIdentity)
             }
         case .date:
             value = (raw as? Date).flatMap { databaseTimestamp($0).map(DatabaseValue.timestamp) }
@@ -155,7 +155,7 @@ public enum DatabaseRecordEncoder {
         }
 
         guard let value else {
-            throw DatabaseRecordEncodingError.fieldNotRepresentable(
+            throw PersistableEncodingError.fieldNotRepresentable(
                 entity: entity,
                 field: field
             )
