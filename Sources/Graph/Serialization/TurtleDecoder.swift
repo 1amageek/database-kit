@@ -1,4 +1,3 @@
-import DatabaseTypes
 // TurtleDecoder.swift
 // Graph - Turtle (RDF) → OWLOntology decoder
 //
@@ -7,6 +6,7 @@ import DatabaseTypes
 // Reference: W3C RDF 1.1 Turtle
 // https://www.w3.org/TR/turtle/
 
+import DatabaseTypes
 import DatabaseValue
 
 /// Decodes a Turtle (RDF) string into an OWLOntology.
@@ -31,7 +31,7 @@ public struct TurtleDecoder: Sendable {
         let parser = TurtleParser(tokens: tokens)
         let (prefixes, triples) = try parser.parse()
         let builder = OWLBuilder(prefixes: prefixes, triples: triples)
-        return builder.build()
+        return try builder.build()
     }
 
     /// Decode an RDF dataset directly into the typed OWL model.
@@ -52,7 +52,7 @@ public struct TurtleDecoder: Sendable {
                 object: try RDFNode(quad.object)
             )
         }
-        let decoded = OWLBuilder(
+        let decoded = try OWLBuilder(
             prefixes: dataset.prefixes,
             triples: triples
         ).build()
@@ -82,6 +82,11 @@ public enum TurtleDecodingError: Error, Sendable, Equatable {
     case undefinedPrefix(String, line: Int)
     case invalidIRI(String, line: Int)
     case unsupportedRDFTerm(String)
+    case invalidClassExpression(String)
+    case invalidDataRange(String)
+    case invalidRestriction(String)
+    case malformedRDFList(String)
+    case cyclicRDFList(String)
     case unexpectedEndOfInput
 }
 
@@ -1095,7 +1100,7 @@ private final class OWLBuilder {
         }
     }
 
-    func build() -> OWLOntology {
+    func build() throws(TurtleDecodingError) -> OWLOntology {
         let prefixMap = PrefixMap(fromOntologyPrefixes: prefixes)
 
         // Find ontology IRI
@@ -1235,9 +1240,9 @@ private final class OWLBuilder {
                 case Self.owlInverseOf:
                     if let inv = triple.object.iriValue { inverseOf = prefixMap.compact(inv) }
                 case Self.rdfsDomain:
-                    domains.append(buildClassExpression(from: triple.object, prefixMap: prefixMap))
+                    domains.append(try buildClassExpression(from: triple.object, prefixMap: prefixMap))
                 case Self.rdfsRange:
-                    ranges.append(buildClassExpression(from: triple.object, prefixMap: prefixMap))
+                    ranges.append(try buildClassExpression(from: triple.object, prefixMap: prefixMap))
                 default: break
                 }
             }
@@ -1269,9 +1274,9 @@ private final class OWLBuilder {
                 case Self.rdfsComment:
                     if let lit = triple.object.literalValue { comment = lit.lexicalForm }
                 case Self.rdfsDomain:
-                    domains.append(buildClassExpression(from: triple.object, prefixMap: prefixMap))
+                    domains.append(try buildClassExpression(from: triple.object, prefixMap: prefixMap))
                 case Self.rdfsRange:
-                    ranges.append(buildDataRange(from: triple.object, prefixMap: prefixMap))
+                    ranges.append(try buildDataRange(from: triple.object, prefixMap: prefixMap))
                 default: break
                 }
             }
@@ -1320,15 +1325,16 @@ private final class OWLBuilder {
             for triple in subjectIndex[.iri(iri)] ?? [] {
                 switch triple.predicate.iriValue {
                 case Self.rdfsSubClassOf:
-                    let sup = buildClassExpression(from: triple.object, prefixMap: prefixMap)
+                    let sup = try buildClassExpression(from: triple.object, prefixMap: prefixMap)
                     axioms.append(.subClassOf(sub: .named(compactedIRI), sup: sup))
                 case Self.owlEquivalentClass:
-                    let equiv = buildClassExpression(from: triple.object, prefixMap: prefixMap)
+                    let equiv = try buildClassExpression(from: triple.object, prefixMap: prefixMap)
                     axioms.append(.equivalentClasses([.named(compactedIRI), equiv]))
                 case Self.owlDisjointUnionOf:
-                    let members = collectList(from: triple.object).compactMap { node -> OWLClassExpression? in
-                        buildClassExpression(from: node, prefixMap: prefixMap)
-                    }
+                    let members = try buildClassExpressions(
+                        fromList: triple.object,
+                        prefixMap: prefixMap
+                    )
                     axioms.append(.disjointUnion(class_: compactedIRI, disjuncts: members))
                 default: break
                 }
@@ -1349,17 +1355,20 @@ private final class OWLBuilder {
                         axioms.append(.inverseObjectProperties(first: compactedIRI, second: prefixMap.compact(inv)))
                     }
                 case Self.owlPropertyChainAxiom:
-                    let chain = collectList(from: triple.object).compactMap { $0.iriValue }.map { prefixMap.compact($0) }
+                    let chain = try collectNamedResources(
+                        from: triple.object,
+                        context: "owl:propertyChainAxiom"
+                    ).map { prefixMap.compact($0) }
                     axioms.append(.subPropertyChainOf(chain: chain, sup: compactedIRI))
                 case Self.owlEquivalentProperty:
                     if let eq = triple.object.iriValue {
                         axioms.append(.equivalentObjectProperties([compactedIRI, prefixMap.compact(eq)]))
                     }
                 case Self.rdfsDomain:
-                    let domain = buildClassExpression(from: triple.object, prefixMap: prefixMap)
+                    let domain = try buildClassExpression(from: triple.object, prefixMap: prefixMap)
                     axioms.append(.objectPropertyDomain(property: compactedIRI, domain: domain))
                 case Self.rdfsRange:
-                    let range = buildClassExpression(from: triple.object, prefixMap: prefixMap)
+                    let range = try buildClassExpression(from: triple.object, prefixMap: prefixMap)
                     axioms.append(.objectPropertyRange(property: compactedIRI, range: range))
                 default: break
                 }
@@ -1395,10 +1404,10 @@ private final class OWLBuilder {
                         axioms.append(.equivalentDataProperties([compactedIRI, prefixMap.compact(eq)]))
                     }
                 case Self.rdfsDomain:
-                    let domain = buildClassExpression(from: triple.object, prefixMap: prefixMap)
+                    let domain = try buildClassExpression(from: triple.object, prefixMap: prefixMap)
                     axioms.append(.dataPropertyDomain(property: compactedIRI, domain: domain))
                 case Self.rdfsRange:
-                    let range = buildDataRange(from: triple.object, prefixMap: prefixMap)
+                    let range = try buildDataRange(from: triple.object, prefixMap: prefixMap)
                     axioms.append(.dataPropertyRange(property: compactedIRI, range: range))
                 default: break
                 }
@@ -1436,7 +1445,10 @@ private final class OWLBuilder {
         for bnode in disjointClassBNodes {
             for triple in subjectIndex[.blankNode(bnode)] ?? [] {
                 if triple.predicate.iriValue == Self.owlMembers {
-                    let members = collectList(from: triple.object).map { buildClassExpression(from: $0, prefixMap: prefixMap) }
+                    let members = try buildClassExpressions(
+                        fromList: triple.object,
+                        prefixMap: prefixMap
+                    )
                     axioms.append(.disjointClasses(members))
                 }
             }
@@ -1446,7 +1458,10 @@ private final class OWLBuilder {
         for bnode in allDifferentBNodes {
             for triple in subjectIndex[.blankNode(bnode)] ?? [] {
                 if triple.predicate.iriValue == Self.owlDistinctMembers || triple.predicate.iriValue == Self.owlMembers {
-                    let members = collectList(from: triple.object).compactMap { $0.iriValue }.map { prefixMap.compact($0) }
+                    let members = try collectNamedResources(
+                        from: triple.object,
+                        context: "owl:distinctMembers"
+                    ).map { prefixMap.compact($0) }
                     axioms.append(.differentIndividuals(members))
                 }
             }
@@ -1456,7 +1471,10 @@ private final class OWLBuilder {
         for bnode in allDisjointPropBNodes {
             for triple in subjectIndex[.blankNode(bnode)] ?? [] {
                 if triple.predicate.iriValue == Self.owlMembers {
-                    let members = collectList(from: triple.object).compactMap { $0.iriValue }.map { prefixMap.compact($0) }
+                    let members = try collectNamedResources(
+                        from: triple.object,
+                        context: "owl:members for disjoint properties"
+                    ).map { prefixMap.compact($0) }
                     // Check if object or data properties
                     if let first = members.first {
                         let expanded = PrefixMap(fromOntologyPrefixes: prefixes).expand(first)
@@ -1486,7 +1504,10 @@ private final class OWLBuilder {
 
     // MARK: - Class Expression Building
 
-    private func buildClassExpression(from node: RDFNode, prefixMap: PrefixMap) -> OWLClassExpression {
+    private func buildClassExpression(
+        from node: RDFNode,
+        prefixMap: PrefixMap
+    ) throws(TurtleDecodingError) -> OWLClassExpression {
         switch node {
         case .iri(let iri):
             switch iri {
@@ -1495,43 +1516,80 @@ private final class OWLBuilder {
             default: return .named(prefixMap.compact(iri))
             }
         case .blankNode(let bnode):
-            return buildBlankNodeExpression(bnode: bnode, prefixMap: prefixMap)
+            return try buildBlankNodeExpression(
+                bnode: bnode,
+                prefixMap: prefixMap
+            )
         case .literal:
-            return .thing // fallback
+            throw .invalidClassExpression(
+                "An RDF literal cannot represent an OWL class expression"
+            )
         }
     }
 
-    private func buildBlankNodeExpression(bnode: String, prefixMap: PrefixMap) -> OWLClassExpression {
+    private func buildBlankNodeExpression(
+        bnode: String,
+        prefixMap: PrefixMap
+    ) throws(TurtleDecodingError) -> OWLClassExpression {
         let triples = subjectIndex[.blankNode(bnode)] ?? []
         let types = triples.filter { $0.predicate.iriValue == Self.rdfType }.compactMap { $0.object.iriValue }
 
         if types.contains(Self.owlRestriction) {
-            return buildRestriction(triples: triples, prefixMap: prefixMap)
+            return try buildRestriction(
+                triples: triples,
+                prefixMap: prefixMap
+            )
         }
 
         // owl:intersectionOf
         for triple in triples {
             if triple.predicate.iriValue == Self.owlIntersectionOf {
-                let members = collectList(from: triple.object).map { buildClassExpression(from: $0, prefixMap: prefixMap) }
+                let members = try buildClassExpressions(
+                    fromList: triple.object,
+                    prefixMap: prefixMap
+                )
                 return .intersection(members)
             }
             if triple.predicate.iriValue == Self.owlUnionOf {
-                let members = collectList(from: triple.object).map { buildClassExpression(from: $0, prefixMap: prefixMap) }
+                let members = try buildClassExpressions(
+                    fromList: triple.object,
+                    prefixMap: prefixMap
+                )
                 return .union(members)
             }
             if triple.predicate.iriValue == Self.owlComplementOf {
-                return .complement(buildClassExpression(from: triple.object, prefixMap: prefixMap))
+                return .complement(
+                    try buildClassExpression(
+                        from: triple.object,
+                        prefixMap: prefixMap
+                    )
+                )
             }
             if triple.predicate.iriValue == Self.owlOneOf {
-                let members = collectList(from: triple.object).compactMap { $0.iriValue }.map { prefixMap.compact($0) }
+                let nodes = try collectList(from: triple.object)
+                var members: [String] = []
+                members.reserveCapacity(nodes.count)
+                for node in nodes {
+                    guard let iri = node.iriValue else {
+                        throw .invalidClassExpression(
+                            "owl:oneOf class members must be named individuals"
+                        )
+                    }
+                    members.append(prefixMap.compact(iri))
+                }
                 return .oneOf(members)
             }
         }
 
-        return .thing // fallback
+        throw .invalidClassExpression(
+            "Blank node '_:\(bnode)' does not define a supported OWL class expression"
+        )
     }
 
-    private func buildRestriction(triples: [ParsedRDFTriple], prefixMap: PrefixMap) -> OWLClassExpression {
+    private func buildRestriction(
+        triples: [ParsedRDFTriple],
+        prefixMap: PrefixMap
+    ) throws(TurtleDecodingError) -> OWLClassExpression {
         var property: String?
         var someValuesFrom: RDFNode?
         var allValuesFrom: RDFNode?
@@ -1578,17 +1636,42 @@ private final class OWLBuilder {
             }
         }
 
-        guard let prop = property else { return .thing }
+        guard let prop = property else {
+            throw .invalidRestriction(
+                "An OWL restriction must declare owl:onProperty"
+            )
+        }
+
+        for cardinality in [
+            minCard,
+            maxCard,
+            exactCard,
+            minQualCard,
+            maxQualCard,
+            qualCard
+        ].compactMap({ $0 }) where cardinality < 0 {
+            throw .invalidRestriction(
+                "OWL restriction cardinality must not be negative"
+            )
+        }
 
         if let node = someValuesFrom {
-            if node.iriValue != nil || node.blankNodeID != nil {
-                return .someValuesFrom(property: prop, filler: buildClassExpression(from: node, prefixMap: prefixMap))
-            }
+            return .someValuesFrom(
+                property: prop,
+                filler: try buildClassExpression(
+                    from: node,
+                    prefixMap: prefixMap
+                )
+            )
         }
         if let node = allValuesFrom {
-            if node.iriValue != nil || node.blankNodeID != nil {
-                return .allValuesFrom(property: prop, filler: buildClassExpression(from: node, prefixMap: prefixMap))
-            }
+            return .allValuesFrom(
+                property: prop,
+                filler: try buildClassExpression(
+                    from: node,
+                    prefixMap: prefixMap
+                )
+            )
         }
         if let node = hasValue {
             if let iri = node.iriValue {
@@ -1597,28 +1680,31 @@ private final class OWLBuilder {
             if let lit = node.literalValue {
                 return .dataHasValue(property: prop, literal: lit)
             }
+            throw .invalidRestriction(
+                "owl:hasValue must identify a named individual or an RDF literal"
+            )
         }
         if hasSelf {
             return .hasSelf(property: prop)
         }
 
         if let n = minQualCard, let cls = onClass {
-            return .minCardinality(property: prop, n: n, filler: buildClassExpression(from: cls, prefixMap: prefixMap))
+            return .minCardinality(property: prop, n: n, filler: try buildClassExpression(from: cls, prefixMap: prefixMap))
         }
         if let n = maxQualCard, let cls = onClass {
-            return .maxCardinality(property: prop, n: n, filler: buildClassExpression(from: cls, prefixMap: prefixMap))
+            return .maxCardinality(property: prop, n: n, filler: try buildClassExpression(from: cls, prefixMap: prefixMap))
         }
         if let n = qualCard, let cls = onClass {
-            return .exactCardinality(property: prop, n: n, filler: buildClassExpression(from: cls, prefixMap: prefixMap))
+            return .exactCardinality(property: prop, n: n, filler: try buildClassExpression(from: cls, prefixMap: prefixMap))
         }
         if let n = minQualCard, let dr = onDataRange {
-            return .dataMinCardinality(property: prop, n: n, range: buildDataRange(from: dr, prefixMap: prefixMap))
+            return .dataMinCardinality(property: prop, n: n, range: try buildDataRange(from: dr, prefixMap: prefixMap))
         }
         if let n = maxQualCard, let dr = onDataRange {
-            return .dataMaxCardinality(property: prop, n: n, range: buildDataRange(from: dr, prefixMap: prefixMap))
+            return .dataMaxCardinality(property: prop, n: n, range: try buildDataRange(from: dr, prefixMap: prefixMap))
         }
         if let n = qualCard, let dr = onDataRange {
-            return .dataExactCardinality(property: prop, n: n, range: buildDataRange(from: dr, prefixMap: prefixMap))
+            return .dataExactCardinality(property: prop, n: n, range: try buildDataRange(from: dr, prefixMap: prefixMap))
         }
 
         if let n = minCard {
@@ -1631,12 +1717,17 @@ private final class OWLBuilder {
             return .exactCardinality(property: prop, n: n, filler: nil)
         }
 
-        return .thing
+        throw .invalidRestriction(
+            "An OWL restriction must declare one supported constraint"
+        )
     }
 
     // MARK: - Data Range Building
 
-    private func buildDataRange(from node: RDFNode, prefixMap: PrefixMap) -> OWLDataRange {
+    private func buildDataRange(
+        from node: RDFNode,
+        prefixMap: PrefixMap
+    ) throws(TurtleDecodingError) -> OWLDataRange {
         switch node {
         case .iri(let iri):
             return .datatype(prefixMap.compact(iri))
@@ -1644,68 +1735,145 @@ private final class OWLBuilder {
             let triples = subjectIndex[.blankNode(bnode)] ?? []
             for triple in triples {
                 if triple.predicate.iriValue == Self.owlIntersectionOf {
-                    let members = collectList(from: triple.object).map { buildDataRange(from: $0, prefixMap: prefixMap) }
+                    let members = try buildDataRanges(
+                        fromList: triple.object,
+                        prefixMap: prefixMap
+                    )
                     return .dataIntersectionOf(members)
                 }
                 if triple.predicate.iriValue == Self.owlUnionOf {
-                    let members = collectList(from: triple.object).map { buildDataRange(from: $0, prefixMap: prefixMap) }
+                    let members = try buildDataRanges(
+                        fromList: triple.object,
+                        prefixMap: prefixMap
+                    )
                     return .dataUnionOf(members)
                 }
                 if let predIRI = triple.predicate.iriValue, predIRI.hasSuffix("datatypeComplementOf") {
-                    return .dataComplementOf(buildDataRange(from: triple.object, prefixMap: prefixMap))
+                    return .dataComplementOf(
+                        try buildDataRange(
+                            from: triple.object,
+                            prefixMap: prefixMap
+                        )
+                    )
                 }
                 if triple.predicate.iriValue == Self.owlOneOf {
-                    let members = collectList(from: triple.object).compactMap { $0.literalValue }
+                    let nodes = try collectList(from: triple.object)
+                    var members: [RDFLiteral] = []
+                    members.reserveCapacity(nodes.count)
+                    for node in nodes {
+                        guard let literal = node.literalValue else {
+                            throw .invalidDataRange(
+                                "owl:oneOf data range members must be RDF literals"
+                            )
+                        }
+                        members.append(literal)
+                    }
                     return .dataOneOf(members)
                 }
             }
-            return .datatype("xsd:string")
+            throw .invalidDataRange(
+                "Blank node '_:\(bnode)' does not define a supported OWL data range"
+            )
         case .literal:
-            return .datatype("xsd:string")
+            throw .invalidDataRange(
+                "An RDF literal cannot directly represent an OWL data range"
+            )
         }
     }
 
     // MARK: - RDF List Collection
 
-    private func collectList(from node: RDFNode) -> [RDFNode] {
+    private func buildClassExpressions(
+        fromList node: RDFNode,
+        prefixMap: PrefixMap
+    ) throws(TurtleDecodingError) -> [OWLClassExpression] {
+        let nodes = try collectList(from: node)
+        var expressions: [OWLClassExpression] = []
+        expressions.reserveCapacity(nodes.count)
+        for node in nodes {
+            expressions.append(
+                try buildClassExpression(
+                    from: node,
+                    prefixMap: prefixMap
+                )
+            )
+        }
+        return expressions
+    }
+
+    private func buildDataRanges(
+        fromList node: RDFNode,
+        prefixMap: PrefixMap
+    ) throws(TurtleDecodingError) -> [OWLDataRange] {
+        let nodes = try collectList(from: node)
+        var ranges: [OWLDataRange] = []
+        ranges.reserveCapacity(nodes.count)
+        for node in nodes {
+            ranges.append(
+                try buildDataRange(
+                    from: node,
+                    prefixMap: prefixMap
+                )
+            )
+        }
+        return ranges
+    }
+
+    private func collectList(
+        from node: RDFNode
+    ) throws(TurtleDecodingError) -> [RDFNode] {
         var result: [RDFNode] = []
         var current = node
+        var visitedNodes: Set<RDFNode> = []
 
         while true {
             if case .iri(let iri) = current, iri == Self.rdfNil {
-                break
+                return result
             }
-            guard case .blankNode(let bnode) = current else {
-                // If it's an IRI, it might be a single-element "list" (Turtle collection)
-                if case .iri = current {
-                    result.append(current)
-                }
-                break
+            guard current.literalValue == nil else {
+                throw .malformedRDFList(
+                    "An RDF list node must be an RDF resource"
+                )
             }
-
-            let triples = subjectIndex[.blankNode(bnode)] ?? []
-            var first: RDFNode?
-            var rest: RDFNode?
-
-            for triple in triples {
-                if triple.predicate.iriValue == Self.rdfFirst {
-                    first = triple.object
-                }
-                if triple.predicate.iriValue == Self.rdfRest {
-                    rest = triple.object
-                }
+            guard visitedNodes.insert(current).inserted else {
+                throw .cyclicRDFList(
+                    "RDF list contains a cycle"
+                )
             }
 
-            if let f = first {
-                result.append(f)
+            let triples = subjectIndex[current] ?? []
+            let firstValues = triples
+                .filter { $0.predicate.iriValue == Self.rdfFirst }
+                .map(\.object)
+            let restValues = triples
+                .filter { $0.predicate.iriValue == Self.rdfRest }
+                .map(\.object)
+            guard firstValues.count == 1, restValues.count == 1 else {
+                throw .malformedRDFList(
+                    "Each RDF list node must have exactly one rdf:first and one rdf:rest"
+                )
             }
-            if let r = rest {
-                current = r
-            } else {
-                break
-            }
+
+            result.append(firstValues[0])
+            current = restValues[0]
         }
+    }
 
-        return result
+    private func collectNamedResources(
+        from node: RDFNode,
+        context: String
+    ) throws(TurtleDecodingError) -> [String] {
+        let members = try collectList(from: node)
+        var identifiers: [String] = []
+        identifiers.reserveCapacity(members.count)
+        for member in members {
+            guard let iri = member.iriValue else {
+                throw .malformedRDFList(
+                    "\(context) members must be named RDF resources"
+                )
+            }
+            identifiers.append(iri)
+        }
+        return identifiers
     }
 }

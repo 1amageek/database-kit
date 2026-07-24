@@ -514,4 +514,92 @@ struct TurtleDecoderTests {
             try TurtleDecoder().decode(from: turtle)
         }
     }
+
+    @Test("Literal class expression is rejected")
+    func literalClassExpressionIsRejected() {
+        let turtle = standardPrefixes + """
+        ex:knows a owl:ObjectProperty ;
+            rdfs:domain "not a class" .
+        """
+
+        do {
+            _ = try TurtleDecoder().decode(from: turtle)
+            Issue.record("Expected invalidClassExpression")
+        } catch TurtleDecodingError.invalidClassExpression {
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("Unknown blank-node data range is rejected")
+    func unknownBlankNodeDataRangeIsRejected() {
+        let turtle = standardPrefixes + """
+        ex:value a owl:DatatypeProperty ;
+            rdfs:range [ ex:unknown ex:Value ] .
+        """
+
+        do {
+            _ = try TurtleDecoder().decode(from: turtle)
+            Issue.record("Expected invalidDataRange")
+        } catch TurtleDecodingError.invalidDataRange {
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("Restriction without property is rejected")
+    func restrictionWithoutPropertyIsRejected() {
+        let turtle = standardPrefixes + """
+        ex:Person a owl:Class ;
+            rdfs:subClassOf [
+                a owl:Restriction ;
+                owl:someValuesFrom ex:Person
+            ] .
+        """
+
+        do {
+            _ = try TurtleDecoder().decode(from: turtle)
+            Issue.record("Expected invalidRestriction")
+        } catch TurtleDecodingError.invalidRestriction {
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("RDF list with missing rest is rejected")
+    func rdfListWithMissingRestIsRejected() {
+        let turtle = standardPrefixes + """
+        ex:Person a owl:Class .
+        _:members rdf:first ex:Person .
+        [] a owl:AllDisjointClasses ;
+            owl:members _:members .
+        """
+
+        do {
+            _ = try TurtleDecoder().decode(from: turtle)
+            Issue.record("Expected malformedRDFList")
+        } catch TurtleDecodingError.malformedRDFList {
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("Cyclic RDF list is rejected")
+    func cyclicRDFListIsRejected() {
+        let turtle = standardPrefixes + """
+        ex:Person a owl:Class .
+        _:members rdf:first ex:Person ;
+            rdf:rest _:members .
+        [] a owl:AllDisjointClasses ;
+            owl:members _:members .
+        """
+
+        do {
+            _ = try TurtleDecoder().decode(from: turtle)
+            Issue.record("Expected cyclicRDFList")
+        } catch TurtleDecodingError.cyclicRDFList {
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
 }
