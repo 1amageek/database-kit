@@ -787,25 +787,19 @@ private extension FieldValueWireCodec {
     static func canonicalObject(
         _ fields: consuming [ObjectField]
     ) throws(DatabaseWireError) -> FieldObject {
-        let originalKeys = fields.map(\.key)
-        let object: FieldObject
-        do {
-            object = try FieldObject(consume fields)
-        } catch let error {
-            throw .invalidFieldObject(error)
-        }
-        let canonicalFields = object.fields
-        guard originalKeys.count == canonicalFields.count else {
-            throw .nonCanonicalFieldObject
-        }
-        for index in originalKeys.indices {
-            guard originalKeys[index].utf8.elementsEqual(
-                canonicalFields[index].key.utf8
-            ) else {
+        for index in fields.indices.dropFirst() {
+            let previousKey = fields[index - 1].key
+            let key = fields[index].key
+            if key.utf8.lexicographicallyPrecedes(previousKey.utf8) {
                 throw .nonCanonicalFieldObject
             }
         }
-        return object
+
+        do {
+            return try FieldObject(consume fields)
+        } catch let error {
+            throw .invalidFieldObject(error)
+        }
     }
 
     static func makeReference(

@@ -898,8 +898,22 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         let primitiveTypeNames: Set<String> = [
             "String", "Int", "Int8", "Int16", "Int32", "Int64",
             "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
-            "Double", "Float", "Bool", "Date", "UUID", "Data",
-            "RDFTerm"
+            "Double", "Float", "Bool",
+            "Date", "Foundation.Date", "FoundationEssentials.Date",
+            "UUID", "Foundation.UUID", "FoundationEssentials.UUID",
+            "Data", "Foundation.Data", "FoundationEssentials.Data",
+            "ExactDecimal", "ByteString", "CivilDate", "CivilTime",
+            "CivilDateTime", "Timestamp", "TimeSpan", "CalendarPeriod",
+            "GeographicPoint", "GeographicPosition", "Vector",
+            "FieldObject", "EntityReference", "RDFTerm",
+            "DatabaseTypes.ExactDecimal", "DatabaseTypes.ByteString",
+            "DatabaseTypes.CivilDate", "DatabaseTypes.CivilTime",
+            "DatabaseTypes.CivilDateTime", "DatabaseTypes.Timestamp",
+            "DatabaseTypes.TimeSpan", "DatabaseTypes.CalendarPeriod",
+            "DatabaseTypes.GeographicPoint",
+            "DatabaseTypes.GeographicPosition", "DatabaseTypes.Vector",
+            "DatabaseTypes.UUID", "DatabaseTypes.FieldObject",
+            "DatabaseTypes.EntityReference", "DatabaseTypes.RDFTerm"
         ]
         var enumMetadataCases: [String] = []
         for fieldInfo in fieldInfos {
@@ -1482,6 +1496,8 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
     switch type {
     case "String":
         schemaType = "string"
+    case "Int":
+        schemaType = "int64"
     case "Int8":
         schemaType = "int8"
     case "Int16":
@@ -1490,6 +1506,8 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
         schemaType = "int32"
     case "Int64":
         schemaType = "int64"
+    case "UInt":
+        schemaType = "uint64"
     case "UInt8":
         schemaType = "uint8"
     case "UInt16":
@@ -1504,13 +1522,39 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
         schemaType = "float32"
     case "Bool":
         schemaType = "bool"
+    case "ExactDecimal", "DatabaseTypes.ExactDecimal":
+        schemaType = "decimal"
     case "Date", "Foundation.Date", "FoundationEssentials.Date":
+        schemaType = "timestamp"
+    case "CivilDate", "DatabaseTypes.CivilDate":
         schemaType = "date"
+    case "CivilTime", "DatabaseTypes.CivilTime":
+        schemaType = "time"
+    case "CivilDateTime", "DatabaseTypes.CivilDateTime":
+        schemaType = "dateTime"
+    case "Timestamp", "DatabaseTypes.Timestamp":
+        schemaType = "timestamp"
+    case "TimeSpan", "DatabaseTypes.TimeSpan":
+        schemaType = "timeSpan"
+    case "CalendarPeriod", "DatabaseTypes.CalendarPeriod":
+        schemaType = "calendarPeriod"
+    case "GeographicPoint", "DatabaseTypes.GeographicPoint":
+        schemaType = "geographicPoint"
+    case "GeographicPosition", "DatabaseTypes.GeographicPosition":
+        schemaType = "geographicPosition"
+    case "Vector", "DatabaseTypes.Vector":
+        schemaType = "vector"
     case "UUID", "Foundation.UUID", "FoundationEssentials.UUID",
          "DatabaseTypes.UUID":
         schemaType = "uuid"
     case "Data", "Foundation.Data", "FoundationEssentials.Data":
-        schemaType = "data"
+        schemaType = "bytes"
+    case "ByteString", "DatabaseTypes.ByteString":
+        schemaType = "bytes"
+    case "FieldObject", "DatabaseTypes.FieldObject":
+        schemaType = "object"
+    case "EntityReference", "DatabaseTypes.EntityReference":
+        schemaType = "reference"
     case "RDFTerm", "DatabaseTypes.RDFTerm":
         schemaType = "rdfTerm"
     default:

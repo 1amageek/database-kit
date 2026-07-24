@@ -45,7 +45,7 @@ public struct ScalarIndexKind<Root: Persistable>: IndexKind {
     /// Default index name: "{TypeName}_{field1}_{field2}_..."
     public var indexName: String {
         let flattenedNames = fieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
         return "\(Root.persistableType)_\(flattenedNames.joined(separator: "_"))"
     }
@@ -112,7 +112,7 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
     /// Default index name: "{TypeName}_count_{field1}_{field2}_..."
     public var indexName: String {
         let flattenedNames = fieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
         if flattenedNames.isEmpty {
             return "\(Root.persistableType)_count"
@@ -199,9 +199,9 @@ public struct SumIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKi
     /// Default index name: "{TypeName}_sum_{groupField1}_{valueField}"
     public var indexName: String {
         let groupNames = groupByFieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
-        let valueName = DatabaseText.replacingOccurrences(
+        let valueName = UTF8Text.replacingOccurrences(
             in: valueFieldName,
             of: ".",
             with: "_"
@@ -309,9 +309,9 @@ public struct MinIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
     /// Default index name: "{TypeName}_min_{groupField1}_{valueField}"
     public var indexName: String {
         let groupNames = groupByFieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
-        let valueName = DatabaseText.replacingOccurrences(
+        let valueName = UTF8Text.replacingOccurrences(
             in: valueFieldName,
             of: ".",
             with: "_"
@@ -406,9 +406,9 @@ public struct MaxIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
     /// Default index name: "{TypeName}_max_{groupField1}_{valueField}"
     public var indexName: String {
         let groupNames = groupByFieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
-        let valueName = DatabaseText.replacingOccurrences(
+        let valueName = UTF8Text.replacingOccurrences(
             in: valueFieldName,
             of: ".",
             with: "_"
@@ -513,9 +513,9 @@ public struct AverageIndexKind<Root: Persistable, Value: IndexNumericValue>: Ind
     /// Default index name: "{TypeName}_avg_{groupField1}_{valueField}"
     public var indexName: String {
         let groupNames = groupByFieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
-        let valueName = DatabaseText.replacingOccurrences(
+        let valueName = UTF8Text.replacingOccurrences(
             in: valueFieldName,
             of: ".",
             with: "_"
@@ -625,7 +625,7 @@ public struct VersionIndexKind<Root: Persistable>: IndexKind {
     /// Default index name: "{TypeName}_version_{field}"
     public var indexName: String {
         let flattenedNames = fieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
         return "\(Root.persistableType)_version_\(flattenedNames.joined(separator: "_"))"
     }
@@ -683,7 +683,7 @@ public struct CountUpdatesIndexKind<Root: Persistable>: IndexKind {
     /// Default index name: "{TypeName}_updates_{field}"
     public var indexName: String {
         let flattenedNames = fieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
         return "\(Root.persistableType)_updates_\(flattenedNames.joined(separator: "_"))"
     }
@@ -751,9 +751,9 @@ public struct CountNotNullIndexKind<Root: Persistable>: IndexKind {
     /// Default index name: "{TypeName}_notnull_{groupFields}_{valueField}"
     public var indexName: String {
         let groupNames = groupByFieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
-        let valueName = DatabaseText.replacingOccurrences(
+        let valueName = UTF8Text.replacingOccurrences(
             in: valueFieldName,
             of: ".",
             with: "_"
@@ -843,7 +843,7 @@ public struct BitmapIndexKind<Root: Persistable>: IndexKind {
     /// Default index name: "{TypeName}_bitmap_{field}"
     public var indexName: String {
         let flattenedNames = fieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
         return "\(Root.persistableType)_bitmap_\(flattenedNames.joined(separator: "_"))"
     }
@@ -956,7 +956,7 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
 
     /// Default index name
     public var indexName: String {
-        let scoreName = DatabaseText.replacingOccurrences(
+        let scoreName = UTF8Text.replacingOccurrences(
             in: scoreFieldName,
             of: ".",
             with: "_"
@@ -965,7 +965,7 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
             return "\(Root.persistableType)_leaderboard_\(scoreName)"
         }
         let groupNames = groupByFieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
         return "\(Root.persistableType)_leaderboard_\(groupNames.joined(separator: "_"))_\(scoreName)"
     }
@@ -1112,9 +1112,9 @@ public struct DistinctIndexKind<Root: Persistable>: IndexKind {
     /// Default index name: "{TypeName}_distinct_{groupFields}_{valueField}"
     public var indexName: String {
         let groupNames = groupByFieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
-        let valueName = DatabaseText.replacingOccurrences(
+        let valueName = UTF8Text.replacingOccurrences(
             in: valueFieldName,
             of: ".",
             with: "_"
@@ -1228,9 +1228,9 @@ public struct PercentileIndexKind<Root: Persistable, Value: IndexNumericValue>: 
     /// Default index name: "{TypeName}_percentile_{groupFields}_{valueField}"
     public var indexName: String {
         let groupNames = groupByFieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
-        let valueName = DatabaseText.replacingOccurrences(
+        let valueName = UTF8Text.replacingOccurrences(
             in: valueFieldName,
             of: ".",
             with: "_"

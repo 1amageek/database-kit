@@ -399,36 +399,30 @@ struct TurtleDecoderTests {
             prefixes: ["ex": "http://example.org/"],
             quads: [
                 RDFQuad(
-                    subject: try .iri(
-                        validating: "http://example.org/schema"
+                    subject: .iri(
+                        try RDFIRI("http://example.org/schema")
                     ),
-                    predicate: try .iri(
-                        validating:
+                    predicate: try RDFPredicateIRI(
                             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
                     ),
                     object: try .iri(
                         validating:
                             "http://www.w3.org/2002/07/owl#Ontology"
                     ),
-                    graph: try .iri(
-                        validating: "urn:ontology-graph"
-                    )
+                    graph: try RDFGraphName(iri: "urn:ontology-graph")
                 ),
                 RDFQuad(
-                    subject: try .iri(
-                        validating: "http://example.org/Person"
+                    subject: .iri(
+                        try RDFIRI("http://example.org/Person")
                     ),
-                    predicate: try .iri(
-                        validating:
+                    predicate: try RDFPredicateIRI(
                             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
                     ),
                     object: try .iri(
                         validating:
                             "http://www.w3.org/2002/07/owl#Class"
                     ),
-                    graph: try .iri(
-                        validating: "urn:ontology-graph"
-                    )
+                    graph: try RDFGraphName(iri: "urn:ontology-graph")
                 )
             ]
         )

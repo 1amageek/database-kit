@@ -87,8 +87,8 @@ enum RDFSyntaxFormatter {
 
         if usePrefixes, let compact = compactIRI(datatype, prefixes: prefixes) {
             result += "^^\(compact)"
-        } else if DatabaseText.contains(":", in: datatype),
-                  !DatabaseText.contains("://", in: datatype),
+        } else if UTF8Text.contains(":", in: datatype),
+                  !UTF8Text.contains("://", in: datatype),
                   !datatype.hasPrefix("urn:") {
             result += "^^\(datatype)"
         } else {

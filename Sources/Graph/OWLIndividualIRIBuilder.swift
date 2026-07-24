@@ -2,6 +2,22 @@ import DatabaseTypes
 import DatabaseValue
 
 public enum OWLIndividualIRIBuilder {
+    public static func subject<Identifier: OWLIndividualIdentifier>(
+        baseIRI: String,
+        persistableType: String,
+        identifier: Identifier
+    ) throws -> RDFSubject {
+        let term = try term(
+            baseIRI: baseIRI,
+            persistableType: persistableType,
+            identifier: identifier
+        )
+        guard case .iri(let iri) = term else {
+            preconditionFailure("An OWL individual IRI builder produced a non-IRI term")
+        }
+        return .iri(iri)
+    }
+
     public static func term<Identifier: OWLIndividualIdentifier>(
         baseIRI: String,
         persistableType: String,

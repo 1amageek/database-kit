@@ -181,7 +181,7 @@ public struct PermutedIndexKind<Root: Persistable>: IndexKind {
     /// Default index name: "{TypeName}_permuted_{fields}_{permutation}"
     public var indexName: String {
         let flattenedNames = fieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
         let permStr = permutation.indices.map(String.init).joined(separator: "")
         return "\(Root.persistableType)_permuted_\(flattenedNames.joined(separator: "_"))_\(permStr)"

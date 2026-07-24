@@ -4,15 +4,15 @@ import DatabaseValue
 import Foundation
 import QueryIR
 
-extension Data: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
+extension Data: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
         .binary(ByteString(retaining: self))
     }
 }
 
-extension Decimal: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
-        get throws(DatabaseLiteralConversionError) {
+extension Decimal: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
+        get throws(QueryLiteralConversionError) {
             do {
                 return .decimal(try ExactDecimal(self))
             } catch .nonFiniteValue {
@@ -24,9 +24,9 @@ extension Decimal: DatabaseLiteralConvertible {
     }
 }
 
-extension Date: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
-        get throws(DatabaseLiteralConversionError) {
+extension Date: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
+        get throws(QueryLiteralConversionError) {
             do {
                 return .timestamp(try Timestamp(self))
             } catch let error {
@@ -41,8 +41,8 @@ extension Date: DatabaseLiteralConvertible {
     }
 }
 
-extension Foundation.UUID: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
+extension Foundation.UUID: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
         .uuid(DatabaseTypes.UUID(self))
     }
 }

@@ -1,4 +1,4 @@
-public struct DatabaseSchemaVersion: Sendable, Hashable, Comparable, CustomStringConvertible {
+public struct SchemaVersion: Sendable, Hashable, Comparable, CustomStringConvertible {
     public let major: UInt32
     public let minor: UInt32
     public let patch: UInt32
@@ -10,8 +10,8 @@ public struct DatabaseSchemaVersion: Sendable, Hashable, Comparable, CustomStrin
     }
 
     public static func < (
-        lhs: DatabaseSchemaVersion,
-        rhs: DatabaseSchemaVersion
+        lhs: SchemaVersion,
+        rhs: SchemaVersion
     ) -> Bool {
         if lhs.major != rhs.major {
             return lhs.major < rhs.major

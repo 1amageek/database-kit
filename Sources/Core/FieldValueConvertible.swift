@@ -62,6 +62,10 @@ extension String: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { .string(self) }
 }
 
+extension ExactDecimal: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .decimal(self) }
+}
+
 extension ByteString: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { .bytes(self) }
 }
@@ -70,12 +74,48 @@ extension CivilDate: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { .date(self) }
 }
 
+extension CivilTime: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .time(self) }
+}
+
+extension CivilDateTime: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .dateTime(self) }
+}
+
 extension Timestamp: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { .timestamp(self) }
 }
 
+extension TimeSpan: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .timeSpan(self) }
+}
+
+extension CalendarPeriod: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .calendarPeriod(self) }
+}
+
+extension GeographicPoint: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .geographicPoint(self) }
+}
+
+extension GeographicPosition: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .geographicPosition(self) }
+}
+
+extension DatabaseTypes.Vector: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .vector(self) }
+}
+
 extension DatabaseTypes.UUID: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { .uuid(self) }
+}
+
+extension FieldObject: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .object(self) }
+}
+
+extension EntityReference: FieldValueConvertible {
+    public func toFieldValue() -> FieldValue { .reference(self) }
 }
 
 extension RDFTerm: FieldValueConvertible {

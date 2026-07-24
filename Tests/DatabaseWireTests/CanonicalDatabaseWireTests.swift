@@ -228,9 +228,9 @@ struct CanonicalDatabaseWireTests {
             .rdfGraph(
                 QueryExecuteOperation.GraphPage(
                     triples: [
-                        try DatabaseRDFQuad(
+                        try RDFQuadValue(
                             subject: .iri(try RDFIRI("urn:event:1")),
-                            predicate: .iri(
+                            predicate: RDFPredicateIRI(
                                 try RDFIRI("urn:calendar:startsAt")
                             ),
                             object: .literal(

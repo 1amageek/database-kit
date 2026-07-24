@@ -79,7 +79,7 @@ public protocol Polymorphable: Persistable {
 
 ## Swift Macro Constraint
 
-Swift 6.3 does not allow a macro attached to a protocol to add protocol
+Swift 6.4 does not allow a macro attached to a protocol to add protocol
 inheritance by generating an extension with an inheritance clause.
 
 This is invalid Swift:
@@ -109,7 +109,7 @@ public protocol Entity: Polymorphable {
 `@Polymorphable` is a metadata and validation macro. It must not be described as
 a macro that makes a protocol conform to `Polymorphable`.
 
-There is a second Swift 6.3 frontend limitation: freestanding macros inside a
+There is a second Swift 6.4 frontend limitation: freestanding macros inside a
 protocol body can fail during type checking before the attached macro can finish
 expansion. Until that compiler issue is fixed, tests may spell the generated
 metadata manually in a protocol extension. The runtime contract remains the same:

@@ -185,17 +185,17 @@ extension Literal {
         case .uint(let v):
             return "\"\(v)\"^^<http://www.w3.org/2001/XMLSchema#unsignedLong>"
         case .decimal(let value):
-            return "\"\(DatabaseLiteralEncoding.decimal(value))\"^^<urn:database:decimal>"
+            return "\"\(QueryLiteralEncoding.decimal(value))\"^^<urn:database:decimal>"
         case .double(let v):
             return String(v)
         case .string(let v):
             return SPARQLEscape.string(v)
         case .date(let v):
-            return "\"\(DatabaseLiteralEncoding.iso8601(v))\"^^<http://www.w3.org/2001/XMLSchema#date>"
+            return "\"\(QueryLiteralEncoding.iso8601(v))\"^^<http://www.w3.org/2001/XMLSchema#date>"
         case .timestamp(let v):
-            return "\"\(DatabaseLiteralEncoding.iso8601(v))\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"
+            return "\"\(QueryLiteralEncoding.iso8601(v))\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"
         case .binary(let v):
-            return "\"\(DatabaseLiteralEncoding.base64(v))\"^^<http://www.w3.org/2001/XMLSchema#base64Binary>"
+            return "\"\(QueryLiteralEncoding.base64(v))\"^^<http://www.w3.org/2001/XMLSchema#base64Binary>"
         case .uuid(let v):
             return "\"\(v.description)\"^^<urn:uuid>"
         case .array(let v):

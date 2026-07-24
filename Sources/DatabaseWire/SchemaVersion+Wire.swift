@@ -1,7 +1,7 @@
 import DatabaseTypes
 import DatabaseValue
 
-extension DatabaseSchemaVersion: DatabaseWireValue {
+extension SchemaVersion: DatabaseWireValue {
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {

@@ -8,7 +8,7 @@ import Testing
 struct LiteralValueConversionTests {
     @Test("unsigned integers retain their full range")
     func unsignedIntegerRetainsFullRange() {
-        #expect(UInt64.max.databaseLiteral == .uint(UInt64.max))
+        #expect(UInt64.max.queryLiteral == .uint(UInt64.max))
     }
 
     @Test("Decimal converts without floating-point loss")
@@ -16,7 +16,7 @@ struct LiteralValueConversionTests {
         let value = try #require(Decimal(string: "1234567890.123456789"))
 
         #expect(
-            try value.databaseLiteral
+            try value.queryLiteral
                 == .decimal(coefficient: 1_234_567_890_123_456_789, scale: 9)
         )
     }
@@ -26,7 +26,7 @@ struct LiteralValueConversionTests {
         let value = try #require(UUID(uuidString: "00112233-4455-6677-8899-aabbccddeeff"))
 
         #expect(
-            try value.databaseLiteral
+            try value.queryLiteral
                 == .uuid(
                     DatabaseTypes.UUID(
                         high: 0x0011_2233_4455_6677,
@@ -41,7 +41,7 @@ struct LiteralValueConversionTests {
         let value = try #require(Decimal(string: "9223372036854775808"))
 
         #expect(
-            try value.databaseLiteral
+            try value.queryLiteral
                 == .decimal(
                     ExactDecimal(
                         coefficient: 9_223_372_036_854_775_808,
@@ -53,8 +53,8 @@ struct LiteralValueConversionTests {
 
     @Test("Decimal rejects NaN")
     func decimalRejectsNaN() {
-        #expect(throws: DatabaseLiteralConversionError.nonFiniteDecimal) {
-            try Decimal.nan.databaseLiteral
+        #expect(throws: QueryLiteralConversionError.nonFiniteDecimal) {
+            try Decimal.nan.queryLiteral
         }
     }
 
@@ -62,8 +62,8 @@ struct LiteralValueConversionTests {
     func dateRejectsNonFiniteTimestamp() {
         let value = Date(timeIntervalSince1970: .infinity)
 
-        #expect(throws: DatabaseLiteralConversionError.nonFiniteTimestamp) {
-            try value.databaseLiteral
+        #expect(throws: QueryLiteralConversionError.nonFiniteTimestamp) {
+            try value.queryLiteral
         }
     }
 
@@ -72,7 +72,7 @@ struct LiteralValueConversionTests {
         let value = Date(timeIntervalSince1970: -0.25)
 
         #expect(
-            try value.databaseLiteral
+            try value.queryLiteral
                 == .timestamp(
                     Timestamp(
                         secondsSinceUnixEpoch: -1,
@@ -86,7 +86,7 @@ struct LiteralValueConversionTests {
     func dataRetainsBorrowableStorage() throws {
         let value = Data([0x00, 0x7F, 0xFF])
 
-        let literal = try value.databaseLiteral
+        let literal = try value.queryLiteral
         guard case .binary(let bytes) = literal else {
             Issue.record("Expected a binary literal")
             return

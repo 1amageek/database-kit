@@ -1,6 +1,6 @@
 import DatabaseValue
 
-extension DatabaseSchemaVersion: Codable {
+extension SchemaVersion: Codable {
     private enum CodingKeys: String, CodingKey {
         case major
         case minor

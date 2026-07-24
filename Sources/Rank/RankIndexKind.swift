@@ -78,7 +78,7 @@ public struct RankIndexKind<Root: Persistable, Score: IndexNumericValue>: IndexK
     /// Default index name: "{TypeName}_rank_{field}"
     public var indexName: String {
         let flattenedNames = fieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
         return "\(Root.persistableType)_rank_\(flattenedNames.joined(separator: "_"))"
     }

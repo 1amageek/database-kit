@@ -1,4 +1,4 @@
-public enum DatabaseLiteralConversionError: Error, Sendable, Equatable {
+public enum QueryLiteralConversionError: Error, Sendable, Equatable {
     /// The value belongs to the database value model but has no QueryIR literal representation.
     case unsupportedFieldValue
 
@@ -15,7 +15,7 @@ public enum DatabaseLiteralConversionError: Error, Sendable, Equatable {
     case timestampOutOfRange
 }
 
-extension DatabaseLiteralConversionError: CustomStringConvertible {
+extension QueryLiteralConversionError: CustomStringConvertible {
     public var description: String {
         switch self {
         case .unsupportedFieldValue:

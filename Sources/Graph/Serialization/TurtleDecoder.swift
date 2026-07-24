@@ -47,8 +47,8 @@ public struct TurtleDecoder: Sendable {
         try dataset.validate()
         let triples = try dataset.quads.map { quad in
             ParsedRDFTriple(
-                subject: try RDFNode(quad.subject),
-                predicate: try RDFNode(quad.predicate),
+                subject: try RDFNode(quad.subject.term),
+                predicate: try RDFNode(quad.predicate.term),
                 object: try RDFNode(quad.object)
             )
         }
@@ -842,7 +842,7 @@ private final class TurtleParser {
     }
 
     private func resolveIRI(_ iri: String) -> String {
-        if let base = baseIRI, !DatabaseText.contains("://", in: iri) {
+        if let base = baseIRI, !UTF8Text.contains("://", in: iri) {
             return base + iri
         }
         return iri

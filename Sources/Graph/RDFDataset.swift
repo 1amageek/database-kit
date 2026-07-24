@@ -14,16 +14,16 @@ extension RDFTerm {
 
 /// RDF quad. `graph == nil` represents the default graph.
 public struct RDFQuad: Sendable, Hashable, Codable {
-    public var subject: RDFTerm
-    public var predicate: RDFTerm
+    public var subject: RDFSubject
+    public var predicate: RDFPredicateIRI
     public var object: RDFTerm
-    public var graph: RDFTerm?
+    public var graph: RDFGraphName?
 
     public init(
-        subject: RDFTerm,
-        predicate: RDFTerm,
+        subject: RDFSubject,
+        predicate: RDFPredicateIRI,
         object: RDFTerm,
-        graph: RDFTerm? = nil
+        graph: RDFGraphName? = nil
     ) {
         self.subject = subject
         self.predicate = predicate
@@ -35,29 +35,59 @@ public struct RDFQuad: Sendable, Hashable, Codable {
         RDFTriple(subject: subject, predicate: predicate, object: object)
     }
 
+    package init(
+        validatingSubject subject: RDFTerm,
+        predicate: RDFTerm,
+        object: RDFTerm,
+        graph: RDFTerm? = nil
+    ) throws {
+        self.subject = try RDFSubject(validating: subject)
+        self.predicate = try RDFPredicateIRI(validating: predicate)
+        self.object = object
+        self.graph = try graph.map(RDFGraphName.init)
+    }
+
     public func validate() throws {
-        guard subject.isRDFSubject else {
-            throw RDFDatasetValidationError.invalidSubject(subject)
-        }
-        guard predicate.isRDFPredicate else {
-            throw RDFDatasetValidationError.invalidPredicate(predicate)
-        }
-        guard object.isRDFObject else {
-            throw RDFDatasetValidationError.invalidObject(object)
-        }
-        if let graph, !graph.isRDFGraphName {
-            throw RDFDatasetValidationError.invalidGraphName(graph)
-        }
+        try RDFTermCodec.validate(object, role: .object)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case subject
+        case predicate
+        case object
+        case graph
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            validatingSubject: container.decode(RDFTerm.self, forKey: .subject),
+            predicate: container.decode(RDFTerm.self, forKey: .predicate),
+            object: container.decode(RDFTerm.self, forKey: .object),
+            graph: container.decodeIfPresent(RDFTerm.self, forKey: .graph)
+        )
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(subject.term, forKey: .subject)
+        try container.encode(predicate.term, forKey: .predicate)
+        try container.encode(object, forKey: .object)
+        try container.encodeIfPresent(graph?.term, forKey: .graph)
     }
 }
 
 /// RDF triple in the default graph.
 public struct RDFTriple: Sendable, Hashable, Codable {
-    public var subject: RDFTerm
-    public var predicate: RDFTerm
+    public var subject: RDFSubject
+    public var predicate: RDFPredicateIRI
     public var object: RDFTerm
 
-    public init(subject: RDFTerm, predicate: RDFTerm, object: RDFTerm) {
+    public init(
+        subject: RDFSubject,
+        predicate: RDFPredicateIRI,
+        object: RDFTerm
+    ) {
         self.subject = subject
         self.predicate = predicate
         self.object = object
@@ -65,6 +95,38 @@ public struct RDFTriple: Sendable, Hashable, Codable {
 
     public var quad: RDFQuad {
         RDFQuad(subject: subject, predicate: predicate, object: object)
+    }
+
+    package init(
+        validatingSubject subject: RDFTerm,
+        predicate: RDFTerm,
+        object: RDFTerm
+    ) throws {
+        self.subject = try RDFSubject(validating: subject)
+        self.predicate = try RDFPredicateIRI(validating: predicate)
+        self.object = object
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case subject
+        case predicate
+        case object
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            validatingSubject: container.decode(RDFTerm.self, forKey: .subject),
+            predicate: container.decode(RDFTerm.self, forKey: .predicate),
+            object: container.decode(RDFTerm.self, forKey: .object)
+        )
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(subject.term, forKey: .subject)
+        try container.encode(predicate.term, forKey: .predicate)
+        try container.encode(object, forKey: .object)
     }
 }
 
@@ -98,7 +160,6 @@ public struct RDFDataset: Sendable, Hashable, Codable {
 public enum RDFDatasetValidationError: Error, Sendable, Equatable, CustomStringConvertible {
     case invalidSubject(RDFTerm)
     case invalidPredicate(RDFTerm)
-    case invalidObject(RDFTerm)
     case invalidGraphName(RDFTerm)
 
     public var description: String {
@@ -107,37 +168,30 @@ public enum RDFDatasetValidationError: Error, Sendable, Equatable, CustomStringC
             return "RDF subject must be an IRI or blank node, got \(term)"
         case .invalidPredicate(let term):
             return "RDF predicate must be an IRI, got \(term)"
-        case .invalidObject(let term):
-            return "RDF object must be an IRI, blank node, or literal, got \(term)"
         case .invalidGraphName(let term):
             return "RDF graph name must be an IRI or blank node, got \(term)"
         }
     }
 }
 
-extension RDFTerm {
-    public var isRDFSubject: Bool {
-        switch self {
-        case .iri, .blankNode: return true
-        case .literal, .tripleTerm: return false
+private extension RDFSubject {
+    init(validating term: RDFTerm) throws {
+        switch term {
+        case .iri(let iri):
+            self = .iri(iri)
+        case .blankNode(let identifier):
+            self = .blankNode(identifier)
+        case .literal, .tripleTerm:
+            throw RDFDatasetValidationError.invalidSubject(term)
         }
     }
+}
 
-    public var isRDFPredicate: Bool {
-        switch self {
-        case .iri: return true
-        case .blankNode, .literal, .tripleTerm: return false
+private extension RDFPredicateIRI {
+    init(validating term: RDFTerm) throws {
+        guard case .iri(let iri) = term else {
+            throw RDFDatasetValidationError.invalidPredicate(term)
         }
-    }
-
-    public var isRDFObject: Bool {
-        true
-    }
-
-    public var isRDFGraphName: Bool {
-        switch self {
-        case .iri, .blankNode: return true
-        case .literal, .tripleTerm: return false
-        }
+        self.init(iri)
     }
 }

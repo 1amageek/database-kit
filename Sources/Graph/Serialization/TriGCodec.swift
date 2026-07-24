@@ -40,12 +40,14 @@ public struct TriGEncoder: Sendable {
             lines.append(line)
         }
 
-        let namedGraphs = grouped.keys.compactMap { $0 }.sorted(by: compareTerms(_:_:))
+        let namedGraphs = grouped.keys.compactMap { $0 }.sorted {
+            compareTerms($0.term, $1.term)
+        }
         for graph in namedGraphs {
             if !lines.isEmpty, lines.last != "" {
                 lines.append("")
             }
-            lines.append("\(RDFSyntaxFormatter.formatTriGTerm(graph, prefixes: dataset.prefixes)) {")
+            lines.append("\(RDFSyntaxFormatter.formatTriGTerm(graph.term, prefixes: dataset.prefixes)) {")
             let graphQuads = grouped[graph, default: []]
                 .map { formatTriple($0, prefixes: dataset.prefixes, indent: "    ") }
                 .sorted()
@@ -58,8 +60,8 @@ public struct TriGEncoder: Sendable {
 
     private func formatTriple(_ quad: RDFQuad, prefixes: [String: String], indent: String = "") -> String {
         [
-            indent + RDFSyntaxFormatter.formatTriGTerm(quad.subject, prefixes: prefixes),
-            RDFSyntaxFormatter.formatTriGTerm(quad.predicate, prefixes: prefixes),
+            indent + RDFSyntaxFormatter.formatTriGTerm(quad.subject.term, prefixes: prefixes),
+            RDFSyntaxFormatter.formatTriGTerm(quad.predicate.term, prefixes: prefixes),
             RDFSyntaxFormatter.formatTriGTerm(quad.object, prefixes: prefixes)
         ].joined(separator: " ") + " ."
     }
@@ -506,11 +508,11 @@ private struct TriGParser {
 
     private mutating func parseObjectList(subject: RDFTerm, predicate: RDFTerm, graph: RDFTerm?) throws {
         let object = try parseObject(graph: graph)
-        quads.append(RDFQuad(subject: subject, predicate: predicate, object: object, graph: graph))
+        quads.append(try RDFQuad(validatingSubject: subject, predicate: predicate, object: object, graph: graph))
         while case .comma = current {
             advance()
             let object = try parseObject(graph: graph)
-            quads.append(RDFQuad(subject: subject, predicate: predicate, object: object, graph: graph))
+            quads.append(try RDFQuad(validatingSubject: subject, predicate: predicate, object: object, graph: graph))
         }
     }
 
@@ -671,14 +673,14 @@ private struct TriGParser {
         for item in items {
             let node = try freshBlankNode()
             if head == nil { head = node }
-            quads.append(RDFQuad(subject: node, predicate: rdfFirst, object: item, graph: graph))
+            quads.append(try RDFQuad(validatingSubject: node, predicate: rdfFirst, object: item, graph: graph))
             if let previous {
-                quads.append(RDFQuad(subject: previous, predicate: rdfRest, object: node, graph: graph))
+                quads.append(try RDFQuad(validatingSubject: previous, predicate: rdfRest, object: node, graph: graph))
             }
             previous = node
         }
         if let previous {
-            quads.append(RDFQuad(subject: previous, predicate: rdfRest, object: rdfNil, graph: graph))
+            quads.append(try RDFQuad(validatingSubject: previous, predicate: rdfRest, object: rdfNil, graph: graph))
         }
         return head ?? rdfNil
     }
@@ -713,7 +715,7 @@ private struct TriGParser {
 
     private func resolveIRI(_ iri: String) -> String {
         if let baseIRI,
-           !DatabaseText.contains("://", in: iri),
+           !UTF8Text.contains("://", in: iri),
            !iri.hasPrefix("urn:") {
             return baseIRI + iri
         }

@@ -24,21 +24,21 @@ public struct OWLClassRDFIndexKind<Root: OWLClassEntity>: IndexKind, Sendable, C
     public let individualIRIBase: String
 
     /// Fixed graph for the projection. `nil` writes to the default graph.
-    public let graph: RDFTerm?
+    public let graph: RDFGraphName?
 
     public var metadata: [String: IndexMetadataValue] {
         var values: [String: IndexMetadataValue] = [
             "individualIRIBase": .string(individualIRIBase)
         ]
         if let graph {
-            values["graph"] = .rdfTerm(graph)
+            values["graph"] = .rdfTerm(graph.term)
         }
         return values
     }
 
     public init(
         individualIRIBase: String,
-        graph: RDFTerm? = nil
+        graph: RDFGraphName? = nil
     ) {
         self.individualIRIBase = individualIRIBase
         self.graph = graph

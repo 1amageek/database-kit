@@ -27,6 +27,13 @@ public enum SchemaDescribeOperation: DatabaseOperation {
         case object = 19
         case reference = 20
         case rdfTerm = 21
+        case time = 22
+        case dateTime = 23
+        case timeSpan = 24
+        case calendarPeriod = 25
+        case geographicPoint = 26
+        case geographicPosition = 27
+        case vector = 28
     }
 
     public enum ReferenceCardinality: UInt8, Sendable, Hashable {
@@ -214,10 +221,10 @@ public enum SchemaDescribeOperation: DatabaseOperation {
     }
 
     public struct Response: DatabaseWireValue, Hashable {
-        public let version: DatabaseSchemaVersion
+        public let version: SchemaVersion
         public let entities: [Entity]
 
-        public init(version: DatabaseSchemaVersion, entities: [Entity]) {
+        public init(version: SchemaVersion, entities: [Entity]) {
             self.version = version
             self.entities = entities
         }
@@ -229,7 +236,7 @@ public enum SchemaDescribeOperation: DatabaseOperation {
         }
 
         public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-            let version = try DatabaseSchemaVersion(from: &reader)
+            let version = try SchemaVersion(from: &reader)
             let count = try reader.readCount()
             var entities: [Entity] = []
             entities.reserveCapacity(count)

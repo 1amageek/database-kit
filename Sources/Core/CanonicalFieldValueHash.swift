@@ -7,13 +7,40 @@ public enum CanonicalFieldValueHash {
         _ value: FieldValue
     ) throws(RDFTermCodecError) -> UInt64 {
         var stream = Stream()
-        try append(value, to: &stream)
+        try appendIteratively(value, to: &stream)
         return stream.finalize()
+    }
+
+    private enum HashStep {
+        case value(FieldValue)
+        case string(String)
+        case identifier(ReferenceIdentifier)
+        case unsigned64(UInt64)
+    }
+
+    private static func appendIteratively(
+        _ root: FieldValue,
+        to stream: inout Stream
+    ) throws(RDFTermCodecError) {
+        var pending: [HashStep] = [.value(root)]
+        while let step = pending.popLast() {
+            switch step {
+            case .string(let value):
+                append(value, to: &stream)
+            case .unsigned64(let value):
+                stream.updateLittleEndian(value)
+            case .identifier(let value):
+                append(value, to: &stream, pending: &pending)
+            case .value(let value):
+                try append(value, to: &stream, pending: &pending)
+            }
+        }
     }
 
     private static func append(
         _ value: FieldValue,
-        to stream: inout Stream
+        to stream: inout Stream,
+        pending: inout [HashStep]
     ) throws(RDFTermCodecError) {
         switch value {
         case .null:
@@ -113,25 +140,25 @@ public enum CanonicalFieldValueHash {
         case .array(let values):
             stream.update(byte: 0x19)
             stream.updateLittleEndian(UInt64(values.count))
-            for value in values {
-                try append(value, to: &stream)
+            for value in values.reversed() {
+                pending.append(.value(value))
             }
         case .object(let fields):
             stream.update(byte: 0x1A)
             stream.updateLittleEndian(UInt64(fields.count))
-            for field in fields.fields {
-                append(field.key, to: &stream)
-                try append(field.value, to: &stream)
+            for field in fields.fields.reversed() {
+                pending.append(.value(field.value))
+                pending.append(.string(field.key))
             }
         case .reference(let identity):
             stream.update(byte: 0x1B)
-            append(identity.entity, to: &stream)
-            append(identity.id, to: &stream)
-            stream.updateLittleEndian(UInt64(identity.partitions.count))
-            for partition in identity.partitions.fields {
-                append(partition.key, to: &stream)
-                try append(partition.value, to: &stream)
+            for partition in identity.partitions.fields.reversed() {
+                pending.append(.value(partition.value))
+                pending.append(.string(partition.key))
             }
+            pending.append(.unsigned64(UInt64(identity.partitions.count)))
+            pending.append(.identifier(identity.id))
+            pending.append(.string(identity.entity))
         case .rdfTerm(let term):
             stream.update(byte: 0x1C)
             let plan = try RDFTermCodec.encodingPlan(term)
@@ -239,7 +266,8 @@ public enum CanonicalFieldValueHash {
 
     private static func append(
         _ value: ReferenceIdentifier,
-        to stream: inout Stream
+        to stream: inout Stream,
+        pending: inout [HashStep]
     ) {
         switch value {
         case .bool(let value):
@@ -287,8 +315,8 @@ public enum CanonicalFieldValueHash {
         case .composite(let values):
             stream.update(byte: 0x0c)
             stream.updateLittleEndian(UInt64(values.count))
-            for value in values {
-                append(value, to: &stream)
+            for value in values.reversed() {
+                pending.append(.identifier(value))
             }
         }
     }

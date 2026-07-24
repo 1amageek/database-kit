@@ -58,6 +58,7 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidRDFBlankNodeIdentifier
     case invalidRDFTripleSubject
     case invalidRDFTriplePredicate
+    case invalidRDFGraphName
     case invalidRDFPredicateIRI(String)
     case invalidRDFDatatypeIRI
     case invalidRDFLanguageTag

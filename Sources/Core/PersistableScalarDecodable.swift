@@ -183,6 +183,30 @@ extension String: PersistableScalarDecodable {
     }
 }
 
+extension ExactDecimal: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> ExactDecimal {
+        guard case .decimal(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "an exact decimal")
+        }
+        return scalar
+    }
+}
+
+extension ByteString: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> ByteString {
+        guard case .bytes(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "bytes")
+        }
+        return scalar
+    }
+}
+
 extension Data: PersistableScalarDecodable {
     public static func decodePersistedScalar(
         _ value: FieldValue,
@@ -207,24 +231,159 @@ extension Foundation.UUID: PersistableScalarDecodable {
     }
 }
 
+extension DatabaseTypes.UUID: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> DatabaseTypes.UUID {
+        guard case .uuid(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a UUID")
+        }
+        return scalar
+    }
+}
+
+extension CivilDate: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> CivilDate {
+        guard case .date(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a civil date")
+        }
+        return scalar
+    }
+}
+
+extension CivilTime: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> CivilTime {
+        guard case .time(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a civil time")
+        }
+        return scalar
+    }
+}
+
+extension CivilDateTime: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> CivilDateTime {
+        guard case .dateTime(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a civil date-time")
+        }
+        return scalar
+    }
+}
+
+extension Timestamp: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> Timestamp {
+        guard case .timestamp(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a timestamp")
+        }
+        return scalar
+    }
+}
+
 extension Date: PersistableScalarDecodable {
     public static func decodePersistedScalar(
         _ value: FieldValue,
         field: String
     ) throws -> Date {
-        let seconds: Double
-        switch value {
-        case .timestamp(let timestamp):
-            return Date(timestamp)
-        case .date(let date):
-            guard let days = databaseDaysSinceUnixEpoch(date) else {
-                throw PersistableDecodingError.invalidDate(field: field)
-            }
-            seconds = Double(days * 86_400)
-        default:
+        guard case .timestamp(let timestamp) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a date or timestamp")
         }
-        return Date(timeIntervalSince1970: seconds)
+        return Date(timestamp)
+    }
+}
+
+extension TimeSpan: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> TimeSpan {
+        guard case .timeSpan(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a time span")
+        }
+        return scalar
+    }
+}
+
+extension CalendarPeriod: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> CalendarPeriod {
+        guard case .calendarPeriod(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a calendar period")
+        }
+        return scalar
+    }
+}
+
+extension GeographicPoint: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> GeographicPoint {
+        guard case .geographicPoint(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a geographic point")
+        }
+        return scalar
+    }
+}
+
+extension GeographicPosition: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> GeographicPosition {
+        guard case .geographicPosition(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a geographic position")
+        }
+        return scalar
+    }
+}
+
+extension DatabaseTypes.Vector: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> DatabaseTypes.Vector {
+        guard case .vector(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "a vector")
+        }
+        return scalar
+    }
+}
+
+extension FieldObject: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> FieldObject {
+        guard case .object(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "an object")
+        }
+        return scalar
+    }
+}
+
+extension EntityReference: PersistableScalarDecodable {
+    public static func decodePersistedScalar(
+        _ value: FieldValue,
+        field: String
+    ) throws -> EntityReference {
+        guard case .reference(let scalar) = value else {
+            throw PersistableDecodingError.invalidValue(field: field, expected: "an entity reference")
+        }
+        return scalar
     }
 }
 
@@ -237,37 +396,5 @@ extension RDFTerm: PersistableScalarDecodable {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an RDF term")
         }
         return scalar
-    }
-}
-
-private func databaseDaysSinceUnixEpoch(_ date: CivilDate) -> Int64? {
-    let year = Int64(date.year)
-    let month = Int64(date.month)
-    let day = Int64(date.day)
-    guard (1...12).contains(month),
-          day >= 1,
-          day <= databaseDaysInMonth(year: year, month: month) else {
-        return nil
-    }
-
-    let adjustedYear = year - (month <= 2 ? 1 : 0)
-    let era = (adjustedYear >= 0 ? adjustedYear : adjustedYear - 399) / 400
-    let yearOfEra = adjustedYear - era * 400
-    let adjustedMonth = month + (month > 2 ? -3 : 9)
-    let dayOfYear = (153 * adjustedMonth + 2) / 5 + day - 1
-    let dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
-    return era * 146_097 + dayOfEra - 719_468
-}
-
-private func databaseDaysInMonth(year: Int64, month: Int64) -> Int64 {
-    switch month {
-    case 2:
-        let leap = year.isMultiple(of: 4)
-            && (!year.isMultiple(of: 100) || year.isMultiple(of: 400))
-        return leap ? 29 : 28
-    case 4, 6, 9, 11:
-        return 30
-    default:
-        return 31
     }
 }

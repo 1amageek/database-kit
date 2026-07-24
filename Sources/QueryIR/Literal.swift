@@ -214,15 +214,15 @@ extension Literal: CustomStringConvertible {
         case .uint(let v):
             return String(v)
         case .decimal(let value):
-            return DatabaseLiteralEncoding.decimal(value)
+            return QueryLiteralEncoding.decimal(value)
         case .double(let v):
             return String(v)
         case .string(let v):
             return "\"\(v)\""
         case .date(let v):
-            return DatabaseLiteralEncoding.iso8601(v)
+            return QueryLiteralEncoding.iso8601(v)
         case .timestamp(let v):
-            return DatabaseLiteralEncoding.iso8601(v)
+            return QueryLiteralEncoding.iso8601(v)
         case .binary(let v):
             return "binary(\(v.count) bytes)"
         case .uuid(let v):

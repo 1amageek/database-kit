@@ -90,12 +90,12 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
 
     /// Default index name
     public var indexName: String {
-        let f = DatabaseText.replacingOccurrences(
+        let f = UTF8Text.replacingOccurrences(
             in: fromField,
             of: ".",
             with: "_"
         )
-        let t = DatabaseText.replacingOccurrences(
+        let t = UTF8Text.replacingOccurrences(
             in: toField,
             of: ".",
             with: "_"
@@ -104,7 +104,7 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
         if edgeField.isEmpty {
             name = "\(Root.persistableType)_graph_\(f)_\(t)"
         } else {
-            let e = DatabaseText.replacingOccurrences(
+            let e = UTF8Text.replacingOccurrences(
                 in: edgeField,
                 of: ".",
                 with: "_"
@@ -112,7 +112,7 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
             name = "\(Root.persistableType)_graph_\(f)_\(e)_\(t)"
         }
         if let graphField {
-            let g = DatabaseText.replacingOccurrences(
+            let g = UTF8Text.replacingOccurrences(
                 in: graphField,
                 of: ".",
                 with: "_"

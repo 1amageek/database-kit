@@ -253,12 +253,12 @@ public enum QueryExecuteOperation: DatabaseOperation {
     }
 
     public struct GraphPage: Sendable, Hashable {
-        public let triples: [DatabaseRDFQuad]
+        public let triples: [RDFQuadValue]
         public let continuation: ByteString?
         public let snapshotVersion: Int64?
 
         public init(
-            triples: [DatabaseRDFQuad],
+            triples: [RDFQuadValue],
             continuation: ByteString? = nil,
             snapshotVersion: Int64? = nil
         ) {
@@ -277,9 +277,9 @@ public enum QueryExecuteOperation: DatabaseOperation {
 
         fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let count = try reader.readCount()
-            var triples: [DatabaseRDFQuad] = []
+            var triples: [RDFQuadValue] = []
             triples.reserveCapacity(count)
-            for _ in 0..<count { triples.append(try DatabaseRDFQuad(from: &reader)) }
+            for _ in 0..<count { triples.append(try RDFQuadValue(from: &reader)) }
             let continuation = try reader.readOptionalBytes()
             self.init(
                 triples: triples,

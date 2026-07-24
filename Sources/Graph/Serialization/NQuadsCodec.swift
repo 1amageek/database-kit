@@ -90,12 +90,12 @@ public struct NQuadsEncoder: Sendable {
 
     private func formatQuad(_ quad: RDFQuad) -> String {
         var parts = [
-            RDFSyntaxFormatter.formatNQuadsTerm(quad.subject),
-            RDFSyntaxFormatter.formatNQuadsTerm(quad.predicate),
+            RDFSyntaxFormatter.formatNQuadsTerm(quad.subject.term),
+            RDFSyntaxFormatter.formatNQuadsTerm(quad.predicate.term),
             RDFSyntaxFormatter.formatNQuadsTerm(quad.object)
         ]
         if let graph = quad.graph {
-            parts.append(RDFSyntaxFormatter.formatNQuadsTerm(graph))
+            parts.append(RDFSyntaxFormatter.formatNQuadsTerm(graph.term))
         }
         return parts.joined(separator: " ") + " ."
     }
@@ -138,13 +138,18 @@ private struct NQuadsLineParser {
             throw RDFSyntaxError.unexpectedToken(expected: "end of line", found: currentDescription, line: line)
         }
 
-        let quad = RDFQuad(subject: subject, predicate: predicate, object: object, graph: graph)
         do {
+            let quad = try RDFQuad(
+                validatingSubject: subject,
+                predicate: predicate,
+                object: object,
+                graph: graph
+            )
             try quad.validate()
+            return quad
         } catch {
             throw RDFSyntaxError.invalidQuad(String(describing: error), line: line)
         }
-        return quad
     }
 
     private mutating func parseTerm() throws -> RDFTerm {

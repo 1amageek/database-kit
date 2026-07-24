@@ -5,6 +5,7 @@
 /// - ISO/IEC 9075-16:2023 (SQL/PGQ)
 /// - GQL (Graph Query Language) specification
 
+import DatabaseTypes
 import DatabaseValue
 
 // Note: Core MatchPattern, PathPattern, PathElement, NodePattern, EdgePattern,
@@ -889,19 +890,19 @@ extension Literal {
         case .uint(let v):
             return String(v)
         case .decimal(let value):
-            return DatabaseLiteralEncoding.decimal(value)
+            return QueryLiteralEncoding.decimal(value)
         case .double(let v):
             return String(v)
         case .string(let v):
             return SQLEscape.string(v)
         case .date(let v):
-            return "DATE '\(DatabaseLiteralEncoding.iso8601(v))'"
+            return "DATE '\(QueryLiteralEncoding.iso8601(v))'"
         case .timestamp(let v):
-            return "TIMESTAMP '\(DatabaseLiteralEncoding.iso8601(v))'"
+            return "TIMESTAMP '\(QueryLiteralEncoding.iso8601(v))'"
         case .iri(let v):
             return SQLEscape.string(v)
         case .binary(let v):
-            return "X'\(DatabaseLiteralEncoding.hex(v))'"
+            return "X'\(QueryLiteralEncoding.hex(v))'"
         case .uuid(let v):
             return "CAST(\(SQLEscape.string(v.description)) AS UUID)"
         case .blankNode(let v):

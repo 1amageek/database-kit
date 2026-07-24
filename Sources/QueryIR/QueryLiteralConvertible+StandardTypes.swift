@@ -1,63 +1,63 @@
 import DatabaseTypes
 import DatabaseValue
 
-extension CivilDate: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
+extension CivilDate: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
         .date(self)
     }
 }
 
-extension Timestamp: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
+extension Timestamp: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
         .timestamp(self)
     }
 }
 
-extension ByteString: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
+extension ByteString: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
         .binary(self)
     }
 }
 
-extension DatabaseTypes.UUID: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
+extension DatabaseTypes.UUID: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
         .uuid(self)
     }
 }
 
-extension RDFTerm: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
+extension RDFTerm: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
         .rdfTerm(self)
     }
 }
 
-extension RDFIRI: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
+extension RDFIRI: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
         .rdfTerm(.iri(self))
     }
 }
 
-extension RDFPredicateIRI: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
+extension RDFPredicateIRI: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
         .rdfTerm(term)
     }
 }
 
-extension RDFLiteral: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
+extension RDFLiteral: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
         .rdfTerm(.literal(self))
     }
 }
 
-extension ExactDecimal: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
+extension ExactDecimal: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
         .decimal(self)
     }
 }
 
-extension FieldValue: DatabaseLiteralConvertible {
-    public var databaseLiteral: Literal {
-        get throws(DatabaseLiteralConversionError) {
+extension FieldValue: QueryLiteralConvertible {
+    public var queryLiteral: Literal {
+        get throws(QueryLiteralConversionError) {
             switch self {
             case .null:
                 return .null
@@ -99,7 +99,7 @@ extension FieldValue: DatabaseLiteralConvertible {
                 var literals: [Literal] = []
                 literals.reserveCapacity(values.count)
                 for value in values {
-                    literals.append(try value.databaseLiteral)
+                    literals.append(try value.queryLiteral)
                 }
                 return .array(literals)
             case .rdfTerm(let value):

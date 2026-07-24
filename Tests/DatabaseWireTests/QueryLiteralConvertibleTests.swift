@@ -4,17 +4,17 @@ import QueryIR
 import Testing
 
 @Suite("Database literal conversion")
-struct DatabaseLiteralConvertibleTests {
+struct QueryLiteralConvertibleTests {
     @Test("standard integer conversions preserve signedness and range")
     func integerConversionsPreserveRange() {
-        #expect(Int64.min.databaseLiteral == .int(Int64.min))
-        #expect(UInt64.max.databaseLiteral == .uint(UInt64.max))
+        #expect(Int64.min.queryLiteral == .int(Int64.min))
+        #expect(UInt64.max.queryLiteral == .uint(UInt64.max))
     }
 
     @Test("homogeneous arrays convert every element")
     func homogeneousArrayConversion() throws {
         #expect(
-            try [UInt16(1), UInt16.max].databaseLiteral
+            try [UInt16(1), UInt16.max].queryLiteral
                 == .array([.uint(1), .uint(UInt64(UInt16.max))])
         )
     }
@@ -23,7 +23,7 @@ struct DatabaseLiteralConvertibleTests {
     func optionalNilConversion() throws {
         let value: Int64? = nil
 
-        #expect(try value.databaseLiteral == .null)
+        #expect(try value.queryLiteral == .null)
     }
 
     @Test("database arrays retain exact scalar representations")
@@ -35,7 +35,7 @@ struct DatabaseLiteralConvertibleTests {
         ])
 
         #expect(
-            try value.databaseLiteral
+            try value.queryLiteral
                 == .array([
                     .int(Int64.min),
                     .uint(UInt64.max),
@@ -46,8 +46,8 @@ struct DatabaseLiteralConvertibleTests {
 
     @Test("database objects fail instead of silently producing a literal")
     func databaseObjectConversionFails() {
-        #expect(throws: DatabaseLiteralConversionError.unsupportedFieldValue) {
-            try FieldValue.object(FieldObject()).databaseLiteral
+        #expect(throws: QueryLiteralConversionError.unsupportedFieldValue) {
+            try FieldValue.object(FieldObject()).queryLiteral
         }
     }
 
@@ -56,7 +56,7 @@ struct DatabaseLiteralConvertibleTests {
         let iri = try RDFIRI("https://example.com/event")
 
         #expect(
-            iri.databaseLiteral
+            iri.queryLiteral
                 == .rdfTerm(.iri(iri))
         )
     }

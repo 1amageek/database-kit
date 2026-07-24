@@ -571,9 +571,7 @@ struct DescriptorOwnershipTests {
 
     @Test("OWLClassRDFIndexKind supports a fixed named graph")
     func owlRDFIndexKindNamedGraph() throws {
-        let graph = try RDFTerm.iri(
-            validating: "https://example.org/graph/people"
-        )
+        let graph = try RDFGraphName(iri: "https://example.org/graph/people")
         let kind = OWLClassRDFIndexKind<OntEmployee>(
             individualIRIBase: "https://example.org/individual/",
             graph: graph
@@ -585,9 +583,7 @@ struct DescriptorOwnershipTests {
     func owlRDFIndexKindCodable() throws {
         let kind = OWLClassRDFIndexKind<OntEmployee>(
             individualIRIBase: "https://example.org/individual/",
-            graph: try .iri(
-                validating: "https://example.org/graph/test"
-            )
+            graph: try RDFGraphName(iri: "https://example.org/graph/test")
         )
         let data = try JSONEncoder().encode(kind)
         let decoded = try JSONDecoder().decode(OWLClassRDFIndexKind<OntEmployee>.self, from: data)

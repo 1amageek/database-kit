@@ -471,8 +471,8 @@ private struct TurtleWriter {
 
     private func formatIRI(_ iri: String) -> String {
         // Already prefixed (contains ":" but not "://")
-        if DatabaseText.contains(":", in: iri),
-           !DatabaseText.contains("://", in: iri) {
+        if UTF8Text.contains(":", in: iri),
+           !UTF8Text.contains("://", in: iri) {
             return iri
         }
         // Try to compact full IRI

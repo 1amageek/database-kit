@@ -10,8 +10,8 @@ struct RDFTextCodecTests {
         let literal = "slash \\ quote \" line\nreturn\rtab\t"
         let dataset = RDFDataset(quads: [
             RDFQuad(
-                subject: try .iri(validating: "urn:subject"),
-                predicate: try .iri(validating: "urn:predicate"),
+                subject: .iri(try RDFIRI("urn:subject")),
+                predicate: try RDFPredicateIRI("urn:predicate"),
                 object: .literal(RDFLiteral(
                     lexicalForm: literal,
                     datatype: .xsdString
@@ -43,7 +43,7 @@ struct RDFTextCodecTests {
         let encoded = TurtleEncoder().encode(ontology)
 
         #expect(
-            DatabaseText.contains(
+            UTF8Text.contains(
                 "rdfs:label \"slash \\\\ quote \\\" line\\nreturn\\rtab\\t\"",
                 in: encoded
             )
@@ -56,8 +56,8 @@ struct RDFTextCodecTests {
             from: "@base <https://example.com/> . <child> <urn:p> <value> ."
         )
 
-        let expectedSubject = try RDFTerm.iri(
-            validating: "https://example.com/child"
+        let expectedSubject = RDFSubject.iri(
+            try RDFIRI("https://example.com/child")
         )
         let expectedObject = try RDFTerm.iri(
             validating: "https://example.com/value"

@@ -94,7 +94,7 @@ public struct FullTextIndexKind<Root: Persistable>: IndexKind {
     /// Default index name: "{TypeName}_fulltext_{fields}"
     public var indexName: String {
         let flattenedNames = fieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
         return "\(Root.persistableType)_fulltext_\(flattenedNames.joined(separator: "_"))"
     }

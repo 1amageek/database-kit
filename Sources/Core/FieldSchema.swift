@@ -49,7 +49,7 @@ public struct FieldSchema: Sendable, Codable, Equatable, Hashable {
 /// Maps Swift types to a finite set of wire-compatible categories.
 /// Used by dynamic Protobuf codecs to interpret raw bytes without compiled types.
 public enum FieldSchemaType: String, Sendable, Codable, Equatable {
-    case string
+    case bool
     case int8
     case int16
     case int32
@@ -60,10 +60,20 @@ public enum FieldSchemaType: String, Sendable, Codable, Equatable {
     case uint64
     case float32
     case float64
-    case bool
+    case decimal
+    case string
+    case bytes
     case date
+    case time
+    case dateTime
+    case timestamp
+    case timeSpan
+    case calendarPeriod
+    case geographicPoint
+    case geographicPosition
+    case vector
     case uuid
-    case data
+    case object
     case rdfTerm
     case reference
     /// Nested Persistable type (encoded as length-delimited Protobuf)

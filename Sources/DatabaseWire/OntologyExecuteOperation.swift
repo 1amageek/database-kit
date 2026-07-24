@@ -53,12 +53,12 @@ public enum OntologyExecuteOperation: DatabaseOperation {
     public struct Document: DatabaseWireValue, Hashable {
         public let ontology: String
         public let imports: [String]
-        public let axioms: [DatabaseRDFQuad]
+        public let axioms: [RDFQuadValue]
 
         public init(
             ontology: String,
             imports: [String] = [],
-            axioms: [DatabaseRDFQuad]
+            axioms: [RDFQuadValue]
         ) {
             self.ontology = ontology
             self.imports = imports
@@ -84,10 +84,10 @@ public enum OntologyExecuteOperation: DatabaseOperation {
             imports.reserveCapacity(importCount)
             for _ in 0..<importCount { imports.append(try reader.readString()) }
             let axiomCount = try reader.readCount()
-            var axioms: [DatabaseRDFQuad] = []
+            var axioms: [RDFQuadValue] = []
             axioms.reserveCapacity(axiomCount)
             for _ in 0..<axiomCount {
-                axioms.append(try DatabaseRDFQuad(from: &reader))
+                axioms.append(try RDFQuadValue(from: &reader))
             }
             self.init(ontology: ontology, imports: imports, axioms: axioms)
         }
@@ -234,14 +234,14 @@ public enum OntologyExecuteOperation: DatabaseOperation {
         public let ontology: String
         public let revision: UInt64
         public let imports: [String]
-        public let axioms: [DatabaseRDFQuad]
+        public let axioms: [RDFQuadValue]
         public let continuation: ByteString?
 
         public init(
             ontology: String,
             revision: UInt64,
             imports: [String],
-            axioms: [DatabaseRDFQuad],
+            axioms: [RDFQuadValue],
             continuation: ByteString? = nil
         ) {
             self.ontology = ontology
@@ -273,10 +273,10 @@ public enum OntologyExecuteOperation: DatabaseOperation {
             imports.reserveCapacity(importCount)
             for _ in 0..<importCount { imports.append(try reader.readString()) }
             let axiomCount = try reader.readCount()
-            var axioms: [DatabaseRDFQuad] = []
+            var axioms: [RDFQuadValue] = []
             axioms.reserveCapacity(axiomCount)
             for _ in 0..<axiomCount {
-                axioms.append(try DatabaseRDFQuad(from: &reader))
+                axioms.append(try RDFQuadValue(from: &reader))
             }
             self.init(
                 ontology: ontology,
@@ -289,12 +289,12 @@ public enum OntologyExecuteOperation: DatabaseOperation {
     }
 
     public struct InferencePage: DatabaseWireValue, Hashable {
-        public let inferredAxioms: [DatabaseRDFQuad]
+        public let inferredAxioms: [RDFQuadValue]
         public let isComplete: Bool
         public let continuation: ByteString?
 
         public init(
-            inferredAxioms: [DatabaseRDFQuad],
+            inferredAxioms: [RDFQuadValue],
             isComplete: Bool,
             continuation: ByteString? = nil
         ) {
@@ -316,10 +316,10 @@ public enum OntologyExecuteOperation: DatabaseOperation {
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let count = try reader.readCount()
-            var axioms: [DatabaseRDFQuad] = []
+            var axioms: [RDFQuadValue] = []
             axioms.reserveCapacity(count)
             for _ in 0..<count {
-                axioms.append(try DatabaseRDFQuad(from: &reader))
+                axioms.append(try RDFQuadValue(from: &reader))
             }
             self.init(
                 inferredAxioms: axioms,

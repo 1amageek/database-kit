@@ -115,8 +115,44 @@ public enum PersistableFieldEncoder {
             value = (raw as? Float).map(FieldValue.float32)
         case .float64:
             value = (raw as? Double).map(FieldValue.float64)
+        case .decimal:
+            value = (raw as? ExactDecimal).map(FieldValue.decimal)
         case .string:
             value = (raw as? String).map(FieldValue.string)
+        case .bytes:
+            if let scalar = raw as? ByteString {
+                value = .bytes(scalar)
+            } else if let scalar = raw as? Data {
+                value = .bytes(ByteString(retaining: scalar))
+            } else if let scalar = raw as? [UInt8] {
+                value = .bytes(ByteString(scalar))
+            } else {
+                value = nil
+            }
+        case .date:
+            value = (raw as? CivilDate).map(FieldValue.date)
+        case .time:
+            value = (raw as? CivilTime).map(FieldValue.time)
+        case .dateTime:
+            value = (raw as? CivilDateTime).map(FieldValue.dateTime)
+        case .timestamp:
+            if let scalar = raw as? Timestamp {
+                value = .timestamp(scalar)
+            } else if let scalar = raw as? Date {
+                value = .timestamp(try Timestamp(scalar))
+            } else {
+                value = nil
+            }
+        case .timeSpan:
+            value = (raw as? TimeSpan).map(FieldValue.timeSpan)
+        case .calendarPeriod:
+            value = (raw as? CalendarPeriod).map(FieldValue.calendarPeriod)
+        case .geographicPoint:
+            value = (raw as? GeographicPoint).map(FieldValue.geographicPoint)
+        case .geographicPosition:
+            value = (raw as? GeographicPosition).map(FieldValue.geographicPosition)
+        case .vector:
+            value = (raw as? DatabaseTypes.Vector).map(FieldValue.vector)
         case .uuid:
             if let scalar = raw as? Foundation.UUID {
                 value = .uuid(DatabaseTypes.UUID(scalar))
@@ -125,23 +161,15 @@ public enum PersistableFieldEncoder {
             } else {
                 value = nil
             }
-        case .data:
-            if let scalar = raw as? Data {
-                value = .bytes(ByteString(retaining: scalar))
-            } else if let scalar = raw as? [UInt8] {
-                value = .bytes(ByteString(scalar))
-            } else {
-                value = nil
-            }
+        case .object:
+            value = (raw as? FieldObject).map(FieldValue.object)
         case .rdfTerm:
             value = (raw as? RDFTerm).map(FieldValue.rdfTerm)
         case .reference:
-            value = (raw as? any PersistableReferenceValue).map {
-                .reference($0.persistableIdentity)
-            }
-        case .date:
-            if let scalar = raw as? Date {
-                value = .timestamp(try Timestamp(scalar))
+            if let scalar = raw as? EntityReference {
+                value = .reference(scalar)
+            } else if let scalar = raw as? any PersistableReferenceValue {
+                value = .reference(scalar.persistableIdentity)
             } else {
                 value = nil
             }

@@ -2,7 +2,7 @@ import DatabaseValue
 import DatabaseTypes
 
 public enum OWLRDFVocabulary {
-    public static let rdfType = RDFTerm.iri(
+    public static let rdfType = RDFPredicateIRI(
         requiredIRI(
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
         )

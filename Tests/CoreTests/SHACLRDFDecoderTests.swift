@@ -101,9 +101,24 @@ struct SHACLRDFDecoderTests {
         _ predicate: String,
         _ object: RDFTerm
     ) -> RDFQuad {
-        RDFQuad(
-            subject: subject,
-            predicate: Self.iri(predicate),
+        let typedSubject: RDFSubject
+        switch subject {
+        case .iri(let iri):
+            typedSubject = .iri(iri)
+        case .blankNode(let identifier):
+            typedSubject = .blankNode(identifier)
+        case .literal, .tripleTerm:
+            preconditionFailure("A SHACL fixture subject must be an IRI or blank node")
+        }
+        let typedPredicate: RDFPredicateIRI
+        do {
+            typedPredicate = try RDFPredicateIRI(predicate)
+        } catch {
+            preconditionFailure("Invalid SHACL predicate IRI fixture: \(predicate)")
+        }
+        return RDFQuad(
+            subject: typedSubject,
+            predicate: typedPredicate,
             object: object
         )
     }

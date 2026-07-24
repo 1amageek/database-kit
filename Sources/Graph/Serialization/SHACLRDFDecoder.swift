@@ -539,8 +539,10 @@ public struct SHACLRDFDecoder: Sendable {
 
         init(_ quads: [RDFQuad]) {
             for quad in quads {
-                guard case .iri(let predicate) = quad.predicate else { continue }
-                values[quad.subject, default: [:]][predicate, default: []]
+                values[quad.subject.term, default: [:]][
+                    quad.predicate.iri,
+                    default: []
+                ]
                     .append(quad.object)
             }
         }

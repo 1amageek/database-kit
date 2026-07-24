@@ -4,7 +4,7 @@ import DatabaseWire
 import Testing
 
 @Suite("Database RDF term wire boundaries")
-struct DatabaseRDFTermWireBoundaryTests {
+struct RDFTermWireBoundaryTests {
     @Test("wire decoding rejects invalid RDF state")
     func invalidDecodeState() {
         var reader = DatabaseWireReader(ByteString([
@@ -75,34 +75,53 @@ struct DatabaseRDFTermWireBoundaryTests {
         }
     }
 
-    @Test("quad construction validates every RDF role")
+    @Test("quad decoding rejects invalid RDF roles")
     func quadRoleValidation() throws {
+        let invalidSubject = try encodeQuadTerms(
+            subject: .literal(RDFLiteral(
+                lexicalForm: "invalid",
+                datatype: .xsdString
+            )),
+            predicate: .iri(try RDFIRI("urn:predicate")),
+            object: .iri(try RDFIRI("urn:object"))
+        )
         #expect(
             throws: DatabaseWireError.invalidCanonicalRDFTerm(
                 .invalidRole(expected: .subject, actual: .literal)
             )
         ) {
-            _ = try DatabaseRDFQuad(
-                subject: .literal(RDFLiteral(
-                    lexicalForm: "invalid",
-                    datatype: .xsdString
-                )),
-                predicate: .iri(try RDFIRI("urn:predicate")),
-                object: .iri(try RDFIRI("urn:object"))
-            )
+            var reader = DatabaseWireReader(invalidSubject)
+            _ = try RDFQuadValue(from: &reader)
         }
+
+        let invalidPredicate = try encodeQuadTerms(
+            subject: .iri(try RDFIRI("urn:subject")),
+            predicate: .blankNode(
+                try RDFBlankNodeIdentifier("invalid")
+            ),
+            object: .iri(try RDFIRI("urn:object"))
+        )
         #expect(
             throws: DatabaseWireError.invalidCanonicalRDFTerm(
                 .invalidRole(expected: .predicate, actual: .blankNode)
             )
         ) {
-            _ = try DatabaseRDFQuad(
-                subject: .iri(try RDFIRI("urn:subject")),
-                predicate: .blankNode(
-                    try RDFBlankNodeIdentifier("invalid")
-                ),
-                object: .iri(try RDFIRI("urn:object"))
-            )
+            var reader = DatabaseWireReader(invalidPredicate)
+            _ = try RDFQuadValue(from: &reader)
+        }
+    }
+
+    private func encodeQuadTerms(
+        subject: RDFTerm,
+        predicate: RDFTerm,
+        object: RDFTerm
+    ) throws(DatabaseWireError) -> ByteString {
+        try DatabaseWireWriter.encode {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
+            try subject.encode(into: &writer)
+            try predicate.encode(into: &writer)
+            try object.encode(into: &writer)
+            writer.writeBool(false)
         }
     }
 

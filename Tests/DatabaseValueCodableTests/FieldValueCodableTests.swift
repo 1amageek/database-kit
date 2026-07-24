@@ -21,7 +21,7 @@ struct FieldValueCodableTests {
             ),
             object: .literal(literal)
         )
-        let version = DatabaseSchemaVersion(1, 2, 3)
+        let version = SchemaVersion(1, 2, 3)
         let fieldValue = FieldValue.object(
             try FieldObject([
                 (key: "term", value: .rdfTerm(term)),

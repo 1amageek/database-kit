@@ -6,7 +6,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
 
     public enum Invocation: Sendable, Hashable {
         case migrationStatus
-        case runMigrations(targetVersion: DatabaseSchemaVersion?)
+        case runMigrations(targetVersion: SchemaVersion?)
         case indexStatus(
             entity: String?,
             index: String?,
@@ -60,7 +60,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
             case 2:
                 self = .runMigrations(
                     targetVersion: try reader.readBool()
-                        ? try DatabaseSchemaVersion(from: &reader)
+                        ? try SchemaVersion(from: &reader)
                         : nil
                 )
             case 3:
@@ -132,13 +132,13 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
     }
 
     public struct MigrationStatus: DatabaseWireValue, Hashable {
-        public let currentVersion: DatabaseSchemaVersion?
-        public let targetVersion: DatabaseSchemaVersion
+        public let currentVersion: SchemaVersion?
+        public let targetVersion: SchemaVersion
         public let pendingMigrationIdentifiers: [String]
 
         public init(
-            currentVersion: DatabaseSchemaVersion?,
-            targetVersion: DatabaseSchemaVersion,
+            currentVersion: SchemaVersion?,
+            targetVersion: SchemaVersion,
             pendingMigrationIdentifiers: [String]
         ) {
             self.currentVersion = currentVersion
@@ -164,9 +164,9 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let currentVersion = try reader.readBool()
-                ? try DatabaseSchemaVersion(from: &reader)
+                ? try SchemaVersion(from: &reader)
                 : nil
-            let targetVersion = try DatabaseSchemaVersion(from: &reader)
+            let targetVersion = try SchemaVersion(from: &reader)
             let count = try reader.readCount()
             var identifiers: [String] = []
             identifiers.reserveCapacity(count)

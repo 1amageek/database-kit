@@ -80,7 +80,7 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
     /// Default index name: "{TypeName}_vector_{field}"
     public var indexName: String {
         let flattenedNames = fieldNames.map {
-            DatabaseText.replacingOccurrences(in: $0, of: ".", with: "_")
+            UTF8Text.replacingOccurrences(in: $0, of: ".", with: "_")
         }
         return "\(Root.persistableType)_vector_\(flattenedNames.joined(separator: "_"))"
     }

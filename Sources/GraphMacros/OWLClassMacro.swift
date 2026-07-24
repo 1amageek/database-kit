@@ -250,22 +250,24 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
         let ontologyGraphBody = graphIRI.map {
             """
             do {
-                        return try RDFTerm.iri(validating: "\($0)")
+                        return RDFGraphName(
+                            RDFSubject.iri(try RDFIRI("\($0)"))
+                        )
                     } catch {
                         preconditionFailure("The macro emitted an invalid ontology graph IRI")
                     }
             """
         } ?? "return nil"
         let ontologyGraphDecl: DeclSyntax = """
-            public static var ontologyGraph: RDFTerm? {
+            public static var ontologyGraph: RDFGraphName? {
                 \(raw: ontologyGraphBody)
             }
             """
         decls.append(ontologyGraphDecl)
 
         let subjectDecl: DeclSyntax = """
-            public func ontologySubject() throws -> RDFTerm {
-                try OWLIndividualIRIBuilder.term(
+            public func ontologySubject() throws -> RDFSubject {
+                try OWLIndividualIRIBuilder.subject(
                     baseIRI: Self.ontologyIndividualIRIBase,
                     persistableType: Self.persistableType,
                     identifier: self.id
@@ -295,8 +297,8 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
                             quads.append(
                                 RDFQuad(
                                     subject: subject,
-                                    predicate: try .iri(
-                                        validating: "\(property.iri)"
+                                    predicate: try RDFPredicateIRI(
+                                        "\(property.iri)"
                                     ),
                                     object: object,
                                     graph: Self.ontologyGraph
@@ -323,9 +325,6 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
                     )
                 ]
                 \(raw: projectionBody)
-                for quad in quads {
-                    try quad.validate()
-                }
                 return quads
             }
             """

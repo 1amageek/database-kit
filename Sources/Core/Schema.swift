@@ -30,7 +30,7 @@ public final class Schema: Sendable {
     /// - major: Incompatible changes
     /// - minor: Backward-compatible feature additions
     /// - patch: Backward-compatible bug fixes
-    public typealias Version = DatabaseSchemaVersion
+    public typealias Version = SchemaVersion
 
     // MARK: - Entity
 

@@ -408,6 +408,21 @@ struct FieldValueTests {
         #expect(hash1 == hash2)
     }
 
+    @Test("Stable hash traverses deeply nested values without process-stack recursion")
+    func stableHashUsesIterativeTraversal() throws {
+        var value = FieldValue.string("leaf")
+        // This is intentionally far above every accepted wire decoding depth.
+        // A larger value also tests recursive destruction of FieldValue itself
+        // rather than the iterative hashing algorithm.
+        for _ in 0..<1_024 {
+            value = .array([value])
+        }
+
+        let first = try value.stableHash()
+        let second = try value.stableHash()
+        #expect(first == second)
+    }
+
     @Test("Different types produce different hashes")
     func testStableHashDifferentTypes() throws {
         let intVal = FieldValue.int64(1)

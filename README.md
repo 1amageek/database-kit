@@ -1,40 +1,46 @@
 # database-kit
 
-Platform-independent model definitions and index type specifications for the database ecosystem.
+Database semantic models, declarations, QueryIR, and the canonical binary
+protocol for the database ecosystem.
 
 ## Overview
 
-database-kit is the **shared foundation** used by both server ([database-framework](https://github.com/1amageek/database-framework)) and client ([database-client](https://github.com/1amageek/database-client)). It provides:
+database-kit is the semantic contract consumed by both
+[database-framework](https://github.com/1amageek/database-framework) and
+[database-client](https://github.com/1amageek/database-client). Primitive
+representations are owned by
+[database-types](https://github.com/1amageek/database-types); database-kit adds
+model, schema, query, graph, and protocol meaning.
+
+It provides:
 
 - `@Persistable` macro for defining data models
 - `@Polymorphable` macro for protocol-oriented polymorphic storage metadata
 - `@OWLClass` macro for OWL ontology class mapping (Graph module)
 - `@OWLDataProperty` / `@OWLObjectProperty` macros for OWL property annotations (Graph module)
 - `IndexKind` protocol for extensible index type definitions
-- Foundation-independent `DatabaseValue` and `QueryIR` value models
+- Foundation-independent identity, RDF, and `QueryIR` semantic models
 - canonical binary `DatabaseWire` operations, envelopes, limits, and errors
 - opt-in Foundation adapters for Codable values and platform conversions
 - Protobuf-compatible serialization
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                      database-kit                        │
-│  Values, QueryIR, DatabaseWire, schemas, index contracts │
-└──────────┬───────────────────────────────┬───────────────┘
-           │                               │
-           ▼                               ▼
-┌─────────────────────┐       ┌─────────────────────────┐
-│  database-framework │       │    database-client       │
-│  Server execution   │◄─────│    Embedded core         │
-│  Storage engines    │ Wire │    JS / HTTP / WebSocket │
-└─────────────────────┘       └─────────────────────────┘
+database-client ────────┐
+                       ▼
+                database-kit ───────▶ database-types
+                       ▲
+                       │
+                database-framework ─▶ storage-kit
 ```
 
 ## Installation
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/1amageek/database-kit.git", from: "26.0411.1")
+    .package(
+        url: "https://github.com/1amageek/database-kit.git",
+        branch: "main"
+    )
 ]
 ```
 
@@ -42,8 +48,8 @@ dependencies: [
 
 | Module | Description |
 |--------|-------------|
-| `DatabaseValue` | Foundation-independent values, persistable identity, RDF terms, and owned/borrowed bytes |
-| `DatabaseValueCodable` | Optional Foundation Codable adapters for database values |
+| `DatabaseValue` | Foundation-independent persisted identity, schema version, and canonical RDF validation/encoding |
+| `DatabaseValueCodable` | Optional Codable adaptations for database semantic and primitive values |
 | `DatabaseDigest` | Foundation-independent canonical SHA-256 digest support |
 | `Core` | `@Persistable` macro, `IndexKind` protocol, Schema, Protobuf serialization |
 | `DatabaseWire` | Canonical binary envelopes, typed operations, bounded codecs, results, and errors |
@@ -57,7 +63,15 @@ dependencies: [
 | `Relationship` | `RelationshipIndexKind` and `@Relationship` macro |
 | `QueryIR` | Unified query intermediate representation (Expression, SortKey, SelectQuery) |
 | `QueryIRFoundation` | Optional Foundation conversions for QueryIR values |
-| `DatabaseKit` | All-in-one re-export |
+| `DatabaseKit` | Convenience re-export of model, index, relationship, and graph declarations |
+
+`DatabaseValue`, `DatabaseDigest`, `QueryIR`, and `DatabaseWire` build with the
+Swift Embedded WASM SDK. `DatabaseValueCodable`, `Core`, macros, and the
+declaration modules are standard Swift targets and are not dependencies of the
+Embedded client path.
+
+See [Architecture and ownership](Docs/ARCHITECTURE.md) for the package boundary
+and dependency rules.
 
 ## Quick Start
 
@@ -143,11 +157,11 @@ public struct Person: Entity {
 `Polymorphable` inherits from `Persistable`, so a polymorphic protocol only needs
 to inherit from `Polymorphable`.
 
-`@Polymorphable` is a metadata and validation macro. Swift 6.3 does not allow an
+`@Polymorphable` is a metadata and validation macro. Swift 6.4 does not allow an
 attached macro on a protocol to add protocol inheritance, so the protocol must
 explicitly write `: Polymorphable`.
 
-Current Swift 6.3 toolchains also have a compiler limitation around freestanding
+Current Swift 6.4 toolchains also have a compiler limitation around freestanding
 macros in protocol bodies. Until that is fixed, tests and downstream packages may
 spell the generated polymorphic metadata manually in a protocol extension; the
 runtime model is the same.
@@ -381,19 +395,22 @@ Bare names (without `:`, `#`, or `/`) default to the namespace extracted from th
 
 | Platform | Minimum Version |
 |----------|-----------------|
-| iOS | 18.0+ |
-| macOS | 15.0+ |
-| tvOS | 18.0+ |
-| watchOS | 11.0+ |
-| visionOS | 2.0+ |
-| Linux | Swift 6.2+ |
+| iOS | 26.0+ |
+| macOS | 26.0+ |
+| tvOS | 26.0+ |
+| watchOS | 26.0+ |
+| visionOS | 26.0+ |
+| Linux | Swift 6.4+ |
+| WASI Embedded | Swift 6.4+ for `DatabaseValue`, `DatabaseDigest`, `QueryIR`, and `DatabaseWire` |
 
 ## Related Packages
 
 | Package | Role | Platform |
 |---------|------|----------|
-| **[database-framework](https://github.com/1amageek/database-framework)** | Server-side index maintenance on FoundationDB | macOS, Linux |
-| **[database-client](https://github.com/1amageek/database-client)** | Client SDK with KeyPath queries and WebSocket transport | iOS, macOS |
+| **[database-types](https://github.com/1amageek/database-types)** | Primitive field-value algebra and immutable byte ownership | Embedded, Apple, Linux |
+| **[database-framework](https://github.com/1amageek/database-framework)** | Database execution, transactions, indexes, graph, ontology, and validation | WASI, macOS, Linux |
+| **[database-client](https://github.com/1amageek/database-client)** | Typed invocation and JavaScript, HTTP, and WebSocket transports | Embedded, Apple, Linux |
+| **[storage-kit](https://github.com/1amageek/storage-kit)** | Storage transactions and backend adapters | WASI, macOS, Linux |
 
 ## License
 

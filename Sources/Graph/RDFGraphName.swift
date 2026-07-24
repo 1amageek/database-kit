@@ -8,25 +8,36 @@ import DatabaseTypes
 /// by `nil`. This value can only contain an absolute IRI or a non-empty blank
 /// node identifier.
 public struct RDFGraphName: Sendable, Hashable, Codable, Comparable {
-    public let term: RDFTerm
+    public let subject: RDFSubject
+
+    public var term: RDFTerm {
+        subject.term
+    }
+
+    public init(_ subject: RDFSubject) {
+        self.subject = subject
+    }
 
     public init(_ term: RDFTerm) throws {
         switch term {
-        case .iri, .blankNode:
-            break
+        case .iri(let iri):
+            self.subject = .iri(iri)
+        case .blankNode(let identifier):
+            self.subject = .blankNode(identifier)
         case .literal, .tripleTerm:
             throw RDFDatasetValidationError.invalidGraphName(term)
         }
-        self.term = term
     }
 
     public init(iri: String) throws {
-        try self.init(.iri(try RDFIRI(iri)))
+        self.init(RDFSubject.iri(try RDFIRI(iri)))
     }
 
     public init(blankNodeIdentifier: String) throws {
-        try self.init(
-            .blankNode(try RDFBlankNodeIdentifier(blankNodeIdentifier))
+        self.init(
+            RDFSubject.blankNode(
+                try RDFBlankNodeIdentifier(blankNodeIdentifier)
+            )
         )
     }
 
@@ -39,6 +50,6 @@ public struct RDFGraphName: Sendable, Hashable, Codable, Comparable {
     }
 
     public static func < (lhs: RDFGraphName, rhs: RDFGraphName) -> Bool {
-        lhs.term < rhs.term
+        lhs.subject < rhs.subject
     }
 }

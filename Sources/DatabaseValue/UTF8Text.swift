@@ -1,5 +1,5 @@
 /// Deterministic string operations used by the platform-neutral database core.
-public enum DatabaseText {
+package enum UTF8Text {
     /// Returns whether `pattern` occurs as the same UTF-8 byte sequence.
     public static func contains(_ pattern: String, in value: String) -> Bool {
         firstRange(of: pattern, in: value) != nil

@@ -66,9 +66,32 @@ extension FieldValue {
                 : .orderedDescending
         case (.date(let left), .date(let right)):
             return order(left, right)
+        case (.time(let left), .time(let right)):
+            return order(left, right)
+        case (.dateTime(let left), .dateTime(let right)):
+            return order(left, right)
         case (.timestamp(let left), .timestamp(let right)):
             return order(left, right)
+        case (.timeSpan(let left), .timeSpan(let right)):
+            return order(left, right)
+        case (.calendarPeriod(let left), .calendarPeriod(let right)):
+            return order(left, right)
+        case (.geographicPoint(let left), .geographicPoint(let right)):
+            return order(left, right)
+        case (.geographicPosition(let left), .geographicPosition(let right)):
+            return order(left, right)
+        case (.vector(let left), .vector(let right)):
+            return order(left, right)
         case (.uuid(let left), .uuid(let right)):
+            return order(left, right)
+        case (.array(let left), .array(let right)):
+            if left == right { return .orderedSame }
+            return left.lexicographicallyPrecedes(right)
+                ? .orderedAscending
+                : .orderedDescending
+        case (.object(let left), .object(let right)):
+            return order(left, right)
+        case (.reference(let left), .reference(let right)):
             return order(left, right)
         case (.rdfTerm(let left), .rdfTerm(let right)):
             return order(left, right)

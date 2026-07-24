@@ -1,7 +1,7 @@
 import DatabaseTypes
 import DatabaseValue
 
-public enum DatabaseLiteralEncoding {
+public enum QueryLiteralEncoding {
     public static func iso8601(_ date: CivilDate) -> String {
         "\(formattedYear(Int64(date.year)))-\(padded(Int(date.month), width: 2))-\(padded(Int(date.day), width: 2))"
     }

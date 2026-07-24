@@ -168,7 +168,7 @@ public enum SHACLExecuteOperation: DatabaseOperation {
         case describeShapes(graph: String)
         case upsertShapes(
             graph: String,
-            shapes: [DatabaseRDFQuad],
+            shapes: [RDFQuadValue],
             expectedRevision: UInt64?
         )
         case deleteShapes(graph: String, expectedRevision: UInt64?)
@@ -219,10 +219,10 @@ public enum SHACLExecuteOperation: DatabaseOperation {
             case 2:
                 let graph = try reader.readString()
                 let count = try reader.readCount()
-                var shapes: [DatabaseRDFQuad] = []
+                var shapes: [RDFQuadValue] = []
                 shapes.reserveCapacity(count)
                 for _ in 0..<count {
-                    shapes.append(try DatabaseRDFQuad(from: &reader))
+                    shapes.append(try RDFQuadValue(from: &reader))
                 }
                 self = .upsertShapes(
                     graph: graph,
@@ -300,13 +300,13 @@ public enum SHACLExecuteOperation: DatabaseOperation {
     public struct ShapesPage: DatabaseWireValue, Hashable {
         public let graph: String
         public let revision: UInt64
-        public let shapes: [DatabaseRDFQuad]
+        public let shapes: [RDFQuadValue]
         public let continuation: ByteString?
 
         public init(
             graph: String,
             revision: UInt64,
-            shapes: [DatabaseRDFQuad],
+            shapes: [RDFQuadValue],
             continuation: ByteString? = nil
         ) {
             self.graph = graph
@@ -331,10 +331,10 @@ public enum SHACLExecuteOperation: DatabaseOperation {
             let graph = try reader.readString()
             let revision = try reader.readUInt64()
             let count = try reader.readCount()
-            var shapes: [DatabaseRDFQuad] = []
+            var shapes: [RDFQuadValue] = []
             shapes.reserveCapacity(count)
             for _ in 0..<count {
-                shapes.append(try DatabaseRDFQuad(from: &reader))
+                shapes.append(try RDFQuadValue(from: &reader))
             }
             self.init(
                 graph: graph,
