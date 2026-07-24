@@ -10,7 +10,7 @@ import DatabaseTypes
 /// **Design Principles**:
 /// 1. Protocol-based: Implement `SecurityPolicy` per type
 /// 2. Declarative: Define permission conditions as functions
-/// 3. Separation of concerns: Tenant isolation via Directory + FDB Partition,
+/// 3. Separation of concerns: Tenant isolation via directory partitioning,
 ///    document-level control via SecurityPolicy
 ///
 /// **Usage**:

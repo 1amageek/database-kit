@@ -3,7 +3,7 @@ import DatabaseTypes
 // Built-in IndexKind definitions
 //
 // These definitions are storage-independent and can be used across all platforms.
-// They are automatically available when importing FDBModel.
+// They are available from the Core declaration module.
 
 import DatabaseValue
 
@@ -1295,55 +1295,55 @@ public struct PercentileIndexKind<Root: Persistable, Value: IndexNumericValue>: 
     }
 }
 
-// MARK: - Canonical Runtime Metadata
+// MARK: - Canonical Index Metadata
 
 extension SumIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
+    public var metadata: [String: FieldValue] {
         ["valueType": .string(valueType.rawValue)]
     }
 }
 
 extension MinIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
+    public var metadata: [String: FieldValue] {
         ["valueType": .string(valueType.rawValue)]
     }
 }
 
 extension MaxIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
+    public var metadata: [String: FieldValue] {
         ["valueType": .string(valueType.rawValue)]
     }
 }
 
 extension AverageIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
+    public var metadata: [String: FieldValue] {
         ["valueType": .string(valueType.rawValue)]
     }
 }
 
 extension VersionIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
+    public var metadata: [String: FieldValue] {
         switch strategy {
         case .keepAll:
             return ["strategy": .string("keepAll")]
         case .keepLast(let count):
             return [
                 "strategy": .string("keepLast"),
-                "strategyCount": .int(count),
+                "strategyCount": .int64(Int64(count)),
             ]
         case .keepForDuration(let duration):
             return [
                 "strategy": .string("keepForDuration"),
-                "strategyDurationSeconds": .double(duration),
+                "strategyDurationSeconds": .float64(duration),
             ]
         }
     }
 }
 
 extension TimeWindowLeaderboardIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
-        var values: [String: IndexMetadataValue] = [
-            "windowCount": .int(windowCount),
+    public var metadata: [String: FieldValue] {
+        var values: [String: FieldValue] = [
+            "windowCount": .int64(Int64(windowCount)),
         ]
         switch window {
         case .hourly:
@@ -1356,20 +1356,20 @@ extension TimeWindowLeaderboardIndexKind {
             values["window"] = .string("monthly")
         case .custom(let duration):
             values["window"] = .string("custom")
-            values["windowDurationSeconds"] = .double(duration)
+            values["windowDurationSeconds"] = .float64(duration)
         }
         return values
     }
 }
 
 extension DistinctIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
-        ["precision": .int(precision)]
+    public var metadata: [String: FieldValue] {
+        ["precision": .int64(Int64(precision))]
     }
 }
 
 extension PercentileIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
-        ["compression": .double(compression)]
+    public var metadata: [String: FieldValue] {
+        ["compression": .float64(compression)]
     }
 }

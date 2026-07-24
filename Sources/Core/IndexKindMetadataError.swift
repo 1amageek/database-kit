@@ -110,7 +110,8 @@ extension IndexKindMetadata {
     public func requireInt(
         _ key: String
     ) throws(IndexKindMetadataError) -> Int {
-        guard let value = metadata[key]?.intValue else {
+        guard let fieldValue = metadata[key],
+              let value = Self.int(exactly: fieldValue) else {
             throw .invalidMetadata(identifier: identifier, key: key)
         }
         return value
@@ -119,10 +120,17 @@ extension IndexKindMetadata {
     public func requireDouble(
         _ key: String
     ) throws(IndexKindMetadataError) -> Double {
-        guard let value = metadata[key]?.doubleValue else {
+        guard let fieldValue = metadata[key] else {
             throw .invalidMetadata(identifier: identifier, key: key)
         }
-        return value
+        switch fieldValue {
+        case .float32(let value):
+            return Double(value)
+        case .float64(let value):
+            return value
+        default:
+            throw .invalidMetadata(identifier: identifier, key: key)
+        }
     }
 
     public func requireBool(
@@ -137,19 +145,35 @@ extension IndexKindMetadata {
     public func requireStringArray(
         _ key: String
     ) throws(IndexKindMetadataError) -> [String] {
-        guard let value = metadata[key]?.stringArrayValue else {
+        guard case .array(let values) = metadata[key] else {
             throw .invalidMetadata(identifier: identifier, key: key)
         }
-        return value
+        var strings: [String] = []
+        strings.reserveCapacity(values.count)
+        for value in values {
+            guard case .string(let string) = value else {
+                throw .invalidMetadata(identifier: identifier, key: key)
+            }
+            strings.append(string)
+        }
+        return strings
     }
 
     public func requireIntArray(
         _ key: String
     ) throws(IndexKindMetadataError) -> [Int] {
-        guard let value = metadata[key]?.intArrayValue else {
+        guard case .array(let values) = metadata[key] else {
             throw .invalidMetadata(identifier: identifier, key: key)
         }
-        return value
+        var integers: [Int] = []
+        integers.reserveCapacity(values.count)
+        for value in values {
+            guard let integer = Self.int(exactly: value) else {
+                throw .invalidMetadata(identifier: identifier, key: key)
+            }
+            integers.append(integer)
+        }
+        return integers
     }
 
     public func requireRDFTerm(
@@ -169,6 +193,29 @@ extension IndexKindMetadata {
             throw .invalidMetadata(identifier: identifier, key: key)
         }
         return scalarType
+    }
+
+    private static func int(exactly value: FieldValue) -> Int? {
+        switch value {
+        case .int8(let value):
+            return Int(value)
+        case .int16(let value):
+            return Int(value)
+        case .int32(let value):
+            return Int(value)
+        case .int64(let value):
+            return Int(exactly: value)
+        case .uint8(let value):
+            return Int(value)
+        case .uint16(let value):
+            return Int(value)
+        case .uint32(let value):
+            return Int(exactly: value)
+        case .uint64(let value):
+            return Int(exactly: value)
+        default:
+            return nil
+        }
     }
 }
 import DatabaseValue

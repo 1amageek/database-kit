@@ -121,7 +121,7 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
         }
 
         // polymorphicDirectoryLayer
-        // Use Core.DirectoryLayer to disambiguate from FoundationDB.DirectoryLayer
+        // Qualify the semantic directory policy emitted into the client module.
         extensionMembers.append("""
             public static var polymorphicDirectoryLayer: Core.DirectoryLayer { \(raw: directoryLayerValue) }
         """)

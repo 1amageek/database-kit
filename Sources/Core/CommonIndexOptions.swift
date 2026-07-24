@@ -1,6 +1,6 @@
 import DatabaseTypes
 // CommonIndexOptions.swift
-// FDBIndexing - Shared index configuration options
+// Shared index configuration options.
 //
 // Common options that apply to all index kinds.
 
@@ -39,8 +39,8 @@ public struct CommonIndexOptions: Sendable, Codable, Hashable {
     /// - `true`: Only non-null values are indexed (saves space)
     /// - `false`: All values are indexed, including nulls (default)
     ///
-    /// **Note**: This is declarative metadata. The execution layer
-    /// (FDBRecordLayer) determines how to handle null values.
+    /// **Note**: This is declarative metadata. The execution layer determines
+    /// how to omit null values while preserving transaction semantics.
     public let sparse: Bool
 
     /// Optional user-defined metadata for application-specific use.

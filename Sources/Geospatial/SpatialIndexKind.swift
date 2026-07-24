@@ -1,11 +1,9 @@
 // SpatialIndexKind.swift
-// SpatialIndexModel - Spatial index metadata (FDB-independent, iOS-compatible)
-//
-// Defines metadata for geospatial indexes. This file is FDB-independent
-// and can be used on all platforms including iOS clients.
+// Geospatial index declaration metadata.
 
 import Core
 import DatabaseValue
+import DatabaseTypes
 
 /// Spatial encoding type
 public enum SpatialEncoding: String, Sendable, Codable, Hashable {
@@ -111,10 +109,10 @@ public struct SpatialIndexKind<Root: Persistable>: IndexKind {
 // MARK: - Hashable Conformance
 
 extension SpatialIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
+    public var metadata: [String: FieldValue] {
         [
             "encoding": .string(encoding.rawValue),
-            "level": .int(level),
+            "level": .int64(Int64(level)),
         ]
     }
 

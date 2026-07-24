@@ -1,17 +1,17 @@
 import DatabaseTypes
 // IndexKind.swift
-// FDBCore - Protocol for defining index kind metadata
+// Protocol for defining index kind metadata.
 //
 // Extension point allowing third parties to define custom index kinds.
-// New kinds can be added without modifying FDBCore itself.
+// New kinds can be added without modifying the declaration core.
 //
-// **Note**: This is the metadata-only base protocol. For runtime capabilities
-// (creating IndexMaintainer), see IndexKind protocol in FDBIndexing.
+// **Note**: This is the metadata-only base protocol. Runtime maintainers are
+// registered by database-framework.
 
 /// Protocol for defining index kinds
 ///
 /// **Extensibility**: Third parties can define custom kinds
-/// - No FDBIndexing modification required
+/// - No database-framework modification is required for the declaration itself
 /// - New kinds added via protocol implementation only
 ///
 /// **Naming convention**:
@@ -25,7 +25,7 @@ import DatabaseTypes
 ///
 /// **Example**:
 /// ```swift
-/// // Built-in kind (in fdb-indexes/ScalarIndexLayer)
+/// // Built-in kind
 /// public struct ScalarIndexKind: IndexKind {
 ///     public static let identifier = "scalar"
 ///     public static let subspaceStructure = SubspaceStructure.flat
@@ -68,7 +68,7 @@ public protocol IndexKind: Sendable, Codable, Hashable {
     ///
     /// **Examples**:
     /// - "scalar" (built-in)
-    /// - "vector" (extended: FDBRecordVector)
+    /// - "vector" (extended declaration)
     /// - "com.mycompany.bloom_filter" (third-party)
     ///
     /// **Note**: This identifier is used in IndexKind's type erasure mechanism.
@@ -108,7 +108,7 @@ public protocol IndexKind: Sendable, Codable, Hashable {
     /// Implementations must include every configuration value that changes
     /// storage layout, maintenance, or query behavior. Field names are carried
     /// separately by `fieldNames` and must not be duplicated here.
-    var metadata: [String: IndexMetadataValue] { get }
+    var metadata: [String: FieldValue] { get }
 
     /// Validate whether this index kind supports specified types
     ///
@@ -120,7 +120,7 @@ public protocol IndexKind: Sendable, Codable, Hashable {
 }
 
 extension IndexKind {
-    public var metadata: [String: IndexMetadataValue] { [:] }
+    public var metadata: [String: FieldValue] { [:] }
 }
 
 /// Index type validation error

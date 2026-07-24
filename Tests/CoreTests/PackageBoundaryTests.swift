@@ -80,6 +80,45 @@ struct PackageBoundaryTests {
         )
     }
 
+    @Test("Sources do not restore superseded value or codec contracts")
+    func sourcesDoNotDeclareSupersededContracts() throws {
+        let root = Self.packageRoot()
+        let sourceFiles = try Self.swiftFiles(
+            under: root.appendingPathComponent("Sources")
+        )
+        let forbiddenDeclarations: Set<String> = [
+            "DatabaseObjectField",
+            "IndexMetadataValue",
+            "ProtobufDecoder",
+            "ProtobufEncoder",
+            "ServiceEnvelope",
+        ]
+
+        var violations: [String] = []
+        for file in sourceFiles {
+            let text = try String(contentsOf: file, encoding: .utf8)
+            let relativePath = Self.relativePath(file, from: root)
+            for (lineIndex, line) in text
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .enumerated() {
+                guard let declaration = Self.declaredTypeName(
+                    from: String(line)
+                ),
+                forbiddenDeclarations.contains(declaration) else {
+                    continue
+                }
+                violations.append(
+                    "\(relativePath):\(lineIndex + 1) declares \(declaration)"
+                )
+            }
+        }
+
+        #expect(
+            violations.isEmpty,
+            "database-kit has one FieldValue algebra and one canonical binary protocol: \(violations.joined(separator: ", "))"
+        )
+    }
+
     @Test("CoreTests declares direct dependencies for imported local modules")
     func coreTestsDeclaresDirectDependenciesForImportedLocalModules() throws {
         let root = Self.packageRoot()

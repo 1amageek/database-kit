@@ -19,8 +19,8 @@ import DatabaseTypes
 /// because Swift does not allow `extension SomeProtocol: OtherProtocol`.
 ///
 /// **Platform Support**:
-/// - Client (iOS/macOS): Protocol definitions, metadata
-/// - Server (macOS/Linux): Full persistence with FDBRuntime
+/// - Client: Protocol definitions and metadata
+/// - Runtime: Full persistence through database-framework
 ///
 /// **Usage**:
 /// ```swift
@@ -69,7 +69,7 @@ import DatabaseTypes
 ///
 /// **Storage Layout**:
 /// ```
-/// [polymorphicDirectory]/R/[typeCode]/[id] → protobuf
+/// [polymorphicDirectory]/R/[typeCode]/[id] → canonical persisted fields
 /// [polymorphicDirectory]/I/[indexName]/[values]/[typeCode]/[id] → empty
 /// ```
 ///

@@ -69,8 +69,8 @@ public protocol VersionedSchema: Sendable {
 extension VersionedSchema {
     /// Create a Schema instance from this VersionedSchema
     ///
-    /// Converts the protocol type to a concrete Schema object that can be
-    /// used with FDBContainer.
+    /// Converts the protocol type to a concrete schema consumed by the
+    /// configured database runtime.
     ///
     /// - Returns: Schema instance with version and models
     public static func makeSchema() -> Schema {

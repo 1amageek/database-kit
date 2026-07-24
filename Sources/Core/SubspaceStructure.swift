@@ -1,20 +1,13 @@
 import DatabaseTypes
 // SubspaceStructure.swift
-// FDBIndexing - Subspace structure type definition
-//
-// Declares how indexes structure FDB key space.
-// DirectoryLayer usage decision is delegated to execution layer (IndexManager).
+// Logical index state structure.
 
 /// Index Subspace structure type
 ///
-/// **About DirectoryLayer**:
-/// - DirectoryLayer usage decision is delegated to execution layer (IndexManager)
-/// - This definition purely declares "structure type"
-///
 /// **Design principles**:
-/// - Metadata layer (FDBIndexing) declares structure
-/// - Execution layer (FDBIndexCore) determines implementation
-/// - DirectoryLayer is a runtime optimization strategy
+/// - database-kit declares the logical structure
+/// - database-framework selects and executes the concrete layout
+/// - storage-kit remains unaware of index meaning
 ///
 /// **Example**:
 /// ```swift

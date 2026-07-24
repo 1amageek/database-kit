@@ -26,7 +26,7 @@ public struct IndexKindMetadata: Sendable, Hashable, Codable {
     /// - Spatial: "encoding", "level"
     /// - Rank: "scoreTypeName", "bucketSize"
     /// - etc.
-    public let metadata: [String: IndexMetadataValue]
+    public let metadata: [String: FieldValue]
 
     // MARK: - Index Kind Metadata
 
@@ -43,7 +43,7 @@ public struct IndexKindMetadata: Sendable, Hashable, Codable {
         identifier: String,
         subspaceStructure: SubspaceStructure,
         fieldNames: [String],
-        metadata: [String: IndexMetadataValue]
+        metadata: [String: FieldValue]
     ) {
         self.identifier = identifier
         self.subspaceStructure = subspaceStructure

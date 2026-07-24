@@ -1,11 +1,9 @@
 // RankIndexKind.swift
-// RankIndexModel - Rank index metadata (FDB-independent, iOS-compatible)
-//
-// Defines metadata for ranking and leaderboard indexes. This file is FDB-independent
-// and can be used on all platforms including iOS clients.
+// Rank index declaration metadata.
 
 import Core
 import DatabaseValue
+import DatabaseTypes
 
 /// Rank index kind for leaderboard and ranking queries
 ///
@@ -121,10 +119,10 @@ public struct RankIndexKind<Root: Persistable, Score: IndexNumericValue>: IndexK
 // MARK: - Hashable Conformance
 
 extension RankIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
+    public var metadata: [String: FieldValue] {
         [
             "scoreType": .string(scoreType.rawValue),
-            "bucketSize": .int(bucketSize),
+            "bucketSize": .int64(Int64(bucketSize)),
         ]
     }
 

@@ -1,6 +1,6 @@
 import DatabaseTypes
 // IndexDescriptor.swift
-// FDBModel - Index descriptor (metadata)
+// Database index descriptor metadata.
 //
 // Provides declarative index definition using Swift KeyPaths.
 // Used by macro generation, schema definition, and execution layer interpretation.
@@ -45,7 +45,7 @@ public struct IndexDescriptor: Descriptor, Sendable {
     /// - "User_address_city"
     /// - "Product_category_price"
     ///
-    /// **Note**: This name is used in FDB key space.
+    /// **Note**: This name identifies persisted index state.
     /// Changing it breaks compatibility with existing data.
     public let name: String
 

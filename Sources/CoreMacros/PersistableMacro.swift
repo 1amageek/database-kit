@@ -1154,40 +1154,13 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             decls.append(initDecl)
         }
 
-        // Generate CodingKeys enum with explicit intValue for Protobuf field numbers
-        // This ensures consistent field numbering even when Optional fields are nil
-        // (Swift's synthesized Codable skips nil values, which would shift field numbers)
+        // Generate CodingKeys for the opt-in Codable model adapter.
         let codableFieldInfos = fieldInfos.filter { !$0.isTransient }
         let codingKeyCases = codableFieldInfos.map { "case \($0.name)" }
-
-        // Generate intValue computed property
-        var intValueCases: [String] = []
-        for (index, field) in codableFieldInfos.enumerated() {
-            intValueCases.append("case .\(field.name): return \(index + 1)")
-        }
-
-        // Generate init?(intValue:)
-        var initIntValueCases: [String] = []
-        for (index, field) in codableFieldInfos.enumerated() {
-            initIntValueCases.append("case \(index + 1): self = .\(field.name)")
-        }
 
         let codingKeysDecl: DeclSyntax = """
             private enum CodingKeys: String, CodingKey {
                 \(raw: codingKeyCases.joined(separator: "\n            "))
-
-                var intValue: Int? {
-                    switch self {
-                    \(raw: intValueCases.joined(separator: "\n                "))
-                    }
-                }
-
-                init?(intValue: Int) {
-                    switch intValue {
-                    \(raw: initIntValueCases.joined(separator: "\n                "))
-                    default: return nil
-                    }
-                }
             }
             """
         decls.append(codingKeysDecl)
@@ -1568,7 +1541,7 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
 
 /// Compiler plugin entry point
 @main
-struct FDBModelMacrosPlugin: CompilerPlugin {
+struct DatabaseDeclarationMacrosPlugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
         PersistableMacro.self,
         PolymorphableMacro.self,
@@ -1587,7 +1560,10 @@ struct MacroExpansionErrorMessage: DiagnosticMessage {
 
     init(_ message: String) {
         self.message = message
-        self.diagnosticID = MessageID(domain: "FDBModelMacros", id: message)
+        self.diagnosticID = MessageID(
+            domain: "DatabaseDeclarationMacros",
+            id: message
+        )
         self.severity = .error
     }
 }

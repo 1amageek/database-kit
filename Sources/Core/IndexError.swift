@@ -1,6 +1,6 @@
 import DatabaseTypes
 // IndexError.swift
-// FDBIndexing - Error types for index operations
+// Index declaration errors.
 
 /// Errors that can occur during index operations
 public enum IndexError: Error, CustomStringConvertible {

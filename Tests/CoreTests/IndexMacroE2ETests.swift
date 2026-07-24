@@ -65,7 +65,7 @@ struct IndexMacroE2ETests {
 
         let version = try Self.descriptor(named: "e2e_version_id").kind
         #expect(version.metadata["strategy"]?.stringValue == "keepLast")
-        #expect(version.metadata["strategyCount"]?.intValue == 5)
+        #expect(version.metadata["strategyCount"]?.int64Value == 5)
 
         let countNotNull = try Self.descriptor(
             named: "e2e_count_not_null_category_optional_tag"

@@ -4,7 +4,7 @@ public import DatabaseValue
 
 /// Schema - Type-independent schema management
 ///
-/// **Design**: FDBRuntime's type-independent schema definition
+/// **Design**: Type-independent database schema definition
 /// - Uses Entity (metadata) with field names and IndexDescriptor
 /// - Uses IndexDescriptor (metadata) instead of Index (runtime)
 /// - Supports all upper layers (entity-layer, graph-layer, document-layer)
@@ -89,7 +89,7 @@ public final class Schema: Sendable {
 
         /// The Persistable type (for runtime type recovery)
         ///
-        /// Used by FDBRuntime to:
+        /// Used by database-framework to:
         /// - Create typed IndexMaintainers during migrations
         /// - Access directory path components at runtime
         /// - Check Polymorphable conformance

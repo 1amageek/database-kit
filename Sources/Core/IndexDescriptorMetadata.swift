@@ -5,7 +5,8 @@ import DatabaseTypes
 /// information required by runtime index registration and schema inspection.
 /// - `name`: Index identifier
 /// - `kind`: Index kind metadata
-/// - `commonMetadata`: CommonIndexOptions (unique, sparse, storedFieldNames, userMetadata.*)
+/// - `commonOptions`: Options shared by every index kind
+/// - `storedFieldNames`: Fields copied into the index value
 public struct IndexDescriptorMetadata: Sendable, Hashable, Codable {
 
     /// Index name (unique identifier)
@@ -14,19 +15,19 @@ public struct IndexDescriptorMetadata: Sendable, Hashable, Codable {
     /// Metadata describing the index kind.
     public let kind: IndexKindMetadata
 
-    /// CommonIndexOptions metadata:
-    /// - "unique": Bool - Uniqueness constraint
-    /// - "sparse": Bool - Sparse index
-    /// - "storedFieldNames": [String] - Covering index fields
-    /// - "userMetadata.*": User-defined metadata
-    public let commonMetadata: [String: IndexMetadataValue]
+    /// Options shared by every index kind.
+    public let commonOptions: CommonIndexOptions
+
+    /// Fields copied into the index value for covering reads.
+    public let storedFieldNames: [String]
 
     // MARK: - Index Descriptor Metadata
 
     public init(_ descriptor: IndexDescriptor) {
         self.name = descriptor.name
         self.kind = descriptor.kind
-        self.commonMetadata = Self.commonMetadata(from: descriptor)
+        self.commonOptions = descriptor.commonOptions
+        self.storedFieldNames = descriptor.storedFieldNames
     }
 
     // MARK: - Stored Metadata
@@ -34,11 +35,13 @@ public struct IndexDescriptorMetadata: Sendable, Hashable, Codable {
     public init(
         name: String,
         kind: IndexKindMetadata,
-        commonMetadata: [String: IndexMetadataValue]
+        commonOptions: CommonIndexOptions = .init(),
+        storedFieldNames: [String] = []
     ) {
         self.name = name
         self.kind = kind
-        self.commonMetadata = commonMetadata
+        self.commonOptions = commonOptions
+        self.storedFieldNames = storedFieldNames
     }
 
     // MARK: - Convenience Accessors (Kind shortcuts)
@@ -62,38 +65,11 @@ public struct IndexDescriptorMetadata: Sendable, Hashable, Codable {
 
     /// Uniqueness constraint (convenience accessor)
     public var unique: Bool {
-        commonMetadata["unique"]?.boolValue ?? false
+        commonOptions.unique
     }
 
     /// Sparse index flag (convenience accessor)
     public var sparse: Bool {
-        commonMetadata["sparse"]?.boolValue ?? false
-    }
-
-    /// Stored field names for covering index (convenience accessor)
-    public var storedFieldNames: [String] {
-        commonMetadata["storedFieldNames"]?.stringArrayValue ?? []
-    }
-
-    // MARK: - Metadata Extraction
-
-    private static func commonMetadata(from descriptor: IndexDescriptor) -> [String: IndexMetadataValue] {
-        var metadata: [String: IndexMetadataValue] = [:]
-
-        // CommonIndexOptions
-        metadata["unique"] = .bool(descriptor.commonOptions.unique)
-        metadata["sparse"] = .bool(descriptor.commonOptions.sparse)
-
-        // storedFieldNames
-        if !descriptor.storedFieldNames.isEmpty {
-            metadata["storedFieldNames"] = .stringArray(descriptor.storedFieldNames)
-        }
-
-        // User-defined metadata (with prefix to avoid conflicts)
-        for (key, value) in descriptor.commonOptions.metadata {
-            metadata["userMetadata.\(key)"] = .string(value)
-        }
-
-        return metadata
+        commonOptions.sparse
     }
 }

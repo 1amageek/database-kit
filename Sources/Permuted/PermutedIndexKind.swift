@@ -1,11 +1,9 @@
 // PermutedIndexKind.swift
-// PermutedIndexModel - Permuted index metadata (FDB-independent, iOS-compatible)
-//
-// Defines metadata for permuted compound indexes. This file is FDB-independent
-// and can be used on all platforms including iOS clients.
+// Permuted index declaration metadata.
 
 import Core
 import DatabaseValue
+import DatabaseTypes
 
 // MARK: - Permutation
 
@@ -226,8 +224,12 @@ public struct PermutedIndexKind<Root: Persistable>: IndexKind {
 // MARK: - Hashable Conformance
 
 extension PermutedIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
-        ["permutation": .intArray(permutation.indices)]
+    public var metadata: [String: FieldValue] {
+        [
+            "permutation": .array(
+                permutation.indices.map { .int64(Int64($0)) }
+            )
+        ]
     }
 
     public func hash(into hasher: inout Hasher) {

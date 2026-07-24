@@ -22,7 +22,6 @@ It provides:
 - Foundation-independent identity, RDF, and `QueryIR` semantic models
 - canonical binary `DatabaseWire` operations, envelopes, limits, and errors
 - opt-in Foundation adapters for Codable values and platform conversions
-- Protobuf-compatible serialization
 
 ```
 database-client ────────┐
@@ -51,7 +50,7 @@ dependencies: [
 | `DatabaseValue` | Foundation-independent persisted identity, schema version, and canonical RDF validation/encoding |
 | `DatabaseValueCodable` | Optional Codable adaptations for database semantic and primitive values |
 | `DatabaseDigest` | Foundation-independent canonical SHA-256 digest support |
-| `Core` | `@Persistable` macro, `IndexKind` protocol, Schema, Protobuf serialization |
+| `Core` | `@Persistable` macro, `IndexKind` protocol, schema, and typed model adaptation |
 | `DatabaseWire` | Canonical binary envelopes, typed operations, bounded codecs, results, and errors |
 | `Vector` | `VectorIndexKind` for similarity search |
 | `FullText` | `FullTextIndexKind` for text search |

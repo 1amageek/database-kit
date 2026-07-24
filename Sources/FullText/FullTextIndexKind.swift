@@ -1,11 +1,9 @@
 // FullTextIndexKind.swift
-// FullTextIndexModel - Full-text index metadata (FDB-independent, iOS-compatible)
-//
-// Defines metadata for full-text search indexes. This file is FDB-independent
-// and can be used on all platforms including iOS clients.
+// Full-text index declaration metadata.
 
 import Core
 import DatabaseValue
+import DatabaseTypes
 
 /// Tokenization strategy for full-text search
 public enum TokenizationStrategy: String, Sendable, Codable, Hashable {
@@ -147,12 +145,12 @@ public struct FullTextIndexKind<Root: Persistable>: IndexKind {
 // MARK: - Hashable Conformance
 
 extension FullTextIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
+    public var metadata: [String: FieldValue] {
         [
             "tokenizer": .string(tokenizer.rawValue),
             "storePositions": .bool(storePositions),
-            "ngramSize": .int(ngramSize),
-            "minTermLength": .int(minTermLength),
+            "ngramSize": .int64(Int64(ngramSize)),
+            "minTermLength": .int64(Int64(minTermLength)),
         ]
     }
 

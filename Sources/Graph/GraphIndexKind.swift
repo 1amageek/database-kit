@@ -329,7 +329,7 @@ extension GraphIndexKind: Hashable {
 }
 
 extension GraphIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
+    public var metadata: [String: FieldValue] {
         [
             "strategy": .string(strategy.rawValue),
             "hasEdgeField": .bool(hasEdgeField),

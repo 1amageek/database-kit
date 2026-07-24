@@ -1,11 +1,9 @@
 // VectorIndexKind.swift
-// VectorIndexModel - Vector index metadata (FDB-independent, iOS-compatible)
-//
-// Defines metadata for vector similarity search indexes. This file is FDB-independent
-// and can be used on all platforms including iOS clients.
+// Vector index declaration metadata.
 
 import Core
 import DatabaseValue
+import DatabaseTypes
 
 /// Vector metric for distance calculation
 ///
@@ -130,9 +128,9 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
 // MARK: - Hashable Conformance
 
 extension VectorIndexKind {
-    public var metadata: [String: IndexMetadataValue] {
+    public var metadata: [String: FieldValue] {
         [
-            "dimensions": .int(dimensions),
+            "dimensions": .int64(Int64(dimensions)),
             "metric": .string(metric.rawValue),
         ]
     }

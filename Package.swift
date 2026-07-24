@@ -112,11 +112,46 @@ let package = Package(
                 ),
             ]
         ),
-        .target(name: "Vector", dependencies: ["Core"]),
-        .target(name: "FullText", dependencies: ["Core"]),
-        .target(name: "Geospatial", dependencies: ["Core"]),
-        .target(name: "Rank", dependencies: ["Core"]),
-        .target(name: "Permuted", dependencies: ["Core"]),
+        .target(
+            name: "Vector",
+            dependencies: [
+                "Core",
+                "DatabaseValue",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
+        ),
+        .target(
+            name: "FullText",
+            dependencies: [
+                "Core",
+                "DatabaseValue",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
+        ),
+        .target(
+            name: "Geospatial",
+            dependencies: [
+                "Core",
+                "DatabaseValue",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
+        ),
+        .target(
+            name: "Rank",
+            dependencies: [
+                "Core",
+                "DatabaseValue",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
+        ),
+        .target(
+            name: "Permuted",
+            dependencies: [
+                "Core",
+                "DatabaseValue",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
+        ),
         .macro(
             name: "GraphMacros",
             dependencies: [
