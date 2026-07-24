@@ -95,12 +95,15 @@ public final class Schema: Sendable {
         /// - Check Polymorphable conformance
         ///
         /// nil when Entity is decoded from wire (no compiled type available)
-        public var persistableType: (any Persistable.Type)?
+        public let persistableType: (any Persistable.Type)?
 
         /// Typed index descriptors (runtime only, requires KeyPath)
         ///
         /// Empty when Entity is decoded from wire.
-        public var indexDescriptors: [IndexDescriptor]
+        public let indexDescriptors: [IndexDescriptor]
+
+        private let fieldsByName: [String: FieldSchema]
+        private let fieldsByNumber: [Int: FieldSchema]
 
         // MARK: - Custom Codable (exclude runtime fields)
 
@@ -112,19 +115,41 @@ public final class Schema: Sendable {
 
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
-            self.name = try container.decode(String.self, forKey: .name)
-            self.fields = try container.decode([FieldSchema].self, forKey: .fields)
-            self.directoryComponents = try container.decode([DirectoryPathComponent].self, forKey: .directoryComponents)
-            self.directoryLayer = try container.decode(DirectoryLayer.self, forKey: .directoryLayer)
-            self.indexes = try container.decode([IndexDescriptorMetadata].self, forKey: .indexes)
-            self.enumMetadata = try container.decode([String: [String]].self, forKey: .enumMetadata)
-            self.ontologyClassIRI = try container.decodeIfPresent(String.self, forKey: .ontologyClassIRI)
-            self.objectPropertyIRI = try container.decodeIfPresent(String.self, forKey: .objectPropertyIRI)
-            self.objectPropertyFromField = try container.decodeIfPresent(String.self, forKey: .objectPropertyFromField)
-            self.objectPropertyToField = try container.decodeIfPresent(String.self, forKey: .objectPropertyToField)
-            self.dataPropertyIRIs = try container.decodeIfPresent([String].self, forKey: .dataPropertyIRIs)
-            self.persistableType = nil
-            self.indexDescriptors = []
+            do {
+                try self.init(
+                    name: container.decode(String.self, forKey: .name),
+                    fields: container.decode([FieldSchema].self, forKey: .fields),
+                    directoryComponents: container.decode(
+                        [DirectoryPathComponent].self,
+                        forKey: .directoryComponents
+                    ),
+                    directoryLayer: container.decode(DirectoryLayer.self, forKey: .directoryLayer),
+                    indexes: container.decode([IndexDescriptorMetadata].self, forKey: .indexes),
+                    enumMetadata: container.decode([String: [String]].self, forKey: .enumMetadata),
+                    ontologyClassIRI: container.decodeIfPresent(String.self, forKey: .ontologyClassIRI),
+                    objectPropertyIRI: container.decodeIfPresent(String.self, forKey: .objectPropertyIRI),
+                    objectPropertyFromField: container.decodeIfPresent(
+                        String.self,
+                        forKey: .objectPropertyFromField
+                    ),
+                    objectPropertyToField: container.decodeIfPresent(
+                        String.self,
+                        forKey: .objectPropertyToField
+                    ),
+                    dataPropertyIRIs: container.decodeIfPresent(
+                        [String].self,
+                        forKey: .dataPropertyIRIs
+                    )
+                )
+            } catch let error as SchemaEntityError {
+                throw DecodingError.dataCorrupted(
+                    .init(
+                        codingPath: decoder.codingPath,
+                        debugDescription: error.description,
+                        underlyingError: error
+                    )
+                )
+            }
         }
 
         // MARK: - Computed Properties
@@ -136,12 +161,12 @@ public final class Schema: Sendable {
 
         /// Build field name → FieldSchema map (for Encoder)
         public var fieldMapByName: [String: FieldSchema] {
-            Dictionary(uniqueKeysWithValues: fields.map { ($0.name, $0) })
+            fieldsByName
         }
 
         /// Build field number → FieldSchema map (for Decoder)
         public var fieldMapByNumber: [Int: FieldSchema] {
-            Dictionary(uniqueKeysWithValues: fields.map { ($0.fieldNumber, $0) })
+            fieldsByNumber
         }
 
         /// Whether this type has dynamic directory components requiring partition values
@@ -184,21 +209,23 @@ public final class Schema: Sendable {
         // MARK: - Init: from Persistable type (runtime)
 
         /// Initialize from Persistable type
-        public init(from type: any Persistable.Type) {
-            self.name = type.persistableType
-            self.fields = type.fieldSchemas
-            self.directoryComponents = Self.extractDirectoryComponents(from: type)
-            self.directoryLayer = type.directoryLayer
-            self.indexes = type.indexDescriptors.map { IndexDescriptorMetadata($0) }
-            self.enumMetadata = Self.extractEnumMetadata(from: type)
-            self.ontologyClassIRI = Self.extractOntologyClassIRI(from: type)
+        public init(from type: any Persistable.Type) throws(SchemaEntityError) {
             let objPropInfo = Self.extractObjectPropertyInfo(from: type)
-            self.objectPropertyIRI = objPropInfo?.iri
-            self.objectPropertyFromField = objPropInfo?.fromField
-            self.objectPropertyToField = objPropInfo?.toField
-            self.dataPropertyIRIs = Self.extractDataPropertyIRIs(from: type)
-            self.persistableType = type
-            self.indexDescriptors = type.indexDescriptors
+            try self.init(
+                name: type.persistableType,
+                fields: type.fieldSchemas,
+                directoryComponents: Self.extractDirectoryComponents(from: type),
+                directoryLayer: type.directoryLayer,
+                indexes: type.indexDescriptors.map { IndexDescriptorMetadata($0) },
+                enumMetadata: Self.extractEnumMetadata(from: type),
+                ontologyClassIRI: Self.extractOntologyClassIRI(from: type),
+                objectPropertyIRI: objPropInfo?.iri,
+                objectPropertyFromField: objPropInfo?.fromField,
+                objectPropertyToField: objPropInfo?.toField,
+                dataPropertyIRIs: Self.extractDataPropertyIRIs(from: type),
+                persistableType: type,
+                indexDescriptors: type.indexDescriptors
+            )
         }
 
         // MARK: - Init: manual / decoded from wire
@@ -216,7 +243,52 @@ public final class Schema: Sendable {
             objectPropertyFromField: String? = nil,
             objectPropertyToField: String? = nil,
             dataPropertyIRIs: [String]? = nil
-        ) {
+        ) throws(SchemaEntityError) {
+            try self.init(
+                name: name,
+                fields: fields,
+                directoryComponents: directoryComponents,
+                directoryLayer: directoryLayer,
+                indexes: indexes,
+                enumMetadata: enumMetadata,
+                ontologyClassIRI: ontologyClassIRI,
+                objectPropertyIRI: objectPropertyIRI,
+                objectPropertyFromField: objectPropertyFromField,
+                objectPropertyToField: objectPropertyToField,
+                dataPropertyIRIs: dataPropertyIRIs,
+                persistableType: nil,
+                indexDescriptors: []
+            )
+        }
+
+        private init(
+            name: String,
+            fields: [FieldSchema],
+            directoryComponents: [DirectoryPathComponent],
+            directoryLayer: DirectoryLayer,
+            indexes: [IndexDescriptorMetadata],
+            enumMetadata: [String: [String]],
+            ontologyClassIRI: String?,
+            objectPropertyIRI: String?,
+            objectPropertyFromField: String?,
+            objectPropertyToField: String?,
+            dataPropertyIRIs: [String]?,
+            persistableType: (any Persistable.Type)?,
+            indexDescriptors: [IndexDescriptor]
+        ) throws(SchemaEntityError) {
+            let fieldMaps = try Self.validate(
+                name: name,
+                fields: fields,
+                directoryComponents: directoryComponents,
+                directoryLayer: directoryLayer,
+                indexes: indexes,
+                enumMetadata: enumMetadata,
+                ontologyClassIRI: ontologyClassIRI,
+                objectPropertyIRI: objectPropertyIRI,
+                objectPropertyFromField: objectPropertyFromField,
+                objectPropertyToField: objectPropertyToField,
+                dataPropertyIRIs: dataPropertyIRIs
+            )
             self.name = name
             self.fields = fields
             self.directoryComponents = directoryComponents
@@ -228,8 +300,10 @@ public final class Schema: Sendable {
             self.objectPropertyFromField = objectPropertyFromField
             self.objectPropertyToField = objectPropertyToField
             self.dataPropertyIRIs = dataPropertyIRIs
-            self.persistableType = nil
-            self.indexDescriptors = []
+            self.persistableType = persistableType
+            self.indexDescriptors = indexDescriptors
+            self.fieldsByName = fieldMaps.byName
+            self.fieldsByNumber = fieldMaps.byNumber
         }
 
         // MARK: - Custom Equatable (compare only Codable fields)
@@ -307,6 +381,191 @@ public final class Schema: Sendable {
             }
             return result
         }
+
+        private static func validate(
+            name: String,
+            fields: [FieldSchema],
+            directoryComponents: [DirectoryPathComponent],
+            directoryLayer: DirectoryLayer,
+            indexes: [IndexDescriptorMetadata],
+            enumMetadata: [String: [String]],
+            ontologyClassIRI: String?,
+            objectPropertyIRI: String?,
+            objectPropertyFromField: String?,
+            objectPropertyToField: String?,
+            dataPropertyIRIs: [String]?
+        ) throws(SchemaEntityError) -> (
+            byName: [String: FieldSchema],
+            byNumber: [Int: FieldSchema]
+        ) {
+            guard !name.isEmpty else {
+                throw .emptyEntityName
+            }
+
+            var fieldsByName: [String: FieldSchema] = [:]
+            var fieldsByNumber: [Int: FieldSchema] = [:]
+            for field in fields {
+                guard !field.name.isEmpty else {
+                    throw .emptyFieldName(fieldNumber: field.fieldNumber)
+                }
+                guard field.fieldNumber > 0 else {
+                    throw .invalidFieldNumber(
+                        fieldName: field.name,
+                        fieldNumber: field.fieldNumber
+                    )
+                }
+                guard fieldsByName.updateValue(field, forKey: field.name) == nil else {
+                    throw .duplicateFieldName(field.name)
+                }
+                if let existing = fieldsByNumber.updateValue(field, forKey: field.fieldNumber) {
+                    throw .duplicateFieldNumber(
+                        fieldNumber: field.fieldNumber,
+                        fieldNames: [existing.name, field.name].sorted()
+                    )
+                }
+                if let target = field.referenceTargetEntity {
+                    guard field.type == .reference else {
+                        throw .referenceTargetOnNonReferenceField(fieldName: field.name)
+                    }
+                    guard !target.isEmpty else {
+                        throw .invalidReferenceTarget(fieldName: field.name)
+                    }
+                }
+            }
+
+            var hasDynamicDirectoryField = false
+            for (position, component) in directoryComponents.enumerated() {
+                switch component {
+                case .staticPath(let value):
+                    guard !value.isEmpty else {
+                        throw .emptyDirectoryPathComponent(position: position)
+                    }
+                case .dynamicField(let fieldName):
+                    hasDynamicDirectoryField = true
+                    guard fieldsByName[fieldName] != nil else {
+                        throw .unknownDirectoryField(fieldName)
+                    }
+                }
+            }
+            if directoryLayer == .partition, !hasDynamicDirectoryField {
+                throw .partitionDirectoryRequiresDynamicField
+            }
+
+            var indexNames = Set<String>()
+            for index in indexes {
+                guard !index.name.isEmpty else {
+                    throw .emptyIndexName
+                }
+                guard indexNames.insert(index.name).inserted else {
+                    throw .duplicateIndexName(index.name)
+                }
+                guard !index.kind.identifier.isEmpty else {
+                    throw .emptyIndexKindIdentifier(indexName: index.name)
+                }
+                for fieldName in index.fieldNames {
+                    try validateIndexField(
+                        fieldName,
+                        indexName: index.name,
+                        fieldsByName: fieldsByName,
+                        stored: false
+                    )
+                }
+                for fieldName in index.storedFieldNames {
+                    try validateIndexField(
+                        fieldName,
+                        indexName: index.name,
+                        fieldsByName: fieldsByName,
+                        stored: true
+                    )
+                }
+            }
+
+            for (fieldName, cases) in enumMetadata {
+                guard let field = fieldsByName[fieldName] else {
+                    throw .unknownEnumField(fieldName)
+                }
+                guard field.type == .enum else {
+                    throw .enumMetadataOnNonEnumField(fieldName)
+                }
+                var caseNames = Set<String>()
+                for caseName in cases {
+                    guard !caseName.isEmpty else {
+                        throw .emptyEnumCase(fieldName: fieldName)
+                    }
+                    guard caseNames.insert(caseName).inserted else {
+                        throw .duplicateEnumCase(fieldName: fieldName, caseName: caseName)
+                    }
+                }
+            }
+
+            if let ontologyClassIRI, ontologyClassIRI.isEmpty {
+                throw .emptyOntologyIRI
+            }
+            try validateObjectProperty(
+                iri: objectPropertyIRI,
+                fromField: objectPropertyFromField,
+                toField: objectPropertyToField,
+                fieldsByName: fieldsByName
+            )
+
+            var seenDataPropertyIRIs = Set<String>()
+            for iri in dataPropertyIRIs ?? [] {
+                guard !iri.isEmpty else {
+                    throw .emptyDataPropertyIRI
+                }
+                guard seenDataPropertyIRIs.insert(iri).inserted else {
+                    throw .duplicateDataPropertyIRI(iri)
+                }
+            }
+
+            return (fieldsByName, fieldsByNumber)
+        }
+
+        private static func validateIndexField(
+            _ fieldName: String,
+            indexName: String,
+            fieldsByName: [String: FieldSchema],
+            stored: Bool
+        ) throws(SchemaEntityError) {
+            guard !fieldName.isEmpty else {
+                throw .emptyIndexFieldName(indexName: indexName)
+            }
+            let rootFieldName = fieldName.split(
+                separator: ".",
+                maxSplits: 1,
+                omittingEmptySubsequences: false
+            )[0]
+            guard fieldsByName[String(rootFieldName)] != nil else {
+                if stored {
+                    throw .unknownStoredField(indexName: indexName, fieldName: fieldName)
+                }
+                throw .unknownIndexField(indexName: indexName, fieldName: fieldName)
+            }
+        }
+
+        private static func validateObjectProperty(
+            iri: String?,
+            fromField: String?,
+            toField: String?,
+            fieldsByName: [String: FieldSchema]
+        ) throws(SchemaEntityError) {
+            switch (iri, fromField, toField) {
+            case (nil, nil, nil):
+                return
+            case (.some(let iri), .some(let fromField), .some(let toField)):
+                guard !iri.isEmpty else {
+                    throw .emptyOntologyIRI
+                }
+                guard fieldsByName[fromField] != nil else {
+                    throw .unknownObjectPropertyField(fromField)
+                }
+                guard fieldsByName[toField] != nil else {
+                    throw .unknownObjectPropertyField(toField)
+                }
+            default:
+                throw .incompleteObjectProperty
+            }
+        }
     }
 
     // MARK: - Properties
@@ -376,7 +635,12 @@ public final class Schema: Sendable {
         var polymorphicMembers: [String: [any Persistable.Type]] = [:]
 
         for type in types {
-            let entity = Entity(from: type)
+            let entity: Entity
+            do {
+                entity = try Entity(from: type)
+            } catch {
+                throw .invalidEntity(error)
+            }
             guard entitiesByName[entity.name] == nil else {
                 throw .duplicateEntityName(entity.name)
             }
@@ -748,6 +1012,9 @@ extension Schema: Hashable {
 
 /// Errors that can occur during Schema validation
 public enum SchemaError: Error, CustomStringConvertible, Sendable, Equatable {
+    /// An entity declaration violates intrinsic schema catalog invariants.
+    case invalidEntity(SchemaEntityError)
+
     /// Duplicate entity name detected.
     case duplicateEntityName(String)
 
@@ -786,6 +1053,8 @@ public enum SchemaError: Error, CustomStringConvertible, Sendable, Equatable {
 
     public var description: String {
         switch self {
+        case .invalidEntity(let error):
+            return "Invalid entity schema: \(error.description)"
         case .duplicateEntityName(let name):
             return "Duplicate entity name '\(name)' detected. Entity names must be unique within a schema."
         case .duplicateIndexName(let indexName, let existingFields, let duplicateFields):

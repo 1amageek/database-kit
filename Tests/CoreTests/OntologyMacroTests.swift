@@ -458,14 +458,14 @@ struct OntologyMacroTests {
     // -- Contract 16: Schema.Entity ontology metadata --
 
     @Test("Schema.Entity captures ontologyClassIRI from @OWLClass")
-    func schemaEntityOntologyClassIRI() {
-        let entity = Schema.Entity(from: OntEmployee.self)
+    func schemaEntityOntologyClassIRI() throws {
+        let entity = try Schema.Entity(from: OntEmployee.self)
         #expect(entity.ontologyClassIRI == "https://example.org/onto#Employee")
     }
 
     @Test("Schema.Entity captures objectPropertyIRI from @OWLObjectProperty")
-    func schemaEntityObjectPropertyIRI() {
-        let entity = Schema.Entity(from: OntAssignment.self)
+    func schemaEntityObjectPropertyIRI() throws {
+        let entity = try Schema.Entity(from: OntAssignment.self)
         #expect(entity.objectPropertyIRI == "https://example.org/onto#employs")
         #expect(entity.objectPropertyFromField == "employeeID")
         #expect(entity.objectPropertyToField == "projectID")
@@ -473,7 +473,7 @@ struct OntologyMacroTests {
 
     @Test("Schema.Entity ontology metadata round-trips through JSON")
     func schemaEntityOntologyMetadataRoundTrip() throws {
-        let entity = Schema.Entity(from: OntEmployee.self)
+        let entity = try Schema.Entity(from: OntEmployee.self)
         let data = try JSONEncoder().encode(entity)
         let decoded = try JSONDecoder().decode(Schema.Entity.self, from: data)
         #expect(decoded.ontologyClassIRI == "https://example.org/onto#Employee")
@@ -481,8 +481,8 @@ struct OntologyMacroTests {
     }
 
     @Test("Schema.Entity without ontology has nil ontology fields")
-    func schemaEntityNoOntology() {
-        let entity = Schema.Entity(from: OntPlainModel.self)
+    func schemaEntityNoOntology() throws {
+        let entity = try Schema.Entity(from: OntPlainModel.self)
         #expect(entity.ontologyClassIRI == nil)
         #expect(entity.objectPropertyIRI == nil)
     }

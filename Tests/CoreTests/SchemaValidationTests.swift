@@ -1,5 +1,6 @@
 import DatabaseTypes
 import DatabaseValue
+import Foundation
 import Testing
 @testable import Core
 
@@ -12,8 +13,8 @@ private struct SchemaValidationEntity {
 @Suite("Schema Validation")
 struct SchemaValidationTests {
     @Test("Duplicate entity names fail schema construction")
-    func duplicateEntityNamesFailConstruction() {
-        let entity = Schema.Entity(
+    func duplicateEntityNamesFailConstruction() throws {
+        let entity = try Schema.Entity(
             name: "DuplicateEntity",
             fields: []
         )
@@ -21,6 +22,85 @@ struct SchemaValidationTests {
         #expect(throws: SchemaError.duplicateEntityName("DuplicateEntity")) {
             try Schema(entities: [entity, entity])
         }
+    }
+
+    @Test("Duplicate field names fail entity construction without trapping")
+    func duplicateFieldNamesFailEntityConstruction() {
+        #expect(
+            throws: SchemaEntityError.duplicateFieldName("value")
+        ) {
+            try Schema.Entity(
+                name: "DuplicateFieldName",
+                fields: [
+                    FieldSchema(name: "value", fieldNumber: 1, type: .string),
+                    FieldSchema(name: "value", fieldNumber: 2, type: .string),
+                ]
+            )
+        }
+    }
+
+    @Test("Duplicate field numbers fail entity construction without trapping")
+    func duplicateFieldNumbersFailEntityConstruction() {
+        #expect(
+            throws: SchemaEntityError.duplicateFieldNumber(
+                fieldNumber: 1,
+                fieldNames: ["first", "second"]
+            )
+        ) {
+            try Schema.Entity(
+                name: "DuplicateFieldNumber",
+                fields: [
+                    FieldSchema(name: "first", fieldNumber: 1, type: .string),
+                    FieldSchema(name: "second", fieldNumber: 1, type: .string),
+                ]
+            )
+        }
+    }
+
+    @Test("Decoded entity metadata enforces the same invariants")
+    func decodedEntityMetadataIsValidated() throws {
+        let data = Data("""
+        {
+          "name": "DecodedEntity",
+          "fields": [
+            {
+              "name": "value",
+              "fieldNumber": 1,
+              "type": "string",
+              "isOptional": false,
+              "isArray": false
+            },
+            {
+              "name": "value",
+              "fieldNumber": 2,
+              "type": "string",
+              "isOptional": false,
+              "isArray": false
+            }
+          ],
+          "directoryComponents": [],
+          "directoryLayer": "default",
+          "indexes": [],
+          "enumMetadata": {}
+        }
+        """.utf8)
+
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(Schema.Entity.self, from: data)
+        }
+    }
+
+    @Test("Validated field maps preserve both catalog identities")
+    func fieldMapsPreserveCatalogIdentities() throws {
+        let first = FieldSchema(name: "first", fieldNumber: 1, type: .string)
+        let second = FieldSchema(name: "second", fieldNumber: 2, type: .int64)
+        let entity = try Schema.Entity(
+            name: "MappedEntity",
+            fields: [first, second]
+        )
+
+        #expect(entity.fieldMapByName == ["first": first, "second": second])
+        #expect(entity.fieldMapByNumber == [1: first, 2: second])
     }
 
     @Test("Duplicate index names fail schema construction")

@@ -45,6 +45,15 @@ Application model conversion is owned by `Core` because it depends on persisted
 model and schema meaning. Optional Foundation conversion is isolated in adapter
 targets and does not enter the Embedded dependency graph.
 
+## Schema Catalog Boundary
+
+`Schema.Entity` is a validated catalog value. Macro-generated, manually
+constructed, and decoded entities pass through the same intrinsic validation
+boundary before reaching persistence codecs or runtime registration. Field-name
+and field-number maps are derived once from that validated catalog; downstream
+code neither resolves duplicate metadata by precedence nor traps while building
+a dictionary.
+
 ## Embedded Boundary
 
 The Embedded client and canonical protocol path is:

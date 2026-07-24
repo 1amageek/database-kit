@@ -96,8 +96,8 @@ struct User {
 ```swift
 let schema = try Schema(
     entities: [
-        Schema.Entity(from: User.self),
-        Schema.Entity(from: Product.self),
+        try Schema.Entity(from: User.self),
+        try Schema.Entity(from: Product.self),
     ],
     version: Schema.Version(1, 0, 0)
 )
