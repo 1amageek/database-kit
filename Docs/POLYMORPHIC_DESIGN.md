@@ -25,8 +25,8 @@ public protocol Entity: Polymorphable {
     var label: String { get }
     var entityType: String { get }
     var embedding: [Float] { get set }
-    var created: Date { get set }
-    var updated: Date { get set }
+    var created: Timestamp { get set }
+    var updated: Timestamp { get set }
 
     #Index(VectorIndexKind<Self>(embedding: \Self.embedding, dimensions: 256))
 }
@@ -38,8 +38,8 @@ public struct Person: Entity {
     public var id: String
     public var name: String
     public var embedding: [Float]
-    public var created: Date
-    public var updated: Date
+    public var created: Timestamp
+    public var updated: Timestamp
 
     public var label: String { name }
     public var entityType: String { "person" }
@@ -53,8 +53,8 @@ public struct Organization: Entity {
     public var name: String
     public var domain: String?
     public var embedding: [Float]
-    public var created: Date
-    public var updated: Date
+    public var created: Timestamp
+    public var updated: Timestamp
 
     public var label: String { name }
     public var entityType: String { "organization" }

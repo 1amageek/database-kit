@@ -27,7 +27,7 @@ import DatabaseTypes
 ///
 ///     var email: String
 ///     var address: Address
-///     var period: Range<Date>
+///     var period: Range<Timestamp>
 /// }
 ///
 /// // Generated IndexDescriptors use KeyPaths directly:

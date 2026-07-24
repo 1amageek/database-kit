@@ -59,7 +59,7 @@ func getRelationshipAttribute(_ declaration: VariableDeclSyntax) -> AttributeSyn
 }
 
 private func databaseReferenceTarget(from type: TypeSyntax) -> TypeSyntax? {
-    genericArgument(from: type, named: "DatabaseReference")
+    genericArgument(from: type, named: "PersistableReference")
 }
 
 private func optionalWrappedType(from type: TypeSyntax) -> TypeSyntax? {

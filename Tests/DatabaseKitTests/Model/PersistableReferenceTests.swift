@@ -4,26 +4,26 @@ import DatabaseKit
 import Testing
 
 @Suite("Canonical database references")
-struct DatabaseReferenceTests {
+struct PersistableReferenceTests {
     @Test("References round-trip as canonical record identities")
     func recordRoundTrip() throws {
         let firstIdentity = try EntityReference(
-            entity: DatabaseReferenceTarget.persistableType,
+            entity: ReferenceTargetModel.persistableType,
             id: .string("target-1"),
             partitions: try FieldObject([
                 (key: "tenantID", value: .string("tenant-a")),
             ])
         )
         let secondIdentity = try EntityReference(
-            entity: DatabaseReferenceTarget.persistableType,
+            entity: ReferenceTargetModel.persistableType,
             id: .string("target-2"),
             partitions: try FieldObject([
                 (key: "tenantID", value: .string("tenant-a")),
             ])
         )
-        let first = try DatabaseReference<DatabaseReferenceTarget>(identity: firstIdentity)
-        let second = try DatabaseReference<DatabaseReferenceTarget>(identity: secondIdentity)
-        let owner = DatabaseReferenceOwner(
+        let first = try PersistableReference<ReferenceTargetModel>(identity: firstIdentity)
+        let second = try PersistableReference<ReferenceTargetModel>(identity: secondIdentity)
+        let owner = ReferenceOwnerModel(
             required: first,
             optional: nil,
             many: [first, second]
@@ -39,7 +39,7 @@ struct DatabaseReferenceTests {
             .reference(secondIdentity),
         ]))
 
-        let decoded = try DatabaseReferenceOwner.decodePersistedFields(fields)
+        let decoded = try ReferenceOwnerModel.decodePersistedFields(fields)
         #expect(decoded.required == first)
         #expect(decoded.optional == nil)
         #expect(decoded.many == [first, second])
@@ -47,8 +47,8 @@ struct DatabaseReferenceTests {
 
     @Test("Reference rejects a mismatched target entity")
     func rejectsMismatchedEntity() throws {
-        #expect(throws: DatabaseReferenceError.self) {
-            try DatabaseReference<DatabaseReferenceTarget>(
+        #expect(throws: PersistableReferenceError.self) {
+            try PersistableReference<ReferenceTargetModel>(
                 identity: try EntityReference(
                     entity: "Other",
                     id: .string("target-1")
@@ -59,14 +59,14 @@ struct DatabaseReferenceTests {
 
     @Test("Relationship metadata is derived from typed fields")
     func relationshipMetadata() throws {
-        let descriptors = try DatabaseReferenceOwner.relationshipDescriptors
+        let descriptors = try ReferenceOwnerModel.relationshipDescriptors
 
         #expect(descriptors.count == 3)
         let required = try #require(descriptors.first { $0.propertyName == "required" })
-        #expect(required.name == "DatabaseReferenceOwner.required")
-        #expect(required.ownerTypeName == DatabaseReferenceOwner.persistableType)
+        #expect(required.name == "ReferenceOwnerModel.required")
+        #expect(required.ownerTypeName == ReferenceOwnerModel.persistableType)
         #expect(required.propertyFieldNumber == 2)
-        #expect(required.relatedTypeName == DatabaseReferenceTarget.persistableType)
+        #expect(required.relatedTypeName == ReferenceTargetModel.persistableType)
         #expect(required.cardinality == .requiredToOne)
         #expect(required.deleteRule == .deny)
 
@@ -79,6 +79,6 @@ struct DatabaseReferenceTests {
         #expect(many.propertyFieldNumber == 4)
         #expect(many.cardinality == .toMany)
         #expect(many.deleteRule == .cascade)
-        #expect(try DatabaseReferenceOwner.indexDescriptors.isEmpty)
+        #expect(try ReferenceOwnerModel.indexDescriptors.isEmpty)
     }
 }

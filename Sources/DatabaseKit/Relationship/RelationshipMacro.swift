@@ -1,9 +1,9 @@
-/// Marks a stored `DatabaseReference<Target>` field as a maintained relationship.
+/// Marks a stored `PersistableReference<Target>` field as a maintained relationship.
 ///
 /// Supported field shapes are:
-/// - `DatabaseReference<Target>`
-/// - `DatabaseReference<Target>?`
-/// - `[DatabaseReference<Target>]`
+/// - `PersistableReference<Target>`
+/// - `PersistableReference<Target>?`
+/// - `[PersistableReference<Target>]`
 ///
 /// The target type, partition binding, and identifier components are carried by
 /// the reference value. The attribute only defines deletion behavior.

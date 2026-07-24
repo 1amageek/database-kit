@@ -51,7 +51,7 @@ public enum TokenizationStrategy: String, Sendable, Hashable {
 /// ```swift
 /// @Persistable
 /// struct Article {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///
 ///     #Index(
 ///         FullTextIndexKind<Article>(

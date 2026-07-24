@@ -127,7 +127,7 @@ public enum TypeValidation {
     /// Check if type conforms to Comparable
     ///
     /// **Support**: All Comparable-conforming types
-    /// - String, Int, Date, UUID, etc. (standard types)
+    /// - String, fixed-width integers, Timestamp, UUID, etc. (standard types)
     /// - User-defined Comparable types
     ///
     /// **Implementation**: Dynamic protocol check
@@ -136,7 +136,7 @@ public enum TypeValidation {
     /// ```swift
     /// TypeValidation.isComparable(String.self)  // true
     /// TypeValidation.isComparable(Int.self)     // true
-    /// TypeValidation.isComparable(Date.self)    // true
+    /// TypeValidation.isComparable(Timestamp.self)    // true
     ///
     /// // Custom type
     /// struct Price: Comparable { ... }

@@ -34,7 +34,7 @@ import DatabaseTypes
 /// ```swift
 /// @Persistable
 /// struct Player {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///     var score: Int64
 ///     var name: String
 ///

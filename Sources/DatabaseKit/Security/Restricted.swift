@@ -26,7 +26,7 @@ public protocol RestrictedProtocol: Sendable {
 /// ```swift
 /// @Persistable
 /// struct Employee {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///     var name: String = ""
 ///
 ///     // Only HR and managers can read/write salary

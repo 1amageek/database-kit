@@ -53,11 +53,11 @@ public struct PersistableFieldDecoder: Sendable {
         self.valuesByName = values
     }
 
-    public func decode<Value: PersistableScalarDecodable>(
+    public func decode<Value: FieldValueDecodable>(
         _ type: Value.Type,
         for field: String
     ) throws -> Value {
-        try Value.decodePersistedScalar(requiredValue(for: field), field: field)
+        try Value.decodeFieldValue(requiredValue(for: field), field: field)
     }
 
     public func decode<Value: Persistable>(
@@ -88,8 +88,8 @@ public struct PersistableFieldDecoder: Sendable {
     public func decode<Value: RawRepresentable>(
         _ type: Value.Type,
         for field: String
-    ) throws -> Value where Value.RawValue: PersistableScalarDecodable {
-        let rawValue = try Value.RawValue.decodePersistedScalar(
+    ) throws -> Value where Value.RawValue: FieldValueDecodable {
+        let rawValue = try Value.RawValue.decodeFieldValue(
             requiredValue(for: field),
             field: field
         )
@@ -99,13 +99,13 @@ public struct PersistableFieldDecoder: Sendable {
         return value
     }
 
-    public func decode<Element: PersistableScalarDecodable>(
+    public func decode<Element: FieldValueDecodable>(
         _ type: [Element].Type,
         for field: String
     ) throws -> [Element] {
         let values = try requiredArray(for: field)
         return try values.map {
-            try Element.decodePersistedScalar($0, field: field)
+            try Element.decodeFieldValue($0, field: field)
         }
     }
 
@@ -140,10 +140,10 @@ public struct PersistableFieldDecoder: Sendable {
     public func decode<Element: RawRepresentable>(
         _ type: [Element].Type,
         for field: String
-    ) throws -> [Element] where Element.RawValue: PersistableScalarDecodable {
+    ) throws -> [Element] where Element.RawValue: FieldValueDecodable {
         let values = try requiredArray(for: field)
         return try values.map { value in
-            let rawValue = try Element.RawValue.decodePersistedScalar(value, field: field)
+            let rawValue = try Element.RawValue.decodeFieldValue(value, field: field)
             guard let element = Element(rawValue: rawValue) else {
                 throw PersistableDecodingError.invalidValue(field: field, expected: "valid enum raw values")
             }
@@ -151,12 +151,12 @@ public struct PersistableFieldDecoder: Sendable {
         }
     }
 
-    public func decodeIfPresent<Value: PersistableScalarDecodable>(
+    public func decodeIfPresent<Value: FieldValueDecodable>(
         _ type: Value.Type,
         for field: String
     ) throws -> Value? {
         guard let value = optionalValue(for: field) else { return nil }
-        return try Value.decodePersistedScalar(value, field: field)
+        return try Value.decodeFieldValue(value, field: field)
     }
 
     public func decodeIfPresent<Value: Persistable>(
@@ -187,22 +187,22 @@ public struct PersistableFieldDecoder: Sendable {
     public func decodeIfPresent<Value: RawRepresentable>(
         _ type: Value.Type,
         for field: String
-    ) throws -> Value? where Value.RawValue: PersistableScalarDecodable {
+    ) throws -> Value? where Value.RawValue: FieldValueDecodable {
         guard let value = optionalValue(for: field) else { return nil }
-        let rawValue = try Value.RawValue.decodePersistedScalar(value, field: field)
+        let rawValue = try Value.RawValue.decodeFieldValue(value, field: field)
         guard let decoded = Value(rawValue: rawValue) else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a valid enum raw value")
         }
         return decoded
     }
 
-    public func decodeIfPresent<Element: PersistableScalarDecodable>(
+    public func decodeIfPresent<Element: FieldValueDecodable>(
         _ type: [Element].Type,
         for field: String
     ) throws -> [Element]? {
         guard let values = try optionalArray(for: field) else { return nil }
         return try values.map {
-            try Element.decodePersistedScalar($0, field: field)
+            try Element.decodeFieldValue($0, field: field)
         }
     }
 
@@ -238,10 +238,10 @@ public struct PersistableFieldDecoder: Sendable {
     public func decodeIfPresent<Element: RawRepresentable>(
         _ type: [Element].Type,
         for field: String
-    ) throws -> [Element]? where Element.RawValue: PersistableScalarDecodable {
+    ) throws -> [Element]? where Element.RawValue: FieldValueDecodable {
         guard let values = try optionalArray(for: field) else { return nil }
         return try values.map { value in
-            let rawValue = try Element.RawValue.decodePersistedScalar(value, field: field)
+            let rawValue = try Element.RawValue.decodeFieldValue(value, field: field)
             guard let element = Element(rawValue: rawValue) else {
                 throw PersistableDecodingError.invalidValue(field: field, expected: "valid enum raw values")
             }

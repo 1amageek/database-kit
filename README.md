@@ -218,7 +218,7 @@ struct Message {
         layer: .partition
     )
 
-    var messageID: String = ULID().ulidString
+    var messageID: String
     var accountID: String
     var channelID: String
     var content: String
@@ -379,7 +379,7 @@ struct Assignment {
     var projectID: String = ""
 
     @OWLDataProperty("ex:since")
-    var startDate: Date = Date()
+    var startDate: Timestamp
 }
 ```
 

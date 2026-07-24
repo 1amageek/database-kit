@@ -183,7 +183,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                         Diagnostic(
                                             node: Syntax(relAttr),
                                             message: MacroExpansionErrorMessage(
-                                                "@Relationship requires a DatabaseReference<Target> field"
+                                                "@Relationship requires a PersistableReference<Target> field"
                                             )
                                         )
                                     ])
@@ -1198,7 +1198,7 @@ public struct IndexMacro: DeclarationMacro {
 ///     var email: String
 ///
 ///     @Transient
-///     var cachedData: Data?  // Excluded from persistence
+///     var cachedData: ByteString?  // Excluded from persistence
 /// }
 /// ```
 public struct TransientMacro: PeerMacro {

@@ -33,7 +33,7 @@ public struct RelationshipMacro: PeerMacro {
         guard let cardinality = relationshipCardinality(of: annotation.type) else {
             throw diagnostic(
                 annotation.type,
-                "@Relationship fields must be DatabaseReference<Target>, DatabaseReference<Target>?, or [DatabaseReference<Target>]"
+                "@Relationship fields must be PersistableReference<Target>, PersistableReference<Target>?, or [PersistableReference<Target>]"
             )
         }
 
@@ -98,7 +98,7 @@ private func relationshipDeleteRule(from attribute: AttributeSyntax) throws -> S
 }
 
 private func databaseReferenceTarget(from type: TypeSyntax) -> TypeSyntax? {
-    genericArgument(from: type, named: "DatabaseReference")
+    genericArgument(from: type, named: "PersistableReference")
 }
 
 private func optionalWrappedType(from type: TypeSyntax) -> TypeSyntax? {

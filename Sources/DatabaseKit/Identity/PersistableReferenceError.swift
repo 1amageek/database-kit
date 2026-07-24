@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-public enum DatabaseReferenceError: Error, Sendable, Equatable {
+public enum PersistableReferenceError: Error, Sendable, Equatable {
     case entityMismatch(expected: String, actual: String)
     case invalidIdentifier(
         entity: String,

@@ -2,11 +2,11 @@ import DatabaseTypes
 import DatabaseKit
 
 @Persistable
-struct DatabaseReferenceTarget {
+struct ReferenceTargetModel {
     var id: String = "fixture-id"
-    #Directory<DatabaseReferenceTarget>(
+    #Directory<ReferenceTargetModel>(
         "targets",
-        Field<DatabaseReferenceTarget>(\.tenantID)
+        Field<ReferenceTargetModel>(\.tenantID)
     )
 
     var tenantID: String

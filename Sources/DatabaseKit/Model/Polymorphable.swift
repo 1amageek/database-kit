@@ -35,7 +35,7 @@ import DatabaseTypes
 ///
 /// @Persistable
 /// struct Article: Document {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///     var title: String
 ///     var content: String
 ///
@@ -44,9 +44,9 @@ import DatabaseTypes
 ///
 /// @Persistable
 /// struct Report: Document {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///     var title: String
-///     var data: Data
+///     var data: ByteString
 ///     // No #Directory: uses default [.staticPath("Report")]
 /// }
 /// ```

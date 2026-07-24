@@ -15,7 +15,7 @@ import DatabaseTypes
 ///     var projectID: String = ""
 ///
 ///     @OWLDataProperty("onto:since")
-///     var startDate: Date = Date()
+///     var startDate: Timestamp
 /// }
 /// ```
 ///

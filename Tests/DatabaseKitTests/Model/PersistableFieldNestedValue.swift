@@ -5,7 +5,7 @@ struct PersistableFieldNestedValue:
     Sendable,
     Equatable,
     FieldValueConvertible,
-    PersistableScalarDecodable
+    FieldValueDecodable
 {
     let label: String
     let priority: Int64
@@ -19,10 +19,10 @@ struct PersistableFieldNestedValue:
         )
     }
 
-    static func decodePersistedScalar(
+    static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> PersistableFieldNestedValue {
+    ) throws(PersistableDecodingError) -> PersistableFieldNestedValue {
         guard case .object(let object) = value,
               case .string(let label) = object["label"],
               case .int64(let priority) = object["priority"] else {

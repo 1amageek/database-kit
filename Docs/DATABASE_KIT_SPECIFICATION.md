@@ -186,8 +186,8 @@ Sources/
 │   ├── Identity/
 │   ├── Schema/
 │   ├── Query/
-│   ├── Mutation/
 │   ├── Relationship/
+│   ├── Security/
 │   ├── Index/
 │   │   ├── Scalar/
 │   │   ├── Aggregate/
@@ -196,11 +196,13 @@ Sources/
 │   │   ├── Geospatial/
 │   │   ├── Rank/
 │   │   └── Permuted/
-│   └── Graph/
+│   ├── Graph/
 │       ├── RDF/
 │       ├── SPARQL/
 │       ├── Ontology/
 │       └── SHACL/
+│   └── Support/
+│       └── package-internal platform-neutral utilities
 ├── DatabaseWire/
 │   ├── Operation/
 │   ├── Encoding/

@@ -12,7 +12,7 @@ import DatabaseTypes
 ///
 ///     @Persistable
 ///     struct User {
-///         var id: String = ULID().ulidString
+///         var id: String
 ///         var name: String
 ///         var email: String
 ///
@@ -21,7 +21,7 @@ import DatabaseTypes
 ///
 ///     @Persistable
 ///     struct Order {
-///         var id: String = ULID().ulidString
+///         var id: String
 ///         var userId: String
 ///         var total: Double
 ///     }
@@ -33,7 +33,7 @@ import DatabaseTypes
 ///
 ///     @Persistable
 ///     struct User {
-///         var id: String = ULID().ulidString
+///         var id: String
 ///         var name: String
 ///         var email: String
 ///         var age: Int32 = 0  // New field

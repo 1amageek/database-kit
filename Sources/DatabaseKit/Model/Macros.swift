@@ -68,7 +68,7 @@ public macro Persistable(type: String) = #externalMacro(module: "DatabaseKitMacr
 /// ```swift
 /// @Persistable
 /// struct Product {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///
 ///     // Scalar index for sorting and range queries
 ///     #Index(ScalarIndexKind<Product>(fields: [\.email]), unique: true)
@@ -180,7 +180,7 @@ public enum DirectoryLayer: String, Sendable, Hashable {
 /// protocol Document: Polymorphable {  // Required: macros cannot add protocol inheritance
 ///     var id: String { get }
 ///     var title: String { get }
-///     var updatedAt: Date { get }
+///     var updatedAt: Timestamp { get }
 ///
 ///     #Directory<Self>("app", "documents")
 ///     #Index(ScalarIndexKind<Self>(fields: [\Self.title]), name: "Document_title")
@@ -188,18 +188,18 @@ public enum DirectoryLayer: String, Sendable, Hashable {
 ///
 /// @Persistable
 /// struct Article: Document {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///     var title: String
-///     var updatedAt: Date
+///     var updatedAt: Timestamp
 ///     var content: String
 /// }
 ///
 /// @Persistable
 /// struct Report: Document {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///     var title: String
-///     var updatedAt: Date
-///     var data: Data
+///     var updatedAt: Timestamp
+///     var data: ByteString
 /// }
 /// ```
 ///
@@ -265,7 +265,7 @@ public macro Polymorphable() = #externalMacro(module: "DatabaseKitMacros", type:
 /// ```swift
 /// @Persistable
 /// struct User {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///     var email: String
 ///     var name: String
 ///

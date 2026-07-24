@@ -39,7 +39,7 @@ public enum VectorMetric: String, Sendable, Hashable {
 /// ```swift
 /// @Persistable
 /// struct Product {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///
 ///     // Model definition: Only specify data structure (dimensions, metric)
 ///     #Index(

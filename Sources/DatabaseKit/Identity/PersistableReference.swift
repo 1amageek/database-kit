@@ -1,12 +1,12 @@
 import DatabaseTypes
 
 /// A type-safe reference to a persisted entity.
-public struct DatabaseReference<Target: Persistable>: Sendable, Hashable {
+public struct PersistableReference<Target: Persistable>: Sendable, Hashable {
     public let identity: EntityReference
 
     public init(
         identity: EntityReference
-    ) throws(DatabaseReferenceError) {
+    ) throws(PersistableReferenceError) {
         guard identity.entity == Target.persistableType else {
             throw .entityMismatch(
                 expected: Target.persistableType,
@@ -80,7 +80,7 @@ public struct DatabaseReference<Target: Persistable>: Sendable, Hashable {
     }
 }
 
-extension DatabaseReference: PersistableReferenceValue {
+extension PersistableReference: PersistableReferenceValue {
     public var persistableIdentity: EntityReference { identity }
 
     public static func decodePersistedReference(

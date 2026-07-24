@@ -1,17 +1,17 @@
 import DatabaseTypes
 
-public protocol PersistableScalarDecodable: Sendable {
-    static func decodePersistedScalar(
+public protocol FieldValueDecodable: Sendable {
+    static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> Self
+    ) throws(PersistableDecodingError) -> Self
 }
 
-extension Bool: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension Bool: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> Bool {
+    ) throws(PersistableDecodingError) -> Bool {
         guard case .bool(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a boolean")
         }
@@ -19,11 +19,11 @@ extension Bool: PersistableScalarDecodable {
     }
 }
 
-extension Int: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension Int: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> Int {
+    ) throws(PersistableDecodingError) -> Int {
         guard case .int64(let scalar) = value, let result = Int(exactly: scalar) else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an Int")
         }
@@ -31,11 +31,11 @@ extension Int: PersistableScalarDecodable {
     }
 }
 
-extension Int8: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension Int8: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> Int8 {
+    ) throws(PersistableDecodingError) -> Int8 {
         guard case .int8(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an Int8")
         }
@@ -43,11 +43,11 @@ extension Int8: PersistableScalarDecodable {
     }
 }
 
-extension Int16: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension Int16: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> Int16 {
+    ) throws(PersistableDecodingError) -> Int16 {
         guard case .int16(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an Int16")
         }
@@ -55,11 +55,11 @@ extension Int16: PersistableScalarDecodable {
     }
 }
 
-extension Int32: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension Int32: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> Int32 {
+    ) throws(PersistableDecodingError) -> Int32 {
         guard case .int32(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an Int32")
         }
@@ -67,11 +67,11 @@ extension Int32: PersistableScalarDecodable {
     }
 }
 
-extension Int64: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension Int64: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> Int64 {
+    ) throws(PersistableDecodingError) -> Int64 {
         guard case .int64(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an Int64")
         }
@@ -79,11 +79,11 @@ extension Int64: PersistableScalarDecodable {
     }
 }
 
-extension UInt: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension UInt: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> UInt {
+    ) throws(PersistableDecodingError) -> UInt {
         guard case .uint64(let scalar) = value, let result = UInt(exactly: scalar) else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a UInt")
         }
@@ -91,11 +91,11 @@ extension UInt: PersistableScalarDecodable {
     }
 }
 
-extension UInt8: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension UInt8: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> UInt8 {
+    ) throws(PersistableDecodingError) -> UInt8 {
         guard case .uint8(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a UInt8")
         }
@@ -103,11 +103,11 @@ extension UInt8: PersistableScalarDecodable {
     }
 }
 
-extension UInt16: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension UInt16: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> UInt16 {
+    ) throws(PersistableDecodingError) -> UInt16 {
         guard case .uint16(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a UInt16")
         }
@@ -115,11 +115,11 @@ extension UInt16: PersistableScalarDecodable {
     }
 }
 
-extension UInt32: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension UInt32: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> UInt32 {
+    ) throws(PersistableDecodingError) -> UInt32 {
         guard case .uint32(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a UInt32")
         }
@@ -127,11 +127,11 @@ extension UInt32: PersistableScalarDecodable {
     }
 }
 
-extension UInt64: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension UInt64: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> UInt64 {
+    ) throws(PersistableDecodingError) -> UInt64 {
         guard case .uint64(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a UInt64")
         }
@@ -139,11 +139,11 @@ extension UInt64: PersistableScalarDecodable {
     }
 }
 
-extension Float: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension Float: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> Float {
+    ) throws(PersistableDecodingError) -> Float {
         guard case .float32(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a Float")
         }
@@ -151,11 +151,11 @@ extension Float: PersistableScalarDecodable {
     }
 }
 
-extension Double: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension Double: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> Double {
+    ) throws(PersistableDecodingError) -> Double {
         guard case .float64(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a Double")
         }
@@ -163,11 +163,11 @@ extension Double: PersistableScalarDecodable {
     }
 }
 
-extension String: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension String: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> String {
+    ) throws(PersistableDecodingError) -> String {
         guard case .string(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a String")
         }
@@ -175,11 +175,11 @@ extension String: PersistableScalarDecodable {
     }
 }
 
-extension ExactDecimal: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension ExactDecimal: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> ExactDecimal {
+    ) throws(PersistableDecodingError) -> ExactDecimal {
         guard case .decimal(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an exact decimal")
         }
@@ -187,11 +187,11 @@ extension ExactDecimal: PersistableScalarDecodable {
     }
 }
 
-extension ByteString: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension ByteString: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> ByteString {
+    ) throws(PersistableDecodingError) -> ByteString {
         guard case .bytes(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "bytes")
         }
@@ -199,11 +199,11 @@ extension ByteString: PersistableScalarDecodable {
     }
 }
 
-extension DatabaseTypes.UUID: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension DatabaseTypes.UUID: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> DatabaseTypes.UUID {
+    ) throws(PersistableDecodingError) -> DatabaseTypes.UUID {
         guard case .uuid(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a UUID")
         }
@@ -211,11 +211,11 @@ extension DatabaseTypes.UUID: PersistableScalarDecodable {
     }
 }
 
-extension CivilDate: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension CivilDate: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> CivilDate {
+    ) throws(PersistableDecodingError) -> CivilDate {
         guard case .date(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a civil date")
         }
@@ -223,11 +223,11 @@ extension CivilDate: PersistableScalarDecodable {
     }
 }
 
-extension CivilTime: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension CivilTime: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> CivilTime {
+    ) throws(PersistableDecodingError) -> CivilTime {
         guard case .time(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a civil time")
         }
@@ -235,11 +235,11 @@ extension CivilTime: PersistableScalarDecodable {
     }
 }
 
-extension CivilDateTime: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension CivilDateTime: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> CivilDateTime {
+    ) throws(PersistableDecodingError) -> CivilDateTime {
         guard case .dateTime(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a civil date-time")
         }
@@ -247,11 +247,11 @@ extension CivilDateTime: PersistableScalarDecodable {
     }
 }
 
-extension Timestamp: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension Timestamp: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> Timestamp {
+    ) throws(PersistableDecodingError) -> Timestamp {
         guard case .timestamp(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a timestamp")
         }
@@ -259,11 +259,11 @@ extension Timestamp: PersistableScalarDecodable {
     }
 }
 
-extension TimeSpan: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension TimeSpan: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> TimeSpan {
+    ) throws(PersistableDecodingError) -> TimeSpan {
         guard case .timeSpan(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a time span")
         }
@@ -271,11 +271,11 @@ extension TimeSpan: PersistableScalarDecodable {
     }
 }
 
-extension CalendarPeriod: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension CalendarPeriod: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> CalendarPeriod {
+    ) throws(PersistableDecodingError) -> CalendarPeriod {
         guard case .calendarPeriod(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a calendar period")
         }
@@ -283,11 +283,11 @@ extension CalendarPeriod: PersistableScalarDecodable {
     }
 }
 
-extension GeographicPoint: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension GeographicPoint: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> GeographicPoint {
+    ) throws(PersistableDecodingError) -> GeographicPoint {
         guard case .geographicPoint(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a geographic point")
         }
@@ -295,11 +295,11 @@ extension GeographicPoint: PersistableScalarDecodable {
     }
 }
 
-extension GeographicPosition: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension GeographicPosition: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> GeographicPosition {
+    ) throws(PersistableDecodingError) -> GeographicPosition {
         guard case .geographicPosition(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a geographic position")
         }
@@ -307,11 +307,11 @@ extension GeographicPosition: PersistableScalarDecodable {
     }
 }
 
-extension DatabaseTypes.Vector: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension DatabaseTypes.Vector: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> DatabaseTypes.Vector {
+    ) throws(PersistableDecodingError) -> DatabaseTypes.Vector {
         guard case .vector(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a vector")
         }
@@ -319,11 +319,11 @@ extension DatabaseTypes.Vector: PersistableScalarDecodable {
     }
 }
 
-extension FieldObject: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension FieldObject: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> FieldObject {
+    ) throws(PersistableDecodingError) -> FieldObject {
         guard case .object(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an object")
         }
@@ -331,11 +331,11 @@ extension FieldObject: PersistableScalarDecodable {
     }
 }
 
-extension EntityReference: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension EntityReference: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> EntityReference {
+    ) throws(PersistableDecodingError) -> EntityReference {
         guard case .reference(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an entity reference")
         }
@@ -343,11 +343,11 @@ extension EntityReference: PersistableScalarDecodable {
     }
 }
 
-extension RDFTerm: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
+extension RDFTerm: FieldValueDecodable {
+    public static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws -> RDFTerm {
+    ) throws(PersistableDecodingError) -> RDFTerm {
         guard case .rdfTerm(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an RDF term")
         }

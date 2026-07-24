@@ -31,7 +31,7 @@ public enum SpatialEncoding: String, Sendable, Hashable {
 /// ```swift
 /// @Persistable
 /// struct Restaurant {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///
 ///     #Index(
 ///         SpatialIndexKind<Restaurant>(
