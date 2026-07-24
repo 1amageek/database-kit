@@ -47,6 +47,8 @@ struct PackageBoundaryTests {
         let forbiddenDeclarations: Set<String> = [
             "AlternativePlan",
             "CollectionStatistics",
+            "DiffError",
+            "DiffOptions",
             "GraphIndexScanPlanner",
             "HyperLogLog",
             "HyperLogLogError",
