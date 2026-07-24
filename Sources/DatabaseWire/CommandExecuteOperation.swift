@@ -3,7 +3,7 @@ import DatabaseValue
 
 public enum CommandExecuteOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.commandExecute
-    public typealias Request = DatabaseCommandRequest
+    public typealias Request = CommandRequest
 
     public enum Response: DatabaseWireValue, Hashable {
         case read(
@@ -16,7 +16,7 @@ public enum CommandExecuteOperation: DatabaseOperation {
             continuation: ByteString?
         )
 
-        public var access: DatabaseCommandAccess {
+        public var access: CommandAccess {
             switch self {
             case .read:
                 return .readOnly
@@ -43,7 +43,7 @@ public enum CommandExecuteOperation: DatabaseOperation {
         public init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            switch try DatabaseCommandAccess(from: &reader) {
+            switch try CommandAccess(from: &reader) {
             case .readOnly:
                 self = .read(
                     output: try reader.readBytes(),

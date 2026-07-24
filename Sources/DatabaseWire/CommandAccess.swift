@@ -1,7 +1,7 @@
 import DatabaseTypes
 
 /// The transaction access required to execute a database command.
-public enum DatabaseCommandAccess: UInt8, DatabaseWireValue, Hashable {
+public enum CommandAccess: UInt8, DatabaseWireValue, Hashable {
     case readOnly = 0
     case readWrite = 1
 

@@ -1,17 +1,17 @@
 import DatabaseTypes
 import DatabaseValue
 
-public struct DatabaseCommandRequest: DatabaseWireValue, Hashable {
+public struct CommandRequest: DatabaseWireValue, Hashable {
     public static let maximumIdentifierUTF8Bytes = 256
 
     public let command: String
-    public let access: DatabaseCommandAccess
+    public let access: CommandAccess
     public let input: ByteString
     public let budget: ExecutionBudget
 
     public init(
         command: String,
-        access: DatabaseCommandAccess,
+        access: CommandAccess,
         input: ByteString = [],
         budget: ExecutionBudget = ExecutionBudget()
     ) {
@@ -38,7 +38,7 @@ public struct DatabaseCommandRequest: DatabaseWireValue, Hashable {
             command: try reader.readString(
                 maximumUTF8Bytes: Self.maximumIdentifierUTF8Bytes
             ),
-            access: try DatabaseCommandAccess(from: &reader),
+            access: try CommandAccess(from: &reader),
             input: try reader.readBytes(),
             budget: try ExecutionBudget(from: &reader)
         )

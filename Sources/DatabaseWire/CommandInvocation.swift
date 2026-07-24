@@ -1,5 +1,5 @@
 import DatabaseTypes
-public struct DatabaseTypedCommandRequest<Command: DatabaseCommandDescriptor>:
+public struct CommandInvocation<Command: CommandDescriptor>:
     DatabaseWireValue {
     public let input: Command.Input
     public let budget: ExecutionBudget
@@ -15,7 +15,7 @@ public struct DatabaseTypedCommandRequest<Command: DatabaseCommandDescriptor>:
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
-        try DatabaseCommandRequest.validateIdentifier(Command.identifier)
+        try CommandRequest.validateIdentifier(Command.identifier)
         try writer.writeString(Command.identifier)
         try Command.access.encode(into: &writer)
         try writer.writeLengthPrefixed {
@@ -29,16 +29,16 @@ public struct DatabaseTypedCommandRequest<Command: DatabaseCommandDescriptor>:
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         let command = try reader.readString(
-            maximumUTF8Bytes: DatabaseCommandRequest.maximumIdentifierUTF8Bytes
+            maximumUTF8Bytes: CommandRequest.maximumIdentifierUTF8Bytes
         )
-        try DatabaseCommandRequest.validateIdentifier(command)
+        try CommandRequest.validateIdentifier(command)
         guard command == Command.identifier else {
             throw .invalidCommandIdentifier(
                 expected: Command.identifier,
                 actual: command
             )
         }
-        let actualAccess = try DatabaseCommandAccess(from: &reader)
+        let actualAccess = try CommandAccess(from: &reader)
         guard actualAccess == Command.access else {
             throw .mismatchedCommandAccess(
                 expected: Command.access.rawValue,

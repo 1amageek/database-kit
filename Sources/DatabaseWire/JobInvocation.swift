@@ -1,6 +1,6 @@
 import DatabaseTypes
-/// Encodes a typed job request directly into the outer `job.start` frame.
-public struct DatabaseTypedJobStartRequest<Job: DatabaseJobDescriptor>:
+/// Encodes a declared job request directly into the outer `job.start` frame.
+public struct JobInvocation<Job: DatabaseJobDescriptor>:
     DatabaseWireValue {
     public let request: Job.Request
     public let maximumSliceWorkUnits: UInt64

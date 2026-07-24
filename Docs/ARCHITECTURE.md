@@ -106,6 +106,9 @@ The version 1 operation families are fixed:
 response payloads. A read response carries output and continuation. A write
 response additionally carries the commit version. Typed decoding rejects an
 access value that does not match the statically selected command descriptor.
+`CommandOperation<Command>` binds `CommandInvocation<Command>` to the
+descriptor's associated result. `ReadCommandResult` has no commit-version
+state; `WriteCommandResult` requires a non-optional commit version.
 
 ## Runtime Boundary
 
