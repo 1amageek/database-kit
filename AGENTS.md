@@ -2,8 +2,15 @@
 
 ## Responsibility
 
-- This package owns the Foundation-independent database value model, persistable identity, QueryIR, and the canonical DatabaseWire v1 contract.
+- This package consumes primitive representations from `DatabaseTypes` and owns
+  the Foundation-independent database semantic model above those primitives:
+  model and document metadata, logical identity, schema, relationships, index
+  and graph declarations, QueryIR, and the canonical DatabaseWire v1 contract.
 - It does not own transport, database execution, storage, application schemas, or platform adapters.
+- A declaration does not move to `DatabaseTypes` merely because multiple
+  database packages consume it. Query, schema, identity, operation, and wire
+  semantics remain here unless the declaration passes the workspace primitive
+  admission gate.
 - DatabaseWire is deterministic and bounded. Every decoder must reject truncated, oversized, invalid, unknown, or trailing input explicitly.
 
 ## Naming
@@ -18,6 +25,8 @@
 ## Data and Error Contracts
 
 - Foundation, Codable, URLSession, and platform date or data types must not enter the canonical model or Wire targets.
+- Primitive byte and field values come from `DatabaseTypes`; do not create
+  duplicate value containers or module-identifying aliases.
 - Large binary paths use one owned buffer plus bounded ranges or views. Materialize a copy only at an explicit ownership or external API boundary.
 - A required copy must be documented at the implementation site and verified when described as a performance improvement.
 - Do not silently substitute defaults for malformed input. Return a typed DatabaseWire error.
