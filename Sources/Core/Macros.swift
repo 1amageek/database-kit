@@ -16,7 +16,7 @@ import DatabaseTypes
 ///     var id: String = ULID().ulidString  // Optional: auto-generated if omitted
 ///
 ///     #Directory<User>("users")
-///     #Index<User>(ScalarIndexKind(fields: [\.email]), unique: true)
+///     #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
 ///
 ///     var email: String
 ///     var name: String
@@ -111,7 +111,7 @@ public macro Persistable(type: String) = #externalMacro(module: "CoreMacros", ty
 /// **Extended Index Kinds**:
 /// - `VectorIndexKind`: Vector similarity search (HNSW, IVF, flat scan)
 /// - `FullTextIndexKind`: Full-text search with inverted index
-/// - `AdjacencyIndexKind`: Graph adjacency index
+/// - `GraphIndexKind`: Property graph adjacency and triple-order declarations
 /// - Custom third-party implementations
 ///
 /// **Index Name Generation**:

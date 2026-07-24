@@ -10,11 +10,11 @@ import Foundation
 
 public enum FieldValueCodableEncoder {
     public static func encode(_ value: any Encodable) throws -> FieldValue {
-        try DatabaseValueEncoding.encode(value)
+        try FieldValueEncoding.encode(value)
     }
 }
 
-private enum DatabaseValueEncoding {
+private enum FieldValueEncoding {
     static func encode(_ value: any Encodable) throws -> FieldValue {
         switch value {
         case let scalar as Bool: return .bool(scalar)
@@ -39,7 +39,7 @@ private enum DatabaseValueEncoding {
             return .timestamp(try Timestamp(scalar))
         case let scalar as RDFTerm: return .rdfTerm(scalar)
         default:
-            let encoder = DatabaseValueEncoder()
+            let encoder = FieldValueEncoder()
             try value.encode(to: encoder)
             guard let encoded = encoder.encodedValue else {
                 throw EncodingError.invalidValue(
@@ -53,7 +53,7 @@ private enum DatabaseValueEncoding {
 
 }
 
-private final class DatabaseValueEncoder: Encoder {
+private final class FieldValueEncoder: Encoder {
     var encodedValue: FieldValue? {
         didSet {
             if let encodedValue { commitValue(encodedValue) }
@@ -74,12 +74,12 @@ private final class DatabaseValueEncoder: Encoder {
     func container<Key: CodingKey>(
         keyedBy type: Key.Type
     ) -> KeyedEncodingContainer<Key> {
-        let objectState = DatabaseObjectEncodingState { [weak self] value in
+        let objectState = FieldObjectEncodingState { [weak self] value in
             self?.encodedValue = value
         }
         encodedValue = .object(FieldObject())
         return KeyedEncodingContainer(
-            DatabaseValueKeyedEncodingContainer<Key>(
+            FieldValueKeyedEncodingContainer<Key>(
                 objectState: objectState,
                 codingPath: codingPath
             )
@@ -87,22 +87,22 @@ private final class DatabaseValueEncoder: Encoder {
     }
 
     func unkeyedContainer() -> UnkeyedEncodingContainer {
-        let arrayState = DatabaseArrayEncodingState { [weak self] value in
+        let arrayState = FieldArrayEncodingState { [weak self] value in
             self?.encodedValue = value
         }
         encodedValue = .array([])
-        return DatabaseValueUnkeyedEncodingContainer(
+        return FieldValueUnkeyedEncodingContainer(
             arrayState: arrayState,
             codingPath: codingPath
         )
     }
 
     func singleValueContainer() -> SingleValueEncodingContainer {
-        DatabaseValueSingleValueEncodingContainer(encoder: self, codingPath: codingPath)
+        FieldValueSingleValueEncodingContainer(encoder: self, codingPath: codingPath)
     }
 }
 
-private final class DatabaseObjectEncodingState {
+private final class FieldObjectEncodingState {
     private var entries: [(key: String, value: FieldValue)] = []
     private let commitObject: (FieldValue) -> Void
 
@@ -128,14 +128,14 @@ private final class DatabaseObjectEncodingState {
     }
 }
 
-private struct DatabaseValueKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
-    let objectState: DatabaseObjectEncodingState
+private struct FieldValueKeyedEncodingContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
+    let objectState: FieldObjectEncodingState
     let codingPath: [CodingKey]
 
     mutating func encodeNil(forKey key: Key) throws { objectState.set(.null, for: key) }
 
     mutating func encode<T: Encodable>(_ value: T, forKey key: Key) throws {
-        objectState.set(try DatabaseValueEncoding.encode(value), for: key)
+        objectState.set(try FieldValueEncoding.encode(value), for: key)
     }
 
     mutating func nestedContainer<NestedKey: CodingKey>(
@@ -150,19 +150,19 @@ private struct DatabaseValueKeyedEncodingContainer<Key: CodingKey>: KeyedEncodin
     }
 
     mutating func superEncoder() -> Encoder {
-        DatabaseValueEncoder(codingPath: codingPath)
+        FieldValueEncoder(codingPath: codingPath)
     }
 
     mutating func superEncoder(forKey key: Key) -> Encoder { childEncoder(for: key) }
 
-    private func childEncoder(for key: Key) -> DatabaseValueEncoder {
-        DatabaseValueEncoder(codingPath: codingPath + [key]) { value in
+    private func childEncoder(for key: Key) -> FieldValueEncoder {
+        FieldValueEncoder(codingPath: codingPath + [key]) { value in
             objectState.set(value, for: key)
         }
     }
 }
 
-private final class DatabaseArrayEncodingState {
+private final class FieldArrayEncodingState {
     private var values: [FieldValue] = []
     private let commitArray: (FieldValue) -> Void
 
@@ -183,15 +183,15 @@ private final class DatabaseArrayEncodingState {
     }
 }
 
-private struct DatabaseValueUnkeyedEncodingContainer: UnkeyedEncodingContainer {
-    let arrayState: DatabaseArrayEncodingState
+private struct FieldValueUnkeyedEncodingContainer: UnkeyedEncodingContainer {
+    let arrayState: FieldArrayEncodingState
     let codingPath: [CodingKey]
     var count: Int { arrayState.count }
 
     mutating func encodeNil() throws { arrayState.append(.null) }
 
     mutating func encode<T: Encodable>(_ value: T) throws {
-        arrayState.append(try DatabaseValueEncoding.encode(value))
+        arrayState.append(try FieldValueEncoding.encode(value))
     }
 
     mutating func nestedContainer<NestedKey: CodingKey>(
@@ -206,29 +206,29 @@ private struct DatabaseValueUnkeyedEncodingContainer: UnkeyedEncodingContainer {
 
     mutating func superEncoder() -> Encoder { childEncoder() }
 
-    private func childEncoder() -> DatabaseValueEncoder {
+    private func childEncoder() -> FieldValueEncoder {
         let index = arrayState.count
         arrayState.append(.null)
-        return DatabaseValueEncoder(
-            codingPath: codingPath + [DatabaseValueEncodingIndexKey(intValue: index)]
+        return FieldValueEncoder(
+            codingPath: codingPath + [FieldValueEncodingIndexKey(intValue: index)]
         ) { value in
             arrayState.replace(at: index, with: value)
         }
     }
 }
 
-private struct DatabaseValueSingleValueEncodingContainer: SingleValueEncodingContainer {
-    let encoder: DatabaseValueEncoder
+private struct FieldValueSingleValueEncodingContainer: SingleValueEncodingContainer {
+    let encoder: FieldValueEncoder
     let codingPath: [CodingKey]
 
     func encodeNil() throws { encoder.encodedValue = .null }
 
     func encode<T: Encodable>(_ value: T) throws {
-        encoder.encodedValue = try DatabaseValueEncoding.encode(value)
+        encoder.encodedValue = try FieldValueEncoding.encode(value)
     }
 }
 
-private struct DatabaseValueEncodingIndexKey: CodingKey {
+private struct FieldValueEncodingIndexKey: CodingKey {
     let intValue: Int?
     let stringValue: String
 

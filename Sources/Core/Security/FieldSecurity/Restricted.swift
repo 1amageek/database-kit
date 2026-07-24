@@ -68,8 +68,7 @@ public struct Restricted<Value: Sendable>: Sendable, RestrictedProtocol {
 
     /// The projected value (provides access to the wrapper itself)
     public var projectedValue: Restricted<Value> {
-        get { self }
-        set { self = newValue }
+        self
     }
 
     /// Initialize with access levels
@@ -110,23 +109,8 @@ extension Restricted: Equatable where Value: Equatable {
 extension Restricted: Hashable where Value: Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(value)
-    }
-}
-
-// MARK: - Codable
-
-extension Restricted: Codable where Value: Codable {
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        self.value = try container.decode(Value.self)
-        // Access levels are not encoded - they come from the type definition
-        self.readAccess = .public
-        self.writeAccess = .public
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(value)
+        hasher.combine(readAccess)
+        hasher.combine(writeAccess)
     }
 }
 

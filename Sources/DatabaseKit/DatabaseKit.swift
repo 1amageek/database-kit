@@ -4,6 +4,7 @@
 // This module re-exports all DatabaseKit modules for convenience.
 
 @_exported import Core
+@_exported import Relationship
 @_exported import Vector
 @_exported import FullText
 @_exported import Geospatial

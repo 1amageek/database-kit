@@ -67,22 +67,6 @@ struct FieldAccessLevelTests {
         #expect(level.evaluate(auth: TestAuth(userID: "user1", roles: ["employee", "hr"])) == true)
     }
 
-    @Test("Custom access uses predicate")
-    func customAccessUsesPredicate() {
-        let level = FieldAccessLevel.custom { auth in
-            auth.userID.hasPrefix("admin_")
-        }
-
-        // Unauthenticated
-        #expect(level.evaluate(auth: nil) == false)
-
-        // Not matching predicate
-        #expect(level.evaluate(auth: TestAuth(userID: "user1")) == false)
-
-        // Matching predicate
-        #expect(level.evaluate(auth: TestAuth(userID: "admin_1")) == true)
-    }
-
     @Test("FieldAccessLevel equality")
     func fieldAccessLevelEquality() {
         #expect(FieldAccessLevel.public == FieldAccessLevel.public)
@@ -90,10 +74,6 @@ struct FieldAccessLevelTests {
         #expect(FieldAccessLevel.roles(["a", "b"]) == FieldAccessLevel.roles(["a", "b"]))
         #expect(FieldAccessLevel.roles(["a"]) != FieldAccessLevel.roles(["b"]))
 
-        // Custom closures cannot be compared
-        let custom1 = FieldAccessLevel.custom { _ in true }
-        let custom2 = FieldAccessLevel.custom { _ in true }
-        #expect(custom1 != custom2)
     }
 
     @Test("FieldAccessLevel description")
@@ -101,7 +81,6 @@ struct FieldAccessLevelTests {
         #expect(FieldAccessLevel.public.description == ".public")
         #expect(FieldAccessLevel.authenticated.description == ".authenticated")
         #expect(FieldAccessLevel.roles(["admin"]).description.contains("admin"))
-        #expect(FieldAccessLevel.custom { _ in true }.description == ".custom(...)")
     }
 }
 
@@ -146,30 +125,6 @@ struct RestrictedPropertyWrapperTests {
         #expect(Restricted<String>.valueType is String.Type)
     }
 
-    @Test("Restricted Codable encodes only value")
-    func restrictedCodableEncodesOnlyValue() throws {
-        let restricted = Restricted(
-            wrappedValue: 42,
-            read: .roles(["hr"]),
-            write: .roles(["admin"])
-        )
-
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(restricted)
-        let json = String(data: data, encoding: .utf8)
-
-        // Should encode just the value, not access levels
-        #expect(json == "42")
-
-        // Decode back
-        let decoder = JSONDecoder()
-        let decoded = try decoder.decode(Restricted<Int>.self, from: data)
-        #expect(decoded.wrappedValue == 42)
-        // Access levels are not encoded, so they default to .public
-        #expect(decoded.readAccess == .public)
-        #expect(decoded.writeAccess == .public)
-    }
-
     @Test("Restricted Equatable")
     func restrictedEquatable() {
         let r1 = Restricted(wrappedValue: 100, read: .authenticated, write: .public)
@@ -187,13 +142,10 @@ struct RestrictedPropertyWrapperTests {
         let r1 = Restricted(wrappedValue: "test", read: .authenticated)
         let r2 = Restricted(wrappedValue: "test", read: .public)
 
-        // Same value should have same hash (access levels not included in hash)
-        #expect(r1.hashValue == r2.hashValue)
+        #expect(r1.hashValue != r2.hashValue)
 
-        // Can be used in Set
-        var set: Set<Restricted<String>> = []
-        set.insert(r1)
-        #expect(set.count == 1)
+        let set: Set<Restricted<String>> = [r1, r2]
+        #expect(set.count == 2)
     }
 
     @Test("Restricted projected value")
@@ -204,9 +156,8 @@ struct RestrictedPropertyWrapperTests {
         let projected = restricted.projectedValue
         #expect(projected.readAccess == .authenticated)
 
-        // Can modify via projected value
-        restricted.projectedValue = Restricted(wrappedValue: "new", read: .public)
+        restricted.wrappedValue = "new"
         #expect(restricted.wrappedValue == "new")
-        #expect(restricted.readAccess == .public)
+        #expect(restricted.readAccess == .authenticated)
     }
 }

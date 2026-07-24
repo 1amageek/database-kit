@@ -16,7 +16,7 @@ import DatabaseTypes
 ///         var name: String
 ///         var email: String
 ///
-///         #Index<User>([\.email], unique: true)
+///         #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
 ///     }
 ///
 ///     @Persistable
@@ -38,8 +38,8 @@ import DatabaseTypes
 ///         var email: String
 ///         var age: Int32 = 0  // New field
 ///
-///         #Index<User>([\.email], unique: true)
-///         #Index<User>([\.age])  // New index
+///         #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
+///         #Index(ScalarIndexKind<User>(fields: [\.age]))  // New index
 ///     }
 ///
 ///     // Order unchanged, can be re-exported

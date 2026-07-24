@@ -203,7 +203,7 @@ private func collectKeyPathStrings(from expression: ExprSyntax) -> [String] {
 /// Rewrite protocol-level index expressions so generated descriptors are
 /// materialized per concrete conforming type.
 ///
-/// `#Index<Document>(ScalarIndexKind<Document>(fields: [\.title]))` becomes
+/// `#Index(ScalarIndexKind<Document>(fields: [\.title]))` becomes
 /// `ScalarIndexKind<Self>(fields: [\Self.title])` inside `extension Document`.
 private func rewriteIndexKindExpression(
     _ expression: String,

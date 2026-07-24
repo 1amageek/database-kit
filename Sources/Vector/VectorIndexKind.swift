@@ -44,9 +44,9 @@ public enum VectorMetric: String, Sendable, Codable, Hashable {
 ///     var id: String = ULID().ulidString
 ///
 ///     // Model definition: Only specify data structure (dimensions, metric)
-///     #Index<Product>(
-///         [\.embedding],
-///         type: VectorIndexKind(
+///     #Index(
+///         VectorIndexKind<Product>(
+///             embedding: \.embedding,
 ///             dimensions: 384,
 ///             metric: .cosine
 ///         )

@@ -21,7 +21,7 @@ import DatabaseValue
 ///     var follower: String
 ///     var followee: String
 ///
-///     #Index<Follow>(type: GraphIndexKind.adjacency(
+///     #Index(GraphIndexKind<Follow>.adjacency(
 ///         source: \.follower,
 ///         target: \.followee
 ///     ))

@@ -20,7 +20,7 @@ import DatabaseTypes
 ///     var internalNotes: String = ""
 /// }
 /// ```
-public enum FieldAccessLevel: Sendable {
+public enum FieldAccessLevel: Sendable, Equatable, Hashable {
     /// Everyone can access (no restriction)
     case `public`
 
@@ -29,9 +29,6 @@ public enum FieldAccessLevel: Sendable {
 
     /// Only users with specific roles can access
     case roles(Set<String>)
-
-    /// Custom access rule
-    case custom(@Sendable (any AuthContext) -> Bool)
 
     /// Evaluate access for the given auth context
     ///
@@ -49,29 +46,6 @@ public enum FieldAccessLevel: Sendable {
             guard let auth = auth else { return false }
             return !auth.roles.isDisjoint(with: required)
 
-        case .custom(let predicate):
-            guard let auth = auth else { return false }
-            return predicate(auth)
-        }
-    }
-}
-
-// MARK: - Equatable (partial)
-
-extension FieldAccessLevel: Equatable {
-    public static func == (lhs: FieldAccessLevel, rhs: FieldAccessLevel) -> Bool {
-        switch (lhs, rhs) {
-        case (.public, .public):
-            return true
-        case (.authenticated, .authenticated):
-            return true
-        case (.roles(let l), .roles(let r)):
-            return l == r
-        case (.custom, .custom):
-            // Custom closures cannot be compared
-            return false
-        default:
-            return false
         }
     }
 }
@@ -87,8 +61,6 @@ extension FieldAccessLevel: CustomStringConvertible {
             return ".authenticated"
         case .roles(let roles):
             return ".roles(\(roles.sorted()))"
-        case .custom:
-            return ".custom(...)"
         }
     }
 }

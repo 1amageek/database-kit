@@ -13,11 +13,11 @@ public enum FieldValueCodableDecoder {
         _ type: Value.Type,
         from value: FieldValue
     ) throws -> Value {
-        try DatabaseValueDecoding.decode(type, from: value, codingPath: [])
+        try FieldValueDecoding.decode(type, from: value, codingPath: [])
     }
 }
 
-private enum DatabaseValueDecoding {
+private enum FieldValueDecoding {
     static func decode<Value: Decodable>(
         _ type: Value.Type,
         from value: FieldValue,
@@ -37,7 +37,7 @@ private enum DatabaseValueDecoding {
         if type == RDFTerm.self, case .rdfTerm(let term) = value {
             return try cast(term, to: type, codingPath: codingPath)
         }
-        return try Value(from: DatabaseValueDecoder(value: value, codingPath: codingPath))
+        return try Value(from: FieldValueDecoder(value: value, codingPath: codingPath))
     }
 
     static func typeMismatch<Value>(
@@ -115,7 +115,7 @@ private enum DatabaseValueDecoding {
     }
 }
 
-private final class DatabaseValueDecoder: Decoder {
+private final class FieldValueDecoder: Decoder {
     let value: FieldValue
     let codingPath: [CodingKey]
     let userInfo: [CodingUserInfoKey: Any] = [:]
@@ -129,14 +129,14 @@ private final class DatabaseValueDecoder: Decoder {
         keyedBy type: Key.Type
     ) throws -> KeyedDecodingContainer<Key> {
         guard case .object(let fields) = value else {
-            throw DatabaseValueDecoding.typeMismatch(
+            throw FieldValueDecoding.typeMismatch(
                 [String: FieldValue].self,
                 value: value,
                 codingPath: codingPath
             )
         }
         return KeyedDecodingContainer(
-            try DatabaseValueKeyedDecodingContainer<Key>(
+            try FieldValueKeyedDecodingContainer<Key>(
                 fields: fields,
                 codingPath: codingPath
             )
@@ -145,24 +145,24 @@ private final class DatabaseValueDecoder: Decoder {
 
     func unkeyedContainer() throws -> UnkeyedDecodingContainer {
         guard case .array(let values) = value else {
-            throw DatabaseValueDecoding.typeMismatch(
+            throw FieldValueDecoding.typeMismatch(
                 [FieldValue].self,
                 value: value,
                 codingPath: codingPath
             )
         }
-        return DatabaseValueUnkeyedDecodingContainer(
+        return FieldValueUnkeyedDecodingContainer(
             values: values,
             codingPath: codingPath
         )
     }
 
     func singleValueContainer() throws -> SingleValueDecodingContainer {
-        DatabaseValueSingleValueDecodingContainer(value: value, codingPath: codingPath)
+        FieldValueSingleValueDecodingContainer(value: value, codingPath: codingPath)
     }
 }
 
-private struct DatabaseValueKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
+private struct FieldValueKeyedDecodingContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
     let codingPath: [CodingKey]
     let allKeys: [Key]
     private let values: [String: FieldValue]
@@ -200,7 +200,7 @@ private struct DatabaseValueKeyedDecodingContainer<Key: CodingKey>: KeyedDecodin
                 .init(codingPath: codingPath, debugDescription: "Missing field '\(key.stringValue)'")
             )
         }
-        return try DatabaseValueDecoding.decode(
+        return try FieldValueDecoding.decode(
             type,
             from: value,
             codingPath: codingPath + [key]
@@ -219,23 +219,23 @@ private struct DatabaseValueKeyedDecodingContainer<Key: CodingKey>: KeyedDecodin
     }
 
     func superDecoder() throws -> Decoder {
-        DatabaseValueDecoder(value: .object(FieldObject()), codingPath: codingPath)
+        FieldValueDecoder(value: .object(FieldObject()), codingPath: codingPath)
     }
 
     func superDecoder(forKey key: Key) throws -> Decoder { try decoder(for: key) }
 
-    private func decoder(for key: Key) throws -> DatabaseValueDecoder {
+    private func decoder(for key: Key) throws -> FieldValueDecoder {
         guard let value = values[key.stringValue] else {
             throw DecodingError.keyNotFound(
                 key,
                 .init(codingPath: codingPath, debugDescription: "Missing field '\(key.stringValue)'")
             )
         }
-        return DatabaseValueDecoder(value: value, codingPath: codingPath + [key])
+        return FieldValueDecoder(value: value, codingPath: codingPath + [key])
     }
 }
 
-private struct DatabaseValueUnkeyedDecodingContainer: UnkeyedDecodingContainer {
+private struct FieldValueUnkeyedDecodingContainer: UnkeyedDecodingContainer {
     let values: [FieldValue]
     let codingPath: [CodingKey]
     var currentIndex = 0
@@ -255,10 +255,10 @@ private struct DatabaseValueUnkeyedDecodingContainer: UnkeyedDecodingContainer {
         guard !isAtEnd else { throw endError() }
         let index = currentIndex
         currentIndex += 1
-        return try DatabaseValueDecoding.decode(
+        return try FieldValueDecoding.decode(
             type,
             from: values[index],
-            codingPath: codingPath + [DatabaseValueDecodingIndexKey(intValue: index)]
+            codingPath: codingPath + [FieldValueDecodingIndexKey(intValue: index)]
         )
     }
 
@@ -274,13 +274,13 @@ private struct DatabaseValueUnkeyedDecodingContainer: UnkeyedDecodingContainer {
 
     mutating func superDecoder() throws -> Decoder { try nextDecoder() }
 
-    private mutating func nextDecoder() throws -> DatabaseValueDecoder {
+    private mutating func nextDecoder() throws -> FieldValueDecoder {
         guard !isAtEnd else { throw endError() }
         let index = currentIndex
         currentIndex += 1
-        return DatabaseValueDecoder(
+        return FieldValueDecoder(
             value: values[index],
-            codingPath: codingPath + [DatabaseValueDecodingIndexKey(intValue: index)]
+            codingPath: codingPath + [FieldValueDecodingIndexKey(intValue: index)]
         )
     }
 
@@ -292,7 +292,7 @@ private struct DatabaseValueUnkeyedDecodingContainer: UnkeyedDecodingContainer {
     }
 }
 
-private struct DatabaseValueSingleValueDecodingContainer: SingleValueDecodingContainer {
+private struct FieldValueSingleValueDecodingContainer: SingleValueDecodingContainer {
     let value: FieldValue
     let codingPath: [CodingKey]
 
@@ -376,15 +376,15 @@ private struct DatabaseValueSingleValueDecodingContainer: SingleValueDecodingCon
     }
 
     func decode<T: Decodable>(_ type: T.Type) throws -> T {
-        try DatabaseValueDecoding.decode(type, from: value, codingPath: codingPath)
+        try FieldValueDecoding.decode(type, from: value, codingPath: codingPath)
     }
 
     private func mismatch<T>(_ type: T.Type) -> DecodingError {
-        DatabaseValueDecoding.typeMismatch(type, value: value, codingPath: codingPath)
+        FieldValueDecoding.typeMismatch(type, value: value, codingPath: codingPath)
     }
 }
 
-private struct DatabaseValueDecodingIndexKey: CodingKey {
+private struct FieldValueDecodingIndexKey: CodingKey {
     let intValue: Int?
     let stringValue: String
 

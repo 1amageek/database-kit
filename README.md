@@ -59,7 +59,7 @@ dependencies: [
 | `Permuted` | `PermutedIndexKind` for alternative field orderings |
 | `Graph` | `GraphIndexKind`, OWL ontology types (`OWLOntology`, `OWLClass`, `OWLAxiom`), `@OWLClass` / `@OWLDataProperty` / `@OWLObjectProperty` macros, `OWLClassEntity`, `OWLDataPropertyDescriptor`, `OWLObjectPropertyDescriptor` |
 | `GraphMacros` | `@OWLClass` / `@OWLDataProperty` / `@OWLObjectProperty` macro compiler plugins |
-| `Relationship` | `RelationshipIndexKind` and `@Relationship` macro |
+| `Relationship` | `RelationshipDescriptor`, delete/cardinality declarations, and `@Relationship` |
 | `QueryIR` | Unified query intermediate representation (Expression, SortKey, SelectQuery) |
 | `QueryIRFoundation` | Optional Foundation conversions for QueryIR values |
 | `DatabaseKit` | Convenience re-export of model, index, relationship, and graph declarations |
@@ -82,8 +82,8 @@ import Core
 @Persistable
 struct User {
     #Directory<User>("app", "users")
-    #Index<User>(ScalarIndexKind(fields: [\.email]), unique: true)
-    #Index<User>(ScalarIndexKind(fields: [\.createdAt]))
+    #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
+    #Index(ScalarIndexKind<User>(fields: [\.createdAt]))
 
     var email: String
     var name: String
@@ -110,8 +110,8 @@ The `@Persistable` macro generates all required protocol conformances:
 ```swift
 @Persistable
 struct Product {
-    #Index<Product>(ScalarIndexKind(fields: [\.category, \.price]))
-    #Index<Product>(ScalarIndexKind(fields: [\.name]), unique: true)
+    #Index(ScalarIndexKind<Product>(fields: [\.category, \.price]))
+    #Index(ScalarIndexKind<Product>(fields: [\.name]), unique: true)
 
     var name: String
     var category: String
@@ -160,10 +160,9 @@ to inherit from `Polymorphable`.
 attached macro on a protocol to add protocol inheritance, so the protocol must
 explicitly write `: Polymorphable`.
 
-Current Swift 6.4 toolchains also have a compiler limitation around freestanding
-macros in protocol bodies. Until that is fixed, tests and downstream packages may
-spell the generated polymorphic metadata manually in a protocol extension; the
-runtime model is the same.
+Swift 6.4 does not type-check freestanding macros in every protocol-body
+configuration. `@Polymorphable` still owns the generated metadata contract;
+applications must not recreate that metadata with string field names.
 
 Polymorphic indexes must be declared with KeyPaths, not developer-written string
 field names. Runtime index maintenance must use descriptors materialized for the
@@ -216,28 +215,32 @@ struct Message {
 ### Standard (Core module)
 
 ```swift
-ScalarIndexKind<T>(fields: [\.field1, \.field2])     // Range queries and sorting
-CountIndexKind<T>(groupBy: [\.field])                // Count aggregation
-SumIndexKind<T, V>(groupBy: [\.group], value: \.num) // Sum aggregation
-MinIndexKind<T, V>(groupBy: [\.group], value: \.num) // Minimum tracking
-MaxIndexKind<T, V>(groupBy: [\.group], value: \.num) // Maximum tracking
-AverageIndexKind<T, V>(groupBy: [\.g], value: \.num) // Average calculation
-VersionIndexKind<T>(field: \.id, strategy: .keepAll)  // Version history
-BitmapIndexKind<T>(field: \.status)                   // Low-cardinality bitmap
-TimeWindowLeaderboardIndexKind<T, S>(scoreField: \.score, window: .daily)
+ScalarIndexKind<Model>(fields: [\.field1, \.field2])
+CountIndexKind<Model>(groupBy: [\.field])
+SumIndexKind<Model, Int64>(groupBy: [\.group], value: \.number)
+MinIndexKind<Model, Double>(groupBy: [\.group], value: \.number)
+MaxIndexKind<Model, Double>(groupBy: [\.group], value: \.number)
+AverageIndexKind<Model, Double>(groupBy: [\.group], value: \.number)
+VersionIndexKind<Model>(field: \.id, strategy: .keepAll)
+BitmapIndexKind<Model>(field: \.status)
+TimeWindowLeaderboardIndexKind<Model>(scoreField: \.score, window: .daily)
+DistinctIndexKind<Model>(groupBy: [\.group], value: \.member)
+PercentileIndexKind<Model, Double>(groupBy: [\.group], value: \.number)
 ```
 
 ### Extended (separate modules)
 
 ```swift
-VectorIndexKind<T>(embedding: \.vec, dimensions: 384, metric: .cosine)
-FullTextIndexKind<T>(content: \.body, language: .english)
-SpatialIndexKind<T>(latitude: \.lat, longitude: \.lng)
-RankIndexKind<T, S>(field: \.score)
-TripleIndexKind<T>(subject: \.s, predicate: \.p, object: \.o)
-AdjacencyIndexKind<T>(from: \.source, edge: \.label, to: \.target)
-PermutedIndexKind<T>(fields: [\.a, \.b])
-RelationshipIndexKind<T, R>(foreignKey: \.customerId, relatedFields: [\.name])
+VectorIndexKind<Model>(embedding: \.vector, dimensions: 384, metric: .cosine)
+FullTextIndexKind<Model>(fields: [\.title, \.body], tokenizer: .simple)
+SpatialIndexKind<Model>(latitude: \.latitude, longitude: \.longitude)
+RankIndexKind<Model, Int64>(field: \.score)
+GraphIndexKind<Model>(from: \.source, edge: \.label, to: \.target)
+RDFQuadIndexKind<Model>(subject: \.subject, predicate: \.predicate, object: \.object)
+PermutedIndexKind<Model>(
+    fields: [\.first, \.second],
+    permutation: .swapping(0, 1, size: 2)
+)
 ```
 
 ## Custom Index Kinds
@@ -268,7 +271,10 @@ public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
 }
 ```
 
-Server-side maintenance is implemented in [database-framework](https://github.com/1amageek/database-framework) via `IndexKindMaintainable`.
+Server-side maintenance is implemented and registered by
+[database-framework](https://github.com/1amageek/database-framework). Custom
+declarations expose only canonical `IndexKindMetadata`; runtime behavior remains
+outside this package.
 
 ## PersistableEnum
 

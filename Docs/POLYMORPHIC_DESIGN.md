@@ -110,10 +110,10 @@ public protocol Entity: Polymorphable {
 a macro that makes a protocol conform to `Polymorphable`.
 
 There is a second Swift 6.4 frontend limitation: freestanding macros inside a
-protocol body can fail during type checking before the attached macro can finish
-expansion. Until that compiler issue is fixed, tests may spell the generated
-metadata manually in a protocol extension. The runtime contract remains the same:
-descriptors are materialized through `Self`, not through one concrete member.
+protocol body can fail during type checking before the attached macro finishes
+expansion. This limits which declaration syntax the toolchain accepts; it does
+not change the metadata contract. Descriptors are always materialized through
+`Self`, never copied from one concrete member.
 
 ## Macro Responsibilities
 
@@ -235,17 +235,17 @@ different member types.
 - String field names may exist in serialized metadata, but they are not the
   developer-facing API for declaring indexes.
 
-## Migration Direction
+## Implemented Contract
 
-1. Change `Polymorphable` to inherit from `Persistable`.
-2. Update `@Polymorphable` documentation and diagnostics to require explicit
-   `: Polymorphable`.
-3. Replace schema construction that uses only the first member type with
-   member-specific descriptor storage.
-4. Update `database-framework` dual-write index maintenance to request
-   descriptors for the concrete model type.
-5. Update `swift-memory` to declare the `Entity` group through the protocol-level
-   API and remove any workaround that relies on string field names or first
-   member descriptors.
-6. Add regression tests with at least two concrete members in the same group and
-   verify writes for the non-first member.
+`database-kit` enforces the following:
+
+1. `Polymorphable` inherits from `Persistable`.
+2. `@Polymorphable` requires explicit `: Polymorphable` inheritance.
+3. `Schema` stores descriptors by group identifier and concrete member type.
+4. Macro expansion rewrites protocol-root KeyPaths to `Self`.
+5. Regression tests cover two concrete members and verify that each receives its
+   own typed descriptor.
+
+`database-framework` must select the descriptor set for the concrete model on
+every write and delete. That execution rule is outside this package; no fallback
+to the first registered member is part of the contract.

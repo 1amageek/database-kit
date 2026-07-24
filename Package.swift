@@ -173,7 +173,16 @@ let package = Package(
         ),
         .target(
             name: "DatabaseKit",
-            dependencies: ["Core", "Vector", "FullText", "Geospatial", "Rank", "Permuted", "Graph"]
+            dependencies: [
+                "Core",
+                "Relationship",
+                "Vector",
+                "FullText",
+                "Geospatial",
+                "Rank",
+                "Permuted",
+                "Graph",
+            ]
         ),
         .testTarget(
             name: "DatabaseDigestTests",
@@ -228,6 +237,7 @@ let package = Package(
             dependencies: [
                 "Core",
                 "CoreMacros",
+                "DatabaseKit",
                 "DatabaseValue",
                 "GraphMacros",
                 "Vector",

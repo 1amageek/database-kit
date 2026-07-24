@@ -55,9 +55,9 @@ public enum TokenizationStrategy: String, Sendable, Codable, Hashable {
 /// struct Article {
 ///     var id: String = ULID().ulidString
 ///
-///     #Index<Article>(
-///         [\.title, \.body],
-///         type: FullTextIndexKind(
+///     #Index(
+///         FullTextIndexKind<Article>(
+///             fields: [\.title, \.body],
 ///             tokenizer: .simple,
 ///             storePositions: true
 ///         )

@@ -151,12 +151,14 @@ public struct Permutation: Sendable, Equatable, Hashable, Codable, CustomStringC
 /// **Usage**:
 /// ```swift
 /// // Base compound index on (country, city, name)
-/// #Index<Location>([\.country, \.city, \.name], type: ScalarIndexKind())
+/// #Index(ScalarIndexKind<Location>(fields: [\.country, \.city, \.name]))
 ///
 /// // Permuted index for (city, country, name) ordering
-/// #Index<Location>(
-///     [\.country, \.city, \.name],
-///     type: PermutedIndexKind(permutation: try! Permutation(indices: [1, 0, 2]))
+/// #Index(
+///     PermutedIndexKind<Location>(
+///         fields: [\.country, \.city, \.name],
+///         permutation: .swapping(0, 1, size: 3)
+///     )
 /// )
 /// ```
 ///

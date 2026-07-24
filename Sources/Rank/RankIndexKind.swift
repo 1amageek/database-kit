@@ -40,8 +40,7 @@ import DatabaseTypes
 ///     var score: Int64
 ///     var name: String
 ///
-///     #Index<Player>(type: RankIndexKind(field: \.score, bucketSize: 10))
-///     // Infers: RankIndexKind<Player, Int64>
+///     #Index(RankIndexKind<Player, Int64>(field: \.score, bucketSize: 10))
 /// }
 ///
 /// // Queries:

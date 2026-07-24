@@ -90,7 +90,7 @@ public struct ScalarIndexKind<Root: Persistable>: IndexKind {
 /// ```swift
 /// @Persistable
 /// struct Order {
-///     #Index(type: CountIndexKind<Order>(groupBy: [\.status, \.type]))
+///     #Index(CountIndexKind<Order>(groupBy: [\.status, \.type]))
 ///     var status: String
 ///     var type: String
 /// }
@@ -159,8 +159,7 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
 ///     var customerId: String
 ///     var amount: Int64  // Type preserved as Int64
 ///
-///     #Index<Order>(type: SumIndexKind(groupBy: [\.customerId], value: \.amount))
-///     // Infers: SumIndexKind<Order, Int64>
+///     #Index(SumIndexKind<Order, Int64>(groupBy: [\.customerId], value: \.amount))
 /// }
 /// ```
 ///
@@ -277,8 +276,7 @@ public struct SumIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKi
 ///     var category: String
 ///     var price: Int64  // Type preserved as Int64
 ///
-///     #Index<Product>(type: MinIndexKind(groupBy: [\.category], value: \.price))
-///     // Infers: MinIndexKind<Product, Int64>
+///     #Index(MinIndexKind<Product, Int64>(groupBy: [\.category], value: \.price))
 /// }
 /// ```
 ///
@@ -374,8 +372,7 @@ public struct MinIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
 ///     var category: String
 ///     var price: Int64  // Type preserved as Int64
 ///
-///     #Index<Product>(type: MaxIndexKind(groupBy: [\.category], value: \.price))
-///     // Infers: MaxIndexKind<Product, Int64>
+///     #Index(MaxIndexKind<Product, Int64>(groupBy: [\.category], value: \.price))
 /// }
 /// ```
 ///
@@ -471,8 +468,7 @@ public struct MaxIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
 ///     var productID: Int64
 ///     var rating: Int64
 ///
-///     #Index<Review>(type: AverageIndexKind(groupBy: [\.productID], value: \.rating))
-///     // Infers: AverageIndexKind<Review, Int64>
+///     #Index(AverageIndexKind<Review, Int64>(groupBy: [\.productID], value: \.rating))
 /// }
 /// ```
 ///
@@ -598,7 +594,7 @@ public enum VersionHistoryStrategy: Sendable, Hashable, Codable {
 /// ```swift
 /// @Persistable
 /// struct Document {
-///     #Index(type: VersionIndexKind<Document>(field: \.id, strategy: .keepLast(10)))
+///     #Index(VersionIndexKind<Document>(field: \.id, strategy: .keepLast(10)))
 ///     var id: UUID
 ///     var title: String
 ///     var content: String
@@ -659,7 +655,7 @@ public struct VersionIndexKind<Root: Persistable>: IndexKind {
 /// ```swift
 /// @Persistable
 /// struct Document {
-///     #Index(type: CountUpdatesIndexKind<Document>(field: \.id))
+///     #Index(CountUpdatesIndexKind<Document>(field: \.id))
 ///     var id: String
 ///     var content: String
 /// }
@@ -719,7 +715,7 @@ public struct CountUpdatesIndexKind<Root: Persistable>: IndexKind {
 /// ```swift
 /// @Persistable
 /// struct User {
-///     #Index(type: CountNotNullIndexKind<User>(groupBy: [\.country], value: \.phoneNumber))
+///     #Index(CountNotNullIndexKind<User>(groupBy: [\.country], value: \.phoneNumber))
 ///     var country: String
 ///     var phoneNumber: String?
 /// }
@@ -809,7 +805,7 @@ public struct CountNotNullIndexKind<Root: Persistable>: IndexKind {
 /// ```swift
 /// @Persistable
 /// struct User {
-///     #Index(type: BitmapIndexKind<User>(field: \.status))
+///     #Index(BitmapIndexKind<User>(field: \.status))
 ///     var status: String  // e.g., "active", "inactive", "pending"
 /// }
 /// ```
@@ -901,7 +897,7 @@ public struct BitmapIndexKind<Root: Persistable>: IndexKind {
 ///     var playerId: String
 ///     var score: Int64
 ///
-///     #Index<GameScore>(type: TimeWindowLeaderboardIndexKind(
+///     #Index(TimeWindowLeaderboardIndexKind<GameScore>(
 ///         scoreField: \.score,
 ///         window: .daily,
 ///         windowCount: 7  // Keep last 7 days
@@ -1069,7 +1065,7 @@ public enum LeaderboardWindowType: Sendable, Hashable, Codable {
 ///     var userId: String
 ///
 ///     // Count unique visitors per page
-///     #Index<PageView>(type: DistinctIndexKind(groupBy: [\.pageId], value: \.userId))
+///     #Index(DistinctIndexKind<PageView>(groupBy: [\.pageId], value: \.userId))
 /// }
 /// ```
 ///
@@ -1184,7 +1180,7 @@ public struct DistinctIndexKind<Root: Persistable>: IndexKind {
 ///     var latencyMs: Double
 ///
 ///     // Track latency percentiles per endpoint
-///     #Index<ResponseTime>(type: PercentileIndexKind(groupBy: [\.endpoint], value: \.latencyMs))
+///     #Index(PercentileIndexKind<ResponseTime, Double>(groupBy: [\.endpoint], value: \.latencyMs))
 /// }
 /// ```
 ///

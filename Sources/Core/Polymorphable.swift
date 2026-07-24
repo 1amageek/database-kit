@@ -121,12 +121,15 @@ public protocol Polymorphable: Persistable {
 
     /// Index descriptors shared across all conforming types
     ///
-    /// Generated from `#Index<P>` macro declarations in the protocol body.
+    /// Generated from `#Index` macro declarations in the protocol body.
     /// These indexes span all conforming types and are stored in the polymorphic directory.
     ///
     /// **Example**:
     /// ```swift
-    /// #Index<Document>(ScalarIndexKind(fields: [\.title]), name: "Document_title")
+    /// #Index(
+    ///     ScalarIndexKind<Self>(fields: [\Self.title]),
+    ///     name: "Document_title"
+    /// )
     /// ```
     ///
     /// **Note**: Index fields must be properties defined in the protocol.

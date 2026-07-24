@@ -23,7 +23,7 @@ public import DatabaseValue
 ///     var id: String = ULID().ulidString  // Optional: auto-generated if omitted
 ///
 ///     #Directory<User>("users")
-///     #Index<User>([\.email], unique: true)
+///     #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
 ///
 ///     var email: String
 ///     var name: String
@@ -100,7 +100,7 @@ public protocol Persistable: Sendable, Codable {
     /// All descriptors for this persistable type
     ///
     /// Contains all metadata descriptors including:
-    /// - `IndexDescriptor`: Generated from `#Index<T>` macro
+    /// - `IndexDescriptor`: Generated from `#Index` macro
     /// - `RelationshipDescriptor`: Generated from `@Relationship` macro (Relationship module)
     /// - Future: `EncryptionDescriptor`, `TTLDescriptor`, etc.
     ///

@@ -35,9 +35,10 @@ public enum SpatialEncoding: String, Sendable, Codable, Hashable {
 /// struct Restaurant {
 ///     var id: String = ULID().ulidString
 ///
-///     #Index<Restaurant>(
-///         [\.latitude, \.longitude],
-///         type: SpatialIndexKind(
+///     #Index(
+///         SpatialIndexKind<Restaurant>(
+///             latitude: \.latitude,
+///             longitude: \.longitude,
 ///             encoding: .s2,
 ///             level: 15
 ///         )

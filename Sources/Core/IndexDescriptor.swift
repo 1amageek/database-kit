@@ -21,9 +21,9 @@ import DatabaseTypes
 /// ```swift
 /// @Persistable
 /// struct User {
-///     #Index<User>([\.email], unique: true)
-///     #Index<User>([\.address.city])
-///     #Index<User>([\.period.lowerBound])
+///     #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
+///     #Index(ScalarIndexKind<User>(fields: [\.address.city]))
+///     #Index(ScalarIndexKind<User>(fields: [\.period.lowerBound]))
 ///
 ///     var email: String
 ///     var address: Address
