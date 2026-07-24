@@ -57,6 +57,8 @@ struct PackageBoundaryTests {
             "PlanType",
             "QueryExecutionStats",
             "QueryPlan",
+            "RelationshipSnapshot",
+            "Snapshot",
         ]
 
         var violations: [String] = []
