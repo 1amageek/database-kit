@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-/// Foundation-independent canonical XSD date and dateTime conversion.
+/// Formats and parses canonical XSD date and dateTime values without Foundation.
 public enum XSDDateTimeCodec {
     public static func format(date: CivilDate) -> String {
         return formatDateUnchecked(date)

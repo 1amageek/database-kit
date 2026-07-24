@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-/// Decodes canonical UTF-8 without relying on generic Unicode codec witnesses.
+/// Decodes canonical UTF-8 without generic Unicode codec witnesses.
 ///
 /// The input remains borrowed for the duration of decoding. The returned
 /// `String` is the required semantic ownership boundary.

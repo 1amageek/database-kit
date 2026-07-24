@@ -2,7 +2,7 @@ import DatabaseTypes
 import DatabaseValue
 import Testing
 
-@Suite("Database XSD Date Time Codec")
+@Suite("XSD Date Time Codec")
 struct XSDDateTimeCodecTests {
     @Test func formatsCanonicalDatesWithoutIntermediateFormattingObjects() throws {
         #expect(
