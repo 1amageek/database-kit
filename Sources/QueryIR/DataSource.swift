@@ -269,13 +269,9 @@ public indirect enum DataSource: Sendable, Equatable, Hashable {
     case except(DataSource, DataSource)
 }
 
-// MARK: - Forward Declarations
+// MARK: - Graph Table
 
-// These will be defined in their respective files
-// GraphTableSource -> SQL/GraphTable.swift
-// GraphPattern -> SPARQL/GraphPattern.swift
-
-/// Placeholder for GraphTableSource (defined in SQL/GraphTable.swift)
+/// A SQL/PGQ graph table source.
 public struct GraphTableSource: Sendable, Equatable, Hashable {
     public let graphName: String
     public let matchPattern: MatchPattern
@@ -306,7 +302,7 @@ public struct GraphTableColumn: Sendable, Equatable, Hashable {
     }
 }
 
-/// Placeholder for MatchPattern (defined in SQL/MatchPattern.swift)
+/// A SQL/PGQ graph match pattern.
 public struct MatchPattern: Sendable, Equatable, Hashable {
     public let paths: [PathPattern]
     public let `where`: Expression?
@@ -317,7 +313,7 @@ public struct MatchPattern: Sendable, Equatable, Hashable {
     }
 }
 
-/// Placeholder for PathPattern (defined in SQL/PathPattern.swift)
+/// A named or anonymous graph path pattern.
 public struct PathPattern: Sendable, Equatable, Hashable {
     public let pathVariable: String?
     public let elements: [PathElement]

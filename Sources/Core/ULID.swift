@@ -268,14 +268,3 @@ extension ULID: Comparable {
         return lhs.rawValue.1 < rhs.rawValue.1
     }
 }
-
-// MARK: - ExpressibleByStringLiteral
-
-extension ULID: ExpressibleByStringLiteral {
-    public init(stringLiteral value: String) {
-        guard let ulid = ULID(ulidString: value) else {
-            fatalError("Invalid ULID string literal: \(value)")
-        }
-        self = ulid
-    }
-}
