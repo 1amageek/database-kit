@@ -46,6 +46,7 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidVector(VectorError)
     case invalidFieldObject(FieldObjectError)
     case nonCanonicalFieldObject
+    case invalidFieldValueWireState
     case invalidQueryLanguage(UInt8)
     case invalidQueryInput(UInt8)
     case invalidResultPayload(UInt8)

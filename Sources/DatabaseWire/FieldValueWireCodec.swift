@@ -42,7 +42,7 @@ enum FieldValueWireCodec {
         case .value(let value):
             return value
         case .objectField, .identifier, .reference:
-            preconditionFailure("Field value decoder produced the wrong root type")
+            throw .invalidFieldValueWireState
         }
     }
 
@@ -70,7 +70,7 @@ enum FieldValueWireCodec {
         case .reference(let reference):
             return reference
         case .value, .objectField, .identifier:
-            preconditionFailure("Entity reference decoder produced the wrong root type")
+            throw .invalidFieldValueWireState
         }
     }
 }
@@ -656,7 +656,7 @@ private extension FieldValueWireCodec {
             }
 
             guard let node = completed else {
-                preconditionFailure("Field value decoder has no next operation")
+                throw .invalidFieldValueWireState
             }
             completed = nil
             guard !frames.isEmpty else {
@@ -666,11 +666,11 @@ private extension FieldValueWireCodec {
             switch frames.removeLast() {
             case .objectField(let key):
                 completed = .objectField(
-                    (key: key, value: takeValue(consume node))
+                    (key: key, value: try takeValue(consume node))
                 )
 
             case .array(var values, let remaining):
-                values.append(takeValue(consume node))
+                values.append(try takeValue(consume node))
                 if remaining == 1 {
                     reader.endNestedValue()
                     openValueCount -= 1
@@ -686,7 +686,7 @@ private extension FieldValueWireCodec {
                 }
 
             case .object(var fields, let remaining):
-                fields.append(takeObjectField(consume node))
+                fields.append(try takeObjectField(consume node))
                 if remaining == 1 {
                     let object = try canonicalObject(consume fields)
                     reader.endNestedValue()
@@ -703,13 +703,13 @@ private extension FieldValueWireCodec {
                 }
 
             case .valueReference:
-                let reference = takeReference(consume node)
+                let reference = try takeReference(consume node)
                 reader.endNestedValue()
                 openValueCount -= 1
                 completed = .value(.reference(reference))
 
             case .identifierComposite(var values, let remaining):
-                values.append(takeIdentifier(consume node))
+                values.append(try takeIdentifier(consume node))
                 if remaining == 1 {
                     reader.endNestedValue()
                     openValueCount -= 1
@@ -725,7 +725,7 @@ private extension FieldValueWireCodec {
                 }
 
             case .referenceIdentifier(let entity):
-                let identifier = takeIdentifier(consume node)
+                let identifier = try takeIdentifier(consume node)
                 do {
                     try identifier.validate()
                 } catch let error {
@@ -760,7 +760,7 @@ private extension FieldValueWireCodec {
                 var fields,
                 let remaining
             ):
-                fields.append(takeObjectField(consume node))
+                fields.append(try takeObjectField(consume node))
                 if remaining == 1 {
                     completed = .reference(
                         try makeReference(
@@ -1055,45 +1055,45 @@ private extension FieldValueWireCodec {
 
     static func takeValue(
         _ node: consuming DecodedNode
-    ) -> FieldValue {
+    ) throws(DatabaseWireError) -> FieldValue {
         switch consume node {
         case .value(let value):
             return value
         case .objectField, .identifier, .reference:
-            preconditionFailure("Field value decoder expected a value")
+            throw .invalidFieldValueWireState
         }
     }
 
     static func takeObjectField(
         _ node: consuming DecodedNode
-    ) -> ObjectField {
+    ) throws(DatabaseWireError) -> ObjectField {
         switch consume node {
         case .objectField(let field):
             return field
         case .value, .identifier, .reference:
-            preconditionFailure("Field value decoder expected an object field")
+            throw .invalidFieldValueWireState
         }
     }
 
     static func takeIdentifier(
         _ node: consuming DecodedNode
-    ) -> ReferenceIdentifier {
+    ) throws(DatabaseWireError) -> ReferenceIdentifier {
         switch consume node {
         case .identifier(let identifier):
             return identifier
         case .value, .objectField, .reference:
-            preconditionFailure("Field value decoder expected an identifier")
+            throw .invalidFieldValueWireState
         }
     }
 
     static func takeReference(
         _ node: consuming DecodedNode
-    ) -> EntityReference {
+    ) throws(DatabaseWireError) -> EntityReference {
         switch consume node {
         case .reference(let reference):
             return reference
         case .value, .objectField, .identifier:
-            preconditionFailure("Field value decoder expected a reference")
+            throw .invalidFieldValueWireState
         }
     }
 }
