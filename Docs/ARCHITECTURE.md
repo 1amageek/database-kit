@@ -1,5 +1,9 @@
 # Architecture and Ownership
 
+The normative package and module-boundary contract is defined in
+[database-kit Responsibility Specification](DATABASE_KIT_SPECIFICATION.md).
+This document describes behavioral invariants within that ownership model.
+
 ## Responsibility
 
 `database-kit` owns the Foundation-independent database semantic model above
@@ -25,14 +29,9 @@ The arrows point from a consumer to a dependency.
 
 | Module | Owns | Does not own |
 |---|---|---|
-| `DatabaseValue` | Persisted identity, schema version, RDF role validation, canonical RDF bytes | Primitive field values, Codable, transport |
-| `DatabaseValueCodable` | Opt-in Codable adaptation | Canonical binary protocol |
-| `DatabaseDigest` | Deterministic digest algorithms used by semantic and protocol contracts | Authentication or transport security |
-| `Core` | Persistable model adaptation, schema and index declarations, macros | Persistence execution or index maintenance |
-| `QueryIR` | SQL, SQL/PGQ, and SPARQL statements and structural validation | Parsing or executing a query |
-| `QueryIRFoundation` | Opt-in Foundation conversions | Query meaning |
-| `DatabaseWire` | Version 1 envelopes, typed operations, bounded binary encoding and decoding | Network transport or operation execution |
-| Declaration modules | Relationship, vector, text, geographic, rank, permuted, graph, ontology, and SHACL declarations | Runtime maintenance and execution |
+| `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, and SHACL declarations | Primitive values, Codable, execution, transport |
+| `DatabaseWire` | Version 1 envelopes, typed operations, bounded binary encoding and decoding, and internal canonical digest support | Semantic meaning, network transport, or operation execution |
+| Compiler plugin | Static generation for `DatabaseKit` contracts | Runtime behavior or a public library product |
 
 ## Primitive Boundary
 
@@ -41,10 +40,13 @@ UUID, geographic values, vectors, entity references, and RDF terms are owned by
 `database-types`. database-kit consumes those values without redeclaring,
 wrapping, or aliasing them.
 
-Application model conversion is owned by `Core` because it depends on persisted
-model and schema meaning. `Core` uses FoundationEssentials where the standard
-Swift runtime is available. Primitive Foundation conversions remain in
-`DatabaseTypesFoundation`; neither dependency enters the Embedded client graph.
+database-kit intentionally has no generic value or Codable product.
+Foundation-independent persistence identity, model adaptation, query, and graph
+meaning belong to `DatabaseKit`. Feature categories are source directories
+inside that module rather than products.
+
+Primitive Foundation conversions remain in `DatabaseTypesFoundation`.
+`DatabaseKit` and `DatabaseWire` do not depend on that product.
 
 ## Schema Catalog Boundary
 
@@ -58,36 +60,50 @@ a dictionary.
 An `IndexDescriptor` captures concrete KeyPath value types while they are still
 available and evaluates both `IndexKind.validateTypes` and
 `validateConfiguration`. It also requires the descriptor KeyPaths to match the
-fields declared by the concrete kind. `Schema` rejects a captured
-`IndexTypeValidationError` before publishing its index catalog. Runtime
+fields declared by the concrete kind. Invalid descriptors fail during
+construction; macro-generated descriptor accessors and `Schema` preserve that
+typed construction failure instead of storing an invalid descriptor. Runtime
 maintainers may therefore rely on a schema containing only type-compatible,
 configuration-valid declarations.
+
+## Query Boundary
+
+The query declarations in `DatabaseKit` represent SQL, SQL/PGQ, and SPARQL
+meaning without owning parsing,
+planning, or execution. Text parsers and runtime execution belong to
+`database-framework`; both text and binary inputs must pass the same QueryIR
+structural and semantic validators.
+
+`LIMIT` and `OFFSET` use `UInt64`. Negative pagination is not representable,
+and a runtime that needs a platform-sized collection index performs a checked
+conversion only after applying its execution resource limit.
+
+`QueryStructuralResourceLedger` reports invalid admission use and unbalanced
+nesting as typed failures. Hostile input and parser lifecycle mistakes never
+become process traps or successful partial queries.
 
 ## Embedded Boundary
 
 The Embedded client and canonical protocol path is:
 
 ```text
-DatabaseTypes
-      │
-      ├──▶ DatabaseValue ──▶ QueryIR
-      │          │             │
-      └──────────┴─────────────┴──▶ DatabaseWire
+database-client ──▶ DatabaseWire ──▶ DatabaseKit ──▶ DatabaseTypes
 ```
 
-`DatabaseValue`, `DatabaseDigest`, `QueryIR`, and `DatabaseWire` must compile
-with the Swift 6.4 Embedded WASM SDK. They must not import Foundation, Codable,
+`DatabaseKit` and `DatabaseWire` must compile with the Swift 6.4 Embedded WASM
+SDK. They must not import Foundation, FoundationEssentials, Codable,
 URLSession, JavaScriptKit, or database runtime implementations.
-
-The full declaration product (`DatabaseKit`) separately compiles as a standard
-WASI target with FoundationEssentials. That build is the declaration dependency
-of the full database-framework reactor and is not part of the Embedded client
-dependency graph.
 
 `DatabaseWireReader` applies frame, string, byte-string, collection, nesting,
 and object budgets before allocating or constructing decoded values.
 Canonical object decoding preserves the input buffer ownership path and rejects
 non-canonical field order without creating a second key array.
+
+`DatabaseWireWriter` has no public mutable-array accumulation mode. Canonical
+encoding first measures the exact output, then writes directly into one final
+`ByteString` allocation. Synchronous streaming uses borrowed spans whose
+lifetime ends when the consumer call returns. Decoder state inconsistencies are
+typed `DatabaseWireError` failures rather than traps.
 
 ## Version 1 Contract
 
@@ -99,6 +115,10 @@ Each `DatabaseOperation` statically binds an operation identifier to its request
 and response types. Protocol failures remain typed and distinguish malformed
 input, resource limits, unsupported identifiers, authorization, conflicts,
 retryability, and server failures.
+
+OWL mapping follows the same rule: malformed class expressions, data ranges,
+restrictions, and RDF lists are rejected. Unknown values are not replaced with
+`owl:Thing` or `xsd:string`, and cyclic lists terminate with a typed error.
 
 The version 1 operation families are fixed:
 

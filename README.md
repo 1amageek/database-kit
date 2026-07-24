@@ -3,6 +3,9 @@
 Database semantic models, declarations, QueryIR, and the canonical binary
 protocol for the database ecosystem.
 
+The normative ownership and product contract is documented in
+[database-kit Responsibility Specification](Docs/DATABASE_KIT_SPECIFICATION.md).
+
 ## Overview
 
 database-kit is the semantic contract consumed by both
@@ -16,12 +19,13 @@ It provides:
 
 - `@Persistable` macro for defining data models
 - `@Polymorphable` macro for protocol-oriented polymorphic storage metadata
-- `@OWLClass` macro for OWL ontology class mapping (Graph module)
-- `@OWLDataProperty` / `@OWLObjectProperty` macros for OWL property annotations (Graph module)
+- `@OWLClass` macro for OWL ontology class mapping
+- `@OWLDataProperty` / `@OWLObjectProperty` macros for OWL property annotations
 - `IndexKind` protocol for extensible index type definitions
 - Foundation-independent identity, RDF, and `QueryIR` semantic models
 - canonical binary `DatabaseWire` operations, envelopes, limits, and errors
-- opt-in Foundation adapters for Codable values and platform conversions
+- one Foundation-independent semantic module
+- one canonical bounded binary protocol module
 
 ```
 database-client ────────┐
@@ -47,37 +51,44 @@ dependencies: [
 
 | Module | Description |
 |--------|-------------|
-| `DatabaseValue` | Foundation-independent persisted identity, schema version, and canonical RDF validation/encoding |
-| `DatabaseValueCodable` | Optional Codable adaptations for database semantic and primitive values |
-| `DatabaseDigest` | Foundation-independent canonical SHA-256 digest support |
-| `Core` | `@Persistable` macro, `IndexKind` protocol, schema, and typed model adaptation |
-| `DatabaseWire` | Canonical binary envelopes, typed operations, bounded codecs, results, and errors |
-| `Vector` | `VectorIndexKind` for similarity search |
-| `FullText` | `FullTextIndexKind` for text search |
-| `Geospatial` | `SpatialIndexKind` for geospatial queries |
-| `Rank` | `RankIndexKind` for leaderboard rankings |
-| `Permuted` | `PermutedIndexKind` for alternative field orderings |
-| `Graph` | `GraphIndexKind`, OWL ontology types (`OWLOntology`, `OWLClass`, `OWLAxiom`), `@OWLClass` / `@OWLDataProperty` / `@OWLObjectProperty` macros, `OWLClassEntity`, `OWLDataPropertyDescriptor`, `OWLObjectPropertyDescriptor` |
-| `GraphMacros` | `@OWLClass` / `@OWLDataProperty` / `@OWLObjectProperty` macro compiler plugins |
-| `Relationship` | `RelationshipDescriptor`, delete/cardinality declarations, and `@Relationship` |
-| `QueryIR` | Unified query intermediate representation (Expression, SortKey, SelectQuery) |
-| `QueryIRFoundation` | Optional Foundation conversions for QueryIR values |
-| `DatabaseKit` | Convenience re-export of model, index, relationship, and graph declarations |
+| `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, and SHACL declarations |
+| `DatabaseWire` | Canonical binary envelopes, typed operations, bounded codecs, results, errors, and internal digest support |
 
-`DatabaseValue`, `DatabaseDigest`, `QueryIR`, and `DatabaseWire` build with the
-Swift Embedded WASM SDK. `DatabaseValueCodable`, `Core`, macros, and the
-declaration modules are standard Swift targets and are not dependencies of the
-Embedded client path.
+Relationship, vector, full-text, geographic, rank, permutation, graph,
+ontology, and SHACL are source classifications within `DatabaseKit`, not
+separate products.
+
+`DatabaseKit` and `DatabaseWire` build with the Swift Embedded WASM SDK.
+
+There is no umbrella value module in database-kit. `FieldValue` and every
+primitive alternative are defined only by `DatabaseTypes`; the database-kit
+modules above add model, RDF, SHACL, query, and protocol semantics without
+redeclaring that algebra.
+
+Query pagination uses `UInt64`, so negative `LIMIT` and `OFFSET` values are not
+representable. DatabaseWire encoding measures the exact frame and writes
+directly into one final `ByteString` allocation; there is no public
+mutable-array writer path.
 
 See [Architecture and ownership](Docs/ARCHITECTURE.md) for the package boundary
 and dependency rules.
+
+## Verification
+
+| Contract | Verification |
+|---|---|
+| Apple platform behavior | `xcodebuild test` for the package scheme |
+| Embedded client graph | Release build of `DatabaseWire` with the Swift 6.4 Embedded WASM SDK |
+| Full semantic graph | Release build of the `DatabaseKit` product with the Swift 6.4 Embedded WASM SDK |
+| Binary ownership | Tests assert that payload pages borrow ranges from the single final frame allocation |
+| Decoder safety | Tests cover truncation, limits, malformed values, non-canonical input, and cyclic RDF lists |
 
 ## Quick Start
 
 ### Define a Model
 
 ```swift
-import Core
+import DatabaseKit
 
 @Persistable
 struct User {
@@ -212,7 +223,7 @@ struct Message {
 
 ## Built-in Index Kinds
 
-### Standard (Core module)
+### Standard indexes
 
 ```swift
 ScalarIndexKind<Model>(fields: [\.field1, \.field2])
@@ -228,7 +239,7 @@ DistinctIndexKind<Model>(groupBy: [\.group], value: \.member)
 PercentileIndexKind<Model, Double>(groupBy: [\.group], value: \.number)
 ```
 
-### Extended (separate modules)
+### Specialized indexes
 
 ```swift
 VectorIndexKind<Model>(embedding: \.vector, dimensions: 384, metric: .cosine)
@@ -248,7 +259,7 @@ PermutedIndexKind<Model>(
 Third parties can create custom index types by conforming to `IndexKind`:
 
 ```swift
-import Core
+import DatabaseKit
 
 public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
     public static var identifier: String { "com.mycompany.timeseries" }
@@ -420,8 +431,8 @@ Bare names (without `:`, `#`, or `/`) default to the namespace extracted from th
 | watchOS | 26.0+ |
 | visionOS | 26.0+ |
 | Linux | Swift 6.4+ |
-| WASI Embedded | Swift 6.4+ for `DatabaseValue`, `DatabaseDigest`, `QueryIR`, and `DatabaseWire` |
-| WASI (standard runtime) | Swift 6.4+ for the full `DatabaseKit` declaration product |
+| WASI Embedded | Swift 6.4+ for `DatabaseKit` and `DatabaseWire` |
+| WASI (standard runtime) | Swift 6.4+ for the same semantic and wire products |
 
 ## Related Packages
 
