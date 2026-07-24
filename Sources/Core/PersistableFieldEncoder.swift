@@ -154,7 +154,7 @@ public enum PersistableFieldEncoder {
         case .vector:
             value = (raw as? DatabaseTypes.Vector).map(FieldValue.vector)
         case .uuid:
-            if let scalar = raw as? Foundation.UUID {
+            if let scalar = raw as? FoundationUUID {
                 value = .uuid(DatabaseTypes.UUID(scalar))
             } else if let scalar = raw as? DatabaseTypes.UUID {
                 value = .uuid(scalar)

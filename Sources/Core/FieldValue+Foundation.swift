@@ -13,7 +13,7 @@ extension Data: FieldValueConvertible {
     }
 }
 
-extension Foundation.UUID: FieldValueConvertible {
+extension FoundationUUID: FieldValueConvertible {
     public func toFieldValue() -> FieldValue {
         .uuid(DatabaseTypes.UUID(self))
     }

@@ -4,6 +4,7 @@ import FoundationEssentials
 #else
 import Foundation
 #endif
+import Core
 import DatabaseValue
 
 public protocol OWLDataPropertyScalar: OWLDataPropertyValue {
@@ -133,7 +134,7 @@ extension Timestamp: OWLDataPropertyScalar {
     }
 }
 
-extension Foundation.UUID: OWLDataPropertyScalar {
+extension FoundationUUID: OWLDataPropertyScalar {
     public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(uuidString.lowercased(), datatype: .string)
     }

@@ -15,7 +15,7 @@ extension Data: PersistableIdentifier {
     }
 }
 
-extension Foundation.UUID: PersistableIdentifier {
+extension FoundationUUID: PersistableIdentifier {
     public static var persistableIdentifierType: PersistableIdentifierType { .uuid }
 
     public var persistableIdentifierValue: ReferenceIdentifier {

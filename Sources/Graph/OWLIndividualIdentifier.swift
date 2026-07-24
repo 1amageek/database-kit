@@ -4,6 +4,7 @@ import FoundationEssentials
 #else
 import Foundation
 #endif
+import Core
 import DatabaseValue
 
 public protocol OWLIndividualIdentifier: Sendable {
@@ -72,7 +73,7 @@ extension Float: OWLIndividualIdentifier {
     }
 }
 
-extension Foundation.UUID: OWLIndividualIdentifier {
+extension FoundationUUID: OWLIndividualIdentifier {
     public var owlIndividualIdentifierLexicalForm: String {
         uuidString.lowercased()
     }

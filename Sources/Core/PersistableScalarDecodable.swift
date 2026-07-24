@@ -219,15 +219,15 @@ extension Data: PersistableScalarDecodable {
     }
 }
 
-extension Foundation.UUID: PersistableScalarDecodable {
+extension FoundationUUID: PersistableScalarDecodable {
     public static func decodePersistedScalar(
         _ value: FieldValue,
         field: String
-    ) throws -> Foundation.UUID {
+    ) throws -> Self {
         guard case .uuid(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a UUID")
         }
-        return Foundation.UUID(scalar)
+        return Self(scalar)
     }
 }
 

@@ -33,7 +33,7 @@ private enum FieldValueEncoding {
         case let scalar as String: return .string(scalar)
         case let scalar as Data:
             return .bytes(ByteString(retaining: scalar))
-        case let scalar as Foundation.UUID:
+        case let scalar as FoundationUUID:
             return .uuid(DatabaseTypes.UUID(scalar))
         case let scalar as Date:
             return .timestamp(try Timestamp(scalar))

@@ -1,4 +1,5 @@
 import DatabaseTypes
+import Core
 // OWLIndividual.swift
 // Graph - OWL DL individual definitions
 //
@@ -75,7 +76,7 @@ public struct OWLAnonymousIndividual: Sendable, Codable, Hashable {
     /// Create a new anonymous individual with a unique ID
     public static func create() -> OWLAnonymousIndividual {
         OWLAnonymousIndividual(
-            nodeID: "_:b\(Foundation.UUID().uuidString.prefix(8))"
+            nodeID: "_:b\(FoundationUUID().uuidString.prefix(8))"
         )
     }
 }

@@ -26,8 +26,8 @@ private enum FieldValueDecoding {
         if type == Data.self, case .bytes(let bytes) = value {
             return try cast(Data(copying: bytes), to: type, codingPath: codingPath)
         }
-        if type == Foundation.UUID.self, case .uuid(let uuid) = value {
-            let decoded = Foundation.UUID(uuid)
+        if type == FoundationUUID.self, case .uuid(let uuid) = value {
+            let decoded = FoundationUUID(uuid)
             return try cast(decoded, to: type, codingPath: codingPath)
         }
         if type == Date.self {
