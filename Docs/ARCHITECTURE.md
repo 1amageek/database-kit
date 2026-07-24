@@ -87,10 +87,15 @@ and field-number maps are derived once from that validated catalog; downstream
 code neither resolves duplicate metadata by precedence nor traps while building
 a dictionary.
 
-An `IndexDescriptor` captures concrete KeyPath value types while they are still
-available and evaluates both `IndexKind.validateTypes` and
-`validateConfiguration`. It also requires the descriptor KeyPaths to match the
-fields declared by the concrete kind. Invalid descriptors fail during
+Swift 6.4 KeyPath syntax is consumed by schema macros while the concrete root
+and value types are available. The macro resolves each selected property to a
+generated `Field<Model, Value>` containing stable identity and
+`FieldSchemaType`. `IndexDescriptor` stores those canonical field descriptions,
+not `KeyPath`, `PartialKeyPath`, `AnyKeyPath`, or `Any.Type`.
+
+Construction evaluates both `IndexKind.validateTypes` and
+`validateConfiguration`, and requires the selected generated fields to match
+the fields declared by the concrete kind. Invalid descriptors fail during
 construction; macro-generated descriptor accessors and `Schema` preserve that
 typed construction failure instead of storing an invalid descriptor. Runtime
 maintainers may therefore rely on a schema containing only type-compatible,
@@ -141,8 +146,10 @@ There is one protocol version and one canonical representation. Version 1 does
 not provide aliases, legacy JSON envelopes, compatibility DTOs, or negotiation
 with an earlier protocol.
 
-Each `DatabaseOperation` statically binds an operation identifier to its request
-and response types. Protocol failures remain typed and distinguish malformed
+Each DatabaseWire-provided `DatabaseOperation<Request, Response>` descriptor
+statically binds an operation identifier to its request and response types.
+Applications cannot construct raw operation descriptors or provide binary
+encoding witnesses. Protocol failures remain typed and distinguish malformed
 input, resource limits, unsupported identifiers, authorization, conflicts,
 retryability, and server failures.
 

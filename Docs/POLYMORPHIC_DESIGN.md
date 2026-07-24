@@ -145,8 +145,9 @@ not change the metadata contract. Descriptors are always materialized through
 
 ## Index Declaration Rule
 
-Developer-facing polymorphic index declarations must remain KeyPath based.
-String field names are an internal metadata representation only.
+Developer-facing polymorphic index declarations use Swift 6.4 KeyPath syntax
+at the macro boundary. String field names are an internal metadata
+representation only.
 
 Accepted shape:
 
@@ -160,9 +161,11 @@ Rejected developer-facing shape:
 VectorIndexKind(fieldNames: ["embedding"], dimensions: 256)
 ```
 
-The reason is type safety. KeyPath declarations let the compiler validate that
-the referenced field exists on the protocol or concrete model. String field
-names allow typos and drift.
+The reason is type safety. KeyPath syntax lets the compiler and macro validate
+that the referenced field exists on the protocol or concrete model. The macro
+then resolves it to a generated `Field<Model, Value>`. String field names allow
+typos and drift, while retaining a runtime KeyPath is incompatible with the
+Embedded contract.
 
 ## Runtime Descriptor Model
 
@@ -171,14 +174,14 @@ type.
 
 ```text
 Entity_vector_embedding
-  Person       -> \Person.embedding
-  Organization -> \Organization.embedding
-  BobTask      -> \BobTask.embedding
+  Person       -> Person.fields.embedding
+  Organization -> Organization.fields.embedding
+  BobTask      -> BobTask.fields.embedding
 ```
 
 The schema must not build a shared polymorphic descriptor by taking
-`memberTypes.first`. A descriptor containing `\Person.embedding` is not valid for
-`Organization` or `BobTask`.
+`memberTypes.first`. Each member receives a descriptor containing that
+member's canonical field identity and `FieldSchemaType`.
 
 The schema preserves member-specific descriptors:
 
@@ -186,17 +189,17 @@ The schema preserves member-specific descriptors:
 polymorphicDescriptors[
     groupIdentifier: "Entity",
     memberType: Person.self
-] = [descriptorWithPersonKeyPath]
+] = [descriptorWithPersonField]
 
 polymorphicDescriptors[
     groupIdentifier: "Entity",
     memberType: Organization.self
-] = [descriptorWithOrganizationKeyPath]
+] = [descriptorWithOrganizationField]
 ```
 
 The group-level metadata may expose logical descriptors for query planning and
-client wire format, but write maintenance must use the descriptor set for the
-actual concrete model being written.
+client Wire representation, but write maintenance must use the descriptor set
+for the actual concrete model being written. Neither level stores a KeyPath.
 
 ## Framework Boundary
 
@@ -226,8 +229,8 @@ redeclare it. QueryIR and canonical wire-safe schema metadata remain owned by
 
 Downstream packages such as `swift-memory` should declare domain protocols and
 models using this API. They should not work around polymorphic indexes by
-declaring string field names or by manually sharing one concrete KeyPath across
-different member types.
+declaring string field names or by manually sharing one concrete generated
+field across different member types.
 
 ## Required Invariants
 
@@ -236,21 +239,25 @@ different member types.
 - All members of a polymorphic group must agree on each shared index's logical
   name, kind, and compatible field shape.
 - Runtime writes must select descriptors by concrete member type.
-- A KeyPath cast failure during index maintenance is a bug signal, not a normal
-  fallback path.
+- A failure to resolve a protocol field for a concrete member is a macro or
+  schema-construction error, not a runtime cast or fallback path.
 - String field names may exist in serialized metadata, but they are not the
   developer-facing API for declaring indexes.
+- Runtime descriptors contain no `KeyPath`, `PartialKeyPath`, `AnyKeyPath`, or
+  `Any.Type`.
 
-## Implemented Contract
+## Version 1 Contract
 
 `database-kit` enforces the following:
 
 1. `Polymorphable` inherits from `Persistable`.
 2. `@Polymorphable` requires explicit `: Polymorphable` inheritance.
 3. `Schema` stores descriptors by group identifier and concrete member type.
-4. Macro expansion rewrites protocol-root KeyPaths to `Self`.
-5. Regression tests cover two concrete members and verify that each receives its
-   own typed descriptor.
+4. Macro expansion consumes protocol-root KeyPath syntax and emits generated
+   fields rooted at each concrete member.
+5. Regression tests cover two concrete members, verify that each receives its
+   own typed descriptor, and inspect Embedded expansion for retained runtime
+   KeyPaths.
 
 `database-framework` must select the descriptor set for the concrete model on
 every write and delete. That execution rule is outside this package; no fallback

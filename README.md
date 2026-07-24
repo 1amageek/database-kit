@@ -191,9 +191,10 @@ Swift 6.4 does not type-check freestanding macros in every protocol-body
 configuration. `@Polymorphable` still owns the generated metadata contract;
 applications must not recreate that metadata with string field names.
 
-Polymorphic indexes must be declared with KeyPaths, not developer-written string
-field names. Runtime index maintenance must use descriptors materialized for the
-actual concrete member type, not descriptors copied from the first schema member.
+Polymorphic indexes use Swift 6.4 KeyPath syntax at the macro boundary, not
+developer-written string field names. The macro resolves each KeyPath to a
+generated typed field. Runtime index maintenance uses canonical descriptors
+materialized for the actual concrete member type and stores no runtime KeyPath.
 
 See [Polymorphic Persistence Design](Docs/POLYMORPHIC_DESIGN.md) for the full
 design and migration plan.
@@ -242,33 +243,61 @@ struct Message {
 ### Standard indexes
 
 ```swift
-ScalarIndexKind<Model>(fields: [\.field1, \.field2])
-CountIndexKind<Model>(groupBy: [\.field])
-SumIndexKind<Model, Int64>(groupBy: [\.group], value: \.number)
-MinIndexKind<Model, Double>(groupBy: [\.group], value: \.number)
-MaxIndexKind<Model, Double>(groupBy: [\.group], value: \.number)
-AverageIndexKind<Model, Double>(groupBy: [\.group], value: \.number)
-VersionIndexKind<Model>(field: \.id, strategy: .keepAll)
-BitmapIndexKind<Model>(field: \.status)
-TimeWindowLeaderboardIndexKind<Model>(scoreField: \.score, window: .daily)
-DistinctIndexKind<Model>(groupBy: [\.group], value: \.member)
-PercentileIndexKind<Model, Double>(groupBy: [\.group], value: \.number)
+ScalarIndexKind<Event>(
+    fields: [Event.fields.calendarID.ascending, Event.fields.startsAt.ascending]
+)
+CountIndexKind<Event>(groupBy: [Event.fields.calendarID])
+SumIndexKind<Event, Int64>(
+    groupBy: [Event.fields.calendarID],
+    value: Event.fields.attendeeCount
+)
+MinIndexKind<Event, Timestamp>(
+    groupBy: [Event.fields.calendarID],
+    value: Event.fields.startsAt
+)
+VersionIndexKind<Event>(field: Event.fields.id, strategy: .keepAll)
+BitmapIndexKind<Event>(field: Event.fields.status)
 ```
 
 ### Specialized indexes
 
 ```swift
-VectorIndexKind<Model>(embedding: \.vector, dimensions: 384, metric: .cosine)
-FullTextIndexKind<Model>(fields: [\.title, \.body], tokenizer: .simple)
-SpatialIndexKind<Model>(latitude: \.latitude, longitude: \.longitude)
-RankIndexKind<Model, Int64>(field: \.score)
-GraphIndexKind<Model>(from: \.source, edge: \.label, to: \.target)
-RDFQuadIndexKind<Model>(subject: \.subject, predicate: \.predicate, object: \.object)
-PermutedIndexKind<Model>(
-    fields: [\.first, \.second],
+VectorIndexKind<Event>(
+    embedding: Event.fields.embedding,
+    dimensions: 384,
+    metric: .cosine
+)
+FullTextIndexKind<Event>(
+    fields: [Event.fields.title, Event.fields.description],
+    tokenizer: .simple
+)
+SpatialIndexKind<Event>(location: Event.fields.location)
+RankIndexKind<Event, Int64>(field: Event.fields.attendeeCount)
+GraphIndexKind<Edge>(
+    from: Edge.fields.source,
+    edge: Edge.fields.label,
+    to: Edge.fields.target
+)
+RDFQuadIndexKind<Statement>(
+    subject: Statement.fields.subject,
+    predicate: Statement.fields.predicate,
+    object: Statement.fields.object
+)
+PermutedIndexKind<Pair>(
+    fields: [Pair.fields.first, Pair.fields.second],
     permutation: .swapping(0, 1, size: 2)
 )
 ```
+
+Schema macros may accept KeyPath syntax directly:
+
+```swift
+#Index(VectorIndexKind<Self>(embedding: \Self.embedding, dimensions: 256))
+```
+
+The enclosing macro consumes `\Self.embedding` and emits the corresponding
+generated field descriptor. The runtime `VectorIndexKind` does not retain that
+KeyPath.
 
 ## Custom Index Kinds
 
@@ -281,7 +310,7 @@ public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
     public static var identifier: String { "com.mycompany.timeseries" }
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
-    public let fieldNames: [String]
+    public let fields: [IndexField<Root>]
     public let resolution: TimeResolution
 
     public enum TimeResolution: String, Sendable, Hashable {
@@ -289,15 +318,15 @@ public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
     }
 
     public init(
-        fields: [PartialKeyPath<Root>],
+        fields: [IndexField<Root>],
         resolution: TimeResolution = .minute
     ) {
-        self.fieldNames = fields.map { Root.fieldName(for: $0) }
+        self.fields = fields
         self.resolution = resolution
     }
 
     public static func validateTypes(
-        _ types: [Any.Type]
+        _ types: [FieldSchemaType]
     ) throws(IndexTypeValidationError) {
         guard types.count == 1 else {
             throw .invalidTypeCount(
@@ -306,16 +335,31 @@ public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
                 actual: types.count
             )
         }
+        guard types[0] == .timestamp else {
+            throw .invalidConfiguration(
+                index: identifier,
+                reason: "Time-series fields must use timestamp values"
+            )
+        }
     }
 }
+```
+
+Application use passes a generated field:
+
+```swift
+TimeSeriesIndexKind<Event>(
+    fields: [Event.fields.startsAt.ascending],
+    resolution: .minute
+)
 ```
 
 Server-side maintenance is implemented and registered by
 [database-framework](https://github.com/1amageek/database-framework). Custom
 declarations expose only canonical `IndexKindMetadata`; runtime behavior remains
-outside this package. Concrete KeyPath types and declaration configuration are
-validated when the descriptor is captured, and `Schema` rejects any invalid
-declaration before exposing the catalog.
+outside this package. Concrete field types and declaration configuration are
+validated while the macro resolves the source KeyPath, and `Schema` rejects any
+invalid declaration before exposing the catalog.
 
 ## PersistableEnum
 

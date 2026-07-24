@@ -111,9 +111,32 @@ path does not use:
 - string-based type recovery;
 - mutable global registration.
 
-The generated shape is generic over a concrete field output or input:
+The generated shape is generic over a concrete field output or input. Each
+boundary preserves its own typed failure:
 
 ```swift
+public protocol PersistedFieldOutput {
+    associatedtype Failure: Error & Sendable
+}
+
+public protocol PersistedFieldInput {
+    associatedtype Failure: Error & Sendable
+}
+
+public enum PersistableEncodingFailure<
+    OutputFailure: Error & Sendable
+>: Error, Sendable {
+    case adaptation(PersistableEncodingError)
+    case output(OutputFailure)
+}
+
+public enum PersistableDecodingFailure<
+    InputFailure: Error & Sendable
+>: Error, Sendable {
+    case input(InputFailure)
+    case adaptation(PersistableDecodingError)
+}
+
 public protocol Persistable: Sendable {
     associatedtype ID: PersistableIdentifier
 
@@ -121,11 +144,11 @@ public protocol Persistable: Sendable {
 
     func encodePersistedFields<Output: PersistedFieldOutput>(
         to output: inout Output
-    ) throws(PersistableEncodingError)
+    ) throws(PersistableEncodingFailure<Output.Failure>)
 
     static func decodePersistedFields<Input: PersistedFieldInput>(
         from input: inout Input
-    ) throws(PersistableDecodingError) -> Self
+    ) throws(PersistableDecodingFailure<Input.Failure>) -> Self
 }
 ```
 
@@ -133,6 +156,12 @@ public protocol Persistable: Sendable {
 boundaries. They are not Wire or storage protocols. DatabaseWire,
 database-framework, and explicit owned materializers provide concrete generic
 implementations.
+
+Generated code maps field conversion and model validation failures to
+`adaptation`. It maps a concrete output or input failure without changing its
+type to `output` or `input`. A non-failing materializer uses `Never` as its
+boundary failure. DatabaseWire limits therefore remain `DatabaseWireError`;
+storage failures remain owned by their storage boundary.
 
 Generated field traversal is ordered by stable field number. It passes field
 identity and typed values directly to the concrete output. The Wire and storage
@@ -165,6 +194,57 @@ Nested models are traversed recursively through concrete generic types. A
 `FieldObject` is materialized only when an owned object value is the requested
 semantic result.
 
+### Compile-time field selection
+
+Swift 6.4 KeyPath syntax is the developer-facing field-selection language.
+A macro validates the selected stored property and consumes the KeyPath syntax
+during expansion. The generated runtime declaration contains no `KeyPath`,
+`PartialKeyPath`, or `AnyKeyPath` value.
+
+```text
+\Event.title
+      │ Swift 6.4 macro validation and expansion
+      ▼
+Event.fields.title: Field<Event, String>
+      │
+      ▼
+field number + field name + FieldSchemaType
+```
+
+`@Persistable` generates a typed field namespace:
+
+```swift
+Event.fields.title
+```
+
+`#field(\Event.title)` is compile-time syntax for the same generated
+`Field<Event, String>` value. Query and manual declaration APIs consume
+generated `Field<Model, Value>` values. Schema macros may accept KeyPath syntax
+directly because the macro removes it before runtime code is emitted.
+
+Generated fields contain stable field identity and schema type, not a retained
+KeyPath. Application source therefore keeps compiler-checked property
+selection while the Embedded binary does not depend on the runtime KeyPath
+representation.
+
+Index validation consumes `FieldSchemaType` values. It does not inspect
+`Any.Type`, recover a field name from KeyPath description, or use runtime type
+casts.
+
+A Swift 6.4 Embedded build test compiles representative `#field`, index, query,
+and relationship declarations. It also examines macro-expanded client code and
+rejects runtime KeyPath references. Support is established by this executable
+gate, not inferred from successful native macro expansion.
+
+The compiler-ordering feasibility gate passed on 2026-07-25 with the Swift 6.4
+development snapshot dated 2026-07-17 and its exactly matching Embedded WASM
+SDK. A freestanding expression macro declared with a
+`KeyPath<Root, Value>` parameter accepted `#field(\Event.title)`, expanded the
+complete expression to a non-KeyPath value, and linked the Embedded WASM
+product. This proves the source-language boundary is viable; production
+acceptance still requires the real generated `Field<Event, String>` expansion
+and the complete tests listed above.
+
 ## Schema and descriptor representation
 
 `Schema.Entity` is a pure validated semantic value. It does not retain a Swift
@@ -189,16 +269,35 @@ the caller selects a concrete model type.
 The public directions are `DatabaseWireEncoder` and
 `DatabaseWireDecoder`. There is no public umbrella `Codec`.
 
-Each `DatabaseOperation` binds its request and response statically:
+DatabaseWire publishes a closed generic operation descriptor:
 
 ```swift
-public protocol DatabaseOperation: Sendable {
-    associatedtype Request: DatabaseWireEncodable
-    associatedtype Response: DatabaseWireDecodable
+public struct DatabaseOperation<
+    Request: Sendable,
+    Response: Sendable
+>: Sendable {
+    public let identifier: DatabaseOperationIdentifier
+}
 
-    static var identifier: DatabaseOperationIdentifier { get }
+public enum DatabaseOperations {
+    public static let queryExecute: DatabaseOperation<
+        QueryExecuteOperation.Request,
+        QueryExecuteOperation.Response
+    >
 }
 ```
+
+The descriptor initializer and its encoding witnesses are not public.
+DatabaseWire constructs every descriptor and exposes the fixed version 1
+operation catalog. `DatabaseClient` accepts a descriptor value, encodes its
+statically bound `Request`, and decodes only its bound `Response`.
+
+Low-level `DatabaseWireEncodable`, `DatabaseWireDecodable`, and untyped Wire
+value protocols are implementation contracts, not public application
+conformance points. Applications extend `command.execute` through semantic
+command declarations whose input and output adapt through generated persisted
+field traversal. They cannot replace the command envelope, operation
+identifier encoding, limits, or canonical binary representation.
 
 Encoding uses two deterministic traversals over an immutable operation value:
 
@@ -303,8 +402,24 @@ public struct DatabaseClient<
 ```
 
 The client does not store `any DatabaseTransport`. Request identifiers come
-from an injected concrete source. A synchronized source may use a short
-`Mutex<UInt64>` critical section with no I/O or suspension.
+from an injected concrete source:
+
+```swift
+public protocol DatabaseRequestIDSource: Sendable {
+    func reserveRequestID()
+        throws(DatabaseRequestIDReservationError) -> UInt64
+}
+```
+
+The default `MonotonicRequestIDSource` owns `Atomic<UInt64>`. Reservation uses
+a compare-exchange loop with relaxed ordering because the atomic value
+establishes identifier uniqueness, not publication of other memory. It never
+performs I/O or suspension.
+
+The sequence starts at one. Reaching `UInt64.max` returns
+`DatabaseRequestIDReservationError.exhausted`; it never wraps and therefore
+never reuses an identifier that might still be in flight. An injected source
+must preserve the same nonzero, unique, non-reusing contract.
 
 The core client:
 
@@ -424,7 +539,10 @@ behavior on the production path.
 | Gate | Required evidence |
 |---|---|
 | Embedded compilation | Release build with a Swift 6.4-or-newer compiler and exactly matching Embedded WASM SDK |
+| KeyPath macro boundary | Swift 6.4 Embedded compiles source KeyPath declarations and expanded runtime code retains no KeyPath value |
 | Dependency closure | Build graph contains only the products listed above |
+| Operation closure | Only DatabaseWire-provided descriptors can select an operation identifier or binary representation |
+| Request identifiers | Concurrent reservation is unique, starts at one, never wraps, and reports exhaustion |
 | Request encoding | One final frame allocation; no intermediate payload copy |
 | Envelope and byte decode | Frame and byte fields share the same backing owner |
 | Bulk page decode | Initial page acceptance does not allocate one object per row |
@@ -450,9 +568,9 @@ still violate it:
 | Area | Current violation | Required replacement |
 |---|---|---|
 | Model adaptation | `Mirror`, `any Persistable`, and intermediate persisted-field collections | Macro-generated generic field input and output |
-| Schema | Persistable metatypes and descriptor existential arrays | Pure validated schema values and concrete descriptor representation |
+| Schema | Persistable metatypes, runtime KeyPaths, and descriptor existential arrays | Macro-resolved typed fields, pure validated schema values, and concrete descriptor representation |
 | Bytes | An Embedded-visible existential external owner | Concrete Embedded `ByteString` backing |
-| Wire API | Public catch-all codec entry points and arbitrary two-pass closures | Directional operation-bound encoder and decoder |
+| Wire API | Public catch-all codec entry points and arbitrary two-pass closures | Closed DatabaseWire-provided operation descriptors and internal directional encoding |
 | Bulk query results | Eager arrays for all rows and triples | Validated owner-retaining page views |
 | Client core | A package-specific byte alias and obsolete module imports | Canonical `ByteString` throughout |
 | Worker transport | JavaScriptKit and JavaScript-owned typed-array conversion | Minimal WASM host ABI with one explicit ownership copy per direction |
@@ -472,8 +590,9 @@ the current dynamic path:
    generic field input and output;
 3. replace schema metatype and descriptor existential storage with validated
    semantic values;
-4. replace public catch-all Wire codec entry points with directional operation
-   encoding and decoding;
+4. replace public catch-all Wire codec entry points with closed
+   DatabaseWire-provided operation descriptors and internal directional
+   encoding;
 5. add lazy owner-retaining bulk result pages;
 6. move `database-client` to `ByteString` and generic transport ownership;
 7. replace JavaScriptKit in the Embedded path with the host ABI;

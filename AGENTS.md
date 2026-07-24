@@ -30,6 +30,13 @@
 - Model adaptation is generated statically. Do not add `Mirror`,
   `any Persistable`, `[any Descriptor]`, or `[any Persistable.Type]` to a
   production path.
+- Swift 6.4 KeyPath syntax may select fields only at a macro expansion
+  boundary. Generated runtime code, schema values, QueryIR, and Wire values
+  store typed `Field<Model, Value>` identity or canonical field references,
+  never `KeyPath`, `PartialKeyPath`, `AnyKeyPath`, or `Any.Type`.
+- DatabaseWire operation descriptors are constructed only by DatabaseWire.
+  Do not expose a public raw Wire conformance point, arbitrary operation
+  initializer, or application-supplied binary encoding witness.
 - Bulk Wire results retain their frame and materialize rows or values on
   demand. Do not eagerly decode an entire result page merely for API
   convenience.

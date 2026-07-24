@@ -231,29 +231,37 @@ Wire-specific encoding of a semantic value is owned by `DatabaseWire`.
 Validation or normalization intrinsic to the semantic value remains owned by
 `DatabaseKit`.
 
-The public Wire vocabulary follows the operation contract already exposed to
-the client and runtime:
+The public Wire vocabulary uses a closed generic descriptor:
 
 ```swift
-public protocol DatabaseOperation {
-    associatedtype Request
-    associatedtype Response
+public struct DatabaseOperation<
+    Request: Sendable,
+    Response: Sendable
+>: Sendable {
+    public let identifier: DatabaseOperationIdentifier
+}
 
-    static var identifier: DatabaseOperationIdentifier { get }
-    static func encode(
-        _ request: Request,
-        into encoder: inout DatabaseWireEncoder
-    ) throws(DatabaseWireError)
-    static func decode(
-        from decoder: inout DatabaseWireDecoder
-    ) throws(DatabaseWireError) -> Response
+public enum DatabaseOperations {
+    public static let queryExecute: DatabaseOperation<
+        QueryExecuteOperation.Request,
+        QueryExecuteOperation.Response
+    >
 }
 ```
 
-The exact signatures may use operation-bound request and response protocols,
-but they must preserve all four static bindings: identifier, request, response,
-and canonical binary representation. A generic public `Codec` that permits an
-unbound request/response combination is not allowed.
+Only DatabaseWire constructs operation descriptors. Their initializer and
+binary encoding witnesses are not public. Each exported descriptor preserves
+all four static bindings: identifier, request, response, and canonical binary
+representation.
+
+Low-level request/response Wire protocols are internal implementation
+contracts. Applications do not conform arbitrary types to
+`DatabaseWireEncodable` or `DatabaseWireDecodable` and cannot supply raw
+operation codecs. Application commands extend the semantic command catalog;
+generated field adaptation feeds the fixed `command.execute` envelope.
+
+A generic public `Codec`, public raw Wire conformance point, or public
+operation-descriptor initializer is not allowed.
 
 ### Macro ownership
 
@@ -554,7 +562,7 @@ semantic noun:
 | Primitive object | `FieldObject`, not `DatabaseObjectField` |
 | Application persistence | `Persistable`, not `DatabaseModel` or `DatabaseCodable` |
 | Model reference | `PersistableReference`, not a module-prefixed generic reference |
-| Database operation binding | `DatabaseOperation`; “database operation” is the represented protocol concept |
+| Database operation binding | `DatabaseOperation<Request, Response>`; “database operation” is the represented protocol concept |
 | Canonical protocol encoder/decoder | `DatabaseWireEncoder` / `DatabaseWireDecoder`; DatabaseWire is the selected external protocol |
 
 Callbacks are named for the event or state transition they handle. Fixed
@@ -609,3 +617,9 @@ The responsibility migration is complete only when all of the following hold:
 13. Swift 6.4 Embedded builds validate the complete client dependency graph.
 14. DatabaseWire golden vectors cover every operation family and are consumed
     unchanged by client and runtime tests.
+15. Swift 6.4 Embedded macro tests compile KeyPath-based model, index, query,
+    and relationship declarations, while expanded runtime code contains no
+    `KeyPath`, `PartialKeyPath`, `AnyKeyPath`, or `Any.Type`.
+16. DatabaseWire exposes only its fixed operation descriptors; applications
+    cannot construct a raw descriptor or conform arbitrary types to a binary
+    Wire protocol.
