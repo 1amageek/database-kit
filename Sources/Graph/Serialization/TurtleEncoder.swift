@@ -1,3 +1,4 @@
+import DatabaseTypes
 // TurtleEncoder.swift
 // Graph - OWLOntology → Turtle (RDF) encoder
 //
@@ -620,23 +621,30 @@ private struct TurtleWriter {
     // MARK: - Literal Formatting
 
     private func formatLiteral(_ literal: OWLLiteral) -> String {
-        if let lang = literal.language {
-            return "\"\(escapeTurtleString(literal.lexicalForm))\"@\(lang)"
+        if let language = literal.languageTag {
+            var result =
+                "\"\(escapeTurtleString(literal.lexicalForm))\""
+                + "@\(language.rawValue)"
+            if let direction = literal.baseDirection {
+                result += "--\(direction.rawValue)"
+            }
+            return result
         }
 
-        switch literal.datatype {
-        case "xsd:string", "http://www.w3.org/2001/XMLSchema#string":
+        switch literal.datatypeIRI.rawValue {
+        case "http://www.w3.org/2001/XMLSchema#string":
             return "\"\(escapeTurtleString(literal.lexicalForm))\""
-        case "xsd:integer", "http://www.w3.org/2001/XMLSchema#integer":
+        case "http://www.w3.org/2001/XMLSchema#integer":
             return literal.lexicalForm
-        case "xsd:decimal", "http://www.w3.org/2001/XMLSchema#decimal":
+        case "http://www.w3.org/2001/XMLSchema#decimal":
             return literal.lexicalForm
-        case "xsd:double", "http://www.w3.org/2001/XMLSchema#double":
+        case "http://www.w3.org/2001/XMLSchema#double":
             return literal.lexicalForm
-        case "xsd:boolean", "http://www.w3.org/2001/XMLSchema#boolean":
+        case "http://www.w3.org/2001/XMLSchema#boolean":
             return literal.lexicalForm
         default:
-            return "\"\(escapeTurtleString(literal.lexicalForm))\"^^\(formatIRI(literal.datatype))"
+            return "\"\(escapeTurtleString(literal.lexicalForm))\"^^"
+                + formatIRI(literal.datatypeIRI.rawValue)
         }
     }
 

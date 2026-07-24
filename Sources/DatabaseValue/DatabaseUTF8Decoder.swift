@@ -1,9 +1,11 @@
+import DatabaseTypes
+
 /// Decodes canonical UTF-8 without relying on generic Unicode codec witnesses.
 ///
 /// The input remains borrowed for the duration of decoding. The returned
 /// `String` is the required semantic ownership boundary.
-package enum DatabaseUTF8Decoder {
-    package static func decode(_ bytes: DatabaseBytes) -> String? {
+package enum UTF8Decoder {
+    package static func decode(_ bytes: ByteString) -> String? {
         bytes.withUnsafeBytes { decode($0) }
     }
 

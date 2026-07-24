@@ -1,18 +1,19 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum CommandWriteOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.commandWrite
     public typealias Request = DatabaseCommandRequest
 
     public struct Response: DatabaseWireValue, Hashable {
-        public let output: DatabaseBytes
+        public let output: ByteString
         public let commitVersion: UInt64
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
 
         public init(
-            output: DatabaseBytes = [],
+            output: ByteString = [],
             commitVersion: UInt64,
-            continuation: DatabaseBytes? = nil
+            continuation: ByteString? = nil
         ) {
             self.output = output
             self.commitVersion = commitVersion

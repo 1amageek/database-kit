@@ -1,7 +1,7 @@
-import DatabaseValue
+import DatabaseTypes
 import Synchronization
 
-final class DigestBorrowCountingOwner: DatabaseByteOwner {
+final class DigestBorrowCountingOwner: ByteStringOwner {
     let bytes: [UInt8]
     private let counter = Mutex(0)
 

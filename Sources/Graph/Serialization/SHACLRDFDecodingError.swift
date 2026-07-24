@@ -1,3 +1,4 @@
+import DatabaseTypes
 public enum SHACLRDFDecodingError: Error, Sendable, Equatable, CustomStringConvertible {
     case missingProperty(subject: String, predicate: String)
     case invalidIRI(String)

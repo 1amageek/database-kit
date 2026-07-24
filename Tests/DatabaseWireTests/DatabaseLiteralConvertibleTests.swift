@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import QueryIR
 import Testing
@@ -30,7 +31,7 @@ struct DatabaseLiteralConvertibleTests {
         let value = FieldValue.array([
             .int64(Int64.min),
             .uint64(UInt64.max),
-            .decimal(coefficient: 123, scale: 2),
+            .decimal(ExactDecimal(coefficient: 123, scale: 2)),
         ])
 
         #expect(
@@ -46,17 +47,17 @@ struct DatabaseLiteralConvertibleTests {
     @Test("database objects fail instead of silently producing a literal")
     func databaseObjectConversionFails() {
         #expect(throws: DatabaseLiteralConversionError.unsupportedFieldValue) {
-            try FieldValue.object([]).databaseLiteral
+            try FieldValue.object(FieldObject()).databaseLiteral
         }
     }
 
     @Test("validated RDF values retain canonical RDF term identity")
     func rdfValueConversion() throws {
-        let iri = try DatabaseRDFIRI("https://example.com/event")
+        let iri = try RDFIRI("https://example.com/event")
 
         #expect(
             iri.databaseLiteral
-                == .rdfTerm(.iri("https://example.com/event"))
+                == .rdfTerm(.iri(iri))
         )
     }
 }

@@ -1,3 +1,4 @@
+import DatabaseTypes
 // TypeValidation.swift
 // FDBModel - Type validation helper functions (FDB-independent)
 //

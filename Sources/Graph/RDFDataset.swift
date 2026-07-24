@@ -3,12 +3,10 @@
 
 import DatabaseValue
 import DatabaseValueCodable
+import DatabaseTypes
 
-/// The canonical RDF literal used by dataset codecs.
-public typealias RDFLiteral = DatabaseRDFLiteral
-
-extension DatabaseRDFTerm {
-    public var rdfLiteral: DatabaseRDFLiteral? {
+extension RDFTerm {
+    public var rdfLiteral: RDFLiteral? {
         guard case .literal(let literal) = self else { return nil }
         return literal
     }
@@ -50,10 +48,6 @@ public struct RDFQuad: Sendable, Hashable, Codable {
         if let graph, !graph.isRDFGraphName {
             throw RDFDatasetValidationError.invalidGraphName(graph)
         }
-        try subject.validateRDFLexicalForm()
-        try predicate.validateRDFLexicalForm()
-        try object.validateRDFLexicalForm()
-        try graph?.validateRDFLexicalForm()
     }
 }
 
@@ -106,9 +100,6 @@ public enum RDFDatasetValidationError: Error, Sendable, Equatable, CustomStringC
     case invalidPredicate(RDFTerm)
     case invalidObject(RDFTerm)
     case invalidGraphName(RDFTerm)
-    case invalidIRI(String)
-    case invalidBlankNodeIdentifier(String)
-    case invalidLiteralDatatype(String)
 
     public var description: String {
         switch self {
@@ -120,37 +111,6 @@ public enum RDFDatasetValidationError: Error, Sendable, Equatable, CustomStringC
             return "RDF object must be an IRI, blank node, or literal, got \(term)"
         case .invalidGraphName(let term):
             return "RDF graph name must be an IRI or blank node, got \(term)"
-        case .invalidIRI(let value):
-            return "RDF IRI must be absolute: \(value)"
-        case .invalidBlankNodeIdentifier(let value):
-            return "RDF blank node identifier must not be empty: \(value)"
-        case .invalidLiteralDatatype(let value):
-            return "RDF literal datatype must be an absolute IRI: \(value)"
-        }
-    }
-}
-
-private extension DatabaseRDFTerm {
-    func validateRDFLexicalForm() throws {
-        switch self {
-        case .iri(let value):
-            guard DatabaseRDFIRIValidator.isAbsolute(value) else {
-                throw RDFDatasetValidationError.invalidIRI(value)
-            }
-        case .blankNode(let identifier):
-            guard !identifier.isEmpty else {
-                throw RDFDatasetValidationError.invalidBlankNodeIdentifier(identifier)
-            }
-        case .literal(let literal):
-            guard DatabaseRDFIRIValidator.isAbsolute(literal.datatype) else {
-                throw RDFDatasetValidationError.invalidLiteralDatatype(
-                    literal.datatype
-                )
-            }
-        case .tripleTerm(let subject, let predicate, let object):
-            try subject.validateRDFLexicalForm()
-            try predicate.validateRDFLexicalForm()
-            try object.validateRDFLexicalForm()
         }
     }
 }
@@ -171,14 +131,7 @@ extension RDFTerm {
     }
 
     public var isRDFObject: Bool {
-        switch self {
-        case .iri, .blankNode, .literal:
-            return true
-        case .tripleTerm(let subject, let predicate, let object):
-            return subject.isRDFSubject
-                && predicate.isRDFPredicate
-                && object.isRDFObject
-        }
+        true
     }
 
     public var isRDFGraphName: Bool {

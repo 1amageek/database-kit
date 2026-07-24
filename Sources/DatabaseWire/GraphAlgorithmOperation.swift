@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum GraphAlgorithmOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.graphAlgorithm
@@ -40,13 +41,13 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
 
     public struct Source: DatabaseWireValue, Hashable {
         public let index: String
-        public let partitions: [DatabaseObjectField]
+        public let partitions: FieldObject
         public let graph: GraphSelector
         public let edgeLabel: DatabaseGraphTerm?
 
         public init(
             index: String,
-            partitions: [DatabaseObjectField] = [],
+            partitions: FieldObject = FieldObject(),
             graph: GraphSelector = .all,
             edgeLabel: DatabaseGraphTerm? = nil
         ) {
@@ -60,10 +61,7 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeString(index)
-            try writer.writeCount(partitions.count)
-            for partition in partitions {
-                try partition.encode(into: &writer)
-            }
+            try partitions.encode(into: &writer)
             try graph.encode(into: &writer)
             writer.writeBool(edgeLabel != nil)
             if let edgeLabel { try edgeLabel.encode(into: &writer) }
@@ -73,15 +71,9 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let index = try reader.readString()
-            let partitionCount = try reader.readCount()
-            var partitions: [DatabaseObjectField] = []
-            partitions.reserveCapacity(partitionCount)
-            for _ in 0..<partitionCount {
-                partitions.append(try DatabaseObjectField(from: &reader))
-            }
             self.init(
                 index: index,
-                partitions: partitions,
+                partitions: try FieldObject(from: &reader),
                 graph: try GraphSelector(from: &reader),
                 edgeLabel: try reader.readBool()
                     ? try DatabaseGraphTerm(from: &reader)
@@ -113,13 +105,13 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
         public let algorithmComplete: Bool
         public let resultPageComplete: Bool
         public let limitReason: LimitReason?
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
 
         public init(
             algorithmComplete: Bool,
             resultPageComplete: Bool,
             limitReason: LimitReason? = nil,
-            continuation: DatabaseBytes? = nil
+            continuation: ByteString? = nil
         ) {
             self.algorithmComplete = algorithmComplete
             self.resultPageComplete = resultPageComplete
@@ -346,9 +338,9 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
 
     public struct Page: DatabaseWireValue, Hashable {
         public let limit: UInt32
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
 
-        public init(limit: UInt32 = 1_000, continuation: DatabaseBytes? = nil) {
+        public init(limit: UInt32 = 1_000, continuation: ByteString? = nil) {
             self.limit = limit
             self.continuation = continuation
         }

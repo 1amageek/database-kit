@@ -1,3 +1,4 @@
+import DatabaseTypes
 public struct DatabaseWireEnvelopeHeader: Sendable, Hashable {
     public let requestID: UInt64
     public let operation: DatabaseOperationIdentifier

@@ -1,3 +1,4 @@
+import DatabaseTypes
 enum DatabaseWireMessageKind: UInt8 {
     case request = 1
     case response = 2

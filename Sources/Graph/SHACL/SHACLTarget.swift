@@ -1,3 +1,4 @@
+import DatabaseTypes
 // SHACLTarget.swift
 // Graph - SHACL target declarations
 //
@@ -44,7 +45,7 @@ extension SHACLTarget {
         switch self {
         case .node(let term):
             guard case .iri(let iri) = term else { return nil }
-            return iri
+            return iri.rawValue
         case .class_(let iri), .subjectsOf(let iri), .objectsOf(let iri):
             return iri
         case .implicitClass:

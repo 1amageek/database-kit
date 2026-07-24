@@ -1,3 +1,4 @@
+import DatabaseTypes
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
@@ -71,13 +72,13 @@ extension Float: OWLIndividualIdentifier {
     }
 }
 
-extension UUID: OWLIndividualIdentifier {
+extension Foundation.UUID: OWLIndividualIdentifier {
     public var owlIndividualIdentifierLexicalForm: String {
         uuidString.lowercased()
     }
 }
 
-extension DatabaseUUID: OWLIndividualIdentifier {
+extension DatabaseTypes.UUID: OWLIndividualIdentifier {
     public var owlIndividualIdentifierLexicalForm: String { description }
 }
 

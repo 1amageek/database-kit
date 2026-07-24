@@ -1,11 +1,13 @@
+import DatabaseTypes
+
 /// A decoded RDF term together with the resources consumed by its canonical form.
-public struct DatabaseRDFTermDecodingResult: Sendable {
-    public let term: DatabaseRDFTerm
+public struct RDFTermDecodingResult: Sendable {
+    public let term: RDFTerm
     public let objectCount: Int
     public let maximumDepth: Int
 
     package init(
-        term: DatabaseRDFTerm,
+        term: RDFTerm,
         objectCount: Int,
         maximumDepth: Int
     ) {

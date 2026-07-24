@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 /// Validates canonical QueryIR representation and request-level SPARQL rules.
@@ -240,7 +241,7 @@ public enum SPARQLSemanticValidator {
         _ value: String
     ) throws(SPARQLSemanticValidationError) {
         do {
-            _ = try DatabaseRDFIRI(value)
+            _ = try RDFIRI(value)
         } catch let error {
             throw .invalidIRI(value, error)
         }
@@ -512,23 +513,23 @@ public enum SPARQLSemanticValidator {
             try validateIRI(iri)
         case .typedLiteral(_, let datatype):
             do {
-                _ = try DatabaseRDFTypedLiteralDatatype(datatype)
+                _ = try RDFTypedLiteralDatatype(datatype)
             } catch let error {
                 throw .invalidTypedLiteralDatatype(datatype, error)
             }
         case .langLiteral(_, let language):
             do {
-                _ = try DatabaseRDFLanguageTag(language)
+                _ = try RDFLanguageTag(language)
             } catch let error {
                 throw .invalidLanguageTag(language, error)
             }
         case .dirLangLiteral(_, let language, let direction):
             do {
-                _ = try DatabaseRDFLanguageTag(language)
+                _ = try RDFLanguageTag(language)
             } catch let error {
                 throw .invalidLanguageTag(language, error)
             }
-            guard DatabaseRDFDirection(rawValue: direction) != nil else {
+            guard RDFDirection(rawValue: direction) != nil else {
                 throw .invalidBaseDirection(direction)
             }
         case .array(let values):
@@ -569,14 +570,13 @@ public enum SPARQLSemanticValidator {
     }
 
     private static func rdfTermContainsBlankNode(
-        _ term: DatabaseRDFTerm
+        _ term: RDFTerm
     ) -> Bool {
         switch term {
         case .blankNode:
             return true
-        case .tripleTerm(let subject, let predicate, let object):
-            return rdfTermContainsBlankNode(subject)
-                || rdfTermContainsBlankNode(predicate)
+        case .tripleTerm(let subject, _, let object):
+            return rdfTermContainsBlankNode(subject.term)
                 || rdfTermContainsBlankNode(object)
         case .iri, .literal:
             return false
@@ -584,16 +584,13 @@ public enum SPARQLSemanticValidator {
     }
 
     private static func blankNodeLabel(
-        in term: DatabaseRDFTerm
+        in term: RDFTerm
     ) -> String? {
         switch term {
         case .blankNode(let label):
-            return label
-        case .tripleTerm(let subject, let predicate, let object):
-            if let label = blankNodeLabel(in: subject) {
-                return label
-            }
-            if let label = blankNodeLabel(in: predicate) {
+            return label.rawValue
+        case .tripleTerm(let subject, _, let object):
+            if let label = blankNodeLabel(in: subject.term) {
                 return label
             }
             return blankNodeLabel(in: object)

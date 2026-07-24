@@ -29,19 +29,53 @@ let package = Package(
         .library(name: "QueryIRFoundation", targets: ["QueryIRFoundation"]),
     ],
     dependencies: [
+        .package(
+            url: "https://github.com/1amageek/database-types.git",
+            branch: "main"
+        ),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0"),
     ],
     targets: [
-        .target(name: "DatabaseValue", dependencies: []),
-        .target(name: "DatabaseValueCodable", dependencies: ["DatabaseValue"]),
-        .target(name: "DatabaseDigest", dependencies: ["DatabaseValue"]),
+        .target(
+            name: "DatabaseValue",
+            dependencies: [
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
+        ),
+        .target(
+            name: "DatabaseValueCodable",
+            dependencies: [
+                "DatabaseValue",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
+        ),
+        .target(
+            name: "DatabaseDigest",
+            dependencies: [
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
+        ),
         .target(
             name: "DatabaseWire",
-            dependencies: ["DatabaseDigest", "DatabaseValue", "QueryIR"]
+            dependencies: [
+                "DatabaseDigest",
+                "DatabaseValue",
+                "QueryIR",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
         ),
         .target(
             name: "Core",
-            dependencies: ["CoreMacros", "DatabaseValue", "DatabaseValueCodable"]
+            dependencies: [
+                "CoreMacros",
+                "DatabaseValue",
+                "DatabaseValueCodable",
+                .product(name: "DatabaseTypes", package: "database-types"),
+                .product(
+                    name: "DatabaseTypesFoundation",
+                    package: "database-types"
+                ),
+            ]
         ),
         .target(name: "Relationship", dependencies: ["Core", "RelationshipMacros"]),
         .macro(
@@ -60,8 +94,24 @@ let package = Package(
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
             ]
         ),
-        .target(name: "QueryIR", dependencies: ["DatabaseValue"]),
-        .target(name: "QueryIRFoundation", dependencies: ["QueryIR", "DatabaseValue"]),
+        .target(
+            name: "QueryIR",
+            dependencies: [
+                "DatabaseValue",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
+        ),
+        .target(
+            name: "QueryIRFoundation",
+            dependencies: [
+                "QueryIR",
+                "DatabaseValue",
+                .product(
+                    name: "DatabaseTypesFoundation",
+                    package: "database-types"
+                ),
+            ]
+        ),
         .target(name: "Vector", dependencies: ["Core"]),
         .target(name: "FullText", dependencies: ["Core"]),
         .target(name: "Geospatial", dependencies: ["Core"]),
@@ -70,7 +120,7 @@ let package = Package(
         .macro(
             name: "GraphMacros",
             dependencies: [
-                "DatabaseValue",
+                .product(name: "DatabaseTypes", package: "database-types"),
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
@@ -78,7 +128,13 @@ let package = Package(
         ),
         .target(
             name: "Graph",
-            dependencies: ["Core", "DatabaseValue", "DatabaseValueCodable", "GraphMacros"]
+            dependencies: [
+                "Core",
+                "DatabaseValue",
+                "DatabaseValueCodable",
+                "GraphMacros",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
         ),
         .target(
             name: "DatabaseKit",
@@ -86,7 +142,10 @@ let package = Package(
         ),
         .testTarget(
             name: "DatabaseDigestTests",
-            dependencies: ["DatabaseDigest", "DatabaseValue"]
+            dependencies: [
+                "DatabaseDigest",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
         ),
         .testTarget(
             name: "DatabaseWireTests",
@@ -94,19 +153,31 @@ let package = Package(
                 "DatabaseValue",
                 "DatabaseWire",
                 "QueryIR",
+                .product(name: "DatabaseTypes", package: "database-types"),
             ]
         ),
         .testTarget(
             name: "DatabaseValueCodableTests",
-            dependencies: ["DatabaseValue", "DatabaseValueCodable"]
+            dependencies: [
+                "DatabaseValue",
+                "DatabaseValueCodable",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
         ),
         .testTarget(
             name: "DatabaseValueTests",
-            dependencies: ["DatabaseValue"]
+            dependencies: [
+                "DatabaseValue",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
         ),
         .testTarget(
             name: "GraphValueTests",
-            dependencies: ["DatabaseValue", "Graph"]
+            dependencies: [
+                "DatabaseValue",
+                "Graph",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
         ),
         .testTarget(
             name: "QueryIRFoundationTests",
@@ -114,6 +185,7 @@ let package = Package(
                 "DatabaseValue",
                 "QueryIR",
                 "QueryIRFoundation",
+                .product(name: "DatabaseTypes", package: "database-types"),
             ]
         ),
         .testTarget(
@@ -131,6 +203,7 @@ let package = Package(
                 "Graph",
                 "Relationship",
                 "QueryIR",
+                .product(name: "DatabaseTypes", package: "database-types"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax"),
             ]

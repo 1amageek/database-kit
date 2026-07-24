@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 /// Rewrites parameterized QueryIR with an explicit binding traversal stack.
@@ -1979,11 +1980,11 @@ private extension QueryParameterBindingTraversal {
                     }
                 case .rdfTerm(let term):
                     literalResults.append(.rdfTerm(term))
-                case .decimal(let coefficient, let scale):
-                    literalResults.append(
-                        .decimal(coefficient: coefficient, scale: scale)
-                    )
-                case .object, .reference:
+                case .decimal(let value):
+                    literalResults.append(.decimal(value))
+                case .time, .dateTime, .timeSpan, .calendarPeriod,
+                     .geographicPoint, .geographicPosition, .vector,
+                     .object, .reference:
                     throw .unsupportedValue(reference)
                 }
             case .assembleArray(let count):

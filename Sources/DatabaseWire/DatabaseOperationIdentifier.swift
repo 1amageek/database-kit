@@ -1,3 +1,4 @@
+import DatabaseTypes
 public enum DatabaseOperationIdentifier: UInt16, Sendable, Hashable, CaseIterable {
     case capabilitiesDescribe = 0x0101
     case schemaDescribe = 0x0102

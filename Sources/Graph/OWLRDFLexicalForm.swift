@@ -1,4 +1,5 @@
 import DatabaseValue
+import DatabaseTypes
 
 public enum OWLRDFLexicalForm {
     public static func floatingPoint(_ value: Double) -> String {
@@ -8,11 +9,11 @@ public enum OWLRDFLexicalForm {
         return String(value)
     }
 
-    public static func dateTime(_ value: DatabaseTimestamp) throws -> String {
-        try DatabaseXSDDateTimeCodec.format(timestamp: value)
+    public static func dateTime(_ value: Timestamp) throws -> String {
+        try XSDDateTimeCodec.format(timestamp: value)
     }
 
-    public static func date(_ value: DatabaseDate) throws -> String {
-        try DatabaseXSDDateTimeCodec.format(date: value)
+    public static func date(_ value: CivilDate) -> String {
+        XSDDateTimeCodec.format(date: value)
     }
 }

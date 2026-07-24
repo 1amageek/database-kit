@@ -1,4 +1,4 @@
-public struct DatabaseRDFTermCodecLimits: Sendable, Equatable {
+public struct RDFTermCodecLimits: Sendable, Equatable {
     public let maximumBytes: Int
     public let maximumDepth: Int
     public let maximumObjectCount: Int

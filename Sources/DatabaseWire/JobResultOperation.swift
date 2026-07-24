@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum JobResultOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.jobResult
@@ -10,7 +11,7 @@ public enum JobResultOperation: DatabaseOperation {
         public let responseDigest: DatabaseJobResultDigest
         public let nextChunkIndex: UInt32
 
-        public var jobID: DatabaseUUID { job.jobID }
+        public var jobID: DatabaseTypes.UUID { job.jobID }
         public var operation: DatabaseJobOperationIdentifier { job.operation }
 
         public init(
@@ -71,7 +72,7 @@ public enum JobResultOperation: DatabaseOperation {
         public let job: DatabaseJobIdentity
         public let continuation: Continuation?
 
-        public var jobID: DatabaseUUID { job.jobID }
+        public var jobID: DatabaseTypes.UUID { job.jobID }
         public var operation: DatabaseJobOperationIdentifier { job.operation }
 
         public init(
@@ -113,7 +114,7 @@ public enum JobResultOperation: DatabaseOperation {
     public enum Response: DatabaseWireValue, Hashable {
         case succeeded(
             job: DatabaseJobIdentity,
-            responsePayloadPage: DatabaseBytes,
+            responsePayloadPage: ByteString,
             totalResponseBytes: UInt64,
             responseDigest: DatabaseJobResultDigest,
             continuation: Continuation?

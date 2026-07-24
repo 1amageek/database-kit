@@ -1,9 +1,11 @@
-public enum DatabaseRDFTermCodecError: Error, Sendable, Equatable {
+import DatabaseTypes
+
+public enum RDFTermCodecError: Error, Sendable, Equatable {
     case truncated
     case trailingBytes
     case unknownTag(UInt8)
     case invalidUTF8
-    case invalidIRI(DatabaseRDFIRIError)
+    case invalidIRI(RDFIRIError)
     case invalidBlankNodeIdentifier
     case invalidTripleSubject
     case invalidTriplePredicate
@@ -13,8 +15,8 @@ public enum DatabaseRDFTermCodecError: Error, Sendable, Equatable {
     case invalidLiteralAnnotation(UInt8)
     case invalidDirection(UInt8)
     case invalidRole(
-        expected: DatabaseRDFTermRole,
-        actual: DatabaseRDFTermKind
+        expected: RDFTermRole,
+        actual: RDFTermKind
     )
     case nonCanonicalVarint
     case nonCanonicalStringEncoding

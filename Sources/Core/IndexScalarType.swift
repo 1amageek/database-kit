@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Stable scalar types supported by typed index runtimes.
 public enum IndexScalarType: String, Sendable, Codable, CaseIterable {
     case int8

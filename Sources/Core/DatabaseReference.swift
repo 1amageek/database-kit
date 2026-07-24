@@ -1,12 +1,13 @@
+import DatabaseTypes
 import DatabaseValue
 import DatabaseValueCodable
 
 /// A type-safe reference to a persisted entity.
 public struct DatabaseReference<Target: Persistable>: Sendable, Hashable, Codable {
-    public let identity: PersistableIdentity
+    public let identity: EntityReference
 
     public init(
-        identity: PersistableIdentity
+        identity: EntityReference
     ) throws(DatabaseReferenceError) {
         guard identity.entity == Target.persistableType else {
             throw .entityMismatch(
@@ -26,37 +27,66 @@ public struct DatabaseReference<Target: Persistable>: Sendable, Hashable, Codabl
             )
         }
 
-        var partitionNumbers = Set<UInt32>()
-        var partitionNames = Set<String>()
-        for partition in identity.partitions {
-            guard partition.number > 0 else {
-                throw .invalidPartitionFieldNumber(
-                    entity: identity.entity,
-                    field: partition.name
-                )
+        let expectedPartitions = Self.canonicalPartitionNames(
+            Target.directoryPathComponents.compactMap { component -> String? in
+                guard case .dynamicField(let fieldName) = component else {
+                    return nil
+                }
+                return fieldName
             }
-            guard partitionNumbers.insert(partition.number).inserted else {
-                throw .duplicatePartitionFieldNumber(
-                    entity: identity.entity,
-                    number: partition.number
-                )
-            }
-            guard partitionNames.insert(partition.name).inserted else {
-                throw .duplicatePartitionFieldName(
-                    entity: identity.entity,
-                    field: partition.name
-                )
-            }
+        )
+        let actualPartitions = identity.partitions.fields.map(\.key)
+        guard Self.haveIdenticalUTF8(
+            expectedPartitions,
+            actualPartitions
+        ) else {
+            throw .partitionMismatch(
+                entity: identity.entity,
+                expected: expectedPartitions,
+                actual: actualPartitions
+            )
         }
         self.identity = identity
+    }
+
+    private static func canonicalPartitionNames(
+        _ names: [String]
+    ) -> [String] {
+        var result: [String] = []
+        result.reserveCapacity(names.count)
+        for name in names.sorted(by: {
+            $0.utf8.lexicographicallyPrecedes($1.utf8)
+        }) {
+            if let previous = result.last,
+               previous.utf8.elementsEqual(name.utf8) {
+                continue
+            }
+            result.append(name)
+        }
+        return result
+    }
+
+    private static func haveIdenticalUTF8(
+        _ left: [String],
+        _ right: [String]
+    ) -> Bool {
+        guard left.count == right.count else {
+            return false
+        }
+        for index in left.indices {
+            guard left[index].utf8.elementsEqual(right[index].utf8) else {
+                return false
+            }
+        }
+        return true
     }
 }
 
 extension DatabaseReference: PersistableReferenceValue {
-    public var persistableIdentity: PersistableIdentity { identity }
+    public var persistableIdentity: EntityReference { identity }
 
     public static func decodePersistedReference(
-        _ identity: PersistableIdentity
+        _ identity: EntityReference
     ) throws -> Self {
         try Self(identity: identity)
     }

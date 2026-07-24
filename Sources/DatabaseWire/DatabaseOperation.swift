@@ -1,3 +1,4 @@
+import DatabaseTypes
 public protocol DatabaseOperation: Sendable {
     associatedtype Request: DatabaseWireValue
     associatedtype Response: DatabaseWireValue

@@ -1,10 +1,11 @@
+import DatabaseTypes
 import Core
 import DatabaseValue
 
 /// Canonical, non-generic OWL class RDF projection metadata.
 public struct OWLClassRDFIndexMetadata: Sendable, Hashable {
     public let individualIRIBase: String
-    public let graph: DatabaseRDFTerm?
+    public let graph: RDFTerm?
 
     public init(
         canonical kind: IndexKindMetadata

@@ -1,3 +1,4 @@
+import DatabaseTypes
 // IndexError.swift
 // FDBIndexing - Error types for index operations
 

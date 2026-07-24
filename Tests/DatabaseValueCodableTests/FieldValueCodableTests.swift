@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import DatabaseTypes
 import DatabaseValue
 import DatabaseValueCodable
 
@@ -7,28 +8,26 @@ import DatabaseValueCodable
 struct FieldValueCodableTests {
     @Test("Canonical value types round-trip through JSON")
     func roundTrip() throws {
-        let literal = try DatabaseRDFLiteral(
+        let literal = try RDFLiteral(
             lexicalForm: "2026-07-18T03:30:00Z",
             datatype: "http://www.w3.org/2001/XMLSchema#dateTime"
         )
-        let term = DatabaseRDFTerm.tripleTerm(
-            subject: .iri("https://example.com/events/1"),
-            predicate: .iri("https://schema.org/startDate"),
+        let term = RDFTerm.tripleTerm(
+            subject: .iri(
+                try RDFIRI("https://example.com/events/1")
+            ),
+            predicate: try RDFPredicateIRI(
+                "https://schema.org/startDate"
+            ),
             object: .literal(literal)
         )
         let version = DatabaseSchemaVersion(1, 2, 3)
-        let fieldValue = FieldValue.object([
-            DatabaseObjectField(
-                number: 1,
-                name: "term",
-                value: .rdfTerm(term)
-            ),
-            DatabaseObjectField(
-                number: 2,
-                name: "unsigned",
-                value: .uint64(UInt64.max)
-            ),
-        ])
+        let fieldValue = FieldValue.object(
+            try FieldObject([
+                (key: "term", value: .rdfTerm(term)),
+                (key: "unsigned", value: .uint64(UInt64.max)),
+            ])
+        )
 
         try expectRoundTrip(literal)
         try expectRoundTrip(term)

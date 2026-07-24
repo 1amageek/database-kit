@@ -1,3 +1,4 @@
+import DatabaseTypes
 // IndexConfiguration.swift
 // Core - Protocol for defining runtime index configuration
 //

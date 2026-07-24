@@ -1,3 +1,4 @@
+import DatabaseTypes
 import QueryIR
 
 /// Encodes and decodes recursive array data types without process-stack recursion.

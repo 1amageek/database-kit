@@ -1,3 +1,4 @@
+import DatabaseTypes
 // GraphIndexStrategy.swift
 // Graph - Storage strategy for graph indexes (FDB-independent, iOS-compatible)
 //

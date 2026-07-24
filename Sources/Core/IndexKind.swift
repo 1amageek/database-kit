@@ -1,3 +1,4 @@
+import DatabaseTypes
 // IndexKind.swift
 // FDBCore - Protocol for defining index kind metadata
 //

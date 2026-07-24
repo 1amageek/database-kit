@@ -1,3 +1,4 @@
+import DatabaseTypes
 import Core
 
 extension GraphIndexKind {

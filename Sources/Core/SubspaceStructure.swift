@@ -1,3 +1,4 @@
+import DatabaseTypes
 // SubspaceStructure.swift
 // FDBIndexing - Subspace structure type definition
 //

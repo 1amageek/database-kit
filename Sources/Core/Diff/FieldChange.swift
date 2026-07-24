@@ -1,3 +1,4 @@
+import DatabaseTypes
 // FieldChange.swift
 // Core - Field-level change representation
 //

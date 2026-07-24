@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// DirectoryPathError - Errors related to directory path resolution
 
 public enum DirectoryPathError: Error, CustomStringConvertible, Sendable {

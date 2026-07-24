@@ -1,11 +1,12 @@
+import DatabaseTypes
 import DatabaseValue
 
 public enum DatabaseLiteralEncoding {
-    public static func iso8601(_ date: DatabaseDate) -> String {
-        "\(formattedYear(date.year))-\(padded(Int(date.month), width: 2))-\(padded(Int(date.day), width: 2))"
+    public static func iso8601(_ date: CivilDate) -> String {
+        "\(formattedYear(Int64(date.year)))-\(padded(Int(date.month), width: 2))-\(padded(Int(date.day), width: 2))"
     }
 
-    public static func iso8601(_ timestamp: DatabaseTimestamp) -> String {
+    public static func iso8601(_ timestamp: Timestamp) -> String {
         var days = timestamp.secondsSinceUnixEpoch / 86_400
         var secondsOfDay = timestamp.secondsSinceUnixEpoch % 86_400
         if secondsOfDay < 0 {
@@ -13,11 +14,11 @@ public enum DatabaseLiteralEncoding {
             secondsOfDay += 86_400
         }
 
-        let date = civilDate(daysSinceUnixEpoch: days)
+        let date = calendarDateComponents(daysSinceUnixEpoch: days)
         let hour = Int(secondsOfDay / 3_600)
         let minute = Int((secondsOfDay % 3_600) / 60)
         let second = Int(secondsOfDay % 60)
-        var result = "\(iso8601(date))T\(padded(hour, width: 2)):\(padded(minute, width: 2)):\(padded(second, width: 2))"
+        var result = "\(formattedYear(date.year))-\(padded(Int(date.month), width: 2))-\(padded(Int(date.day), width: 2))T\(padded(hour, width: 2)):\(padded(minute, width: 2)):\(padded(second, width: 2))"
 
         if timestamp.nanoseconds != 0 {
             var fraction = padded(Int(timestamp.nanoseconds), width: 9)
@@ -30,7 +31,7 @@ public enum DatabaseLiteralEncoding {
         return result + "Z"
     }
 
-    public static func hex(_ bytes: DatabaseBytes) -> String {
+    public static func hex(_ bytes: ByteString) -> String {
         let (encodedCount, overflow) = bytes.count.multipliedReportingOverflow(by: 2)
         precondition(!overflow, "Hexadecimal byte count overflow")
         return bytes.withUnsafeBytes { source in
@@ -46,7 +47,7 @@ public enum DatabaseLiteralEncoding {
         }
     }
 
-    public static func base64(_ bytes: DatabaseBytes) -> String {
+    public static func base64(_ bytes: ByteString) -> String {
         guard !bytes.isEmpty else { return "" }
 
         let (roundedCount, roundingOverflow) = bytes.count.addingReportingOverflow(2)
@@ -83,7 +84,9 @@ public enum DatabaseLiteralEncoding {
         }
     }
 
-    public static func decimal(coefficient: Int64, scale: Int32) -> String {
+    public static func decimal(_ value: ExactDecimal) -> String {
+        let coefficient = value.coefficient
+        let scale = value.scale
         guard scale != 0 else { return String(coefficient) }
         let isNegative = coefficient < 0
         let digits = isNegative
@@ -107,7 +110,9 @@ public enum DatabaseLiteralEncoding {
         return "\(coefficient)e\(-Int64(scale))"
     }
 
-    private static func civilDate(daysSinceUnixEpoch days: Int64) -> DatabaseDate {
+    private static func calendarDateComponents(
+        daysSinceUnixEpoch days: Int64
+    ) -> (year: Int64, month: UInt8, day: UInt8) {
         let shifted = days + 719_468
         let era = (shifted >= 0 ? shifted : shifted - 146_096) / 146_097
         let dayOfEra = shifted - era * 146_097
@@ -118,17 +123,20 @@ public enum DatabaseLiteralEncoding {
         let day = dayOfYear - (153 * monthPrime + 2) / 5 + 1
         let month = monthPrime + (monthPrime < 10 ? 3 : -9)
         if month <= 2 { year += 1 }
-        return DatabaseDate(year: Int32(year), month: UInt8(month), day: UInt8(day))
+        return (year, UInt8(month), UInt8(day))
     }
 
-    private static func formattedYear(_ year: Int32) -> String {
+    private static func formattedYear(_ year: Int64) -> String {
         if year >= 0 {
-            return padded(Int(year), width: 4)
+            return padded(year, width: 4)
         }
-        return "-" + padded(abs(Int(year)), width: 4)
+        return "-" + padded(year.magnitude, width: 4)
     }
 
-    private static func padded(_ value: Int, width: Int) -> String {
+    private static func padded<T: BinaryInteger>(
+        _ value: T,
+        width: Int
+    ) -> String {
         let raw = String(value)
         guard raw.count < width else { return raw }
         return String(repeating: "0", count: width - raw.count) + raw

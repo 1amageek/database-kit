@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Typed descriptor for resumable database maintenance jobs.
 public enum DatabaseMaintenanceJobDescriptor: DatabaseJobDescriptor {
     public typealias Request = MaintenanceExecuteOperation.Request

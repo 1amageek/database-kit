@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// A typed marker used by `#Directory` to select a dynamic partition field.
 ///
 /// The macro compiles this key path into a `DirectoryPathComponent.dynamicField`

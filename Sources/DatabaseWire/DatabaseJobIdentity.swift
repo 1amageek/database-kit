@@ -1,12 +1,13 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 /// Identifies one persistent job and the exact runtime operation that owns it.
 public struct DatabaseJobIdentity: DatabaseWireValue, Hashable {
-    public let jobID: DatabaseUUID
+    public let jobID: DatabaseTypes.UUID
     public let operation: DatabaseJobOperationIdentifier
 
     public init(
-        jobID: DatabaseUUID,
+        jobID: DatabaseTypes.UUID,
         operation: DatabaseJobOperationIdentifier
     ) {
         self.jobID = jobID
@@ -24,7 +25,7 @@ public struct DatabaseJobIdentity: DatabaseWireValue, Hashable {
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         self.init(
-            jobID: try DatabaseUUID(from: &reader),
+            jobID: try DatabaseTypes.UUID(from: &reader),
             operation: try DatabaseJobOperationIdentifier(from: &reader)
         )
     }

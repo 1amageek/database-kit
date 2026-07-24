@@ -1,3 +1,4 @@
+import DatabaseTypes
 // TurtleDecoder.swift
 // Graph - Turtle (RDF) → OWLOntology decoder
 //
@@ -941,11 +942,11 @@ private enum RDFNode: Hashable {
     init(_ term: RDFTerm) throws {
         switch term {
         case .iri(let value):
-            self = .iri(value)
+            self = .iri(value.rawValue)
         case .literal(let value):
             self = .literal(value)
         case .blankNode(let value):
-            self = .blankNode(value)
+            self = .blankNode(value.rawValue)
         case .tripleTerm:
             throw TurtleDecodingError.unsupportedRDFTerm(term.description)
         }

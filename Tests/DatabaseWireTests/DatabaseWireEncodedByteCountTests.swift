@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import Synchronization
 import Testing
@@ -109,7 +110,7 @@ struct DatabaseWireEncodedByteCountTests {
         let logicalByteCount = 1_073_741_824
         let encodedByteCount = logicalByteCount + 4
         let source = BorrowObservedByteOwner(count: logicalByteCount)
-        let payload = DatabaseBytes(retaining: source)
+        let payload = ByteString(retaining: source)
         let limits = try DatabaseWireLimits(
             maximumFrameBytes: encodedByteCount,
             maximumStringBytes: 32,
@@ -134,7 +135,7 @@ struct DatabaseWireEncodedByteCountTests {
     @Test("deferred byte count overflow is reported without source borrow")
     func deferredOverflowIsReported() {
         let source = BorrowObservedByteOwner(count: Int.max)
-        let payload = DatabaseBytes(retaining: source)
+        let payload = ByteString(retaining: source)
 
         #expect(throws: DatabaseWireError.byteCountOverflow) {
             _ = try DatabaseWireWriter.encodedByteCount(
@@ -206,7 +207,7 @@ struct DatabaseWireEncodedByteCountTests {
     @Test("emission borrows a payload only during the output pass")
     func emissionBorrowsPayloadOnlyDuringOutputPass() throws {
         let source = BorrowObservedByteOwner(count: 0)
-        let payload = DatabaseBytes(retaining: source)
+        let payload = ByteString(retaining: source)
         var emittedByteCount = 0
 
         try DatabaseWireWriter.emit(
@@ -242,7 +243,7 @@ struct DatabaseWireEncodedByteCountTests {
     }
 }
 
-private final class BorrowObservedByteOwner: DatabaseByteOwner {
+private final class BorrowObservedByteOwner: ByteStringOwner {
     let count: Int
     private let borrowCountState = Mutex(0)
 

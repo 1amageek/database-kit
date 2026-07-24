@@ -1,3 +1,4 @@
+import DatabaseTypes
 import Core
 import DatabaseValue
 
@@ -31,9 +32,9 @@ public struct RDFQuadIndexKind<Root: Persistable>: IndexKind {
     }
 
     public init(
-        subject: KeyPath<Root, DatabaseRDFTerm>,
-        predicate: KeyPath<Root, DatabaseRDFTerm>,
-        object: KeyPath<Root, DatabaseRDFTerm>
+        subject: KeyPath<Root, RDFTerm>,
+        predicate: KeyPath<Root, RDFTerm>,
+        object: KeyPath<Root, RDFTerm>
     ) {
         self.subjectField = Root.fieldName(for: subject)
         self.predicateField = Root.fieldName(for: predicate)
@@ -42,10 +43,10 @@ public struct RDFQuadIndexKind<Root: Persistable>: IndexKind {
     }
 
     public init(
-        subject: KeyPath<Root, DatabaseRDFTerm>,
-        predicate: KeyPath<Root, DatabaseRDFTerm>,
-        object: KeyPath<Root, DatabaseRDFTerm>,
-        graph: KeyPath<Root, DatabaseRDFTerm>
+        subject: KeyPath<Root, RDFTerm>,
+        predicate: KeyPath<Root, RDFTerm>,
+        object: KeyPath<Root, RDFTerm>,
+        graph: KeyPath<Root, RDFTerm>
     ) {
         self.subjectField = Root.fieldName(for: subject)
         self.predicateField = Root.fieldName(for: predicate)
@@ -54,10 +55,10 @@ public struct RDFQuadIndexKind<Root: Persistable>: IndexKind {
     }
 
     public init(
-        subject: KeyPath<Root, DatabaseRDFTerm>,
-        predicate: KeyPath<Root, DatabaseRDFTerm>,
-        object: KeyPath<Root, DatabaseRDFTerm>,
-        graph: KeyPath<Root, DatabaseRDFTerm?>
+        subject: KeyPath<Root, RDFTerm>,
+        predicate: KeyPath<Root, RDFTerm>,
+        object: KeyPath<Root, RDFTerm>,
+        graph: KeyPath<Root, RDFTerm?>
     ) {
         self.subjectField = Root.fieldName(for: subject)
         self.predicateField = Root.fieldName(for: predicate)
@@ -74,22 +75,22 @@ public struct RDFQuadIndexKind<Root: Persistable>: IndexKind {
             )
         }
 
-        for type in types.prefix(3) where type != DatabaseRDFTerm.self {
+        for type in types.prefix(3) where type != RDFTerm.self {
             throw IndexTypeValidationError.unsupportedType(
                 index: identifier,
                 type: type,
-                reason: "subject, predicate, and object fields must be DatabaseRDFTerm"
+                reason: "subject, predicate, and object fields must be RDFTerm"
             )
         }
 
         if types.count == 4 {
             let graphType = types[3]
-            guard graphType == DatabaseRDFTerm.self
-                    || graphType == Optional<DatabaseRDFTerm>.self else {
+            guard graphType == RDFTerm.self
+                    || graphType == Optional<RDFTerm>.self else {
                 throw IndexTypeValidationError.unsupportedType(
                     index: identifier,
                     type: graphType,
-                    reason: "graph field must be DatabaseRDFTerm or Optional<DatabaseRDFTerm>"
+                    reason: "graph field must be RDFTerm or Optional<RDFTerm>"
                 )
             }
         }
@@ -100,10 +101,10 @@ extension RDFQuadIndexKind {
     /// Builds the canonical schema value without creating a concrete index
     /// kind instance. Runtime schema boundaries consume this representation.
     public static func canonical(
-        subject: KeyPath<Root, DatabaseRDFTerm>,
-        predicate: KeyPath<Root, DatabaseRDFTerm>,
-        object: KeyPath<Root, DatabaseRDFTerm>,
-        graph: KeyPath<Root, DatabaseRDFTerm>
+        subject: KeyPath<Root, RDFTerm>,
+        predicate: KeyPath<Root, RDFTerm>,
+        object: KeyPath<Root, RDFTerm>,
+        graph: KeyPath<Root, RDFTerm>
     ) -> IndexKindMetadata {
         IndexKindMetadata(
             identifier: identifier,
@@ -120,10 +121,10 @@ extension RDFQuadIndexKind {
 
     /// Builds canonical metadata for a nullable graph field.
     public static func canonical(
-        subject: KeyPath<Root, DatabaseRDFTerm>,
-        predicate: KeyPath<Root, DatabaseRDFTerm>,
-        object: KeyPath<Root, DatabaseRDFTerm>,
-        graph: KeyPath<Root, DatabaseRDFTerm?>
+        subject: KeyPath<Root, RDFTerm>,
+        predicate: KeyPath<Root, RDFTerm>,
+        object: KeyPath<Root, RDFTerm>,
+        graph: KeyPath<Root, RDFTerm?>
     ) -> IndexKindMetadata {
         IndexKindMetadata(
             identifier: identifier,
@@ -140,9 +141,9 @@ extension RDFQuadIndexKind {
 
     /// Builds canonical metadata for the default graph.
     public static func canonical(
-        subject: KeyPath<Root, DatabaseRDFTerm>,
-        predicate: KeyPath<Root, DatabaseRDFTerm>,
-        object: KeyPath<Root, DatabaseRDFTerm>
+        subject: KeyPath<Root, RDFTerm>,
+        predicate: KeyPath<Root, RDFTerm>,
+        object: KeyPath<Root, RDFTerm>
     ) -> IndexKindMetadata {
         IndexKindMetadata(
             identifier: identifier,

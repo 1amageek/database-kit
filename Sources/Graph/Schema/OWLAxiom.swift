@@ -1,3 +1,4 @@
+import DatabaseTypes
 // OWLAxiom.swift
 // Graph - OWL DL axiom definitions
 //

@@ -1,9 +1,11 @@
+import DatabaseTypes
+
 /// Deterministic cache discriminator for canonical RDF bytes.
 ///
 /// A fingerprint only selects a cache bucket. Callers must compare canonical
 /// bytes before treating two values as equal because hash collisions remain
 /// possible by definition.
-public struct DatabaseRDFTermEncodingFingerprint: Sendable, Hashable, Equatable {
+public struct RDFTermEncodingFingerprint: Sendable, Hashable, Equatable {
     public let high: UInt64
     public let low: UInt64
     public let byteCount: Int

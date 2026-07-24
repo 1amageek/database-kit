@@ -1,3 +1,4 @@
+import DatabaseTypes
 public import DatabaseValue
 
 /// Persistable protocol - Storage-independent persistable model interface
@@ -75,7 +76,7 @@ public protocol Persistable: Sendable, Codable {
     static var persistableIdentifierType: PersistableIdentifierType { get }
 
     /// Identifier value exposed through the `Persistable` existential boundary.
-    var persistableIdentifierValue: PersistableIdentifierValue { get }
+    var persistableIdentifierValue: ReferenceIdentifier { get }
 
     // MARK: - Metadata (Storage-independent)
 
@@ -193,6 +194,9 @@ public protocol Persistable: Sendable, Codable {
 
     /// Reconstruct a compiled persistable directly from canonical database values.
     static func decodePersistedFields(_ fields: [PersistableField]) throws -> Self
+
+    /// Reconstruct a nested model from a primitive object representation.
+    static func decodePersistedObject(_ object: FieldObject) throws -> Self
 
     /// Get field number for a field name (for Protobuf serialization)
     ///
@@ -319,7 +323,7 @@ public extension Persistable {
         ID.persistableIdentifierType
     }
 
-    var persistableIdentifierValue: PersistableIdentifierValue {
+    var persistableIdentifierValue: ReferenceIdentifier {
         id.persistableIdentifierValue
     }
 
@@ -368,6 +372,40 @@ public extension Persistable {
         throw PersistableDecodingError.missingCompiledDecoder(
             persistableType
         )
+    }
+
+    static func decodePersistedObject(_ object: FieldObject) throws -> Self {
+        var schemasByName: [String: FieldSchema] = [:]
+        for schema in fieldSchemas {
+            guard schemasByName.updateValue(
+                schema,
+                forKey: schema.name
+            ) == nil else {
+                throw PersistableDecodingError.duplicateSchemaFieldName(
+                    schema.name
+                )
+            }
+        }
+
+        var fields: [PersistableField] = []
+        fields.reserveCapacity(object.count)
+        for field in object.fields {
+            guard let schema = schemasByName[field.key],
+                  let number = UInt32(exactly: schema.fieldNumber) else {
+                throw PersistableDecodingError.unknownField(
+                    number: 0,
+                    name: field.key
+                )
+            }
+            fields.append(
+                try PersistableField(
+                    number: number,
+                    name: field.key,
+                    value: field.value
+                )
+            )
+        }
+        return try decodePersistedFields(fields)
     }
 
     /// Default implementation returns nil (no field numbers)

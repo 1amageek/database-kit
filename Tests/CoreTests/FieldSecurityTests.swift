@@ -1,3 +1,5 @@
+import DatabaseTypes
+import DatabaseValue
 // FieldSecurityTests.swift
 // Core - Tests for field-level security types
 

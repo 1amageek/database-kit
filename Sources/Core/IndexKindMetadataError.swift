@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Errors produced while decoding canonical index metadata.
 public enum IndexKindMetadataError: Error, Sendable, Equatable, CustomStringConvertible {
     case kindMismatch(expected: String, actual: String)
@@ -153,7 +154,7 @@ extension IndexKindMetadata {
 
     public func requireRDFTerm(
         _ key: String
-    ) throws(IndexKindMetadataError) -> DatabaseRDFTerm {
+    ) throws(IndexKindMetadataError) -> RDFTerm {
         guard let value = metadata[key]?.rdfTermValue else {
             throw .invalidMetadata(identifier: identifier, key: key)
         }

@@ -1,6 +1,6 @@
-public import DatabaseValue
+import DatabaseTypes
 
-extension DatabaseRDFLiteral {
+extension RDFLiteral {
     public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
         try writer.writeString(lexicalForm)
         switch annotation {
@@ -22,9 +22,9 @@ extension DatabaseRDFLiteral {
         switch try reader.readUInt8() {
         case 0:
             let rawDatatype = try reader.readString()
-            let datatype: DatabaseRDFTypedLiteralDatatype
+            let datatype: RDFTypedLiteralDatatype
             do {
-                datatype = try DatabaseRDFTypedLiteralDatatype(rawDatatype)
+                datatype = try RDFTypedLiteralDatatype(rawDatatype)
             } catch {
                 throw .invalidRDFDatatypeIRI
             }
@@ -34,7 +34,7 @@ extension DatabaseRDFLiteral {
             self.init(lexicalForm: lexicalForm, language: language)
         case 2:
             let language = try Self.readLanguageTag(from: &reader)
-            let direction: DatabaseRDFDirection
+            let direction: RDFDirection
             switch try reader.readUInt8() {
             case 0: direction = .leftToRight
             case 1: direction = .rightToLeft
@@ -52,11 +52,11 @@ extension DatabaseRDFLiteral {
 
     private static func readLanguageTag(
         from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> DatabaseRDFLanguageTag {
+    ) throws(DatabaseWireError) -> RDFLanguageTag {
         let rawLanguage = try reader.readString()
-        let language: DatabaseRDFLanguageTag
+        let language: RDFLanguageTag
         do {
-            language = try DatabaseRDFLanguageTag(rawLanguage)
+            language = try RDFLanguageTag(rawLanguage)
         } catch {
             throw .invalidRDFLanguageTag
         }

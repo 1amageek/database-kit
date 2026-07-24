@@ -1,3 +1,4 @@
+import DatabaseTypes
 public enum DatabaseWireLimit: Sendable, Hashable {
     case frameBytes
     case stringBytes

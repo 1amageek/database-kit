@@ -1,3 +1,5 @@
+import DatabaseTypes
+
 /// SPARQLTerm.swift
 /// SPARQL term types (RDF terms)
 ///
@@ -182,8 +184,8 @@ extension Literal {
             return String(v)
         case .uint(let v):
             return "\"\(v)\"^^<http://www.w3.org/2001/XMLSchema#unsignedLong>"
-        case .decimal(let coefficient, let scale):
-            return "\"\(DatabaseLiteralEncoding.decimal(coefficient: coefficient, scale: scale))\"^^<urn:database:decimal>"
+        case .decimal(let value):
+            return "\"\(DatabaseLiteralEncoding.decimal(value))\"^^<urn:database:decimal>"
         case .double(let v):
             return String(v)
         case .string(let v):
@@ -216,30 +218,31 @@ extension Literal {
         }
     }
 
-    private static func rdfTermSPARQL(_ term: DatabaseRDFTerm) -> String {
+    private static func rdfTermSPARQL(_ term: RDFTerm) -> String {
         switch term {
         case .iri(let value):
-            return SPARQLEscape.iri(value)
+            return SPARQLEscape.iri(value.rawValue)
         case .blankNode(let identifier):
-            if SPARQLEscape.ncNameOrNil(identifier) != nil {
-                return "_:\(identifier)"
+            let rawIdentifier = identifier.rawValue
+            if SPARQLEscape.ncNameOrNil(rawIdentifier) != nil {
+                return "_:\(rawIdentifier)"
             }
             var hash = UInt64(14_695_981_039_346_656_037)
-            for byte in identifier.utf8 {
+            for byte in rawIdentifier.utf8 {
                 hash = (hash ^ UInt64(byte)) &* 1_099_511_628_211
             }
             return "_:b\(hash)"
         case .literal(let literal):
             let lexical = SPARQLEscape.string(literal.lexicalForm)
-            if let language = literal.language {
-                if let direction = literal.direction {
-                    return "\(lexical)@\(language)--\(direction)"
+            if let language = literal.languageTag {
+                if let direction = literal.baseDirection {
+                    return "\(lexical)@\(language.rawValue)--\(direction.rawValue)"
                 }
-                return "\(lexical)@\(language)"
+                return "\(lexical)@\(language.rawValue)"
             }
-            return "\(lexical)^^<\(literal.datatype)>"
+            return "\(lexical)^^<\(literal.datatypeIRI.rawValue)>"
         case .tripleTerm(let subject, let predicate, let object):
-            return "<<( \(rdfTermSPARQL(subject)) \(rdfTermSPARQL(predicate)) \(rdfTermSPARQL(object)) )>>"
+            return "<<( \(rdfTermSPARQL(subject.term)) \(rdfTermSPARQL(predicate.term)) \(rdfTermSPARQL(object)) )>>"
         }
     }
 }

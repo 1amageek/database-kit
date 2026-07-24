@@ -1,23 +1,24 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public struct DatabaseRDFQuad: DatabaseWireValue, Hashable {
-    public let subject: DatabaseRDFTerm
-    public let predicate: DatabaseRDFTerm
-    public let object: DatabaseRDFTerm
-    public let graph: DatabaseRDFTerm?
+    public let subject: RDFTerm
+    public let predicate: RDFTerm
+    public let object: RDFTerm
+    public let graph: RDFTerm?
 
     public init(
-        subject: DatabaseRDFTerm,
-        predicate: DatabaseRDFTerm,
-        object: DatabaseRDFTerm,
-        graph: DatabaseRDFTerm? = nil
+        subject: RDFTerm,
+        predicate: RDFTerm,
+        object: RDFTerm,
+        graph: RDFTerm? = nil
     ) throws(DatabaseWireError) {
         do {
-            try DatabaseRDFTermCodec.validate(subject, role: .subject)
-            try DatabaseRDFTermCodec.validate(predicate, role: .predicate)
-            try DatabaseRDFTermCodec.validate(object, role: .object)
+            try RDFTermCodec.validate(subject, role: .subject)
+            try RDFTermCodec.validate(predicate, role: .predicate)
+            try RDFTermCodec.validate(object, role: .object)
             if let graph {
-                try DatabaseRDFTermCodec.validate(graph, role: .graphName)
+                try RDFTermCodec.validate(graph, role: .graphName)
             }
         } catch let error {
             throw .invalidCanonicalRDFTerm(error)

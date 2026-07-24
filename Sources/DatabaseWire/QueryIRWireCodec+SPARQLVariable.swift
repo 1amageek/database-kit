@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import QueryIR
 
@@ -89,7 +90,7 @@ extension QueryIRWireCodec {
         _ value: String
     ) throws(DatabaseWireError) {
         do {
-            _ = try DatabaseRDFIRI(value)
+            _ = try RDFIRI(value)
         } catch {
             throw .invalidRDFIRI(value)
         }

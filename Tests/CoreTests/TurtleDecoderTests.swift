@@ -1,3 +1,5 @@
+import DatabaseTypes
+import DatabaseValue
 import Testing
 import Foundation
 @testable import Graph
@@ -283,7 +285,7 @@ struct TurtleDecoderTests {
             return nil
         }
         #expect(
-            assertions.first?.datatype
+            assertions.first?.datatypeIRI.rawValue
                 == "http://www.w3.org/2001/XMLSchema#date"
         )
     }
@@ -299,7 +301,7 @@ struct TurtleDecoderTests {
             if case .dataPropertyAssertion(_, _, let value) = axiom { return value }
             return nil
         }
-        #expect(assertions.first?.language == "en")
+        #expect(assertions.first?.languageTag?.rawValue == "en")
         #expect(assertions.first?.lexicalForm == "hello")
     }
 
@@ -397,16 +399,36 @@ struct TurtleDecoderTests {
             prefixes: ["ex": "http://example.org/"],
             quads: [
                 RDFQuad(
-                    subject: .iri("http://example.org/schema"),
-                    predicate: .iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-                    object: .iri("http://www.w3.org/2002/07/owl#Ontology"),
-                    graph: .iri("urn:ontology-graph")
+                    subject: try .iri(
+                        validating: "http://example.org/schema"
+                    ),
+                    predicate: try .iri(
+                        validating:
+                            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                    ),
+                    object: try .iri(
+                        validating:
+                            "http://www.w3.org/2002/07/owl#Ontology"
+                    ),
+                    graph: try .iri(
+                        validating: "urn:ontology-graph"
+                    )
                 ),
                 RDFQuad(
-                    subject: .iri("http://example.org/Person"),
-                    predicate: .iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-                    object: .iri("http://www.w3.org/2002/07/owl#Class"),
-                    graph: .iri("urn:ontology-graph")
+                    subject: try .iri(
+                        validating: "http://example.org/Person"
+                    ),
+                    predicate: try .iri(
+                        validating:
+                            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                    ),
+                    object: try .iri(
+                        validating:
+                            "http://www.w3.org/2002/07/owl#Class"
+                    ),
+                    graph: try .iri(
+                        validating: "urn:ontology-graph"
+                    )
                 )
             ]
         )

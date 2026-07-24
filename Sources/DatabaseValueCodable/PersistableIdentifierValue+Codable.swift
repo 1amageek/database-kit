@@ -1,6 +1,7 @@
+import DatabaseTypes
 import DatabaseValue
 
-extension PersistableIdentifierValue: Codable {
+extension ReferenceIdentifier: @retroactive Codable {
     private enum CodingKeys: String, CodingKey {
         case kind
         case bool
@@ -60,27 +61,27 @@ extension PersistableIdentifierValue: Codable {
             self = .string(try container.decode(String.self, forKey: .string))
         case .bytes:
             self = .bytes(
-                DatabaseBytes(
+                ByteString(
                     try container.decode([UInt8].self, forKey: .bytes)
                 )
             )
         case .uuid:
             self = .uuid(
-                DatabaseUUID(
+                DatabaseTypes.UUID(
                     high: try container.decode(UInt64.self, forKey: .high),
                     low: try container.decode(UInt64.self, forKey: .low)
                 )
             )
         case .composite:
             let components = try container.decode(
-                [PersistableIdentifierValue].self,
+                [ReferenceIdentifier].self,
                 forKey: .components
             )
             guard !components.isEmpty else {
                 throw DecodingError.dataCorruptedError(
                     forKey: .components,
                     in: container,
-                    debugDescription: "A composite persistable identifier must contain at least one component."
+                    debugDescription: "A composite reference identifier must contain at least one component."
                 )
             }
             self = .composite(components)
@@ -134,7 +135,7 @@ extension PersistableIdentifierValue: Codable {
                     self,
                     EncodingError.Context(
                         codingPath: encoder.codingPath,
-                        debugDescription: "A composite persistable identifier must contain at least one component."
+                        debugDescription: "A composite reference identifier must contain at least one component."
                     )
                 )
             }

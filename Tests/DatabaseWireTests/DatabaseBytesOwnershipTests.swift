@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 @testable import DatabaseWire
 import Synchronization
@@ -6,7 +7,7 @@ import Testing
 @Suite("Database Bytes Ownership Tests")
 struct DatabaseBytesOwnershipTests {
     @Test func successPayloadIsAViewIntoTheSingleFinalFrameAllocation() throws {
-        let source = DatabaseBytes(
+        let source = ByteString(
             [UInt8](repeating: 0xa5, count: 1_048_576)
         )
 
@@ -33,30 +34,22 @@ struct DatabaseBytesOwnershipTests {
         #expect(encoded.frame.count == source.count + 22)
     }
 
-    @Test func exactCopySharesArrayStorageAtArrayOnlyBoundaries() throws {
-        let bytes = try DatabaseBytes.copying(count: 4) {
+    @Test func arrayOnlyBoundaryProducesTheExactBytes() throws {
+        let bytes = try ByteString.copying(count: 4) {
             (output: UnsafeMutableRawBufferPointer) throws(OwnershipTestError) in
             output[0] = 0x10
             output[1] = 0x20
             output[2] = 0x30
             output[3] = 0x40
         }
-        let array = bytes.contiguousArray()
+        let array = bytes.copyBytes()
 
-        let bytesAddress = try #require(bytes.withUnsafeBytes { buffer in
-            buffer.baseAddress.map { UInt(bitPattern: $0) }
-        })
-        let arrayAddress = try #require(array.withUnsafeBytes { buffer in
-            buffer.baseAddress.map { UInt(bitPattern: $0) }
-        })
-
-        #expect(bytesAddress == arrayAddress)
         #expect(array == [0x10, 0x20, 0x30, 0x40])
     }
 
     @Test func exactCopyPreservesTypedInitializationErrors() {
         #expect(throws: OwnershipTestError.initializationFailed) {
-            _ = try DatabaseBytes.copying(count: 4) {
+            _ = try ByteString.copying(count: 4) {
                 (_: UnsafeMutableRawBufferPointer) throws(OwnershipTestError) in
                 throw .initializationFailed
             }
@@ -69,7 +62,7 @@ struct DatabaseBytesOwnershipTests {
             buffer.baseAddress.map { UInt(bitPattern: $0) }
         })
 
-        let bytes = DatabaseBytes(source)
+        let bytes = ByteString(source)
         let bytesAddress = try #require(bytes.withUnsafeBytes { buffer in
             buffer.baseAddress.map { UInt(bitPattern: $0) }
         })
@@ -81,8 +74,8 @@ struct DatabaseBytesOwnershipTests {
     }
 
     @Test func slicesBorrowAnOffsetIntoTheSameStorage() throws {
-        let bytes: DatabaseBytes = [0x10, 0x20, 0x30, 0x40]
-        let slice = bytes.slice(1..<3)
+        let bytes: ByteString = [0x10, 0x20, 0x30, 0x40]
+        let slice = bytes[1..<3]
         let sourceAddress = try #require(bytes.withUnsafeBytes { buffer in
             buffer.baseAddress.map { UInt(bitPattern: $0) }
         })
@@ -98,8 +91,8 @@ struct DatabaseBytesOwnershipTests {
         let owner = OwnershipTestByteOwner(
             bytes: [0x10, 0x20, 0x30, 0x40]
         )
-        let bytes = DatabaseBytes(retaining: owner)
-        let slice = bytes.slice(1..<3)
+        let bytes = ByteString(retaining: owner)
+        let slice = bytes[1..<3]
         var borrowedOwnerAddress: UInt?
         owner.borrowBytes { buffer in
             borrowedOwnerAddress = buffer.baseAddress.map {
@@ -123,10 +116,10 @@ struct DatabaseBytesOwnershipTests {
         let owner = NestedBorrowDatabaseByteOwner(
             bytes: [0x10, 0x20, 0x30, 0x40]
         )
-        let bytes = DatabaseBytes(retaining: owner)
-        let lhs = bytes.slice(1..<3)
-        let equal = bytes.slice(1..<3)
-        let greater = bytes.slice(2..<4)
+        let bytes = ByteString(retaining: owner)
+        let lhs = bytes[1..<3]
+        let equal = bytes[1..<3]
+        let greater = bytes[2..<4]
 
         #expect(lhs == equal)
         #expect(lhs.lexicographicallyPrecedes(greater))
@@ -135,12 +128,12 @@ struct DatabaseBytesOwnershipTests {
 
     @Test func slicesReleaseOneAllocationExactlyOnce() {
         let releaseProbe = ReleaseProbe()
-        var bytes: DatabaseBytes? = makeOwnedBytes(
+        var bytes: ByteString? = makeOwnedBytes(
             [0x10, 0x20, 0x30, 0x40],
             releaseProbe: releaseProbe
         )
-        var firstSlice = bytes?.slice(1..<3)
-        var secondSlice = bytes?.slice(2..<4)
+        var firstSlice = bytes?[1..<3]
+        var secondSlice = bytes?[2..<4]
 
         bytes = nil
         #expect(releaseProbe.releaseCount == 0)
@@ -155,11 +148,11 @@ struct DatabaseBytesOwnershipTests {
 
     @Test func detachingASliceReleasesItsLargerOwner() throws {
         let releaseProbe = ReleaseProbe()
-        var frame: DatabaseBytes? = makeOwnedBytes(
+        var frame: ByteString? = makeOwnedBytes(
             [0x10, 0x20, 0x30, 0x40, 0x50],
             releaseProbe: releaseProbe
         )
-        var token = frame?.slice(2..<4)
+        var token = frame?[2..<4]
         var detached = token?.detached()
         let tokenAddress = try #require(token?.withUnsafeBytes { buffer in
             buffer.baseAddress.map { UInt(bitPattern: $0) }
@@ -182,7 +175,7 @@ struct DatabaseBytesOwnershipTests {
 
     @Test func detachingFullRangeCreatesExactIndependentStorage() throws {
         let releaseProbe = ReleaseProbe()
-        var frame: DatabaseBytes? = makeOwnedBytes(
+        var frame: ByteString? = makeOwnedBytes(
             [0x10, 0x20, 0x30, 0x40],
             releaseProbe: releaseProbe
         )
@@ -209,11 +202,11 @@ struct DatabaseBytesOwnershipTests {
 
     @Test func detachingEmptySliceReleasesItsLargerOwner() {
         let releaseProbe = ReleaseProbe()
-        var frame: DatabaseBytes? = makeOwnedBytes(
+        var frame: ByteString? = makeOwnedBytes(
             [0x10, 0x20, 0x30, 0x40],
             releaseProbe: releaseProbe
         )
-        var emptySlice = frame?.slice(2..<2)
+        var emptySlice = frame?[2..<2]
         let detached = emptySlice?.detached()
 
         frame = nil
@@ -224,7 +217,7 @@ struct DatabaseBytesOwnershipTests {
     }
 
     @Test func detachingExactOwnedStorageIsIdempotent() throws {
-        let exact = DatabaseBytes.copying(count: 4) { output in
+        let exact = ByteString.copying(count: 4) { output in
             output.copyBytes(from: [0x10, 0x20, 0x30, 0x40])
         }
         let first = exact.detached()
@@ -258,7 +251,7 @@ struct DatabaseBytesOwnershipTests {
         let secondAddress = try #require(second.withUnsafeBytes {
             $0.baseAddress.map { UInt(bitPattern: $0) }
         })
-        let slice = encoded.slice(1..<encoded.count)
+        let slice = encoded[1..<encoded.count]
         let detachedSlice = slice.detached()
         let sliceAddress = try #require(slice.withUnsafeBytes {
             $0.baseAddress.map { UInt(bitPattern: $0) }
@@ -275,33 +268,16 @@ struct DatabaseBytesOwnershipTests {
     private func makeOwnedBytes(
         _ bytes: [UInt8],
         releaseProbe: ReleaseProbe
-    ) -> DatabaseBytes {
-        let pointer = UnsafeMutableRawPointer.allocate(
-            byteCount: bytes.count,
-            alignment: MemoryLayout<UInt8>.alignment
+    ) -> ByteString {
+        ByteString(
+            retaining: ReleaseObservedByteOwner(
+                bytes: bytes,
+                releaseProbe: releaseProbe
+            )
         )
-        bytes.withUnsafeBytes { source in
-            if let sourceAddress = source.baseAddress {
-                pointer.copyMemory(
-                    from: sourceAddress,
-                    byteCount: source.count
-                )
-            }
-        }
-        let allocation = DatabaseByteAllocation(
-            unsafeAddress: UInt(bitPattern: pointer),
-            count: bytes.count,
-            deallocator: { address, _ in
-                if let pointer = UnsafeMutableRawPointer(bitPattern: address) {
-                    pointer.deallocate()
-                }
-                releaseProbe.recordRelease()
-            }
-        )
-        return DatabaseBytes(allocation: allocation)
     }
 
-    private final class ReleaseProbe: Sendable {
+    fileprivate final class ReleaseProbe: Sendable {
         private let state = Mutex(0)
 
         var releaseCount: Int {
@@ -314,11 +290,38 @@ struct DatabaseBytesOwnershipTests {
     }
 }
 
+private final class ReleaseObservedByteOwner: ByteStringOwner {
+    let bytes: [UInt8]
+    let releaseProbe: DatabaseBytesOwnershipTests.ReleaseProbe
+
+    init(
+        bytes: [UInt8],
+        releaseProbe: DatabaseBytesOwnershipTests.ReleaseProbe
+    ) {
+        self.bytes = bytes
+        self.releaseProbe = releaseProbe
+    }
+
+    deinit {
+        releaseProbe.recordRelease()
+    }
+
+    var count: Int {
+        bytes.count
+    }
+
+    func borrowBytes(
+        _ body: (UnsafeRawBufferPointer) throws -> Void
+    ) rethrows {
+        try bytes.withUnsafeBytes(body)
+    }
+}
+
 private enum OwnershipTestError: Error {
     case initializationFailed
 }
 
-private struct OwnershipTestByteOwner: DatabaseByteOwner {
+private struct OwnershipTestByteOwner: ByteStringOwner {
     let bytes: [UInt8]
 
     var count: Int {
@@ -332,7 +335,7 @@ private struct OwnershipTestByteOwner: DatabaseByteOwner {
     }
 }
 
-private final class NestedBorrowDatabaseByteOwner: DatabaseByteOwner {
+private final class NestedBorrowDatabaseByteOwner: ByteStringOwner {
     let bytes: [UInt8]
     private let state = Mutex((active: 0, maximum: 0))
 

@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 /// Performs bounded, non-recursive validation of canonical QueryIR.
@@ -39,11 +40,11 @@ public enum QueryStructuralValidator {
 
     /// Validates parameter payloads before recursive binding begins.
     public static func validate(
-        parameters: [DatabaseObjectField],
+        parameters: [QueryParameter],
         limits: QueryStructuralLimits = .default
     ) throws(QueryStructuralValidationError) {
         var validation = ValidationTraversal(limits: limits)
-        try validation.validateDatabaseFields(parameters)
+        try validation.validateParameters(parameters)
     }
 
     static func validateBoundStructure(
@@ -137,8 +138,8 @@ private extension QueryStructuralValidator {
         case literal(Literal, depth: UInt64)
         case boundParameterLiteral(FieldValue, depth: UInt64)
         case fieldValue(FieldValue, depth: UInt64)
-        case persistableIdentifier(PersistableIdentifierValue, depth: UInt64)
-        case rdfTerm(DatabaseRDFTerm, depth: UInt64)
+        case persistableIdentifier(ReferenceIdentifier, depth: UInt64)
+        case rdfTerm(RDFTerm, depth: UInt64)
         case propertyPath(PropertyPath, depth: UInt64)
         case triple(TriplePattern, depth: UInt64)
         case quad(Quad, depth: UInt64)
@@ -813,12 +814,33 @@ private extension QueryStructuralValidator {
                         }
                     case .rdfTerm(let term):
                         validationSteps.append(.rdfTerm(term, depth: childDepth))
+                    case .object(let object):
+                        try appendFieldObject(
+                            object,
+                            depth: childDepth,
+                            to: &validationSteps
+                        )
+                    case .reference(let reference):
+                        do {
+                            try reference.id.validate()
+                        } catch let error {
+                            throw .invalidReferenceIdentifier(error)
+                        }
+                        validationSteps.append(
+                            .persistableIdentifier(reference.id, depth: childDepth)
+                        )
+                        try appendFieldObject(
+                            reference.partitions,
+                            depth: childDepth,
+                            to: &validationSteps
+                        )
                     case .null, .bool,
                          .int8, .int16, .int32, .int64,
                          .uint8, .uint16, .uint32, .uint64,
                          .float32, .float64, .decimal,
-                         .string, .bytes, .date, .timestamp, .uuid,
-                         .object, .reference:
+                         .string, .bytes, .date, .time, .dateTime, .timestamp,
+                         .timeSpan, .calendarPeriod,
+                         .geographicPoint, .geographicPosition, .vector, .uuid:
                         break
                     }
 
@@ -830,19 +852,17 @@ private extension QueryStructuralValidator {
                             validationSteps.append(.fieldValue(value, depth: childDepth))
                         }
                     case .object(let fields):
-                        try appendDatabaseFields(fields, depth: childDepth, to: &validationSteps)
+                        try appendFieldObject(fields, depth: childDepth, to: &validationSteps)
                     case .reference(let identity):
                         do {
-                            try PersistableIdentifierValidator.validateStructure(
-                                identity.id
-                            )
+                            try identity.id.validate()
                         } catch let error {
-                            throw .invalidPersistableIdentifier(error)
+                            throw .invalidReferenceIdentifier(error)
                         }
                         validationSteps.append(
                             .persistableIdentifier(identity.id, depth: childDepth)
                         )
-                        try appendDatabaseFields(
+                        try appendFieldObject(
                             identity.partitions,
                             depth: childDepth,
                             to: &validationSteps
@@ -853,7 +873,9 @@ private extension QueryStructuralValidator {
                          .int8, .int16, .int32, .int64,
                          .uint8, .uint16, .uint32, .uint64,
                          .float32, .float64, .decimal,
-                         .string, .bytes, .date, .timestamp, .uuid:
+                         .string, .bytes, .date, .time, .dateTime, .timestamp,
+                         .timeSpan, .calendarPeriod,
+                         .geographicPoint, .geographicPosition, .vector, .uuid:
                         break
                     }
 
@@ -870,8 +892,8 @@ private extension QueryStructuralValidator {
                 case .rdfTerm(let term, _):
                     if case .tripleTerm(let subject, let predicate, let object) = term {
                         validationSteps.append(.rdfTerm(object, depth: childDepth))
-                        validationSteps.append(.rdfTerm(predicate, depth: childDepth))
-                        validationSteps.append(.rdfTerm(subject, depth: childDepth))
+                        validationSteps.append(.rdfTerm(predicate.term, depth: childDepth))
+                        validationSteps.append(.rdfTerm(subject.term, depth: childDepth))
                     }
 
                 case .propertyPath(let path, _):
@@ -967,14 +989,14 @@ private extension QueryStructuralValidator {
             }
         }
 
-        mutating func validateDatabaseFields(
-            _ fields: [DatabaseObjectField]
+        mutating func validateParameters(
+            _ parameters: [QueryParameter]
         ) throws(QueryStructuralValidationError) {
-            try consumeCollection(fields.count)
+            try consumeCollection(parameters.count)
             var validationSteps: [ValidationStep] = []
-            validationSteps.reserveCapacity(fields.count)
-            for field in fields.reversed() {
-                validationSteps.append(.fieldValue(field.value, depth: 0))
+            validationSteps.reserveCapacity(parameters.count)
+            for parameter in parameters.reversed() {
+                validationSteps.append(.fieldValue(parameter.value, depth: 0))
             }
             try validate(consume validationSteps)
         }
@@ -1053,14 +1075,15 @@ private extension QueryStructuralValidator {
             depth: UInt64,
             to validationSteps: inout [ValidationStep]
         ) throws(QueryStructuralValidationError) {
-            try appendDatabaseFields(table.partitions, depth: depth, to: &validationSteps)
+            try appendFieldObject(table.partitions, depth: depth, to: &validationSteps)
         }
 
-        private mutating func appendDatabaseFields(
-            _ fields: [DatabaseObjectField],
+        private mutating func appendFieldObject(
+            _ object: FieldObject,
             depth: UInt64,
             to validationSteps: inout [ValidationStep]
         ) throws(QueryStructuralValidationError) {
+            let fields = object.fields
             try consumeCollection(fields.count)
             for field in fields.reversed() {
                 validationSteps.append(.fieldValue(field.value, depth: depth))

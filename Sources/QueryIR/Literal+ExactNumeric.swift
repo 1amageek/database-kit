@@ -1,3 +1,5 @@
+import DatabaseTypes
+
 extension Literal {
     public static func parseInteger(_ lexicalForm: String) -> Literal? {
         if let value = Int64(lexicalForm) {
@@ -49,7 +51,7 @@ extension Literal {
         var digits = String(whole) + String(fraction)
         while digits.first == "0" { digits.removeFirst() }
         if digits.isEmpty {
-            return .decimal(coefficient: 0, scale: 0)
+            return .decimal(ExactDecimal(coefficient: 0, scale: 0))
         }
 
         var scale = Int64(fraction.count)
@@ -62,8 +64,10 @@ extension Literal {
         }
 
         let signedDigits = isNegative ? "-" + digits : digits
-        guard let coefficient = Int64(signedDigits) else { return nil }
-        return .decimal(coefficient: coefficient, scale: adjustedScale)
+        guard let coefficient = Int128(signedDigits) else { return nil }
+        return .decimal(
+            ExactDecimal(coefficient: coefficient, scale: adjustedScale)
+        )
     }
 
     public func compareExactNumeric(to other: Literal) -> Int? {
@@ -90,9 +94,9 @@ private struct ExactNumericMagnitude {
         case .uint(let value):
             lexicalDigits = String(value)
             scale = 0
-        case .decimal(let coefficient, let valueScale):
-            lexicalDigits = String(coefficient)
-            scale = Int64(valueScale)
+        case .decimal(let value):
+            lexicalDigits = String(value.coefficient)
+            scale = Int64(value.scale)
         default:
             return nil
         }

@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// A compiled component of a database directory path.
 ///
 /// Persistable macros emit this value model directly so runtime directory

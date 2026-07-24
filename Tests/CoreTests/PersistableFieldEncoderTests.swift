@@ -1,3 +1,4 @@
+import DatabaseTypes
 import Core
 import DatabaseValue
 import Foundation
@@ -7,9 +8,10 @@ import Testing
 struct PersistableFieldEncoderTests {
     @Test("Compiled documents round-trip without JSON")
     func compiledDocumentRoundTrip() throws {
-        let externalID = try #require(
-            UUID(uuidString: "00112233-4455-6677-8899-aabbccddeeff")
+        let parsedExternalID = Foundation.UUID(
+            uuidString: "00112233-4455-6677-8899-aabbccddeeff"
         )
+        let externalID = try #require(parsedExternalID)
         let occurredAt = Date(timeIntervalSince1970: 1_721_234_567.125)
         let document = PersistableFieldEncoderTestDocument(
             title: "Runtime",
@@ -21,7 +23,7 @@ struct PersistableFieldEncoderTests {
         let fields = try PersistableFieldEncoder.encode(document)
         let byName = Dictionary(uniqueKeysWithValues: fields.map { ($0.name, $0.value) })
 
-        #expect(byName["externalID"] == .uuid(DatabaseUUID(
+        #expect(byName["externalID"] == .uuid(DatabaseTypes.UUID(
             high: 0x0011_2233_4455_6677,
             low: 0x8899_AABB_CCDD_EEFF
         )))

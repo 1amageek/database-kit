@@ -1,3 +1,4 @@
+import DatabaseTypes
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
@@ -109,7 +110,7 @@ public struct HyperLogLog: Sendable, Codable, Hashable {
     /// - Parameter value: The value to add
     public mutating func add(
         _ value: FieldValue
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         let hash = try value.stableHash()
         addHash(hash)
     }

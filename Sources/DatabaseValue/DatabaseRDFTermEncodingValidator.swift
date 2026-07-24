@@ -1,6 +1,8 @@
-struct DatabaseRDFTermEncodingValidator {
+import DatabaseTypes
+
+struct RDFTermEncodingValidator {
     let bytes: UnsafeRawBufferPointer
-    let limits: DatabaseRDFTermCodecLimits
+    let limits: RDFTermCodecLimits
     private(set) var offset = 0
     private(set) var objectCount = 0
     private(set) var maximumDepth = 0
@@ -9,24 +11,24 @@ struct DatabaseRDFTermEncodingValidator {
 
     mutating func validateTerm(
         depth: Int
-    ) throws(DatabaseRDFTermCodecError) -> DatabaseRDFTermKind {
+    ) throws(RDFTermCodecError) -> RDFTermKind {
         try registerTerm(at: depth)
-        let kind: DatabaseRDFTermKind
+        let kind: RDFTermKind
         switch try readByte() {
-        case DatabaseRDFTermKind.blankNode.rawValue:
+        case RDFTermKind.blankNode.rawValue:
             let identifier = try readStringRange()
             try validateUTF8(identifier)
             guard !identifier.isEmpty else {
                 throw .invalidBlankNodeIdentifier
             }
             kind = .blankNode
-        case DatabaseRDFTermKind.iri.rawValue:
+        case RDFTermKind.iri.rawValue:
             try validateIRI(try readStringRange())
             kind = .iri
-        case DatabaseRDFTermKind.literal.rawValue:
+        case RDFTermKind.literal.rawValue:
             try validateLiteral()
             kind = .literal
-        case DatabaseRDFTermKind.tripleTerm.rawValue:
+        case RDFTermKind.tripleTerm.rawValue:
             let nestedDepth = depth + 1
             let subject = try validateTerm(depth: nestedDepth)
             guard subject == .iri || subject == .blankNode else {
@@ -45,7 +47,7 @@ struct DatabaseRDFTermEncodingValidator {
     }
 
     private mutating func validateLiteral(
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         let lexicalForm = try readStringRange()
         try validateUTF8(lexicalForm)
         switch try readByte() {
@@ -55,12 +57,12 @@ struct DatabaseRDFTermEncodingValidator {
                 try validateIRI(datatype)
                 guard !matchesASCII(
                     datatype,
-                    DatabaseRDFIRI.rdfLanguageString.rawValue
+                    RDFIRI.rdfLanguageString.rawValue
                 ), !matchesASCII(
                     datatype,
-                    DatabaseRDFIRI.rdfDirectionalLanguageString.rawValue
+                    RDFIRI.rdfDirectionalLanguageString.rawValue
                 ) else {
-                    throw DatabaseRDFTermCodecError.invalidDatatypeIRI
+                    throw RDFTermCodecError.invalidDatatypeIRI
                 }
             } catch {
                 throw .invalidDatatypeIRI
@@ -81,7 +83,7 @@ struct DatabaseRDFTermEncodingValidator {
     }
 
     private mutating func readStringRange(
-    ) throws(DatabaseRDFTermCodecError) -> Range<Int> {
+    ) throws(RDFTermCodecError) -> Range<Int> {
         let storedByteCount = try readCount()
         guard storedByteCount > 0 else {
             throw .nonCanonicalStringEncoding
@@ -96,7 +98,7 @@ struct DatabaseRDFTermEncodingValidator {
     }
 
     private mutating func readCount(
-    ) throws(DatabaseRDFTermCodecError) -> Int {
+    ) throws(RDFTermCodecError) -> Int {
         var value: UInt64 = 0
         for byteIndex in 0..<10 {
             let byte = try readByte()
@@ -118,7 +120,7 @@ struct DatabaseRDFTermEncodingValidator {
     }
 
     private mutating func readByte(
-    ) throws(DatabaseRDFTermCodecError) -> UInt8 {
+    ) throws(RDFTermCodecError) -> UInt8 {
         guard offset < bytes.count else { throw .truncated }
         let byte = bytes[offset]
         offset += 1
@@ -127,7 +129,7 @@ struct DatabaseRDFTermEncodingValidator {
 
     private mutating func registerTerm(
         at depth: Int
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         guard depth <= limits.maximumDepth else {
             throw .maximumDepthExceeded(
                 actual: depth,
@@ -148,7 +150,7 @@ struct DatabaseRDFTermEncodingValidator {
 
     private func validateUTF8(
         _ range: Range<Int>
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         var index = range.lowerBound
         while index < range.upperBound {
             index = try readScalar(at: index, end: range.upperBound).nextIndex
@@ -158,7 +160,7 @@ struct DatabaseRDFTermEncodingValidator {
     private func readScalar(
         at index: Int,
         end: Int
-    ) throws(DatabaseRDFTermCodecError) -> (scalar: UInt32, nextIndex: Int) {
+    ) throws(RDFTermCodecError) -> (scalar: UInt32, nextIndex: Int) {
         let first = bytes[index]
         if first == 0 {
             throw .nonCanonicalStringEncoding
@@ -225,7 +227,7 @@ struct DatabaseRDFTermEncodingValidator {
 
     private func validateIRI(
         _ range: Range<Int>
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         try validateUTF8(range)
         guard let colon = firstIndex(of: 0x3A, in: range) else {
             throw .invalidIRI(.missingScheme)
@@ -287,7 +289,7 @@ struct DatabaseRDFTermEncodingValidator {
     private func validateIRIScheme(
         _ range: Range<Int>,
         sourceStart: Int
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         guard let first = range.first else {
             throw .invalidIRI(.missingScheme)
         }
@@ -310,7 +312,7 @@ struct DatabaseRDFTermEncodingValidator {
     private func validateIRIAuthority(
         _ range: Range<Int>,
         sourceStart: Int
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         let at = lastIndex(of: 0x40, in: range)
         let hostPortStart: Int
         if let at {
@@ -358,7 +360,7 @@ struct DatabaseRDFTermEncodingValidator {
 
     private func validatePort(
         _ range: Range<Int>
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         var index = range.lowerBound
         while index < range.upperBound {
             guard isASCIIDigit(bytes[index]) else {
@@ -372,7 +374,7 @@ struct DatabaseRDFTermEncodingValidator {
         _ range: Range<Int>,
         component: IRIComponent,
         sourceStart: Int
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         var index = range.lowerBound
         while index < range.upperBound {
             let start = index
@@ -408,7 +410,7 @@ struct DatabaseRDFTermEncodingValidator {
 
     private func validateIPLiteral(
         _ range: Range<Int>
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         if let first = range.first, bytes[first] == 86 || bytes[first] == 118 {
             guard validateIPvFuture(range) else {
                 throw .invalidIRI(.invalidIPLiteral)
@@ -544,9 +546,9 @@ struct DatabaseRDFTermEncodingValidator {
 
     private func validateLanguageTag(
         _ range: Range<Int>
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         try validateUTF8(range)
-        guard DatabaseRDFLanguageTagBytesValidator.validate(bytes, range: range) else {
+        guard RDFLanguageTag.isValid(utf8: bytes, in: range) else {
             throw .invalidLanguageTag
         }
         var index = range.lowerBound

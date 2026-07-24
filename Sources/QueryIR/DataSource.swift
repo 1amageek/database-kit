@@ -6,6 +6,7 @@
 /// - ISO/IEC 9075-16:2023 (SQL/PGQ GRAPH_TABLE)
 /// - W3C SPARQL 1.1/1.2 (Graph Patterns, SERVICE)
 
+import DatabaseTypes
 import DatabaseValue
 
 /// Table reference (SQL)
@@ -20,13 +21,13 @@ public struct TableRef: Sendable, Equatable, Hashable {
     public let alias: String?
 
     /// Typed values for the table's compiled dynamic directory components.
-    public let partitions: [DatabaseObjectField]
+    public let partitions: FieldObject
 
     public init(
         schema: String? = nil,
         table: String,
         alias: String? = nil,
-        partitions: [DatabaseObjectField] = []
+        partitions: FieldObject = FieldObject()
     ) {
         self.schema = schema
         self.table = table
@@ -37,7 +38,7 @@ public struct TableRef: Sendable, Equatable, Hashable {
     /// Create a simple table reference
     public init(
         _ table: String,
-        partitions: [DatabaseObjectField] = []
+        partitions: FieldObject = FieldObject()
     ) {
         self.schema = nil
         self.table = table

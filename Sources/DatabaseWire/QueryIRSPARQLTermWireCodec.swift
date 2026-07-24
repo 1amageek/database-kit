@@ -1,3 +1,4 @@
+import DatabaseTypes
 import QueryIR
 
 /// Encodes and decodes recursive SPARQL-star terms without process-stack recursion.

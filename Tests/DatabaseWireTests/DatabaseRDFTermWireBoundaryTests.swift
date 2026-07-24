@@ -1,36 +1,13 @@
+import DatabaseTypes
 import DatabaseValue
 import DatabaseWire
 import Testing
 
 @Suite("Database RDF term wire boundaries")
 struct DatabaseRDFTermWireBoundaryTests {
-    @Test("wire encoding rejects invalid RDF state")
-    func invalidEncodeState() {
-        #expect(
-            throws: DatabaseWireError.invalidCanonicalRDFTerm(
-                .invalidIRI(.missingScheme)
-            )
-        ) {
-            _ = try encodeTerm(.iri("relative"))
-        }
-        #expect(
-            throws: DatabaseWireError.invalidCanonicalRDFTerm(
-                .invalidTriplePredicate
-            )
-        ) {
-            _ = try encodeTerm(
-                .tripleTerm(
-                    subject: .iri("urn:subject"),
-                    predicate: .blankNode("predicate"),
-                    object: .iri("urn:object")
-                )
-            )
-        }
-    }
-
     @Test("wire decoding rejects invalid RDF state")
     func invalidDecodeState() {
-        var reader = DatabaseWireReader(DatabaseBytes([
+        var reader = DatabaseWireReader(ByteString([
             5, 0, 0, 0,
             2, 4, 0x62, 0x61, 0x64,
         ]))
@@ -40,17 +17,17 @@ struct DatabaseRDFTermWireBoundaryTests {
                 .invalidIRI(.missingScheme)
             )
         ) {
-            _ = try DatabaseRDFTerm(from: &reader)
+            _ = try RDFTerm(from: &reader)
         }
     }
 
     @Test("wire RDF payload is exactly the canonical term representation")
     func wireUsesCanonicalTermEncoding() throws {
-        let term = DatabaseRDFTerm.literal(DatabaseRDFLiteral(
+        let term = RDFTerm.literal(RDFLiteral(
             lexicalForm: "before\0after",
-            language: try DatabaseRDFLanguageTag("ja")
+            language: try RDFLanguageTag("ja")
         ))
-        let canonical = try DatabaseRDFTermCodec.encode(term)
+        let canonical = try RDFTermCodec.encode(term)
         let wire = try encodeTerm(term)
         var expected = [
             UInt8(truncatingIfNeeded: canonical.count),
@@ -60,18 +37,22 @@ struct DatabaseRDFTermWireBoundaryTests {
         ]
         expected.append(contentsOf: canonical)
 
-        #expect(wire == DatabaseBytes(expected))
+        #expect(wire == ByteString(expected))
     }
 
     @Test("wire encoding applies depth and object budgets")
     func encodeBudgets() throws {
-        let leaf = DatabaseRDFTerm.iri("urn:leaf")
-        let nested = DatabaseRDFTerm.tripleTerm(
-            subject: .iri("urn:subject"),
-            predicate: .iri("urn:predicate"),
+        let leaf = RDFTerm.iri(try RDFIRI("urn:leaf"))
+        let nested = RDFTerm.tripleTerm(
+            subject: .iri(try RDFIRI("urn:subject")),
+            predicate: try RDFPredicateIRI("urn:predicate"),
             object: .tripleTerm(
-                subject: .blankNode("inner"),
-                predicate: .iri("urn:inner-predicate"),
+                subject: .blankNode(
+                    try RDFBlankNodeIdentifier("inner")
+                ),
+                predicate: try RDFPredicateIRI(
+                    "urn:inner-predicate"
+                ),
                 object: leaf
             )
         )
@@ -95,19 +76,19 @@ struct DatabaseRDFTermWireBoundaryTests {
     }
 
     @Test("quad construction validates every RDF role")
-    func quadRoleValidation() {
+    func quadRoleValidation() throws {
         #expect(
             throws: DatabaseWireError.invalidCanonicalRDFTerm(
                 .invalidRole(expected: .subject, actual: .literal)
             )
         ) {
             _ = try DatabaseRDFQuad(
-                subject: .literal(DatabaseRDFLiteral(
+                subject: .literal(RDFLiteral(
                     lexicalForm: "invalid",
                     datatype: .xsdString
                 )),
-                predicate: .iri("urn:predicate"),
-                object: .iri("urn:object")
+                predicate: .iri(try RDFIRI("urn:predicate")),
+                object: .iri(try RDFIRI("urn:object"))
             )
         }
         #expect(
@@ -116,17 +97,19 @@ struct DatabaseRDFTermWireBoundaryTests {
             )
         ) {
             _ = try DatabaseRDFQuad(
-                subject: .iri("urn:subject"),
-                predicate: .blankNode("invalid"),
-                object: .iri("urn:object")
+                subject: .iri(try RDFIRI("urn:subject")),
+                predicate: .blankNode(
+                    try RDFBlankNodeIdentifier("invalid")
+                ),
+                object: .iri(try RDFIRI("urn:object"))
             )
         }
     }
 
     private func encodeTerm(
-        _ term: DatabaseRDFTerm,
+        _ term: RDFTerm,
         limits: DatabaseWireLimits = .default
-    ) throws(DatabaseWireError) -> DatabaseBytes {
+    ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
             try term.encode(into: &writer)

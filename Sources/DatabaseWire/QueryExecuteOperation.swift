@@ -1,5 +1,6 @@
-public import DatabaseValue
-public import QueryIR
+import DatabaseTypes
+import DatabaseValue
+import QueryIR
 
 public enum QueryExecuteOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.queryExecute
@@ -50,9 +51,9 @@ public enum QueryExecuteOperation: DatabaseOperation {
 
     public struct Page: DatabaseWireValue, Hashable {
         public let limit: UInt32
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
 
-        public init(limit: UInt32 = 1_000, continuation: DatabaseBytes? = nil) {
+        public init(limit: UInt32 = 1_000, continuation: ByteString? = nil) {
             self.limit = limit
             self.continuation = continuation
         }
@@ -69,15 +70,15 @@ public enum QueryExecuteOperation: DatabaseOperation {
 
     public struct Request: DatabaseWireValue, Hashable {
         public let input: Input
-        public let parameters: [DatabaseObjectField]
-        public let graphPartitions: [DatabaseObjectField]
+        public let parameters: [QueryParameter]
+        public let graphPartitions: FieldObject
         public let page: Page
         public let budget: DatabaseExecutionBudget
 
         public init(
             input: Input,
-            parameters: [DatabaseObjectField] = [],
-            graphPartitions: [DatabaseObjectField] = [],
+            parameters: [QueryParameter] = [],
+            graphPartitions: FieldObject = FieldObject(),
             page: Page = Page(),
             budget: DatabaseExecutionBudget = DatabaseExecutionBudget()
         ) {
@@ -92,8 +93,7 @@ public enum QueryExecuteOperation: DatabaseOperation {
             try input.encode(into: &writer)
             try writer.writeCount(parameters.count)
             for parameter in parameters { try parameter.encode(into: &writer) }
-            try writer.writeCount(graphPartitions.count)
-            for partition in graphPartitions { try partition.encode(into: &writer) }
+            try graphPartitions.encode(into: &writer)
             try page.encode(into: &writer)
             try budget.encode(into: &writer)
         }
@@ -101,36 +101,56 @@ public enum QueryExecuteOperation: DatabaseOperation {
         public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let input = try Input(from: &reader)
             let count = try reader.readCount()
-            var parameters: [DatabaseObjectField] = []
+            var parameters: [QueryParameter] = []
             parameters.reserveCapacity(count)
             for _ in 0..<count {
-                parameters.append(try DatabaseObjectField(from: &reader))
-            }
-            let graphPartitionCount = try reader.readCount()
-            var graphPartitions: [DatabaseObjectField] = []
-            graphPartitions.reserveCapacity(graphPartitionCount)
-            for _ in 0..<graphPartitionCount {
-                graphPartitions.append(try DatabaseObjectField(from: &reader))
+                parameters.append(try QueryParameter(from: &reader))
             }
             self.init(
                 input: input,
                 parameters: parameters,
-                graphPartitions: graphPartitions,
+                graphPartitions: try FieldObject(from: &reader),
                 page: try Page(from: &reader),
                 budget: try DatabaseExecutionBudget(from: &reader)
             )
         }
     }
 
+    public struct Column: Sendable, Hashable {
+        public let number: UInt32
+        public let name: String
+
+        public init(number: UInt32, name: String) {
+            self.number = number
+            self.name = name
+        }
+
+        fileprivate func encode(
+            into writer: inout DatabaseWireWriter
+        ) throws(DatabaseWireError) {
+            writer.writeUInt32(number)
+            try writer.writeString(name)
+        }
+
+        fileprivate init(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            self.init(
+                number: try reader.readUInt32(),
+                name: try reader.readString()
+            )
+        }
+    }
+
     public struct Row: Sendable, Hashable {
-        public let values: [DatabaseObjectField]
-        public let annotations: [DatabaseObjectField]
-        public let version: DatabaseBytes?
+        public let values: [FieldValue]
+        public let annotations: FieldObject
+        public let version: ByteString?
 
         public init(
-            values: [DatabaseObjectField],
-            annotations: [DatabaseObjectField] = [],
-            version: DatabaseBytes? = nil
+            values: [FieldValue],
+            annotations: FieldObject = FieldObject(),
+            version: ByteString? = nil
         ) {
             self.values = values
             self.annotations = annotations
@@ -140,44 +160,58 @@ public enum QueryExecuteOperation: DatabaseOperation {
         fileprivate func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             try writer.writeCount(values.count)
             for value in values { try value.encode(into: &writer) }
-            try writer.writeCount(annotations.count)
-            for annotation in annotations { try annotation.encode(into: &writer) }
+            try annotations.encode(into: &writer)
             try writer.writeOptionalBytes(version)
         }
 
         fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let valueCount = try reader.readCount()
-            var values: [DatabaseObjectField] = []
+            var values: [FieldValue] = []
             values.reserveCapacity(valueCount)
-            for _ in 0..<valueCount { values.append(try DatabaseObjectField(from: &reader)) }
-            let annotationCount = try reader.readCount()
-            var annotations: [DatabaseObjectField] = []
-            annotations.reserveCapacity(annotationCount)
-            for _ in 0..<annotationCount {
-                annotations.append(try DatabaseObjectField(from: &reader))
+            for _ in 0..<valueCount {
+                values.append(try FieldValue(from: &reader))
             }
             self.init(
                 values: values,
-                annotations: annotations,
+                annotations: try FieldObject(from: &reader),
                 version: try reader.readOptionalBytes()
             )
         }
     }
 
     public struct RowPage: Sendable, Hashable {
+        public let columns: [Column]
         public let rows: [Row]
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
         public let snapshotVersion: UInt64?
 
-        public init(rows: [Row], continuation: DatabaseBytes? = nil, snapshotVersion: UInt64? = nil) {
+        public init(
+            columns: [Column],
+            rows: [Row],
+            continuation: ByteString? = nil,
+            snapshotVersion: UInt64? = nil
+        ) {
+            self.columns = columns
             self.rows = rows
             self.continuation = continuation
             self.snapshotVersion = snapshotVersion
         }
 
         fileprivate func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+            try writer.writeCount(columns.count)
+            for column in columns {
+                try column.encode(into: &writer)
+            }
             try writer.writeCount(rows.count)
-            for row in rows { try row.encode(into: &writer) }
+            for row in rows {
+                guard row.values.count == columns.count else {
+                    throw .invalidRowValueCount(
+                        expected: columns.count,
+                        actual: row.values.count
+                    )
+                }
+                try row.encode(into: &writer)
+            }
             try writer.writeOptionalBytes(continuation)
             if let snapshotVersion {
                 writer.writeBool(true)
@@ -188,24 +222,44 @@ public enum QueryExecuteOperation: DatabaseOperation {
         }
 
         fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+            let columnCount = try reader.readCount()
+            var columns: [Column] = []
+            columns.reserveCapacity(columnCount)
+            for _ in 0..<columnCount {
+                columns.append(try Column(from: &reader))
+            }
             let count = try reader.readCount()
             var rows: [Row] = []
             rows.reserveCapacity(count)
-            for _ in 0..<count { rows.append(try Row(from: &reader)) }
+            for _ in 0..<count {
+                let row = try Row(from: &reader)
+                guard row.values.count == columnCount else {
+                    throw .invalidRowValueCount(
+                        expected: columnCount,
+                        actual: row.values.count
+                    )
+                }
+                rows.append(row)
+            }
             let continuation = try reader.readOptionalBytes()
             let snapshotVersion = try reader.readBool() ? try reader.readUInt64() : nil
-            self.init(rows: rows, continuation: continuation, snapshotVersion: snapshotVersion)
+            self.init(
+                columns: columns,
+                rows: rows,
+                continuation: continuation,
+                snapshotVersion: snapshotVersion
+            )
         }
     }
 
     public struct GraphPage: Sendable, Hashable {
         public let triples: [DatabaseRDFQuad]
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
         public let snapshotVersion: Int64?
 
         public init(
             triples: [DatabaseRDFQuad],
-            continuation: DatabaseBytes? = nil,
+            continuation: ByteString? = nil,
             snapshotVersion: Int64? = nil
         ) {
             self.triples = triples

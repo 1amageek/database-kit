@@ -1,19 +1,20 @@
+import DatabaseTypes
 import DatabaseValue
 
 /// Little-endian reader used by database-kit wire DTOs.
 public struct DatabaseWireReader: Sendable {
-    private let bytes: DatabaseBytes
+    private let bytes: ByteString
     private var offset: Int
     private var nestingDepth: Int
     private var decodedObjectCount: Int
     public let limits: DatabaseWireLimits
 
     public init(_ bytes: [UInt8], limits: DatabaseWireLimits = .default) {
-        self.init(DatabaseBytes(bytes), limits: limits)
+        self.init(ByteString(bytes), limits: limits)
     }
 
     public init(
-        _ bytes: DatabaseBytes,
+        _ bytes: ByteString,
         limits: DatabaseWireLimits = .default
     ) {
         self.bytes = bytes
@@ -100,6 +101,12 @@ public struct DatabaseWireReader: Sendable {
         Int64(bitPattern: try readUInt64())
     }
 
+    public mutating func readInt128() throws(DatabaseWireError) -> Int128 {
+        let low = UInt128(try readUInt64())
+        let high = UInt128(try readUInt64()) << 64
+        return Int128(bitPattern: high | low)
+    }
+
     public mutating func readUInt64() throws(DatabaseWireError) -> UInt64 {
         try validateFrameSize()
         guard offset + 8 <= bytes.count else {
@@ -127,7 +134,7 @@ public struct DatabaseWireReader: Sendable {
         Float(bitPattern: try readUInt32())
     }
 
-    public mutating func readBytes() throws(DatabaseWireError) -> DatabaseBytes {
+    public mutating func readBytes() throws(DatabaseWireError) -> ByteString {
         let intCount = try readLength()
         guard intCount <= limits.maximumByteStringBytes else {
             throw .byteStringTooLarge(actual: intCount, maximum: limits.maximumByteStringBytes)
@@ -135,14 +142,14 @@ public struct DatabaseWireReader: Sendable {
         guard intCount <= bytes.count - offset else {
             throw DatabaseWireError.truncated
         }
-        let value = bytes.slice(offset..<(offset + intCount))
+        let value = bytes[offset..<(offset + intCount)]
         offset += intCount
         return value
     }
 
     mutating func readUnframedBytes(
         count: Int
-    ) throws(DatabaseWireError) -> DatabaseBytes {
+    ) throws(DatabaseWireError) -> ByteString {
         try validateFrameSize()
         guard count >= 0 else {
             throw .byteCountOverflow
@@ -150,7 +157,7 @@ public struct DatabaseWireReader: Sendable {
         guard count <= bytes.count - offset else {
             throw .truncated
         }
-        let value = bytes.slice(offset..<(offset + count))
+        let value = bytes[offset..<(offset + count)]
         offset += count
         return value
     }
@@ -202,9 +209,9 @@ public struct DatabaseWireReader: Sendable {
         guard count <= bytes.count - offset else {
             throw DatabaseWireError.truncated
         }
-        let encoded = bytes.slice(offset..<(offset + count))
+        let encoded = bytes[offset..<(offset + count)]
         offset += count
-        guard let value = DatabaseUTF8Decoder.decode(encoded) else {
+        guard let value = UTF8Decoder.decode(encoded) else {
             throw DatabaseWireError.invalidUTF8
         }
         return value

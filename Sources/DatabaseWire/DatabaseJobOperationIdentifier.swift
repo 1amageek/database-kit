@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Canonical identifier for one resumable job operation.
 public struct DatabaseJobOperationIdentifier:
     DatabaseWireValue,

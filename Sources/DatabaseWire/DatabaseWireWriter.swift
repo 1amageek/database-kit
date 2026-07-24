@@ -1,8 +1,9 @@
+import DatabaseTypes
 import DatabaseValue
 
 /// Little-endian writer used by database-kit wire DTOs.
 ///
-/// Exact-size encoding writes directly into the final `DatabaseBytes` storage.
+/// Exact-size encoding writes directly into the final `ByteString` storage.
 /// The mutable pointer is confined to the synchronous `encode` call and never
 /// crosses a concurrency boundary.
 public struct DatabaseWireWriter {
@@ -137,13 +138,13 @@ public struct DatabaseWireWriter {
     public static func encode(
         limits: DatabaseWireLimits = .default,
         _ encode: (inout DatabaseWireWriter) throws(DatabaseWireError) -> Void
-    ) throws(DatabaseWireError) -> DatabaseBytes {
+    ) throws(DatabaseWireError) -> ByteString {
         let byteCount = try Self.encodedByteCount(
             limits: limits,
             encode
         )
 
-        return try DatabaseBytes.copying(count: byteCount) {
+        return try ByteString.copying(count: byteCount) {
             (output: UnsafeMutableRawBufferPointer) throws(DatabaseWireError) -> Void in
             var writer = DatabaseWireWriter(
                 fixedOutput: output,
@@ -161,7 +162,7 @@ public struct DatabaseWireWriter {
     public static func encodeThrowing(
         limits: DatabaseWireLimits = .default,
         _ encode: (inout DatabaseWireWriter) throws -> Void
-    ) throws -> DatabaseBytes {
+    ) throws -> ByteString {
         var measuringWriter = DatabaseWireWriter(measuring: limits)
         try encode(&measuringWriter)
         try measuringWriter.ensureNoDeferredError()
@@ -173,7 +174,7 @@ public struct DatabaseWireWriter {
             )
         }
 
-        return try DatabaseBytes.copying(count: byteCount) { output in
+        return try ByteString.copying(count: byteCount) { output in
             var writer = DatabaseWireWriter(
                 fixedOutput: output,
                 limits: limits
@@ -342,6 +343,11 @@ public struct DatabaseWireWriter {
         writeUInt64(UInt64(bitPattern: value))
     }
 
+    public mutating func writeInt128(_ value: Int128) {
+        writeUInt64(UInt64(truncatingIfNeeded: value))
+        writeUInt64(UInt64(truncatingIfNeeded: value >> 64))
+    }
+
     public mutating func writeUInt64(_ value: UInt64) {
         if isMeasuring {
             recordMeasuredBytes(8)
@@ -362,11 +368,11 @@ public struct DatabaseWireWriter {
     }
 
     public mutating func writeBytes(_ value: [UInt8]) throws(DatabaseWireError) {
-        try writeBytes(DatabaseBytes(value))
+        try writeBytes(ByteString(value))
     }
 
     public mutating func writeBytes(
-        _ value: DatabaseBytes
+        _ value: ByteString
     ) throws(DatabaseWireError) {
         guard value.count <= limits.maximumByteStringBytes else {
             throw .byteStringTooLarge(actual: value.count, maximum: limits.maximumByteStringBytes)
@@ -494,7 +500,7 @@ public struct DatabaseWireWriter {
         replaceUInt32(UInt32(payloadCount), at: lengthOffset)
     }
 
-    mutating func writeUnframedBytes(_ value: DatabaseBytes) {
+    mutating func writeUnframedBytes(_ value: ByteString) {
         if isMeasuring {
             recordMeasuredBytes(value.count)
         } else {
@@ -505,8 +511,8 @@ public struct DatabaseWireWriter {
     }
 
     mutating func writeCanonicalRDFTerm(
-        _ term: DatabaseRDFTerm,
-        role: DatabaseRDFTermRole = .term
+        _ term: RDFTerm,
+        role: RDFTermRole = .term
     ) throws(DatabaseWireError) {
         guard limits.maximumObjectCount > encodedObjectCount else {
             let (actual, overflow) = encodedObjectCount.addingReportingOverflow(1)
@@ -524,14 +530,14 @@ public struct DatabaseWireWriter {
             )
         }
         let remainingDepth = limits.maximumNestingDepth - nestingDepth
-        let codecLimits = DatabaseRDFTermCodecLimits(
+        let codecLimits = RDFTermCodecLimits(
             maximumBytes: limits.maximumByteStringBytes,
             maximumDepth: remainingDepth,
             maximumObjectCount: remainingObjectCount
         )
-        let plan: DatabaseRDFTermEncodingPlan
+        let plan: RDFTermEncodingPlan
         do {
-            plan = try DatabaseRDFTermCodec.encodingPlan(
+            plan = try RDFTermCodec.encodingPlan(
                 term,
                 role: role,
                 limits: codecLimits
@@ -548,14 +554,14 @@ public struct DatabaseWireWriter {
         }
 
         do {
-            try DatabaseRDFTermCodec.encode(plan, into: &self)
+            try RDFTermCodec.encode(plan, into: &self)
         } catch let error {
             throw mapCanonicalRDFTermError(error)
         }
     }
 
     private func mapCanonicalRDFTermError(
-        _ error: DatabaseRDFTermCodecError
+        _ error: RDFTermCodecError
     ) -> DatabaseWireError {
         switch error {
         case .maximumBytesExceeded(let actual, _):
@@ -661,7 +667,7 @@ public struct DatabaseWireWriter {
     }
 }
 
-extension DatabaseWireWriter: DatabaseRDFTermEncodingSink {
+extension DatabaseWireWriter: RDFTermEncodingSink {
     public mutating func write(_ byte: UInt8) {
         appendByte(byte)
     }

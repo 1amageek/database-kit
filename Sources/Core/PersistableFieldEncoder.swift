@@ -3,6 +3,8 @@ import FoundationEssentials
 #else
 import Foundation
 #endif
+import DatabaseTypes
+import DatabaseTypesFoundation
 import DatabaseValue
 
 public enum PersistableFieldEncoder {
@@ -36,7 +38,7 @@ public enum PersistableFieldEncoder {
                 )
             }
             fields.append(
-                PersistableField(
+                try PersistableField(
                     number: number,
                     name: schema.name,
                     value: try encodeValue(
@@ -116,31 +118,33 @@ public enum PersistableFieldEncoder {
         case .string:
             value = (raw as? String).map(FieldValue.string)
         case .uuid:
-            if let scalar = raw as? UUID {
-                value = databaseUUID(scalar).map(FieldValue.uuid)
+            if let scalar = raw as? Foundation.UUID {
+                value = .uuid(DatabaseTypes.UUID(scalar))
+            } else if let scalar = raw as? DatabaseTypes.UUID {
+                value = .uuid(scalar)
             } else {
                 value = nil
             }
         case .data:
             if let scalar = raw as? Data {
-                value = .bytes(
-                    DatabaseBytes(
-                        retaining: RetainedDataByteOwner(data: scalar)
-                    )
-                )
+                value = .bytes(ByteString(retaining: scalar))
             } else if let scalar = raw as? [UInt8] {
-                value = .bytes(DatabaseBytes(scalar))
+                value = .bytes(ByteString(scalar))
             } else {
                 value = nil
             }
         case .rdfTerm:
-            value = (raw as? DatabaseRDFTerm).map(FieldValue.rdfTerm)
+            value = (raw as? RDFTerm).map(FieldValue.rdfTerm)
         case .reference:
             value = (raw as? any PersistableReferenceValue).map {
                 .reference($0.persistableIdentity)
             }
         case .date:
-            value = (raw as? Date).flatMap { databaseTimestamp($0).map(FieldValue.timestamp) }
+            if let scalar = raw as? Date {
+                value = .timestamp(try Timestamp(scalar))
+            } else {
+                value = nil
+            }
         case .enum:
             if let representable = raw as? any RawRepresentable {
                 value = enumValue(representable.rawValue)
@@ -149,7 +153,7 @@ public enum PersistableFieldEncoder {
             }
         case .nested:
             if let nested = raw as? any Persistable {
-                value = .object(try encode(nested))
+                value = .object(try fieldObject(from: encode(nested)))
             } else if let nested = raw as? any Encodable {
                 let encoded = try FieldValueCodableEncoder.encode(nested)
                 if case .object = encoded {
@@ -200,23 +204,13 @@ public enum PersistableFieldEncoder {
         return nil
     }
 
-    private static func databaseTimestamp(_ value: Date) -> DatabaseTimestamp? {
-        let interval = value.timeIntervalSince1970
-        let integral = interval.rounded(.down)
-        guard let seconds = Int64(exactly: integral) else { return nil }
-        let fractional = interval - integral
-        let nanoseconds = (fractional * 1_000_000_000).rounded()
-        guard nanoseconds >= 0, nanoseconds < 1_000_000_000 else { return nil }
-        return DatabaseTimestamp(
-            secondsSinceUnixEpoch: seconds,
-            nanoseconds: UInt32(nanoseconds)
+    private static func fieldObject(
+        from fields: consuming [PersistableField]
+    ) throws -> FieldObject {
+        try FieldObject(
+            fields.map {
+                (key: $0.name, value: $0.value)
+            }
         )
-    }
-
-    private static func databaseUUID(_ value: UUID) -> DatabaseUUID? {
-        var uuid = value.uuid
-        return withUnsafeBytes(of: &uuid) { bytes in
-            DatabaseUUID(bytes: bytes)
-        }
     }
 }

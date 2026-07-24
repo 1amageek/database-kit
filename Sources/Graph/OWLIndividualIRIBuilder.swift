@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 public enum OWLIndividualIRIBuilder {
@@ -5,7 +6,7 @@ public enum OWLIndividualIRIBuilder {
         baseIRI: String,
         persistableType: String,
         identifier: Identifier
-    ) throws -> DatabaseRDFTerm {
+    ) throws -> RDFTerm {
         try term(
             baseIRI: baseIRI,
             persistableType: persistableType,
@@ -17,7 +18,7 @@ public enum OWLIndividualIRIBuilder {
         baseIRI: String,
         persistableType: String,
         value: Value
-    ) throws -> [DatabaseRDFTerm] {
+    ) throws -> [RDFTerm] {
         try value.owlObjectPropertyIdentifierLexicalForms.map {
             try term(
                 baseIRI: baseIRI,
@@ -31,18 +32,24 @@ public enum OWLIndividualIRIBuilder {
         baseIRI: String,
         persistableType: String,
         lexicalForm: String
-    ) throws -> DatabaseRDFTerm {
-        guard DatabaseRDFIRIValidator.isAbsolute(baseIRI) else {
+    ) throws -> RDFTerm {
+        do {
+            _ = try RDFIRI(baseIRI)
+        } catch {
             throw OWLProjectionError.invalidIndividualIRIBase(baseIRI)
         }
         let separator = baseIRI.hasSuffix("/") || baseIRI.hasSuffix("#") ? "" : "/"
-        return .iri(
+        let value =
             baseIRI
-                + separator
-                + percentEncode(persistableType)
-                + "/"
-                + percentEncode(lexicalForm)
-        )
+            + separator
+            + percentEncode(persistableType)
+            + "/"
+            + percentEncode(lexicalForm)
+        do {
+            return try .iri(validating: value)
+        } catch {
+            throw OWLProjectionError.invalidIndividualIRI(value)
+        }
     }
 
     private static func percentEncode(_ value: String) -> String {

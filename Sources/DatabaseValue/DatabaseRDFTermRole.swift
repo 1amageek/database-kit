@@ -1,4 +1,4 @@
-public enum DatabaseRDFTermRole: Sendable, Equatable {
+public enum RDFTermRole: Sendable, Equatable {
     case term
     case subject
     case predicate

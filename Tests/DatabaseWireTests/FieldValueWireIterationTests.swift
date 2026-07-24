@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import DatabaseWire
 import Testing
@@ -7,34 +8,29 @@ struct FieldValueWireIterationTests {
     @Test("recursive value component preserves its canonical byte layout")
     func recursiveValueComponentPreservesCanonicalBytes() throws {
         let value = FieldValue.reference(
-            PersistableIdentity(
+            try EntityReference(
                 entity: "E",
                 id: .composite([.string("id")]),
-                partitions: [
-                    DatabaseObjectField(
-                        number: 7,
-                        name: "p",
-                        value: .object([
-                            DatabaseObjectField(
-                                number: 8,
-                                name: "v",
-                                value: .bool(true)
-                            ),
-                        ])
+                partitions: try FieldObject([
+                    (
+                        key: "p",
+                        value: .object(
+                            try FieldObject([
+                                (key: "v", value: .bool(true)),
+                            ])
+                        )
                     ),
-                ]
+                ])
             )
         )
-        let expected: DatabaseBytes = [
-            0x14,
+        let expected: ByteString = [
+            0x1B,
             0x01, 0x00, 0x00, 0x00, 0x45,
             0x0C, 0x01, 0x00, 0x00, 0x00,
             0x09, 0x02, 0x00, 0x00, 0x00, 0x69, 0x64,
             0x01, 0x00, 0x00, 0x00,
-            0x07, 0x00, 0x00, 0x00,
             0x01, 0x00, 0x00, 0x00, 0x70,
-            0x13, 0x01, 0x00, 0x00, 0x00,
-            0x08, 0x00, 0x00, 0x00,
+            0x1A, 0x01, 0x00, 0x00, 0x00,
             0x01, 0x00, 0x00, 0x00, 0x76,
             0x01, 0x01,
         ]
@@ -55,16 +51,16 @@ struct FieldValueWireIterationTests {
         let valueDepth = layerCount + 1
         let referenceCount = layerCount / 3
         let objectCount = (layerCount * 2) + referenceCount + 1
-        let encodedByteCount = (referenceCount * 40) + 1
+        let encodedByteCount = (referenceCount * 33) + 1
         let limits = try DatabaseWireLimits(
             maximumFrameBytes: encodedByteCount,
-            maximumStringBytes: 0,
+            maximumStringBytes: 1,
             maximumByteStringBytes: 0,
             maximumCollectionCount: 1,
             maximumNestingDepth: valueDepth,
             maximumObjectCount: objectCount
         )
-        let value = Self.makeDeepMixedValue(layerCount: layerCount)
+        let value = try Self.makeDeepMixedValue(layerCount: layerCount)
 
         let encoded = try Self.encode(value, limits: limits)
         #expect(encoded.count == encodedByteCount)
@@ -78,7 +74,7 @@ struct FieldValueWireIterationTests {
 
         let rejectedLimits = try DatabaseWireLimits(
             maximumFrameBytes: encodedByteCount,
-            maximumStringBytes: 0,
+            maximumStringBytes: 1,
             maximumByteStringBytes: 0,
             maximumCollectionCount: 1,
             maximumNestingDepth: valueDepth - 1,
@@ -210,39 +206,35 @@ private extension FieldValueWireIterationTests {
     static func encode(
         _ value: FieldValue,
         limits: DatabaseWireLimits = .default
-    ) throws(DatabaseWireError) -> DatabaseBytes {
+    ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
             try value.encode(into: &writer)
         }
     }
 
-    static func makeDeepMixedValue(layerCount: Int) -> FieldValue {
+    static func makeDeepMixedValue(
+        layerCount: Int
+    ) throws -> FieldValue {
         var value = FieldValue.null
         for index in 0..<layerCount {
             switch index % 3 {
             case 0:
                 value = .array([value])
             case 1:
-                value = .object([
-                    DatabaseObjectField(
-                        number: UInt32(index),
-                        name: "",
-                        value: value
-                    ),
-                ])
+                value = .object(
+                    try FieldObject([
+                        (key: "", value: value),
+                    ])
+                )
             default:
                 value = .reference(
-                    PersistableIdentity(
-                        entity: "",
+                    try EntityReference(
+                        entity: "E",
                         id: .string(""),
-                        partitions: [
-                            DatabaseObjectField(
-                                number: 1,
-                                name: "",
-                                value: value
-                            )
-                        ]
+                        partitions: try FieldObject([
+                            (key: "", value: value),
+                        ])
                     )
                 )
             }

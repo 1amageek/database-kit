@@ -1,3 +1,5 @@
+import DatabaseTypes
+
 /// PropertyPath.swift
 /// SPARQL 1.1/1.2 Property Path types
 ///
@@ -7,7 +9,7 @@
 import DatabaseValue
 
 public indirect enum PropertyPath: Sendable, Equatable, Hashable {
-    case iri(DatabaseRDFPredicateIRI)
+    case iri(RDFPredicateIRI)
     case inverse(PropertyPath)
     case sequence(PropertyPath, PropertyPath)
     case alternative(PropertyPath, PropertyPath)
@@ -22,7 +24,7 @@ public indirect enum PropertyPath: Sendable, Equatable, Hashable {
 
 extension PropertyPath {
     /// Create a simple IRI path
-    public static func uri(_ iri: DatabaseRDFPredicateIRI) -> PropertyPath {
+    public static func uri(_ iri: RDFPredicateIRI) -> PropertyPath {
         .iri(iri)
     }
 
@@ -92,14 +94,14 @@ extension PropertyPath {
 
 extension PropertyPath {
     /// Returns all IRIs used in this path
-    public var iris: Set<DatabaseRDFPredicateIRI> {
-        var result = Set<DatabaseRDFPredicateIRI>()
+    public var iris: Set<RDFPredicateIRI> {
+        var result = Set<RDFPredicateIRI>()
         collectIRIs(into: &result)
         return result
     }
 
     private func collectIRIs(
-        into result: inout Set<DatabaseRDFPredicateIRI>
+        into result: inout Set<RDFPredicateIRI>
     ) {
         switch self {
         case .iri(let iri):
@@ -397,7 +399,7 @@ extension PropertyPath {
     }
 
     private func formatIRI(
-        _ iri: DatabaseRDFPredicateIRI,
+        _ iri: RDFPredicateIRI,
         prefixes: [String: String]
     ) -> String {
         for (prefix, base) in prefixes {

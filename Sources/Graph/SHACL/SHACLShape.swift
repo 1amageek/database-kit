@@ -1,3 +1,4 @@
+import DatabaseTypes
 // SHACLShape.swift
 // Graph - SHACL shape definitions
 //

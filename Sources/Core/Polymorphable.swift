@@ -1,3 +1,4 @@
+import DatabaseTypes
 // Polymorphable.swift
 // Core - Protocol for polymorphic type groups
 //

@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 extension DatabaseWireReader {
@@ -6,7 +7,7 @@ extension DatabaseWireReader {
         return try readString()
     }
 
-    public mutating func readOptionalBytes() throws(DatabaseWireError) -> DatabaseBytes? {
+    public mutating func readOptionalBytes() throws(DatabaseWireError) -> ByteString? {
         guard try readBool() else { return nil }
         return try readBytes()
     }

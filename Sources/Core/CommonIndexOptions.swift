@@ -1,3 +1,4 @@
+import DatabaseTypes
 // CommonIndexOptions.swift
 // FDBIndexing - Shared index configuration options
 //

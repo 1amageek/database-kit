@@ -4,7 +4,7 @@
 /// borrowed buffer is not valid outside that call. This protocol lets hashes,
 /// storage keys, and wire frames consume the canonical representation without
 /// first allocating an intermediate payload.
-public protocol DatabaseRDFTermEncodingSink {
+public protocol RDFTermEncodingSink {
     mutating func write(_ byte: UInt8)
 
     mutating func write(_ bytes: UnsafeRawBufferPointer)

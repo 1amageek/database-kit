@@ -1,3 +1,4 @@
+import DatabaseTypes
 // SecurityQuery.swift
 // Core - Query information for security evaluation
 

@@ -1,3 +1,4 @@
+import DatabaseTypes
 
 /// Wire-safe metadata for a protocol-oriented polymorphic source.
 ///

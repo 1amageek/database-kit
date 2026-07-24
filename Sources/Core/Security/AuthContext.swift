@@ -1,3 +1,4 @@
+import DatabaseTypes
 // AuthContext.swift
 // Core - Authentication context protocol for security evaluation
 

@@ -1,3 +1,5 @@
+import DatabaseTypes
+import DatabaseTypesFoundation
 import DatabaseValue
 import DatabaseValueCodable
 #if canImport(FoundationEssentials)
@@ -189,24 +191,19 @@ extension Data: PersistableScalarDecodable {
         guard case .bytes(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "bytes")
         }
-        return Data(scalar)
+        return Data(copying: scalar)
     }
 }
 
-extension UUID: PersistableScalarDecodable {
+extension Foundation.UUID: PersistableScalarDecodable {
     public static func decodePersistedScalar(
         _ value: FieldValue,
         field: String
-    ) throws -> UUID {
+    ) throws -> Foundation.UUID {
         guard case .uuid(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a UUID")
         }
-        return UUID(uuid: (
-            scalar[0], scalar[1], scalar[2], scalar[3],
-            scalar[4], scalar[5], scalar[6], scalar[7],
-            scalar[8], scalar[9], scalar[10], scalar[11],
-            scalar[12], scalar[13], scalar[14], scalar[15]
-        ))
+        return Foundation.UUID(scalar)
     }
 }
 
@@ -218,11 +215,7 @@ extension Date: PersistableScalarDecodable {
         let seconds: Double
         switch value {
         case .timestamp(let timestamp):
-            guard timestamp.nanoseconds < 1_000_000_000 else {
-                throw PersistableDecodingError.invalidDate(field: field)
-            }
-            seconds = Double(timestamp.secondsSinceUnixEpoch)
-                + Double(timestamp.nanoseconds) / 1_000_000_000
+            return Date(timestamp)
         case .date(let date):
             guard let days = databaseDaysSinceUnixEpoch(date) else {
                 throw PersistableDecodingError.invalidDate(field: field)
@@ -235,11 +228,11 @@ extension Date: PersistableScalarDecodable {
     }
 }
 
-extension DatabaseRDFTerm: PersistableScalarDecodable {
+extension RDFTerm: PersistableScalarDecodable {
     public static func decodePersistedScalar(
         _ value: FieldValue,
         field: String
-    ) throws -> DatabaseRDFTerm {
+    ) throws -> RDFTerm {
         guard case .rdfTerm(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an RDF term")
         }
@@ -247,7 +240,7 @@ extension DatabaseRDFTerm: PersistableScalarDecodable {
     }
 }
 
-private func databaseDaysSinceUnixEpoch(_ date: DatabaseDate) -> Int64? {
+private func databaseDaysSinceUnixEpoch(_ date: CivilDate) -> Int64? {
     let year = Int64(date.year)
     let month = Int64(date.month)
     let day = Int64(date.day)

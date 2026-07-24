@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Canonical metadata shared by aggregation maintenance and query runtimes.
 public struct AggregationIndexMetadata: Sendable, Equatable {
     public enum Operation: String, Sendable, Equatable {

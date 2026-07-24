@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import DatabaseWire
 import Testing
@@ -7,20 +8,22 @@ struct TypedOperationWireTests {
     private var quad: DatabaseRDFQuad {
         get throws {
             try DatabaseRDFQuad(
-                subject: .iri("urn:event:1"),
-                predicate: .iri("urn:calendar:startsAt"),
+                subject: .iri(try RDFIRI("urn:event:1")),
+                predicate: .iri(
+                    try RDFIRI("urn:calendar:startsAt")
+                ),
                 object: .literal(
-                    DatabaseRDFLiteral(
+                    RDFLiteral(
                         lexicalForm: "2026-07-16",
-                        datatype: DatabaseXSDDatatype.date.typedLiteralDatatype
+                        datatype: XSDDatatype.date.typedLiteralDatatype
                     )
                 ),
-                graph: .iri("urn:calendar:active")
+                graph: .iri(try RDFIRI("urn:calendar:active"))
             )
         }
     }
 
-    private let jobID = DatabaseUUID(
+    private let jobID = DatabaseTypes.UUID(
         high: 0x0011_2233_4455_6677,
         low: 0x8899_AABB_CCDD_EEFF
     )
@@ -29,9 +32,9 @@ struct TypedOperationWireTests {
     func graphFamilyRoundTrips() throws {
         let source = GraphAlgorithmOperation.Source(
             index: "eventGraph",
-            partitions: [
-                .init(number: 1, name: "runID", value: .string("run-1")),
-            ],
+            partitions: try FieldObject([
+                (key: "runID", value: .string("run-1")),
+            ]),
             graph: .named(.identifier("urn:calendar:active")),
             edgeLabel: .identifier("related")
         )
@@ -83,12 +86,28 @@ struct TypedOperationWireTests {
             GraphAlgorithmOperation.Request(
                 source: .init(
                     index: "rdfDataset",
-                    graph: .named(.rdf(.blankNode("calendar-graph"))),
-                    edgeLabel: .rdf(.iri("urn:calendar:related"))
+                    graph: .named(
+                        .rdf(
+                            .blankNode(
+                                try RDFBlankNodeIdentifier(
+                                    "calendar-graph"
+                                )
+                            )
+                        )
+                    ),
+                    edgeLabel: .rdf(
+                        .iri(try RDFIRI("urn:calendar:related"))
+                    )
                 ),
                 invocation: .shortestPath(
-                    source: .rdf(.blankNode("event")),
-                    target: .rdf(.iri("urn:event:target")),
+                    source: .rdf(
+                        .blankNode(
+                            try RDFBlankNodeIdentifier("event")
+                        )
+                    ),
+                    target: .rdf(
+                        .iri(try RDFIRI("urn:event:target"))
+                    ),
                     maximumDepth: 8,
                     bidirectional: true,
                     maximumNodes: 500
@@ -217,13 +236,15 @@ struct TypedOperationWireTests {
             )
         )
         try expectRoundTrip(
-            OntologyExecuteOperation.Response.validation(validationReport())
+            OntologyExecuteOperation.Response.validation(
+                try validationReport()
+            )
         )
     }
 
     @Test("SHACL requests and responses retain data and focus selections")
     func shaclFamilyRoundTrips() throws {
-        let identity = PersistableIdentity(
+        let identity = try EntityReference(
             entity: "Event",
             id: .string("event-1")
         )
@@ -250,12 +271,16 @@ struct TypedOperationWireTests {
                 data: .init(
                     entity: "Event",
                     index: "calendarGraph",
-                    partitions: [
-                        .init(number: 1, name: "runID", value: .string("run-1")),
-                    ],
-                    graph: .named(.iri("urn:calendar:active"))
+                    partitions: try FieldObject([
+                        (key: "runID", value: .string("run-1")),
+                    ]),
+                    graph: .named(
+                        .iri(try RDFIRI("urn:calendar:active"))
+                    )
                 ),
-                focus: .nodes([.iri("urn:event:1")]),
+                focus: .nodes([
+                    .iri(try RDFIRI("urn:event:1")),
+                ]),
                 entailment: .rdfs
             ),
         ]
@@ -272,7 +297,9 @@ struct TypedOperationWireTests {
             )
         )
         try expectRoundTrip(
-            SHACLExecuteOperation.Response.validation(validationReport())
+            SHACLExecuteOperation.Response.validation(
+                try validationReport()
+            )
         )
     }
 
@@ -303,16 +330,16 @@ struct TypedOperationWireTests {
             .indexStatus(
                 entity: "Event",
                 index: nil,
-                partitions: [
-                    .init(number: 1, name: "runID", value: .string("run-1")),
-                ]
+                partitions: try FieldObject([
+                    (key: "runID", value: .string("run-1")),
+                ])
             ),
             .rebuildIndex(
                 entity: "Event",
                 index: "startsAt",
-                partitions: [
-                    .init(number: 1, name: "runID", value: .string("run-1")),
-                ],
+                partitions: try FieldObject([
+                    (key: "runID", value: .string("run-1")),
+                ]),
                 batchSize: 500
             ),
             .compact,
@@ -347,13 +374,12 @@ struct TypedOperationWireTests {
                         .init(
                             entity: "Event",
                             index: "startsAt",
-                            partitions: [
-                                .init(
-                                    number: 1,
-                                    name: "runID",
+                            partitions: try FieldObject([
+                                (
+                                    key: "runID",
                                     value: .string("run-1")
                                 ),
-                            ],
+                            ]),
                             state: .ready,
                             indexedEntityCount: 10
                         ),
@@ -537,8 +563,12 @@ struct TypedOperationWireTests {
             kind: "database.test.status"
         )
         let job = DatabaseJobIdentity(jobID: jobID, operation: operation)
-        let now = DatabaseTimestamp(secondsSinceUnixEpoch: 1_784_131_200)
-        let past = DatabaseTimestamp(secondsSinceUnixEpoch: 1_784_131_199)
+        let now = try Timestamp(
+            secondsSinceUnixEpoch: 1_784_131_200
+        )
+        let past = try Timestamp(
+            secondsSinceUnixEpoch: 1_784_131_199
+        )
         #expect(throws: DatabaseWireError.invalidJobStatus) {
             try JobStatusOperation.Response(
                 state: .pending,
@@ -620,7 +650,7 @@ struct TypedOperationWireTests {
         #expect(throws: DatabaseWireError.invalidJobStatus) {
             try DatabaseEnvelopeCodec.decode(
                 JobStatusOperation.Response.self,
-                from: DatabaseBytes(invalidBytes)
+                from: ByteString(invalidBytes)
             )
         }
     }
@@ -746,7 +776,7 @@ struct TypedOperationWireTests {
         }
         let oversized = JobResultOperation.Response.succeeded(
             job: job,
-            responsePayloadPage: DatabaseBytes(
+            responsePayloadPage: ByteString(
                 [UInt8](
                     repeating: 0,
                     count: JobResultOperation.maximumResponsePageBytes + 1
@@ -789,16 +819,16 @@ struct TypedOperationWireTests {
 
     @Test("job result digest matches a multi-block golden vector")
     func jobResultDigestMatchesMultiBlockGoldenVector() throws {
-        let payload = DatabaseBytes(
+        let payload = ByteString(
             (0..<1_000).map { UInt8(truncatingIfNeeded: $0) }
         )
         var accumulator = DatabaseJobResultDigestAccumulator(
             operation: try DatabaseMaintenanceJobDescriptor
                 .jobOperationIdentifier()
         )
-        accumulator.update(payload.slice(0..<63))
-        accumulator.update(payload.slice(63..<511))
-        accumulator.update(payload.slice(511..<1_000))
+        accumulator.update(payload[0..<63])
+        accumulator.update(payload[63..<511])
+        accumulator.update(payload[511..<1_000])
 
         #expect(
             accumulator.finalize().bytes.copyBytes() == [
@@ -890,7 +920,7 @@ struct TypedOperationWireTests {
             operation: maintenance
         )
         let otherJob = DatabaseJobIdentity(
-            jobID: DatabaseUUID(high: jobID.high ^ 1, low: jobID.low),
+            jobID: DatabaseTypes.UUID(high: jobID.high ^ 1, low: jobID.low),
             operation: maintenance
         )
         let continuation = try JobResultOperation.Continuation(
@@ -967,7 +997,7 @@ struct TypedOperationWireTests {
         )
     }
 
-    private func validationReport() -> DatabaseValidationReport {
+    private func validationReport() throws -> DatabaseValidationReport {
         .init(
             conforms: false,
             issues: [
@@ -975,7 +1005,7 @@ struct TypedOperationWireTests {
                     severity: .violation,
                     code: "MIN_COUNT",
                     messages: ["Required value is missing"],
-                    focusNode: .iri("urn:event:1"),
+                    focusNode: .iri(try RDFIRI("urn:event:1")),
                     path: .sequence([
                         .predicate("urn:calendar:venue"),
                         .alternative([
@@ -986,12 +1016,14 @@ struct TypedOperationWireTests {
                     value: .literal(
                         .init(
                             lexicalForm: "",
-                            datatype: DatabaseXSDDatatype.string
+                            datatype: XSDDatatype.string
                                 .typedLiteralDatatype
                         )
                     ),
                     sourceConstraintComponent: "http://www.w3.org/ns/shacl#MinCountConstraintComponent",
-                    sourceShape: .blankNode("event-shape")
+                    sourceShape: .blankNode(
+                        try RDFBlankNodeIdentifier("event-shape")
+                    )
                 ),
             ]
         )

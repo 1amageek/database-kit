@@ -1,3 +1,4 @@
+import DatabaseTypes
 import QueryIR
 
 /// Decodes expression trees without recursive process-stack growth.

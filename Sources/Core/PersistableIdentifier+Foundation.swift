@@ -1,4 +1,6 @@
+import DatabaseTypes
 import DatabaseValue
+import DatabaseTypesFoundation
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
@@ -8,32 +10,15 @@ import Foundation
 extension Data: PersistableIdentifier {
     public static var persistableIdentifierType: PersistableIdentifierType { .bytes }
 
-    public var persistableIdentifierValue: PersistableIdentifierValue {
-        .bytes(DatabaseBytes(retaining: self))
+    public var persistableIdentifierValue: ReferenceIdentifier {
+        .bytes(ByteString(retaining: self))
     }
 }
 
-extension UUID: PersistableIdentifier {
+extension Foundation.UUID: PersistableIdentifier {
     public static var persistableIdentifierType: PersistableIdentifierType { .uuid }
 
-    public var persistableIdentifierValue: PersistableIdentifierValue {
-        let bytes = uuid
-        let high = UInt64(bytes.0) << 56
-            | UInt64(bytes.1) << 48
-            | UInt64(bytes.2) << 40
-            | UInt64(bytes.3) << 32
-            | UInt64(bytes.4) << 24
-            | UInt64(bytes.5) << 16
-            | UInt64(bytes.6) << 8
-            | UInt64(bytes.7)
-        let low = UInt64(bytes.8) << 56
-            | UInt64(bytes.9) << 48
-            | UInt64(bytes.10) << 40
-            | UInt64(bytes.11) << 32
-            | UInt64(bytes.12) << 24
-            | UInt64(bytes.13) << 16
-            | UInt64(bytes.14) << 8
-            | UInt64(bytes.15)
-        return .uuid(DatabaseUUID(high: high, low: low))
+    public var persistableIdentifierValue: ReferenceIdentifier {
+        .uuid(DatabaseTypes.UUID(self))
     }
 }

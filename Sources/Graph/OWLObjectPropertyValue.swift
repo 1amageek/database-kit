@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 #if canImport(FoundationEssentials)
@@ -32,8 +33,8 @@ extension Double: OWLObjectPropertyValue {}
 extension Float: OWLObjectPropertyValue {}
 
 #if canImport(FoundationEssentials) || canImport(Foundation)
-extension UUID: OWLObjectPropertyValue {}
-extension DatabaseUUID: OWLObjectPropertyValue {}
+extension Foundation.UUID: OWLObjectPropertyValue {}
+extension DatabaseTypes.UUID: OWLObjectPropertyValue {}
 extension Data: OWLObjectPropertyValue {}
 #endif
 

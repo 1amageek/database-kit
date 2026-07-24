@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import QueryIR
 import Testing
@@ -6,7 +7,7 @@ import Testing
 struct QueryIRPropertyPathSemanticsTests {
     @Test("Simplification preserves alternative bag multiplicity")
     func simplificationPreservesAlternativeBagMultiplicity() throws {
-        let predicate = try DatabaseRDFPredicateIRI(
+        let predicate = try RDFPredicateIRI(
             "https://example.invalid/property/repeated-alternative"
         )
         let path = PropertyPath.alternative(

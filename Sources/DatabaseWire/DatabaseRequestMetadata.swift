@@ -1,3 +1,4 @@
+import DatabaseTypes
 public struct DatabaseRequestMetadata: Sendable, Hashable {
     public let traceID: String?
     public let idempotencyKey: String?

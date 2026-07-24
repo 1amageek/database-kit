@@ -1,5 +1,6 @@
 public enum QueryParameterBindingError: Error, Sendable, Equatable, CustomStringConvertible {
     case invalidPosition(UInt32)
+    case invalidName
     case duplicatePosition(UInt32)
     case duplicateName(String)
     case missingPosition(UInt32)
@@ -10,6 +11,8 @@ public enum QueryParameterBindingError: Error, Sendable, Equatable, CustomString
         switch self {
         case .invalidPosition(let position):
             return "Parameter position \(position) must be one-based"
+        case .invalidName:
+            return "Parameter name must not be empty"
         case .duplicatePosition(let position):
             return "Parameter position \(position) is duplicated"
         case .duplicateName(let name):

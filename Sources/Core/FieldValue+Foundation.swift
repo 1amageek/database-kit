@@ -3,35 +3,28 @@ import FoundationEssentials
 #else
 import Foundation
 #endif
+import DatabaseTypes
+import DatabaseTypesFoundation
 import DatabaseValue
 
 extension Data: FieldValueConvertible {
     public func toFieldValue() -> FieldValue {
-        .bytes(DatabaseBytes(retaining: RetainedDataByteOwner(data: self)))
+        .bytes(ByteString(retaining: self))
     }
 }
 
-extension UUID: FieldValueConvertible {
+extension Foundation.UUID: FieldValueConvertible {
     public func toFieldValue() -> FieldValue {
-        guard let value = DatabaseUUID(
-            canonicalString: uuidString.lowercased()
-        ) else {
-            preconditionFailure("Foundation UUID did not produce a canonical UUID")
-        }
-        return .uuid(value)
+        .uuid(DatabaseTypes.UUID(self))
     }
 }
 
 extension Date: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue {
-        let interval = timeIntervalSince1970
-        let seconds = interval.rounded(.down)
-        let fractional = interval - seconds
-        return .timestamp(
-            DatabaseTimestamp(
-                secondsSinceUnixEpoch: Int64(seconds),
-                nanoseconds: UInt32((fractional * 1_000_000_000).rounded())
-            )
-        )
+    public func toFieldValue() throws(FieldValueConversionError) -> FieldValue {
+        do {
+            return .timestamp(try Timestamp(self))
+        } catch let error {
+            throw .timestamp(error)
+        }
     }
 }

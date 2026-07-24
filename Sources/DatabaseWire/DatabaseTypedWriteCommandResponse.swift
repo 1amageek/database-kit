@@ -1,15 +1,16 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public struct DatabaseTypedWriteCommandResponse<Output: DatabaseWireValue>:
     DatabaseWireValue {
     public let output: Output
     public let commitVersion: UInt64
-    public let continuation: DatabaseBytes?
+    public let continuation: ByteString?
 
     public init(
         output: Output,
         commitVersion: UInt64,
-        continuation: DatabaseBytes? = nil
+        continuation: ByteString? = nil
     ) {
         self.output = output
         self.commitVersion = commitVersion

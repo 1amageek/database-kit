@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 /// A violation of the canonical QueryIR semantics defined by SPARQL.
@@ -65,16 +66,16 @@ public enum SPARQLSemanticValidationError: Error, Sendable, Equatable {
     case invalidVariableName(String, SPARQLVariableNameError)
 
     /// A QueryIR IRI is not a validated absolute RFC 3987 IRI.
-    case invalidIRI(String, DatabaseRDFIRIError)
+    case invalidIRI(String, RDFIRIError)
 
     /// An RDF typed literal used an invalid or reserved datatype annotation.
     case invalidTypedLiteralDatatype(
         String,
-        DatabaseRDFTypedLiteralDatatypeError
+        RDFTypedLiteralDatatypeError
     )
 
     /// An RDF language literal used an invalid BCP 47 language tag.
-    case invalidLanguageTag(String, DatabaseRDFLanguageTagError)
+    case invalidLanguageTag(String, RDFLanguageTagError)
 
     /// A directional language literal used a direction other than ltr or rtl.
     case invalidBaseDirection(String)

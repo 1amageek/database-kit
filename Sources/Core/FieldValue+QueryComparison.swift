@@ -1,3 +1,4 @@
+import DatabaseTypes
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
@@ -26,8 +27,8 @@ extension FieldValue {
     }
 
     public func numericDifference(from other: FieldValue) -> Double? {
-        guard let left = numericDoubleValue,
-              let right = other.numericDoubleValue else {
+        guard let left = queryNumericDoubleValue,
+              let right = other.queryNumericDoubleValue else {
             return nil
         }
         return left - right
@@ -101,25 +102,12 @@ extension FieldValue {
             return Self.compare(left, to: right)
         case (.float64(let left), .uint64(let right)):
             return Self.compare(right, to: left)?.reversed
-        case (
-            .decimal(let leftCoefficient, let leftScale),
-            .decimal(let rightCoefficient, let rightScale)
-        ):
-            return comparisonResult(
-                DatabaseExactDecimal(
-                    coefficient: leftCoefficient,
-                    scale: leftScale
-                ).compare(
-                    to: DatabaseExactDecimal(
-                        coefficient: rightCoefficient,
-                        scale: rightScale
-                    )
-                )
-            )
+        case (.decimal(let left), .decimal(let right)):
+            return comparisonResult(left.compare(to: right))
         case (.decimal, .int64), (.decimal, .uint64),
              (.int64, .decimal), (.uint64, .decimal):
-            guard let left = DatabaseExactDecimal(self),
-                  let right = DatabaseExactDecimal(other) else {
+            guard let left = exactDecimalValue,
+                  let right = other.exactDecimalValue else {
                 return Self.compareFiniteNumericFallback(self, other)
             }
             return comparisonResult(left.compare(to: right))
@@ -208,8 +196,8 @@ extension FieldValue {
         _ left: FieldValue,
         _ right: FieldValue
     ) -> ComparisonResult? {
-        guard let left = left.numericDoubleValue,
-              let right = right.numericDoubleValue,
+        guard let left = left.queryNumericDoubleValue,
+              let right = right.queryNumericDoubleValue,
               left.isFinite,
               right.isFinite else {
             return nil
@@ -217,6 +205,71 @@ extension FieldValue {
         if left < right { return .orderedAscending }
         if left > right { return .orderedDescending }
         return .orderedSame
+    }
+
+    private var exactDecimalValue: ExactDecimal? {
+        switch self {
+        case .int8(let value):
+            return ExactDecimal(coefficient: Int128(value), scale: 0)
+        case .int16(let value):
+            return ExactDecimal(coefficient: Int128(value), scale: 0)
+        case .int32(let value):
+            return ExactDecimal(coefficient: Int128(value), scale: 0)
+        case .int64(let value):
+            return ExactDecimal(coefficient: Int128(value), scale: 0)
+        case .uint8(let value):
+            return ExactDecimal(coefficient: Int128(value), scale: 0)
+        case .uint16(let value):
+            return ExactDecimal(coefficient: Int128(value), scale: 0)
+        case .uint32(let value):
+            return ExactDecimal(coefficient: Int128(value), scale: 0)
+        case .uint64(let value):
+            return ExactDecimal(coefficient: Int128(value), scale: 0)
+        case .decimal(let value):
+            return value
+        default:
+            return nil
+        }
+    }
+
+    private var queryNumericDoubleValue: Double? {
+        switch self {
+        case .int8(let value): return Double(value)
+        case .int16(let value): return Double(value)
+        case .int32(let value): return Double(value)
+        case .int64(let value): return Double(value)
+        case .uint8(let value): return Double(value)
+        case .uint16(let value): return Double(value)
+        case .uint32(let value): return Double(value)
+        case .uint64(let value): return Double(value)
+        case .float32(let value): return Double(value)
+        case .float64(let value): return value
+        case .decimal(let value):
+            let magnitude = Self.powerOfTen(
+                UInt32(value.scale >= 0 ? Int64(value.scale) : -Int64(value.scale))
+            )
+            return value.scale >= 0
+                ? Double(value.coefficient) / magnitude
+                : Double(value.coefficient) * magnitude
+        default:
+            return nil
+        }
+    }
+
+    private static func powerOfTen(_ exponent: UInt32) -> Double {
+        var exponent = exponent
+        var factor = 10.0
+        var result = 1.0
+        while exponent > 0 {
+            if exponent & 1 == 1 {
+                result *= factor
+            }
+            exponent >>= 1
+            if exponent > 0 {
+                factor *= factor
+            }
+        }
+        return result
     }
 
     private func utf8Equal(_ left: String, _ right: String) -> Bool {
@@ -241,37 +294,37 @@ private extension ComparisonResult {
     }
 }
 
-extension FieldValue: ExpressibleByBooleanLiteral {
+extension FieldValue: @retroactive ExpressibleByBooleanLiteral {
     public init(booleanLiteral value: Bool) {
         self = .bool(value)
     }
 }
 
-extension FieldValue: ExpressibleByIntegerLiteral {
+extension FieldValue: @retroactive ExpressibleByIntegerLiteral {
     public init(integerLiteral value: Int64) {
         self = .int64(value)
     }
 }
 
-extension FieldValue: ExpressibleByFloatLiteral {
+extension FieldValue: @retroactive ExpressibleByFloatLiteral {
     public init(floatLiteral value: Double) {
         self = .float64(value)
     }
 }
 
-extension FieldValue: ExpressibleByStringLiteral {
+extension FieldValue: @retroactive ExpressibleByStringLiteral {
     public init(stringLiteral value: String) {
         self = .string(value)
     }
 }
 
-extension FieldValue: ExpressibleByArrayLiteral {
+extension FieldValue: @retroactive ExpressibleByArrayLiteral {
     public init(arrayLiteral elements: FieldValue...) {
         self = .array(elements)
     }
 }
 
-extension FieldValue: ExpressibleByNilLiteral {
+extension FieldValue: @retroactive ExpressibleByNilLiteral {
     public init(nilLiteral: ()) {
         self = .null
     }

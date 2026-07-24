@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Marker macro that binds a field to an OWL DatatypeProperty.
 ///
 /// Namespace is auto-resolved from the `@OWLClass` IRI.

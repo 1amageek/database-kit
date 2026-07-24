@@ -1,9 +1,10 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 /// A vertex or edge label in either a property graph or an RDF graph.
 public enum DatabaseGraphTerm: DatabaseWireValue, Hashable {
     case identifier(String)
-    case rdf(DatabaseRDFTerm)
+    case rdf(RDFTerm)
 
     public func encode(
         into writer: inout DatabaseWireWriter
@@ -25,7 +26,7 @@ public enum DatabaseGraphTerm: DatabaseWireValue, Hashable {
         case 1:
             self = .identifier(try reader.readString())
         case 2:
-            self = .rdf(try DatabaseRDFTerm(from: &reader))
+            self = .rdf(try RDFTerm(from: &reader))
         case let tag:
             throw .invalidValueTag(tag)
         }

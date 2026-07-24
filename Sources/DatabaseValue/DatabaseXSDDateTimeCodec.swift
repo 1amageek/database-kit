@@ -1,13 +1,12 @@
+import DatabaseTypes
+
 /// Foundation-independent canonical XSD date and dateTime conversion.
-public enum DatabaseXSDDateTimeCodec {
-    public static func format(date: DatabaseDate) throws -> String {
-        guard isValid(date) else {
-            throw DatabaseXSDDateTimeError.invalidDate(date)
-        }
+public enum XSDDateTimeCodec {
+    public static func format(date: CivilDate) -> String {
         return formatDateUnchecked(date)
     }
 
-    public static func parseDate(_ value: String) -> DatabaseDate? {
+    public static func parseDate(_ value: String) -> CivilDate? {
         var scanner = XSDDateTimeScanner(value)
         guard let date = scanner.readDate(), scanner.isAtEnd else {
             return nil
@@ -16,26 +15,27 @@ public enum DatabaseXSDDateTimeCodec {
     }
 
     public static func format(
-        timestamp: DatabaseTimestamp
+        timestamp: Timestamp
     ) throws -> String {
-        guard timestamp.nanoseconds < 1_000_000_000 else {
-            throw DatabaseXSDDateTimeError.invalidNanoseconds(
-                timestamp.nanoseconds
-            )
-        }
-
         let (days, secondOfDay) = splitUnixSeconds(
             timestamp.secondsSinceUnixEpoch
         )
         let civil = civilDate(fromDaysSinceUnixEpoch: days)
         guard let year = Int32(exactly: civil.year) else {
-            throw DatabaseXSDDateTimeError.timestampOutOfSupportedYearRange
+            throw XSDDateTimeError.timestampOutOfSupportedYearRange
         }
-        let date = DatabaseDate(
-            year: year,
-            month: UInt8(civil.month),
-            day: UInt8(civil.day)
-        )
+        let date: CivilDate
+        do {
+            date = try CivilDate(
+                year: year,
+                month: UInt8(civil.month),
+                day: UInt8(civil.day)
+            )
+        } catch {
+            preconditionFailure(
+                "Unix timestamp conversion produced an invalid civil date"
+            )
+        }
         let hour = UInt8(secondOfDay / 3_600)
         let minute = UInt8((secondOfDay % 3_600) / 60)
         let second = UInt8(secondOfDay % 60)
@@ -75,7 +75,7 @@ public enum DatabaseXSDDateTimeCodec {
 
     public static func parseTimestamp(
         _ value: String
-    ) -> DatabaseTimestamp? {
+    ) -> Timestamp? {
         var scanner = XSDDateTimeScanner(value)
         guard let date = scanner.readDate(),
               scanner.read(84),
@@ -137,21 +137,17 @@ public enum DatabaseXSDDateTimeCodec {
               ) else {
             return nil
         }
-        return DatabaseTimestamp(
-            secondsSinceUnixEpoch: utcSeconds,
-            nanoseconds: nanoseconds
-        )
+        do {
+            return try Timestamp(
+                secondsSinceUnixEpoch: utcSeconds,
+                nanoseconds: nanoseconds
+            )
+        } catch {
+            return nil
+        }
     }
 
-    public static func isValid(_ date: DatabaseDate) -> Bool {
-        let month = Int64(date.month)
-        let day = Int64(date.day)
-        return (1...12).contains(month)
-            && day >= 1
-            && day <= daysInMonth(year: Int64(date.year), month: month)
-    }
-
-    private static func formatDateUnchecked(_ date: DatabaseDate) -> String {
+    private static func formatDateUnchecked(_ date: CivilDate) -> String {
         let byteCount = formattedDateByteCount(date)
         return String(unsafeUninitializedCapacity: byteCount) { output in
             var offset = 0
@@ -160,7 +156,7 @@ public enum DatabaseXSDDateTimeCodec {
         }
     }
 
-    private static func formattedDateByteCount(_ date: DatabaseDate) -> Int {
+    private static func formattedDateByteCount(_ date: CivilDate) -> Int {
         let magnitude = date.year < 0
             ? UInt64(-Int64(date.year))
             : UInt64(date.year)
@@ -170,7 +166,7 @@ public enum DatabaseXSDDateTimeCodec {
     }
 
     private static func writeDate(
-        _ date: DatabaseDate,
+        _ date: CivilDate,
         to output: UnsafeMutableBufferPointer<UInt8>,
         offset: inout Int
     ) {
@@ -271,8 +267,7 @@ public enum DatabaseXSDDateTimeCodec {
         return (year, month, day)
     }
 
-    private static func daysSinceUnixEpoch(_ date: DatabaseDate) -> Int64? {
-        guard isValid(date) else { return nil }
+    private static func daysSinceUnixEpoch(_ date: CivilDate) -> Int64? {
         let year = Int64(date.year)
         let month = Int64(date.month)
         let day = Int64(date.day)
@@ -347,7 +342,7 @@ private struct XSDDateTimeScanner {
         read(expected)
     }
 
-    mutating func readDate() -> DatabaseDate? {
+    mutating func readDate() -> CivilDate? {
         let negative = readIfPresent(45)
         var yearMagnitude: UInt64 = 0
         var yearDigitCount = 0
@@ -385,12 +380,15 @@ private struct XSDDateTimeScanner {
             guard yearMagnitude <= UInt64(Int32.max) else { return nil }
             signedYear = Int64(yearMagnitude)
         }
-        let date = DatabaseDate(
-            year: Int32(signedYear),
-            month: UInt8(month),
-            day: UInt8(day)
-        )
-        return DatabaseXSDDateTimeCodec.isValid(date) ? date : nil
+        do {
+            return try CivilDate(
+                year: Int32(signedYear),
+                month: UInt8(month),
+                day: UInt8(day)
+            )
+        } catch {
+            return nil
+        }
     }
 
     mutating func readFixedUnsigned(count: Int) -> UInt64? {

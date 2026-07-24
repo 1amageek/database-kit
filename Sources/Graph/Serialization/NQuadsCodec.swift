@@ -1,3 +1,4 @@
+import DatabaseTypes
 // NQuadsCodec.swift
 // Graph - N-Quads / N-Triples dataset codec
 
@@ -152,20 +153,20 @@ private struct NQuadsLineParser {
         }
 
         if peek() == "<" {
-            return .iri(try parseIRI())
+            return try .iri(validating: parseIRI())
         }
         if peek() == "\"" {
             return .literal(try parseLiteral())
         }
         if input[index...].hasPrefix("_:") {
-            return .blankNode(try parseBlankNode())
+            return try .blankNode(identifier: parseBlankNode())
         }
 
         let token = readBareToken()
         guard !token.isEmpty else {
             throw RDFSyntaxError.invalidTerm(currentDescription, line: line)
         }
-        return .iri(token)
+        return try .iri(validating: token)
     }
 
     private mutating func parseIRI() throws -> String {

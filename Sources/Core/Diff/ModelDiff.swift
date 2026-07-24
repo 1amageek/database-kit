@@ -1,3 +1,4 @@
+import DatabaseTypes
 // ModelDiff.swift
 // Core - Model diff result
 //

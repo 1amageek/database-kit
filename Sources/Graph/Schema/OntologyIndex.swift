@@ -1,3 +1,4 @@
+import DatabaseTypes
 // OntologyIndex.swift
 // Graph - O(1) axiom lookup index for OWL ontologies
 //

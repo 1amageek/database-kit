@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 @testable import DatabaseWire
 import QueryIR
@@ -7,7 +8,7 @@ import Testing
 struct QueryIRSPARQLWireCodecDepthTests {
     @Test("SPARQL term tags retain canonical byte order")
     func sparqlTermCanonicalBytesAreStable() throws {
-        let literalBytes = DatabaseBytes([
+        let literalBytes = ByteString([
             2, 2, 7, 0, 0, 0, 0, 0, 0, 0,
         ])
         #expect(
@@ -22,7 +23,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
             predicate: .iri("urn:p"),
             object: .blankNode("o")
         )
-        let tripleBytes = DatabaseBytes([
+        let tripleBytes = ByteString([
             4,
             0, 1, 0, 0, 0, 115,
             1, 5, 0, 0, 0, 117, 114, 110, 58, 112,
@@ -42,7 +43,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
             object: .blankNode("o"),
             reifier: .variable("r")
         )
-        let reifiedBytes = DatabaseBytes([
+        let reifiedBytes = ByteString([
             5,
             0, 1, 0, 0, 0, 115,
             1, 5, 0, 0, 0, 117, 114, 110, 58, 112,
@@ -60,8 +61,8 @@ struct QueryIRSPARQLWireCodecDepthTests {
 
     @Test("property path tags retain canonical byte order")
     func propertyPathCanonicalBytesAreStable() throws {
-        let alpha = try DatabaseRDFPredicateIRI("urn:a")
-        let beta = try DatabaseRDFPredicateIRI("urn:b")
+        let alpha = try RDFPredicateIRI("urn:a")
+        let beta = try RDFPredicateIRI("urn:b")
         let exclusions = try PropertyPathNegatedSet(
             forward: Set([beta, alpha]),
             inverse: Set()
@@ -79,7 +80,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
             ),
             bounds
         )
-        let expected = DatabaseBytes([
+        let expected = ByteString([
             8, 3, 2, 1,
             0, 5, 0, 0, 0, 117, 114, 110, 58, 97,
             4, 0, 5, 0, 0, 0, 117, 114, 110, 58, 98,
@@ -183,7 +184,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
 
     @Test("property path decoding preserves validated invariants")
     func propertyPathDecodeValidationIsPreserved() throws {
-        let nonCanonicalSet = DatabaseBytes([
+        let nonCanonicalSet = ByteString([
             7,
             1, 2, 0, 0, 0,
             5, 0, 0, 0, 117, 114, 110, 58, 98,
@@ -200,7 +201,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
             _ = try decodePropertyPath([7, 0, 0], limits: .default)
         }
 
-        let invalidRange = DatabaseBytes([
+        let invalidRange = ByteString([
             8,
             0, 5, 0, 0, 0, 117, 114, 110, 58, 112,
             3, 0, 0, 0, 0, 0, 0, 0,
@@ -215,7 +216,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
             _ = try decodePropertyPath(invalidRange, limits: .default)
         }
 
-        let invalidPredicate = DatabaseBytes([
+        let invalidPredicate = ByteString([
             0, 8, 0, 0, 0, 114, 101, 108, 97, 116, 105, 118, 101,
         ])
         #expect(
@@ -231,7 +232,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
             _ = try encodeSPARQLTerm(.iri("relative"), limits: .default)
         }
 
-        let invalidIRI = DatabaseBytes([
+        let invalidIRI = ByteString([
             1, 8, 0, 0, 0, 114, 101, 108, 97, 116, 105, 118, 101,
         ])
         #expect(throws: DatabaseWireError.invalidRDFIRI("relative")) {
@@ -263,8 +264,8 @@ struct QueryIRSPARQLWireCodecDepthTests {
     private func nestedPropertyPath(
         levels: Int
     ) throws -> PropertyPath {
-        let alpha = try DatabaseRDFPredicateIRI("urn:alpha")
-        let beta = try DatabaseRDFPredicateIRI("urn:beta")
+        let alpha = try RDFPredicateIRI("urn:alpha")
+        let beta = try RDFPredicateIRI("urn:beta")
         let bounds = try PropertyPathRange(minimum: 1, maximum: 3)
         var path = PropertyPath.iri(alpha)
         for level in 0..<levels {
@@ -284,7 +285,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
     private func encodeSPARQLTerm(
         _ term: SPARQLTerm,
         limits: DatabaseWireLimits
-    ) throws(DatabaseWireError) -> DatabaseBytes {
+    ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
             try QueryIRWireCodec.encodeSPARQLTerm(term, into: &writer)
@@ -292,7 +293,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
     }
 
     private func decodeSPARQLTerm(
-        _ bytes: DatabaseBytes,
+        _ bytes: ByteString,
         limits: DatabaseWireLimits
     ) throws(DatabaseWireError) -> SPARQLTerm {
         var reader = DatabaseWireReader(bytes, limits: limits)
@@ -304,7 +305,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
     private func encodePropertyPath(
         _ path: PropertyPath,
         limits: DatabaseWireLimits
-    ) throws(DatabaseWireError) -> DatabaseBytes {
+    ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
             try QueryIRWireCodec.encodePropertyPath(path, into: &writer)
@@ -312,7 +313,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
     }
 
     private func decodePropertyPath(
-        _ bytes: DatabaseBytes,
+        _ bytes: ByteString,
         limits: DatabaseWireLimits
     ) throws(DatabaseWireError) -> PropertyPath {
         var reader = DatabaseWireReader(bytes, limits: limits)

@@ -1,3 +1,5 @@
+import DatabaseTypes
+import DatabaseValue
 import Testing
 import Foundation
 @testable import Core
@@ -568,19 +570,24 @@ struct DescriptorOwnershipTests {
     }
 
     @Test("OWLClassRDFIndexKind supports a fixed named graph")
-    func owlRDFIndexKindNamedGraph() {
+    func owlRDFIndexKindNamedGraph() throws {
+        let graph = try RDFTerm.iri(
+            validating: "https://example.org/graph/people"
+        )
         let kind = OWLClassRDFIndexKind<OntEmployee>(
             individualIRIBase: "https://example.org/individual/",
-            graph: .iri("https://example.org/graph/people")
+            graph: graph
         )
-        #expect(kind.graph == .iri("https://example.org/graph/people"))
+        #expect(kind.graph == graph)
     }
 
     @Test("OWLClassRDFIndexKind Codable round-trip")
     func owlRDFIndexKindCodable() throws {
         let kind = OWLClassRDFIndexKind<OntEmployee>(
             individualIRIBase: "https://example.org/individual/",
-            graph: .iri("https://example.org/graph/test")
+            graph: try .iri(
+                validating: "https://example.org/graph/test"
+            )
         )
         let data = try JSONEncoder().encode(kind)
         let decoded = try JSONDecoder().decode(OWLClassRDFIndexKind<OntEmployee>.self, from: data)

@@ -1,6 +1,6 @@
-public import DatabaseValue
+import DatabaseTypes
 
-extension DatabaseTimestamp: DatabaseWireValue {
+extension Timestamp: DatabaseWireValue {
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
@@ -11,9 +11,13 @@ extension DatabaseTimestamp: DatabaseWireValue {
     public init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
-        self.init(
-            secondsSinceUnixEpoch: try reader.readInt64(),
-            nanoseconds: try reader.readUInt32()
-        )
+        do {
+            try self.init(
+                secondsSinceUnixEpoch: reader.readInt64(),
+                nanoseconds: reader.readUInt32()
+            )
+        } catch {
+            throw .invalidTimestamp
+        }
     }
 }

@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Persistable+DirectoryFields - Directory field name extraction
 
 extension Persistable {

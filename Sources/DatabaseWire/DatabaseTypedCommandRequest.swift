@@ -1,3 +1,4 @@
+import DatabaseTypes
 public struct DatabaseTypedCommandRequest<Command: DatabaseCommandDescriptor>:
     DatabaseWireValue {
     public let input: Command.Input

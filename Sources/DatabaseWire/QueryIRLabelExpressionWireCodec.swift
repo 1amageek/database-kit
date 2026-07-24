@@ -1,3 +1,4 @@
+import DatabaseTypes
 import QueryIR
 
 /// Encodes and decodes recursive label expressions without process-stack recursion.

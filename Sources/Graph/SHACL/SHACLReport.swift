@@ -1,3 +1,4 @@
+import DatabaseTypes
 // SHACLReport.swift
 // Graph - SHACL validation report
 //

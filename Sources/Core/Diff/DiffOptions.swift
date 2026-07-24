@@ -1,3 +1,4 @@
+import DatabaseTypes
 // DiffOptions.swift
 // Core - Diff computation options
 //

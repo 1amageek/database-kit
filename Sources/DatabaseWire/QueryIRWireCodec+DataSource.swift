@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import QueryIR
 
@@ -22,10 +23,7 @@ extension QueryIRWireCodec {
         try writeOptionalString(table.schema, into: &writer)
         try writer.writeString(table.table)
         try writeOptionalString(table.alias, into: &writer)
-        try writer.writeCount(table.partitions.count)
-        for partition in table.partitions {
-            try partition.encode(into: &writer)
-        }
+        try table.partitions.encode(into: &writer)
     }
 
     static func decodeTableRef(
@@ -34,17 +32,11 @@ extension QueryIRWireCodec {
         let schema = try readOptionalString(from: &reader)
         let table = try reader.readString()
         let alias = try readOptionalString(from: &reader)
-        let partitionCount = try reader.readCount()
-        var partitions: [DatabaseObjectField] = []
-        partitions.reserveCapacity(partitionCount)
-        for _ in 0..<partitionCount {
-            partitions.append(try DatabaseObjectField(from: &reader))
-        }
         return TableRef(
             schema: schema,
             table: table,
             alias: alias,
-            partitions: partitions
+            partitions: try FieldObject(from: &reader)
         )
     }
 

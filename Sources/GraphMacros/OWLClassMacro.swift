@@ -1,5 +1,5 @@
 import Foundation
-import DatabaseValue
+import DatabaseTypes
 import SwiftCompilerPlugin
 import SwiftSyntax
 import SwiftSyntaxBuilder
@@ -56,7 +56,7 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
                 )
             ])
         }
-        guard DatabaseRDFIRIValidator.isAbsolute(rawIRI) else {
+        guard RDFIRISyntax.isValid(rawIRI) else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(firstArg),
@@ -127,7 +127,7 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
                 )
             ])
         }
-        guard DatabaseRDFIRIValidator.isAbsolute(individualIRIBase) else {
+        guard RDFIRISyntax.isValid(individualIRIBase) else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
@@ -148,7 +148,7 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
                 )
             ])
         }
-        if let graphIRI, !DatabaseRDFIRIValidator.isAbsolute(graphIRI) {
+        if let graphIRI, !RDFIRISyntax.isValid(graphIRI) {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
@@ -168,7 +168,7 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
             if let varDecl = member.decl.as(VariableDeclSyntax.self) {
                 guard let propertyAttr = getOWLDataPropertyAttribute(varDecl) else { continue }
                 let info = extractOWLDataPropertyInfo(from: propertyAttr)
-                guard DatabaseRDFIRIValidator.isAbsolute(info.iri) else {
+                guard RDFIRISyntax.isValid(info.iri) else {
                     throw DiagnosticsError(diagnostics: [
                         Diagnostic(
                             node: Syntax(propertyAttr),
@@ -247,9 +247,19 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(individualIRIBaseDecl)
 
-        let graphExpression = graphIRI.map { "RDFTerm.iri(\"\($0)\")" } ?? "nil"
+        let ontologyGraphBody = graphIRI.map {
+            """
+            do {
+                        return try RDFTerm.iri(validating: "\($0)")
+                    } catch {
+                        preconditionFailure("The macro emitted an invalid ontology graph IRI")
+                    }
+            """
+        } ?? "return nil"
         let ontologyGraphDecl: DeclSyntax = """
-            public static var ontologyGraph: RDFTerm? { \(raw: graphExpression) }
+            public static var ontologyGraph: RDFTerm? {
+                \(raw: ontologyGraphBody)
+            }
             """
         decls.append(ontologyGraphDecl)
 
@@ -285,7 +295,9 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
                             quads.append(
                                 RDFQuad(
                                     subject: subject,
-                                    predicate: .iri("\(property.iri)"),
+                                    predicate: try .iri(
+                                        validating: "\(property.iri)"
+                                    ),
                                     object: object,
                                     graph: Self.ontologyGraph
                                 )
@@ -304,7 +316,9 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
                     RDFQuad(
                         subject: subject,
                         predicate: OWLRDFVocabulary.rdfType,
-                        object: .iri(Self.ontologyClassIRI),
+                        object: try .iri(
+                            validating: Self.ontologyClassIRI
+                        ),
                         graph: Self.ontologyGraph
                     )
                 ]
@@ -317,10 +331,9 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(quadsDecl)
 
-        let graphArgument = graphIRI.map { ", graph: .iri(\"\($0)\")" } ?? ""
         let owlRDFDecl: DeclSyntax = """
             public static var _owlRDFIndexDescriptors: [IndexDescriptor] {
-                [IndexDescriptor(name: \(raw: structName).persistableType + "_owl_rdf", keyPaths: [] as [PartialKeyPath<\(raw: structName)>], kind: OWLClassRDFIndexKind<\(raw: structName)>(individualIRIBase: "\(raw: individualIRIBase)"\(raw: graphArgument)))]
+                [IndexDescriptor(name: \(raw: structName).persistableType + "_owl_rdf", keyPaths: [] as [PartialKeyPath<\(raw: structName)>], kind: OWLClassRDFIndexKind<\(raw: structName)>(individualIRIBase: "\(raw: individualIRIBase)", graph: Self.ontologyGraph))]
             }
 
             public static var _owlRDFDescriptors: [any Descriptor] {

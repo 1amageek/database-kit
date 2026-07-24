@@ -1,16 +1,17 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum CommandReadOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.commandRead
     public typealias Request = DatabaseCommandRequest
 
     public struct Response: DatabaseWireValue, Hashable {
-        public let output: DatabaseBytes
-        public let continuation: DatabaseBytes?
+        public let output: ByteString
+        public let continuation: ByteString?
 
         public init(
-            output: DatabaseBytes = [],
-            continuation: DatabaseBytes? = nil
+            output: ByteString = [],
+            continuation: ByteString? = nil
         ) {
             self.output = output
             self.continuation = continuation

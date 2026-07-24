@@ -888,8 +888,8 @@ extension Literal {
             return String(v)
         case .uint(let v):
             return String(v)
-        case .decimal(let coefficient, let scale):
-            return DatabaseLiteralEncoding.decimal(coefficient: coefficient, scale: scale)
+        case .decimal(let value):
+            return DatabaseLiteralEncoding.decimal(value)
         case .double(let v):
             return String(v)
         case .string(let v):

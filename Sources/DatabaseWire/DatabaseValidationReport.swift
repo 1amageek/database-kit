@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
     public enum Severity: UInt8, Sendable, Hashable {
@@ -21,23 +22,23 @@ public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
         public let severity: Severity
         public let code: String
         public let messages: [String]
-        public let focusNode: DatabaseRDFTerm?
+        public let focusNode: RDFTerm?
         public let path: DatabaseSHACLPath?
-        public let value: DatabaseRDFTerm?
+        public let value: RDFTerm?
         public let sourceConstraintComponent: String?
-        public let sourceShape: DatabaseRDFTerm?
-        public let details: [DatabaseObjectField]
+        public let sourceShape: RDFTerm?
+        public let details: FieldObject
 
         public init(
             severity: Severity,
             code: String,
             messages: [String] = [],
-            focusNode: DatabaseRDFTerm? = nil,
+            focusNode: RDFTerm? = nil,
             path: DatabaseSHACLPath? = nil,
-            value: DatabaseRDFTerm? = nil,
+            value: RDFTerm? = nil,
             sourceConstraintComponent: String? = nil,
-            sourceShape: DatabaseRDFTerm? = nil,
-            details: [DatabaseObjectField] = []
+            sourceShape: RDFTerm? = nil,
+            details: FieldObject = FieldObject()
         ) {
             self.severity = severity
             self.code = code
@@ -62,8 +63,7 @@ public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
             try Self.encodeOptionalTerm(value, into: &writer)
             try writer.writeOptionalString(sourceConstraintComponent)
             try Self.encodeOptionalTerm(sourceShape, into: &writer)
-            try writer.writeCount(details.count)
-            for detail in details { try detail.encode(into: &writer) }
+            try details.encode(into: &writer)
         }
 
         public init(
@@ -80,12 +80,6 @@ public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
             let value = try Self.decodeOptionalTerm(from: &reader)
             let sourceConstraintComponent = try reader.readOptionalString()
             let sourceShape = try Self.decodeOptionalTerm(from: &reader)
-            let count = try reader.readCount()
-            var details: [DatabaseObjectField] = []
-            details.reserveCapacity(count)
-            for _ in 0..<count {
-                details.append(try DatabaseObjectField(from: &reader))
-            }
             self.init(
                 severity: severity,
                 code: code,
@@ -95,12 +89,12 @@ public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
                 value: value,
                 sourceConstraintComponent: sourceConstraintComponent,
                 sourceShape: sourceShape,
-                details: details
+                details: try FieldObject(from: &reader)
             )
         }
 
         private static func encodeOptionalTerm(
-            _ term: DatabaseRDFTerm?,
+            _ term: RDFTerm?,
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             writer.writeBool(term != nil)
@@ -109,8 +103,8 @@ public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
 
         private static func decodeOptionalTerm(
             from reader: inout DatabaseWireReader
-        ) throws(DatabaseWireError) -> DatabaseRDFTerm? {
-            try reader.readBool() ? try DatabaseRDFTerm(from: &reader) : nil
+        ) throws(DatabaseWireError) -> RDFTerm? {
+            try reader.readBool() ? try RDFTerm(from: &reader) : nil
         }
 
         private static func encodeOptionalPath(
@@ -130,12 +124,12 @@ public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
 
     public let conforms: Bool
     public let issues: [Issue]
-    public let continuation: DatabaseBytes?
+    public let continuation: ByteString?
 
     public init(
         conforms: Bool,
         issues: [Issue],
-        continuation: DatabaseBytes? = nil
+        continuation: ByteString? = nil
     ) {
         self.conforms = conforms
         self.issues = issues

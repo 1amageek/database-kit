@@ -1,3 +1,4 @@
+import DatabaseTypes
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
@@ -6,17 +7,17 @@ import Foundation
 import DatabaseValue
 
 public protocol OWLDataPropertyScalar: OWLDataPropertyValue {
-    func owlDataPropertyTerm() throws -> DatabaseRDFTerm
+    func owlDataPropertyTerm() throws -> RDFTerm
 }
 
 extension OWLDataPropertyScalar {
-    public func owlDataPropertyTerms() throws -> [DatabaseRDFTerm] {
+    public func owlDataPropertyTerms() throws -> [RDFTerm] {
         [try owlDataPropertyTerm()]
     }
 }
 
-extension DatabaseRDFTerm: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+extension RDFTerm: OWLDataPropertyScalar {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         guard case .literal = self else {
             throw OWLProjectionError.dataPropertyRequiresLiteral
         }
@@ -25,73 +26,73 @@ extension DatabaseRDFTerm: OWLDataPropertyScalar {
 }
 
 extension String: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(self, datatype: .string)
     }
 }
 
 extension Int: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(String(self), datatype: .integer)
     }
 }
 
 extension Int8: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(String(self), datatype: .integer)
     }
 }
 
 extension Int16: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(String(self), datatype: .integer)
     }
 }
 
 extension Int32: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(String(self), datatype: .integer)
     }
 }
 
 extension Int64: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(String(self), datatype: .integer)
     }
 }
 
 extension UInt: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(String(self), datatype: .nonNegativeInteger)
     }
 }
 
 extension UInt8: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(String(self), datatype: .nonNegativeInteger)
     }
 }
 
 extension UInt16: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(String(self), datatype: .nonNegativeInteger)
     }
 }
 
 extension UInt32: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(String(self), datatype: .nonNegativeInteger)
     }
 }
 
 extension UInt64: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(String(self), datatype: .nonNegativeInteger)
     }
 }
 
 extension Double: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(
             OWLRDFLexicalForm.floatingPoint(self),
             datatype: .double
@@ -100,7 +101,7 @@ extension Double: OWLDataPropertyScalar {
 }
 
 extension Float: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(
             OWLRDFLexicalForm.floatingPoint(Double(self)),
             datatype: .float
@@ -109,22 +110,22 @@ extension Float: OWLDataPropertyScalar {
 }
 
 extension Bool: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(self ? "true" : "false", datatype: .boolean)
     }
 }
 
-extension DatabaseDate: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+extension CivilDate: OWLDataPropertyScalar {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(
-            try OWLRDFLexicalForm.date(self),
+            OWLRDFLexicalForm.date(self),
             datatype: .date
         )
     }
 }
 
-extension DatabaseTimestamp: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+extension Timestamp: OWLDataPropertyScalar {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         return OWLRDFVocabulary.literal(
             try OWLRDFLexicalForm.dateTime(self),
             datatype: .dateTime
@@ -132,20 +133,20 @@ extension DatabaseTimestamp: OWLDataPropertyScalar {
     }
 }
 
-extension UUID: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+extension Foundation.UUID: OWLDataPropertyScalar {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(uuidString.lowercased(), datatype: .string)
     }
 }
 
-extension DatabaseUUID: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+extension DatabaseTypes.UUID: OWLDataPropertyScalar {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(description, datatype: .string)
     }
 }
 
 extension Data: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> DatabaseRDFTerm {
+    public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(base64EncodedString(), datatype: .base64Binary)
     }
 }

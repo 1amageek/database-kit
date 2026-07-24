@@ -1,5 +1,5 @@
 import Foundation
-import DatabaseValue
+import DatabaseTypes
 import SwiftCompilerPlugin
 import SwiftSyntax
 import SwiftSyntaxBuilder
@@ -65,7 +65,7 @@ public struct OWLDataPropertyMacro: PeerMacro {
                 )
             ])
         }
-        guard DatabaseRDFIRIValidator.isAbsolute(segment.content.text) else {
+        guard RDFIRISyntax.isValid(segment.content.text) else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(firstArg),

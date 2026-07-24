@@ -1,6 +1,7 @@
+import DatabaseTypes
 import DatabaseValue
 
-extension PersistableIdentity: Codable {
+extension EntityReference: @retroactive Codable {
     private enum CodingKeys: String, CodingKey {
         case entity
         case id
@@ -9,10 +10,10 @@ extension PersistableIdentity: Codable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(
-            entity: try container.decode(String.self, forKey: .entity),
-            id: try container.decode(PersistableIdentifierValue.self, forKey: .id),
-            partitions: try container.decode([DatabaseObjectField].self, forKey: .partitions)
+        try self.init(
+            entity: container.decode(String.self, forKey: .entity),
+            id: container.decode(ReferenceIdentifier.self, forKey: .id),
+            partitions: container.decode(FieldObject.self, forKey: .partitions)
         )
     }
 

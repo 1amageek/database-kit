@@ -1,13 +1,14 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public struct DatabaseTypedReadCommandResponse<Output: DatabaseWireValue>:
     DatabaseWireValue {
     public let output: Output
-    public let continuation: DatabaseBytes?
+    public let continuation: ByteString?
 
     public init(
         output: Output,
-        continuation: DatabaseBytes? = nil
+        continuation: ByteString? = nil
     ) {
         self.output = output
         self.continuation = continuation

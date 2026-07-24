@@ -1,8 +1,9 @@
+import DatabaseTypes
 import DatabaseValue
 
 /// A value that can be represented by the canonical database field model.
 public protocol FieldValueConvertible: Sendable {
-    func toFieldValue() -> FieldValue
+    func toFieldValue() throws(FieldValueConversionError) -> FieldValue
 }
 
 extension Bool: FieldValueConvertible {
@@ -61,37 +62,42 @@ extension String: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { .string(self) }
 }
 
-extension DatabaseBytes: FieldValueConvertible {
+extension ByteString: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { .bytes(self) }
 }
 
-extension DatabaseDate: FieldValueConvertible {
+extension CivilDate: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { .date(self) }
 }
 
-extension DatabaseTimestamp: FieldValueConvertible {
+extension Timestamp: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { .timestamp(self) }
 }
 
-extension DatabaseUUID: FieldValueConvertible {
+extension DatabaseTypes.UUID: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { .uuid(self) }
 }
 
-extension DatabaseRDFTerm: FieldValueConvertible {
+extension RDFTerm: FieldValueConvertible {
     public func toFieldValue() -> FieldValue { .rdfTerm(self) }
 }
 
 extension Array: FieldValueConvertible where Element: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue {
-        .array(map { $0.toFieldValue() })
+    public func toFieldValue() throws(FieldValueConversionError) -> FieldValue {
+        var values: [FieldValue] = []
+        values.reserveCapacity(count)
+        for element in self {
+            values.append(try element.toFieldValue())
+        }
+        return .array(values)
     }
 }
 
 extension Optional: FieldValueConvertible where Wrapped: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue {
+    public func toFieldValue() throws(FieldValueConversionError) -> FieldValue {
         switch self {
         case .some(let value):
-            return value.toFieldValue()
+            return try value.toFieldValue()
         case .none:
             return .null
         }

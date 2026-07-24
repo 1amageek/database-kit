@@ -1,3 +1,4 @@
+import DatabaseTypes
 #if canImport(FoundationEssentials)
 import struct FoundationEssentials.Date
 #else

@@ -1,5 +1,5 @@
 import DatabaseDigest
-import DatabaseValue
+import DatabaseTypes
 import Synchronization
 import Testing
 
@@ -23,7 +23,7 @@ struct SHA256AccumulatorTests {
     ) {
         var accumulator = SHA256Accumulator()
         accumulator.update(
-            DatabaseBytes([UInt8](repeating: 0x61, count: byteCount))
+            ByteString([UInt8](repeating: 0x61, count: byteCount))
         )
 
         #expect(hexadecimalString(of: accumulator.finalize()) == expectedHexadecimal)
@@ -32,7 +32,7 @@ struct SHA256AccumulatorTests {
     @Test func canonicalABCVectorAcrossSegmentedUpdates() {
         var accumulator = SHA256Accumulator()
         accumulator.update(0x61)
-        accumulator.update(DatabaseBytes([0x62]))
+        accumulator.update(ByteString([0x62]))
         [UInt8]().withUnsafeBytes { accumulator.update($0) }
         [UInt8](arrayLiteral: 0x63).withUnsafeBytes {
             accumulator.update($0)
@@ -60,7 +60,7 @@ struct SHA256AccumulatorTests {
         )
         var accumulator = SHA256Accumulator()
 
-        accumulator.update(DatabaseBytes(retaining: owner))
+        accumulator.update(ByteString(retaining: owner))
         let digest = accumulator.finalize()
 
         #expect(owner.borrowCount == 1)
@@ -71,11 +71,11 @@ struct SHA256AccumulatorTests {
     }
 
     @Test func scopedAndOwnedFinalizationProduceIdenticalBytes() {
-        let input = DatabaseBytes([UInt8](repeating: 0x5a, count: 257))
+        let input = ByteString([UInt8](repeating: 0x5a, count: 257))
         var scopedAccumulator = SHA256Accumulator()
         scopedAccumulator.update(input)
         let scopedDigest = scopedAccumulator.withUnsafeDigestBytes { bytes in
-            DatabaseBytes.copying(count: bytes.count) { destination in
+            ByteString.copying(count: bytes.count) { destination in
                 destination.copyMemory(from: bytes)
             }
         }
@@ -86,7 +86,7 @@ struct SHA256AccumulatorTests {
         #expect(scopedDigest == ownedAccumulator.finalize())
     }
 
-    private func hexadecimalString(of bytes: DatabaseBytes) -> String {
+    private func hexadecimalString(of bytes: ByteString) -> String {
         let digits: [UInt8] = Array("0123456789abcdef".utf8)
         return bytes.withUnsafeBytes { source in
             String(decoding: [UInt8](unsafeUninitializedCapacity: source.count * 2) {
@@ -102,7 +102,7 @@ struct SHA256AccumulatorTests {
     }
 }
 
-private final class BorrowCountingByteOwner: DatabaseByteOwner {
+private final class BorrowCountingByteOwner: ByteStringOwner {
     let bytes: [UInt8]
     private let borrowCounter = Mutex(0)
 

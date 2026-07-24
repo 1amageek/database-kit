@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Encodes a typed job request directly into the outer `job.start` frame.
 public struct DatabaseTypedJobStartRequest<Job: DatabaseJobDescriptor>:
     DatabaseWireValue {

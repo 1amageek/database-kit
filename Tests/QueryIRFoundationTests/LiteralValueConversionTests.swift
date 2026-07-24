@@ -1,4 +1,4 @@
-import DatabaseValue
+import DatabaseTypes
 import Foundation
 import QueryIR
 import QueryIRFoundation
@@ -28,7 +28,7 @@ struct LiteralValueConversionTests {
         #expect(
             try value.databaseLiteral
                 == .uuid(
-                    DatabaseUUID(
+                    DatabaseTypes.UUID(
                         high: 0x0011_2233_4455_6677,
                         low: 0x8899_AABB_CCDD_EEFF
                     )
@@ -36,13 +36,19 @@ struct LiteralValueConversionTests {
         )
     }
 
-    @Test("Decimal rejects values outside the canonical coefficient range")
-    func decimalRejectsOutOfRangeValue() throws {
+    @Test("Decimal values beyond Int64 retain their exact coefficient")
+    func decimalBeyondInt64RetainsExactValue() throws {
         let value = try #require(Decimal(string: "9223372036854775808"))
 
-        #expect(throws: DatabaseLiteralConversionError.decimalOutOfRange) {
+        #expect(
             try value.databaseLiteral
-        }
+                == .decimal(
+                    ExactDecimal(
+                        coefficient: 9_223_372_036_854_775_808,
+                        scale: 0
+                    )
+                )
+        )
     }
 
     @Test("Decimal rejects NaN")
@@ -68,7 +74,7 @@ struct LiteralValueConversionTests {
         #expect(
             try value.databaseLiteral
                 == .timestamp(
-                    DatabaseTimestamp(
+                    Timestamp(
                         secondsSinceUnixEpoch: -1,
                         nanoseconds: 750_000_000
                     )

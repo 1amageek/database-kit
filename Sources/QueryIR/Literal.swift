@@ -1,3 +1,5 @@
+import DatabaseTypes
+
 /// Literal.swift
 /// Unified literal value representation for SQL and SPARQL
 ///
@@ -26,8 +28,8 @@ public enum Literal: Sendable, Equatable, Hashable {
     /// Unsigned integer value (64-bit)
     case uint(UInt64)
 
-    /// Exact fixed-point decimal value
-    case decimal(coefficient: Int64, scale: Int32)
+    /// Exact base-10 decimal value.
+    case decimal(ExactDecimal)
 
     /// Floating-point value
     case double(Double)
@@ -36,16 +38,16 @@ public enum Literal: Sendable, Equatable, Hashable {
     case string(String)
 
     /// Date value (date only, no time)
-    case date(DatabaseDate)
+    case date(CivilDate)
 
     /// Timestamp value (date + time)
-    case timestamp(DatabaseTimestamp)
+    case timestamp(Timestamp)
 
     /// Binary data
-    case binary(DatabaseBytes)
+    case binary(ByteString)
 
     /// Universally unique identifier
-    case uuid(DatabaseUUID)
+    case uuid(DatabaseTypes.UUID)
 
     /// Array of literals
     case array([Literal])
@@ -73,7 +75,16 @@ public enum Literal: Sendable, Equatable, Hashable {
     case dirLangLiteral(value: String, language: String, direction: String)
 
     /// Canonical RDF term, including RDF-star and reified triple terms.
-    case rdfTerm(DatabaseRDFTerm)
+    case rdfTerm(RDFTerm)
+}
+
+extension Literal {
+    public static func decimal(
+        coefficient: Int128,
+        scale: Int32
+    ) -> Self {
+        .decimal(ExactDecimal(coefficient: coefficient, scale: scale))
+    }
 }
 
 // MARK: - Type Accessors
@@ -182,7 +193,7 @@ extension Literal {
             return XSDDatatype(rawValue: datatype)
         case .rdfTerm(let term):
             guard case .literal(let literal) = term else { return nil }
-            return XSDDatatype(rawValue: literal.datatype)
+            return XSDDatatype(rawValue: literal.datatypeIRI.rawValue)
         default:
             return nil
         }
@@ -202,8 +213,8 @@ extension Literal: CustomStringConvertible {
             return String(v)
         case .uint(let v):
             return String(v)
-        case .decimal(let coefficient, let scale):
-            return DatabaseLiteralEncoding.decimal(coefficient: coefficient, scale: scale)
+        case .decimal(let value):
+            return DatabaseLiteralEncoding.decimal(value)
         case .double(let v):
             return String(v)
         case .string(let v):

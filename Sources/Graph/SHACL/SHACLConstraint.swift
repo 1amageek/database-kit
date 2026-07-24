@@ -1,3 +1,4 @@
+import DatabaseTypes
 // SHACLConstraint.swift
 // Graph - SHACL constraint components
 //

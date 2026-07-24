@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Macro that binds a Persistable type to an OWL class in the OntologyStore.
 ///
 /// Generates `OWLClassEntity` protocol conformance, adding

@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import DatabaseWire
 import QueryIR
@@ -7,7 +8,7 @@ import Testing
 struct QueryIRWireCodecTests {
     @Test("mixed basic graph patterns round-trip without splitting blank-node scope")
     func mixedBasicGraphPatternRoundTrips() throws {
-        let pathPredicate = try DatabaseRDFPredicateIRI("urn:calendar:related")
+        let pathPredicate = try RDFPredicateIRI("urn:calendar:related")
         let basicGraphPattern = BasicGraphPattern(
             elements: [
                 .triple(
@@ -81,13 +82,12 @@ struct QueryIRWireCodecTests {
             schema: "calendar",
             table: "events",
             alias: "event",
-            partitions: [
-                DatabaseObjectField(
-                    number: 1,
-                    name: "runID",
+            partitions: try FieldObject([
+                (
+                    key: "runID",
                     value: .string("run-2026-07-17")
                 ),
-            ]
+            ])
         )
         let statements: [QueryStatement] = [
             .select(select),
@@ -393,13 +393,12 @@ struct QueryIRWireCodecTests {
         let statement = QueryStatement.ask(AskQuery(pattern: .basic([])))
         let request = QueryExecuteOperation.Request(
             input: .ir(statement),
-            graphPartitions: [
-                DatabaseObjectField(
-                    number: 1,
-                    name: "runID",
+            graphPartitions: try FieldObject([
+                (
+                    key: "runID",
                     value: .string("run-2026-07-17")
                 ),
-            ]
+            ])
         )
 
         let encoded = try DatabaseEnvelopeCodec.encode(request)
@@ -526,7 +525,7 @@ struct QueryIRWireCodecTests {
         #expect(
             throws: DatabaseWireError.invalidSPARQLVariableName("?")
         ) {
-            _ = try QueryIRWireCodec.decode(DatabaseBytes(bytes))
+            _ = try QueryIRWireCodec.decode(ByteString(bytes))
         }
     }
 
@@ -744,7 +743,7 @@ struct QueryIRWireCodecTests {
         let nestedPath = PropertyPath.inverse(
             .inverse(
                 .inverse(
-                    .iri(try DatabaseRDFPredicateIRI("urn:edge"))
+                    .iri(try RDFPredicateIRI("urn:edge"))
                 )
             )
         )
@@ -835,9 +834,9 @@ struct QueryIRWireCodecTests {
     @Test("property path predicate IRIs and ranges enforce invariants")
     func propertyPathTypesEnforceInvariants() throws {
         #expect(
-            throws: DatabaseRDFPredicateIRIError.invalidIRI(.missingScheme)
+            throws: RDFIRIError.missingScheme
         ) {
-            _ = try DatabaseRDFPredicateIRI("relative")
+            _ = try RDFPredicateIRI("relative")
         }
         #expect(
             throws: PropertyPathRangeError.maximumBelowMinimum(
@@ -851,9 +850,9 @@ struct QueryIRWireCodecTests {
 
     @Test("negated property sets encode direction and deterministic ordering")
     func negatedPropertySetsAreCanonical() throws {
-        let alpha = try DatabaseRDFPredicateIRI("urn:predicate:alpha")
-        let beta = try DatabaseRDFPredicateIRI("urn:predicate:beta")
-        let inverse = try DatabaseRDFPredicateIRI("urn:predicate:inverse")
+        let alpha = try RDFPredicateIRI("urn:predicate:alpha")
+        let beta = try RDFPredicateIRI("urn:predicate:beta")
+        let inverse = try RDFPredicateIRI("urn:predicate:inverse")
         let first = try PropertyPathNegatedSet(
             forward: Set([beta, alpha]),
             inverse: Set([inverse])
@@ -880,7 +879,7 @@ struct QueryIRWireCodecTests {
 
     @Test("bounded property path round-trips without approximation")
     func boundedPropertyPathRoundTrips() throws {
-        let predicate = try DatabaseRDFPredicateIRI("urn:predicate:next")
+        let predicate = try RDFPredicateIRI("urn:predicate:next")
         let bounds = try PropertyPathRange(minimum: 2, maximum: 4)
         let original = statement(path: .range(.iri(predicate), bounds))
 
@@ -917,9 +916,9 @@ struct QueryIRWireCodecTests {
 
     private func replacingUniqueASCII(
         _ source: String,
-        in bytes: DatabaseBytes,
+        in bytes: ByteString,
         with replacement: String
-    ) throws -> DatabaseBytes {
+    ) throws -> ByteString {
         let sourceBytes = Array(source.utf8)
         let replacementBytes = Array(replacement.utf8)
         guard sourceBytes.count == replacementBytes.count else {
@@ -949,6 +948,6 @@ struct QueryIRWireCodecTests {
             offset..<(offset + sourceBytes.count),
             with: replacementBytes
         )
-        return DatabaseBytes(result)
+        return ByteString(result)
     }
 }

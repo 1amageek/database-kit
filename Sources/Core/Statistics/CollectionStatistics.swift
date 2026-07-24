@@ -1,3 +1,4 @@
+import DatabaseTypes
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
@@ -25,10 +26,10 @@ public struct CollectionStatistics: Sendable, Hashable {
     // MARK: - FDB固有
 
     /// キー範囲の開始（FDB固有）
-    public let keyRangeStart: DatabaseBytes?
+    public let keyRangeStart: ByteString?
 
     /// キー範囲の終了（FDB固有）
-    public let keyRangeEnd: DatabaseBytes?
+    public let keyRangeEnd: ByteString?
 
     public init(
         typeName: String,
@@ -36,8 +37,8 @@ public struct CollectionStatistics: Sendable, Hashable {
         storageSize: Int64,
         avgDocumentSize: Int,
         lastModified: Date? = nil,
-        keyRangeStart: DatabaseBytes? = nil,
-        keyRangeEnd: DatabaseBytes? = nil
+        keyRangeStart: ByteString? = nil,
+        keyRangeEnd: ByteString? = nil
     ) {
         self.typeName = typeName
         self.documentCount = documentCount

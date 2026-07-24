@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 extension DatabaseSchemaVersion: DatabaseWireValue {
     public func encode(

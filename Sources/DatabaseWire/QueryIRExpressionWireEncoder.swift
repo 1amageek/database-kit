@@ -1,3 +1,4 @@
+import DatabaseTypes
 import QueryIR
 
 /// Encodes expression trees with an explicit continuation stack.

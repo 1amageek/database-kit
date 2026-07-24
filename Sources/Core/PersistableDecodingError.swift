@@ -1,3 +1,4 @@
+import DatabaseTypes
 public enum PersistableDecodingError: Error, Sendable, CustomStringConvertible {
     case missingSchema(String)
     case missingCompiledDecoder(String)

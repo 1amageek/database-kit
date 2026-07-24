@@ -1,10 +1,11 @@
+import DatabaseTypes
 import DatabaseValue
 
 /// Stable, framed hashing for database values and approximate cardinality indexes.
 public enum CanonicalFieldValueHash {
     public static func hash(
         _ value: FieldValue
-    ) throws(DatabaseRDFTermCodecError) -> UInt64 {
+    ) throws(RDFTermCodecError) -> UInt64 {
         var stream = Stream()
         try append(value, to: &stream)
         return stream.finalize()
@@ -13,7 +14,7 @@ public enum CanonicalFieldValueHash {
     private static func append(
         _ value: FieldValue,
         to stream: inout Stream
-    ) throws(DatabaseRDFTermCodecError) {
+    ) throws(RDFTermCodecError) {
         switch value {
         case .null:
             stream.update(byte: 0x00)
@@ -50,12 +51,8 @@ public enum CanonicalFieldValueHash {
         case .float64(let value):
             stream.update(byte: 0x0B)
             stream.updateLittleEndian(value.bitPattern)
-        case .decimal(let coefficient, let scale):
+        case .decimal(let value):
             stream.update(byte: 0x0C)
-            let value = DatabaseExactDecimal(
-                coefficient: coefficient,
-                scale: scale
-            )
             stream.updateLittleEndian(value.coefficient)
             stream.updateLittleEndian(value.scale)
         case .string(let value):
@@ -74,45 +71,161 @@ public enum CanonicalFieldValueHash {
             stream.updateLittleEndian(value.year)
             stream.update(byte: value.month)
             stream.update(byte: value.day)
-        case .timestamp(let value):
+        case .time(let value):
             stream.update(byte: 0x10)
+            append(value, to: &stream)
+        case .dateTime(let value):
+            stream.update(byte: 0x11)
+            stream.updateLittleEndian(value.date.year)
+            stream.update(byte: value.date.month)
+            stream.update(byte: value.date.day)
+            append(value.time, to: &stream)
+        case .timestamp(let value):
+            stream.update(byte: 0x12)
             stream.updateLittleEndian(value.secondsSinceUnixEpoch)
             stream.updateLittleEndian(value.nanoseconds)
+        case .timeSpan(let value):
+            stream.update(byte: 0x13)
+            stream.updateLittleEndian(value.seconds)
+            stream.updateLittleEndian(value.nanoseconds)
+        case .calendarPeriod(let value):
+            stream.update(byte: 0x14)
+            stream.updateLittleEndian(value.months)
+            stream.updateLittleEndian(value.days)
+        case .geographicPoint(let value):
+            stream.update(byte: 0x15)
+            stream.updateLittleEndian(value.latitude.bitPattern)
+            stream.updateLittleEndian(value.longitude.bitPattern)
+        case .geographicPosition(let value):
+            stream.update(byte: 0x16)
+            stream.updateLittleEndian(value.point.latitude.bitPattern)
+            stream.updateLittleEndian(value.point.longitude.bitPattern)
+            stream.updateLittleEndian(
+                value.ellipsoidalHeightInMeters.bitPattern
+            )
+        case .vector(let value):
+            stream.update(byte: 0x17)
+            append(value, to: &stream)
         case .uuid(let value):
-            stream.update(byte: 0x11)
+            stream.update(byte: 0x18)
             stream.updateLittleEndian(value.high)
             stream.updateLittleEndian(value.low)
         case .array(let values):
-            stream.update(byte: 0x12)
+            stream.update(byte: 0x19)
             stream.updateLittleEndian(UInt64(values.count))
             for value in values {
                 try append(value, to: &stream)
             }
         case .object(let fields):
-            stream.update(byte: 0x13)
+            stream.update(byte: 0x1A)
             stream.updateLittleEndian(UInt64(fields.count))
-            for field in fields {
-                stream.updateLittleEndian(field.number)
-                append(field.name, to: &stream)
+            for field in fields.fields {
+                append(field.key, to: &stream)
                 try append(field.value, to: &stream)
             }
         case .reference(let identity):
-            stream.update(byte: 0x14)
+            stream.update(byte: 0x1B)
             append(identity.entity, to: &stream)
             append(identity.id, to: &stream)
             stream.updateLittleEndian(UInt64(identity.partitions.count))
-            for partition in identity.partitions {
-                stream.updateLittleEndian(partition.number)
-                append(partition.name, to: &stream)
+            for partition in identity.partitions.fields {
+                append(partition.key, to: &stream)
                 try append(partition.value, to: &stream)
             }
         case .rdfTerm(let term):
-            stream.update(byte: 0x15)
-            let plan = try DatabaseRDFTermCodec.encodingPlan(term)
+            stream.update(byte: 0x1C)
+            let plan = try RDFTermCodec.encodingPlan(term)
             stream.updateLittleEndian(UInt64(plan.byteCount))
             var sink = RDFSink(stream: stream)
-            try DatabaseRDFTermCodec.encode(plan, into: &sink)
+            try RDFTermCodec.encode(plan, into: &sink)
             stream = sink.stream
+        }
+    }
+
+    private static func append(
+        _ value: CivilTime,
+        to stream: inout Stream
+    ) {
+        stream.update(byte: value.hour)
+        stream.update(byte: value.minute)
+        stream.update(byte: value.second)
+        stream.updateLittleEndian(value.nanoseconds)
+    }
+
+    private static func append(
+        _ value: Vector,
+        to stream: inout Stream
+    ) {
+        stream.updateLittleEndian(UInt64(value.count))
+        switch value.elementType {
+        case .int8:
+            stream.update(byte: 0)
+            _ = value.withInt8Elements { elements in
+                for element in elements {
+                    stream.update(byte: UInt8(bitPattern: element))
+                }
+            }
+        case .int16:
+            stream.update(byte: 1)
+            _ = value.withInt16Elements { elements in
+                for element in elements {
+                    stream.updateLittleEndian(element)
+                }
+            }
+        case .int32:
+            stream.update(byte: 2)
+            _ = value.withInt32Elements { elements in
+                for element in elements {
+                    stream.updateLittleEndian(element)
+                }
+            }
+        case .int64:
+            stream.update(byte: 3)
+            _ = value.withInt64Elements { elements in
+                for element in elements {
+                    stream.updateLittleEndian(element)
+                }
+            }
+        case .uint8:
+            stream.update(byte: 4)
+            _ = value.withUInt8Elements { elements in
+                stream.update(elements)
+            }
+        case .uint16:
+            stream.update(byte: 5)
+            _ = value.withUInt16Elements { elements in
+                for element in elements {
+                    stream.updateLittleEndian(element)
+                }
+            }
+        case .uint32:
+            stream.update(byte: 6)
+            _ = value.withUInt32Elements { elements in
+                for element in elements {
+                    stream.updateLittleEndian(element)
+                }
+            }
+        case .uint64:
+            stream.update(byte: 7)
+            _ = value.withUInt64Elements { elements in
+                for element in elements {
+                    stream.updateLittleEndian(element)
+                }
+            }
+        case .float32:
+            stream.update(byte: 8)
+            _ = value.withFloat32Elements { elements in
+                for element in elements {
+                    stream.updateLittleEndian(element.bitPattern)
+                }
+            }
+        case .float64:
+            stream.update(byte: 9)
+            _ = value.withFloat64Elements { elements in
+                for element in elements {
+                    stream.updateLittleEndian(element.bitPattern)
+                }
+            }
         }
     }
 
@@ -125,7 +238,7 @@ public enum CanonicalFieldValueHash {
     }
 
     private static func append(
-        _ value: PersistableIdentifierValue,
+        _ value: ReferenceIdentifier,
         to stream: inout Stream
     ) {
         switch value {
@@ -180,7 +293,7 @@ public enum CanonicalFieldValueHash {
         }
     }
 
-    private struct RDFSink: DatabaseRDFTermEncodingSink {
+    private struct RDFSink: RDFTermEncodingSink {
         var stream: Stream
 
         mutating func write(_ byte: UInt8) {
@@ -298,7 +411,7 @@ public enum CanonicalFieldValueHash {
 }
 
 public extension FieldValue {
-    func stableHash() throws(DatabaseRDFTermCodecError) -> UInt64 {
+    func stableHash() throws(RDFTermCodecError) -> UInt64 {
         try CanonicalFieldValueHash.hash(self)
     }
 }

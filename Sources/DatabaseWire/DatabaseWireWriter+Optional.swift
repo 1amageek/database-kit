@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 extension DatabaseWireWriter {
@@ -10,7 +11,7 @@ extension DatabaseWireWriter {
         try writeString(value)
     }
 
-    public mutating func writeOptionalBytes(_ value: DatabaseBytes?) throws(DatabaseWireError) {
+    public mutating func writeOptionalBytes(_ value: ByteString?) throws(DatabaseWireError) {
         guard let value else {
             writeBool(false)
             return

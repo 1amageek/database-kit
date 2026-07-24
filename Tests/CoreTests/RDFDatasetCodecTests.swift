@@ -1,3 +1,4 @@
+import DatabaseTypes
 import Testing
 import DatabaseValue
 @testable import Graph
@@ -17,7 +18,7 @@ struct RDFDatasetCodecTests {
 
         #expect(dataset.quads.count == 3)
         #expect(dataset.quads[0].graph == nil)
-        #expect(dataset.quads[1].graph == .iri("http://example.org/doc/1"))
+        #expect(dataset.quads[1].graph == fixtureIRI("http://example.org/doc/1"))
         let expected = RDFTerm.literal(
             .typed(
                 "30",
@@ -49,14 +50,14 @@ struct RDFDatasetCodecTests {
         let dataset = try NQuadsDecoder().decode(from: input)
 
         #expect(dataset.quads.count == 2)
-        #expect(dataset.quads[0].subject == .blankNode("alice"))
-        #expect(dataset.quads[0].object == .blankNode("bob"))
-        #expect(dataset.quads[0].graph == .iri("http://example.org/doc#1"))
-        #expect(dataset.quads[1].subject == .iri("http://example.org/alice#id"))
+        #expect(dataset.quads[0].subject == fixtureBlankNode("alice"))
+        #expect(dataset.quads[0].object == fixtureBlankNode("bob"))
+        #expect(dataset.quads[0].graph == fixtureIRI("http://example.org/doc#1"))
+        #expect(dataset.quads[1].subject == fixtureIRI("http://example.org/alice#id"))
         let expected = RDFTerm.literal(
             .langString(
                 "Alice #1\nAgent",
-                language: try DatabaseRDFLanguageTag("en")
+                language: try RDFLanguageTag("en")
             )
         )
         #expect(dataset.quads[1].object == expected)
@@ -77,18 +78,18 @@ struct RDFDatasetCodecTests {
     func nQuadsRoundTrip() throws {
         let dataset = RDFDataset(quads: [
             RDFQuad(
-                subject: .iri("http://example.org/b"),
-                predicate: .iri("http://example.org/p"),
-                object: .iri("http://example.org/o"),
-                graph: .iri("http://example.org/g")
+                subject: fixtureIRI("http://example.org/b"),
+                predicate: fixtureIRI("http://example.org/p"),
+                object: fixtureIRI("http://example.org/o"),
+                graph: fixtureIRI("http://example.org/g")
             ),
             RDFQuad(
-                subject: .iri("http://example.org/a"),
-                predicate: .iri("http://example.org/p"),
+                subject: fixtureIRI("http://example.org/a"),
+                predicate: fixtureIRI("http://example.org/p"),
                 object: .literal(
                     .langString(
                         "hello",
-                        language: try DatabaseRDFLanguageTag("en")
+                        language: try RDFLanguageTag("en")
                     )
                 )
             ),
@@ -106,8 +107,8 @@ struct RDFDatasetCodecTests {
         let invalidSubject = RDFDataset(quads: [
             RDFQuad(
                 subject: .literal(.string("Alice")),
-                predicate: .iri("http://example.org/knows"),
-                object: .iri("http://example.org/bob")
+                predicate: fixtureIRI("http://example.org/knows"),
+                object: fixtureIRI("http://example.org/bob")
             )
         ])
         #expect(throws: RDFDatasetValidationError.self) {
@@ -116,9 +117,9 @@ struct RDFDatasetCodecTests {
 
         let invalidGraph = RDFDataset(quads: [
             RDFQuad(
-                subject: .iri("http://example.org/alice"),
-                predicate: .iri("http://example.org/knows"),
-                object: .iri("http://example.org/bob"),
+                subject: fixtureIRI("http://example.org/alice"),
+                predicate: fixtureIRI("http://example.org/knows"),
+                object: fixtureIRI("http://example.org/bob"),
                 graph: .literal(.string("doc"))
             )
         ])
@@ -151,7 +152,7 @@ struct RDFDatasetCodecTests {
         #expect(dataset.prefixes["ex"] == "http://example.org/")
         #expect(dataset.quads.count == 4)
         #expect(dataset.quads.filter { $0.graph == nil }.count == 1)
-        #expect(dataset.quads.filter { $0.graph == .iri("http://example.org/doc1") }.count == 3)
+        #expect(dataset.quads.filter { $0.graph == fixtureIRI("http://example.org/doc1") }.count == 3)
     }
 
     @Test("TriG decodes SPARQL-style PREFIX and BASE")
@@ -169,9 +170,9 @@ struct RDFDatasetCodecTests {
         #expect(dataset.prefixes["ex"] == "http://example.org/")
         #expect(dataset.quads == [
             RDFQuad(
-                subject: .iri("http://base.example/relative"),
-                predicate: .iri("http://example.org/predicate"),
-                object: .iri("http://example.org/object")
+                subject: fixtureIRI("http://base.example/relative"),
+                predicate: fixtureIRI("http://example.org/predicate"),
+                object: fixtureIRI("http://example.org/object")
             )
         ])
     }
@@ -188,18 +189,18 @@ struct RDFDatasetCodecTests {
         """
 
         let dataset = try TriGDecoder().decode(from: input)
-        let graph = RDFTerm.iri("http://example.org/doc")
+        let graph = fixtureIRI("http://example.org/doc")
 
         #expect(dataset.quads.count == 7)
         #expect(dataset.quads.allSatisfy { $0.graph == graph })
         #expect(dataset.quads.contains {
-            $0.predicate == .iri("http://example.org/name") &&
+            $0.predicate == fixtureIRI("http://example.org/name") &&
             $0.object == .literal(.string("Alice")) &&
             $0.graph == graph
         })
         #expect(dataset.quads.contains {
-            $0.subject == .iri("http://example.org/list") &&
-            $0.predicate == .iri("http://example.org/items") &&
+            $0.subject == fixtureIRI("http://example.org/list") &&
+            $0.predicate == fixtureIRI("http://example.org/items") &&
             $0.graph == graph
         })
     }
@@ -225,15 +226,15 @@ struct RDFDatasetCodecTests {
             prefixes: ["ex": "http://example.org/"],
             quads: [
                 RDFQuad(
-                    subject: .iri("http://example.org/alice"),
-                    predicate: .iri("http://example.org/knows"),
-                    object: .iri("http://example.org/bob")
+                    subject: fixtureIRI("http://example.org/alice"),
+                    predicate: fixtureIRI("http://example.org/knows"),
+                    object: fixtureIRI("http://example.org/bob")
                 ),
                 RDFQuad(
-                    subject: .iri("http://example.org/receipt"),
-                    predicate: .iri("http://example.org/settles"),
-                    object: .iri("http://example.org/invoice"),
-                    graph: .iri("http://example.org/doc")
+                    subject: fixtureIRI("http://example.org/receipt"),
+                    predicate: fixtureIRI("http://example.org/settles"),
+                    object: fixtureIRI("http://example.org/invoice"),
+                    graph: fixtureIRI("http://example.org/doc")
                 ),
             ]
         )
@@ -243,5 +244,21 @@ struct RDFDatasetCodecTests {
 
         #expect(encoded.contains("ex:doc {"))
         #expect(Set(decoded.quads) == Set(dataset.quads))
+    }
+}
+
+private func fixtureIRI(_ rawValue: String) -> RDFTerm {
+    do {
+        return try .iri(validating: rawValue)
+    } catch {
+        preconditionFailure("Invalid RDF IRI fixture: \(rawValue)")
+    }
+}
+
+private func fixtureBlankNode(_ rawValue: String) -> RDFTerm {
+    do {
+        return try .blankNode(identifier: rawValue)
+    } catch {
+        preconditionFailure("Invalid blank-node fixture: \(rawValue)")
     }
 }

@@ -1,6 +1,6 @@
-public import DatabaseValue
+import DatabaseTypes
 
-extension DatabaseUUID: DatabaseWireValue {
+extension DatabaseTypes.UUID: DatabaseWireValue {
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {

@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum JobStartOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.jobStart
@@ -39,13 +40,13 @@ public enum JobStartOperation: DatabaseOperation {
 
     public struct Request: DatabaseWireValue, Hashable {
         public let operation: DatabaseJobOperationIdentifier
-        public let requestPayload: DatabaseBytes
+        public let requestPayload: ByteString
         public let maximumSliceWorkUnits: UInt64
         public let retryPolicy: RetryPolicy
 
         public init(
             operation: DatabaseJobOperationIdentifier,
-            requestPayload: DatabaseBytes,
+            requestPayload: ByteString,
             maximumSliceWorkUnits: UInt64 = 100_000,
             retryPolicy: RetryPolicy = RetryPolicy()
         ) {
@@ -79,7 +80,7 @@ public enum JobStartOperation: DatabaseOperation {
     public struct Response: DatabaseWireValue, Hashable {
         public let job: DatabaseJobIdentity
 
-        public var jobID: DatabaseUUID { job.jobID }
+        public var jobID: DatabaseTypes.UUID { job.jobID }
         public var operation: DatabaseJobOperationIdentifier { job.operation }
 
         public init(job: DatabaseJobIdentity) {
@@ -87,7 +88,7 @@ public enum JobStartOperation: DatabaseOperation {
         }
 
         public init(
-            jobID: DatabaseUUID,
+            jobID: DatabaseTypes.UUID,
             operation: DatabaseJobOperationIdentifier
         ) {
             self.init(

@@ -1,19 +1,30 @@
 import DatabaseValue
+import DatabaseTypes
 
 public enum OWLRDFVocabulary {
-    public static let rdfType = DatabaseRDFTerm.iri(
-        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+    public static let rdfType = RDFTerm.iri(
+        requiredIRI(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+        )
     )
 
     public static func literal(
         _ lexicalForm: String,
-        datatype: DatabaseXSDDatatype
-    ) -> DatabaseRDFTerm {
+        datatype: XSDDatatype
+    ) -> RDFTerm {
         .literal(
-            DatabaseRDFLiteral(
+            RDFLiteral(
                 lexicalForm: lexicalForm,
                 datatype: datatype.typedLiteralDatatype
             )
         )
+    }
+
+    private static func requiredIRI(_ value: String) -> RDFIRI {
+        do {
+            return try RDFIRI(value)
+        } catch {
+            preconditionFailure("Invalid built-in RDF vocabulary IRI: \(value)")
+        }
     }
 }

@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// @Persistable macro declaration
 ///
 /// Generates Persistable protocol conformance with metadata methods and ID management.

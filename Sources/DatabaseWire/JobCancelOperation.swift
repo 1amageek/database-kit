@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum JobCancelOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.jobCancel
@@ -6,7 +7,7 @@ public enum JobCancelOperation: DatabaseOperation {
     public struct Request: DatabaseWireValue, Hashable {
         public let job: DatabaseJobIdentity
 
-        public var jobID: DatabaseUUID { job.jobID }
+        public var jobID: DatabaseTypes.UUID { job.jobID }
         public var operation: DatabaseJobOperationIdentifier { job.operation }
 
         public init(job: DatabaseJobIdentity) {

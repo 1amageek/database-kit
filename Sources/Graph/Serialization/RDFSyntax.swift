@@ -1,3 +1,4 @@
+import DatabaseTypes
 // RDFSyntax.swift
 // Graph - shared concrete RDF syntax helpers
 
@@ -41,26 +42,27 @@ enum RDFSyntaxFormatter {
     static func formatNQuadsTerm(_ term: RDFTerm) -> String {
         switch term {
         case .iri(let value):
-            return "<\(escapeIRI(value))>"
+            return "<\(escapeIRI(value.rawValue))>"
         case .blankNode(let id):
-            return "_:\(id)"
+            return "_:\(id.rawValue)"
         case .literal(let literal):
             return formatLiteral(literal, usePrefixes: false, prefixes: [:])
         case .tripleTerm(let subject, let predicate, let object):
-            return "<<( \(formatNQuadsTerm(subject)) \(formatNQuadsTerm(predicate)) \(formatNQuadsTerm(object)) )>>"
+            return "<<( \(formatNQuadsTerm(subject.term)) \(formatNQuadsTerm(predicate.term)) \(formatNQuadsTerm(object)) )>>"
         }
     }
 
     static func formatTriGTerm(_ term: RDFTerm, prefixes: [String: String]) -> String {
         switch term {
         case .iri(let value):
-            return compactIRI(value, prefixes: prefixes) ?? "<\(escapeIRI(value))>"
+            return compactIRI(value.rawValue, prefixes: prefixes)
+                ?? "<\(escapeIRI(value.rawValue))>"
         case .blankNode(let id):
-            return "_:\(id)"
+            return "_:\(id.rawValue)"
         case .literal(let literal):
             return formatLiteral(literal, usePrefixes: true, prefixes: prefixes)
         case .tripleTerm(let subject, let predicate, let object):
-            return "<<( \(formatTriGTerm(subject, prefixes: prefixes)) \(formatTriGTerm(predicate, prefixes: prefixes)) \(formatTriGTerm(object, prefixes: prefixes)) )>>"
+            return "<<( \(formatTriGTerm(subject.term, prefixes: prefixes)) \(formatTriGTerm(predicate.term, prefixes: prefixes)) \(formatTriGTerm(object, prefixes: prefixes)) )>>"
         }
     }
 
@@ -70,15 +72,15 @@ enum RDFSyntaxFormatter {
         prefixes: [String: String]
     ) -> String {
         var result = "\"\(escapeString(literal.lexicalForm))\""
-        if let language = literal.language {
-            result += "@\(language)"
-            if let direction = literal.direction {
-                result += "--\(direction)"
+        if let language = literal.languageTag {
+            result += "@\(language.rawValue)"
+            if let direction = literal.baseDirection {
+                result += "--\(direction.rawValue)"
             }
             return result
         }
 
-        let datatype = literal.datatype
+        let datatype = literal.datatypeIRI.rawValue
         if datatype == xsdString || datatype == expandedXSDString {
             return result
         }

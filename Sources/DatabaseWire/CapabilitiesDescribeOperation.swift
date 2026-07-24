@@ -1,3 +1,4 @@
+import DatabaseTypes
 public enum CapabilitiesDescribeOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.capabilitiesDescribe
     public typealias Request = DatabaseEmpty

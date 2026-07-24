@@ -1,56 +1,57 @@
+import DatabaseTypes
 import DatabaseValue
 
-extension DatabaseDate: DatabaseLiteralConvertible {
+extension CivilDate: DatabaseLiteralConvertible {
     public var databaseLiteral: Literal {
         .date(self)
     }
 }
 
-extension DatabaseTimestamp: DatabaseLiteralConvertible {
+extension Timestamp: DatabaseLiteralConvertible {
     public var databaseLiteral: Literal {
         .timestamp(self)
     }
 }
 
-extension DatabaseBytes: DatabaseLiteralConvertible {
+extension ByteString: DatabaseLiteralConvertible {
     public var databaseLiteral: Literal {
         .binary(self)
     }
 }
 
-extension DatabaseUUID: DatabaseLiteralConvertible {
+extension DatabaseTypes.UUID: DatabaseLiteralConvertible {
     public var databaseLiteral: Literal {
         .uuid(self)
     }
 }
 
-extension DatabaseRDFTerm: DatabaseLiteralConvertible {
+extension RDFTerm: DatabaseLiteralConvertible {
     public var databaseLiteral: Literal {
         .rdfTerm(self)
     }
 }
 
-extension DatabaseRDFIRI: DatabaseLiteralConvertible {
+extension RDFIRI: DatabaseLiteralConvertible {
     public var databaseLiteral: Literal {
-        .rdfTerm(.iri(rawValue))
+        .rdfTerm(.iri(self))
     }
 }
 
-extension DatabaseRDFPredicateIRI: DatabaseLiteralConvertible {
+extension RDFPredicateIRI: DatabaseLiteralConvertible {
     public var databaseLiteral: Literal {
         .rdfTerm(term)
     }
 }
 
-extension DatabaseRDFLiteral: DatabaseLiteralConvertible {
+extension RDFLiteral: DatabaseLiteralConvertible {
     public var databaseLiteral: Literal {
         .rdfTerm(.literal(self))
     }
 }
 
-extension DatabaseExactDecimal: DatabaseLiteralConvertible {
+extension ExactDecimal: DatabaseLiteralConvertible {
     public var databaseLiteral: Literal {
-        .decimal(coefficient: coefficient, scale: scale)
+        .decimal(self)
     }
 }
 
@@ -82,8 +83,8 @@ extension FieldValue: DatabaseLiteralConvertible {
                 return .double(Double(value))
             case .float64(let value):
                 return .double(value)
-            case .decimal(let coefficient, let scale):
-                return .decimal(coefficient: coefficient, scale: scale)
+            case .decimal(let value):
+                return .decimal(value)
             case .string(let value):
                 return .string(value)
             case .bytes(let value):
@@ -103,7 +104,15 @@ extension FieldValue: DatabaseLiteralConvertible {
                 return .array(literals)
             case .rdfTerm(let value):
                 return .rdfTerm(value)
-            case .object, .reference:
+            case .time,
+                 .dateTime,
+                 .timeSpan,
+                 .calendarPeriod,
+                 .geographicPoint,
+                 .geographicPosition,
+                 .vector,
+                 .object,
+                 .reference:
                 throw .unsupportedFieldValue
             }
         }

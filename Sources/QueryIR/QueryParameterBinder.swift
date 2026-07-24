@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 /// Resolves canonical wire parameters into an immutable QueryIR statement.
@@ -7,7 +8,7 @@ public struct QueryParameterBinder: Sendable {
     private let structuralLimits: QueryStructuralLimits
 
     public init(
-        parameters: [DatabaseObjectField],
+        parameters: [QueryParameter],
         structuralLimits: QueryStructuralLimits = .default
     ) throws {
         try QueryStructuralValidator.validate(
@@ -18,20 +19,26 @@ public struct QueryParameterBinder: Sendable {
         var names: [String: FieldValue] = [:]
 
         for parameter in parameters {
-            guard parameter.number > 0 else {
+            guard parameter.position > 0 else {
                 throw QueryParameterBindingError.invalidPosition(
-                    parameter.number
+                    parameter.position
                 )
             }
-            guard positions.updateValue(parameter.value, forKey: parameter.number) == nil else {
+            guard positions.updateValue(
+                parameter.value,
+                forKey: parameter.position
+            ) == nil else {
                 throw QueryParameterBindingError.duplicatePosition(
-                    parameter.number
+                    parameter.position
                 )
             }
-            if !parameter.name.isEmpty {
-                guard names.updateValue(parameter.value, forKey: parameter.name) == nil else {
+            if let name = parameter.name {
+                guard !name.isEmpty else {
+                    throw QueryParameterBindingError.invalidName
+                }
+                guard names.updateValue(parameter.value, forKey: name) == nil else {
                     throw QueryParameterBindingError.duplicateName(
-                        parameter.name
+                        name
                     )
                 }
             }

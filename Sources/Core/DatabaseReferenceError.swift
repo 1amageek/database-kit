@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 public enum DatabaseReferenceError: Error, Sendable, Equatable {
@@ -6,7 +7,9 @@ public enum DatabaseReferenceError: Error, Sendable, Equatable {
         entity: String,
         reason: PersistableIdentifierValidationError
     )
-    case invalidPartitionFieldNumber(entity: String, field: String)
-    case duplicatePartitionFieldNumber(entity: String, number: UInt32)
-    case duplicatePartitionFieldName(entity: String, field: String)
+    case partitionMismatch(
+        entity: String,
+        expected: [String],
+        actual: [String]
+    )
 }

@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Pure ordering selection shared by every graph execution path.
 public enum GraphIndexScanPlanner {
     public static func ordering(

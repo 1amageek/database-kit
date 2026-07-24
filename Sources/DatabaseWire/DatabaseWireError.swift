@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 /// Errors raised by DatabaseKit wire binary codecs.
@@ -31,12 +32,21 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidErrorCategory(UInt8)
     case invalidRetryability(UInt8)
     case invalidValueTag(UInt8)
-    case invalidPersistableIdentifierTag(UInt8)
-    case emptyPersistableIdentifierComposite
-    case invalidPersistableIdentifier(PersistableIdentifierValidationError)
+    case invalidReferenceIdentifierTag(UInt8)
+    case invalidReferenceIdentifier(ReferenceIdentifierValidationError)
+    case invalidEntityReference(EntityReferenceError)
+    case invalidCivilDate(CivilDateError)
+    case invalidCivilTime(CivilTimeError)
+    case invalidTimeSpan(TimeSpanError)
+    case invalidGeographicPoint(GeographicPointError)
+    case invalidGeographicPosition(GeographicPositionError)
+    case invalidVector(VectorError)
+    case invalidFieldObject(FieldObjectError)
+    case nonCanonicalFieldObject
     case invalidQueryLanguage(UInt8)
     case invalidQueryInput(UInt8)
     case invalidResultPayload(UInt8)
+    case invalidRowValueCount(expected: Int, actual: Int)
     case invalidDigestLength(actual: Int, expected: Int)
     case invalidParameterReference(UInt8)
     case invalidParameterPosition(UInt32)
@@ -55,7 +65,7 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidRDFLiteralAnnotation(UInt8)
     case invalidRDFDirection(UInt8)
     case invalidRDFDirectionValue(String)
-    case invalidCanonicalRDFTerm(DatabaseRDFTermCodecError)
+    case invalidCanonicalRDFTerm(RDFTermCodecError)
     case invalidPropertyPathNegatedSet
     case nonCanonicalPropertyPathPredicateSet
     case invalidPropertyPathRange(minimum: Int, maximum: Int?)

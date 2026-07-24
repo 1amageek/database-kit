@@ -1,3 +1,4 @@
+import DatabaseTypes
 
 /// クエリ実行計画のタイプ
 public enum PlanType: String, Sendable, Codable, Hashable {

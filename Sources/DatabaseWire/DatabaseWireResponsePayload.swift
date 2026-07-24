@@ -1,7 +1,8 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum DatabaseWireResponsePayload: Sendable, Hashable {
-    case success(DatabaseBytes)
+    case success(ByteString)
     case failure(DatabaseRemoteError)
 
     public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {

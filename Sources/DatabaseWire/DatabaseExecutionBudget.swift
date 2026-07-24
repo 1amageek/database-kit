@@ -1,3 +1,4 @@
+import DatabaseTypes
 public struct DatabaseExecutionBudget: DatabaseWireValue, Hashable {
     public let maximumRows: UInt32
     public let maximumWorkUnits: UInt64

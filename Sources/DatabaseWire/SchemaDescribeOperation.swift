@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum SchemaDescribeOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.schemaDescribe
@@ -141,13 +142,13 @@ public enum SchemaDescribeOperation: DatabaseOperation {
         public let name: String
         public let kind: String
         public let fields: [UInt32]
-        public let options: [DatabaseObjectField]
+        public let options: FieldObject
 
         public init(
             name: String,
             kind: String,
             fields: [UInt32],
-            options: [DatabaseObjectField] = []
+            options: FieldObject = FieldObject()
         ) {
             self.name = name
             self.kind = kind
@@ -160,8 +161,7 @@ public enum SchemaDescribeOperation: DatabaseOperation {
             try writer.writeString(kind)
             try writer.writeCount(fields.count)
             for field in fields { writer.writeUInt32(field) }
-            try writer.writeCount(options.count)
-            for option in options { try option.encode(into: &writer) }
+            try options.encode(into: &writer)
         }
 
         fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
@@ -171,13 +171,12 @@ public enum SchemaDescribeOperation: DatabaseOperation {
             var fields: [UInt32] = []
             fields.reserveCapacity(fieldCount)
             for _ in 0..<fieldCount { fields.append(try reader.readUInt32()) }
-            let optionCount = try reader.readCount()
-            var options: [DatabaseObjectField] = []
-            options.reserveCapacity(optionCount)
-            for _ in 0..<optionCount {
-                options.append(try DatabaseObjectField(from: &reader))
-            }
-            self.init(name: name, kind: kind, fields: fields, options: options)
+            self.init(
+                name: name,
+                kind: kind,
+                fields: fields,
+                options: try FieldObject(from: &reader)
+            )
         }
     }
 

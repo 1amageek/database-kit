@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// クエリ実行計画
 public struct QueryPlan: Sendable, Codable, Hashable {
     /// 計画タイプ

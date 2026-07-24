@@ -1,3 +1,4 @@
+import DatabaseTypes
 public struct DatabaseWireLimits: Sendable, Hashable {
     /// The largest recursive value depth that the owned Swift value model can
     /// release safely on every supported runtime stack.

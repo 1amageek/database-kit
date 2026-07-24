@@ -1,3 +1,4 @@
+import DatabaseTypes
 // Descriptor.swift
 // Core - Unified descriptor protocol for Persistable metadata
 //

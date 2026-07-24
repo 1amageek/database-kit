@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Provides runtime access to an OWL class IRI.
 ///
 /// Allows `Schema.Entity` (in Core) to extract ontology metadata

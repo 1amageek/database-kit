@@ -1,3 +1,4 @@
+import DatabaseTypes
 // SHACLPath.swift
 // Graph - SHACL property path expressions
 //

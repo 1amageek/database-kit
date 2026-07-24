@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// FieldSchema - Field-level type metadata for Persistable types
 ///
 /// Provides compile-time metadata about each field's name, type, and Protobuf field number.

@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Macro that binds a Persistable type to an OWL ObjectProperty,
 /// materializing a relationship as a first-class entity.
 ///

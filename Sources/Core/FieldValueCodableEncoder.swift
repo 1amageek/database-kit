@@ -1,3 +1,5 @@
+import DatabaseTypes
+import DatabaseTypesFoundation
 import DatabaseValue
 import DatabaseValueCodable
 #if canImport(FoundationEssentials)
@@ -30,14 +32,12 @@ private enum DatabaseValueEncoding {
         case let scalar as Double: return .float64(scalar)
         case let scalar as String: return .string(scalar)
         case let scalar as Data:
-            return .bytes(
-                DatabaseBytes(
-                    retaining: RetainedDataByteOwner(data: scalar)
-                )
-            )
-        case let scalar as UUID: return .uuid(databaseUUID(scalar))
-        case let scalar as Date: return .timestamp(try databaseTimestamp(scalar))
-        case let scalar as DatabaseRDFTerm: return .rdfTerm(scalar)
+            return .bytes(ByteString(retaining: scalar))
+        case let scalar as Foundation.UUID:
+            return .uuid(DatabaseTypes.UUID(scalar))
+        case let scalar as Date:
+            return .timestamp(try Timestamp(scalar))
+        case let scalar as RDFTerm: return .rdfTerm(scalar)
         default:
             let encoder = DatabaseValueEncoder()
             try value.encode(to: encoder)
@@ -51,40 +51,6 @@ private enum DatabaseValueEncoding {
         }
     }
 
-    private static func databaseUUID(_ value: UUID) -> DatabaseUUID {
-        let bytes = value.uuid
-        let values = [
-            bytes.0, bytes.1, bytes.2, bytes.3,
-            bytes.4, bytes.5, bytes.6, bytes.7,
-            bytes.8, bytes.9, bytes.10, bytes.11,
-            bytes.12, bytes.13, bytes.14, bytes.15,
-        ]
-        let high = values[..<8].reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
-        let low = values[8...].reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
-        return DatabaseUUID(high: high, low: low)
-    }
-
-    private static func databaseTimestamp(_ value: Date) throws -> DatabaseTimestamp {
-        let interval = value.timeIntervalSince1970
-        let integral = interval.rounded(.down)
-        guard let seconds = Int64(exactly: integral) else {
-            throw EncodingError.invalidValue(
-                value,
-                .init(codingPath: [], debugDescription: "Date seconds exceed Int64")
-            )
-        }
-        let nanoseconds = ((interval - integral) * 1_000_000_000).rounded()
-        guard nanoseconds >= 0, nanoseconds < 1_000_000_000 else {
-            throw EncodingError.invalidValue(
-                value,
-                .init(codingPath: [], debugDescription: "Date nanoseconds are invalid")
-            )
-        }
-        return DatabaseTimestamp(
-            secondsSinceUnixEpoch: seconds,
-            nanoseconds: UInt32(nanoseconds)
-        )
-    }
 }
 
 private final class DatabaseValueEncoder: Encoder {
@@ -111,7 +77,7 @@ private final class DatabaseValueEncoder: Encoder {
         let objectState = DatabaseObjectEncodingState { [weak self] value in
             self?.encodedValue = value
         }
-        encodedValue = .object([])
+        encodedValue = .object(FieldObject())
         return KeyedEncodingContainer(
             DatabaseValueKeyedEncodingContainer<Key>(
                 objectState: objectState,
@@ -137,7 +103,7 @@ private final class DatabaseValueEncoder: Encoder {
 }
 
 private final class DatabaseObjectEncodingState {
-    private var entries: [(name: String, number: UInt32, value: FieldValue)] = []
+    private var entries: [(key: String, value: FieldValue)] = []
     private let commitObject: (FieldValue) -> Void
 
     init(commitObject: @escaping (FieldValue) -> Void) {
@@ -145,26 +111,20 @@ private final class DatabaseObjectEncodingState {
     }
 
     func set(_ value: FieldValue, for key: some CodingKey) {
-        if let index = entries.firstIndex(where: { $0.name == key.stringValue }) {
+        if let index = entries.firstIndex(where: { $0.key == key.stringValue }) {
             entries[index].value = value
         } else {
-            let candidate = key.intValue.flatMap(UInt32.init(exactly:))
-            var number = candidate ?? UInt32(entries.count + 1)
-            if number == 0 || entries.contains(where: { $0.number == number }) {
-                number = 1
-                while entries.contains(where: { $0.number == number }) {
-                    number += 1
-                }
-            }
-            entries.append((key.stringValue, number, value))
+            entries.append((key.stringValue, value))
         }
-        commitObject(
-            .object(
-                entries.map {
-                    DatabaseObjectField(number: $0.number, name: $0.name, value: $0.value)
-                }
+        let object: FieldObject
+        do {
+            object = try FieldObject(entries)
+        } catch {
+            preconditionFailure(
+                "Keyed encoding state produced duplicate object keys"
             )
-        )
+        }
+        commitObject(.object(object))
     }
 }
 

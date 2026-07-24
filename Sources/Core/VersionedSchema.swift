@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// VersionedSchema - Protocol for defining schema versions
 ///
 /// **Design**: Each schema version is represented as a type conforming to this protocol.

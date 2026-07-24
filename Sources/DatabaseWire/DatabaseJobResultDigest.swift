@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 import DatabaseDigest
 
 /// Canonical SHA-256 digest of a completed job response payload.
@@ -7,10 +8,10 @@ public struct DatabaseJobResultDigest:
     Hashable {
     public static let byteCount = 32
 
-    public let bytes: DatabaseBytes
+    public let bytes: ByteString
 
     public init(
-        _ bytes: DatabaseBytes
+        _ bytes: ByteString
     ) throws(DatabaseWireError) {
         guard bytes.count == Self.byteCount else {
             throw .invalidDigestLength(
@@ -24,7 +25,7 @@ public struct DatabaseJobResultDigest:
     public init(
         _ bytes: [UInt8]
     ) throws(DatabaseWireError) {
-        try self.init(DatabaseBytes(bytes))
+        try self.init(ByteString(bytes))
     }
 
     public func encode(
@@ -52,7 +53,7 @@ public struct DatabaseJobResultDigest:
         DatabaseJobResultDigest(validatedBytes: bytes.detached())
     }
 
-    fileprivate init(validatedBytes: DatabaseBytes) {
+    fileprivate init(validatedBytes: ByteString) {
         self.bytes = validatedBytes
     }
 }
@@ -63,8 +64,8 @@ public struct DatabaseJobResultDigest:
 /// order, the kind UTF-8 length and bytes, the ASCII domain `JRST`, and the
 /// response payload bytes in page order.
 public struct DatabaseJobResultDigestAccumulator: Sendable {
-    private static let identifierDomain: DatabaseBytes = [0x4a, 0x4f, 0x50, 0x49]
-    private static let resultDomain: DatabaseBytes = [0x4a, 0x52, 0x53, 0x54]
+    private static let identifierDomain: ByteString = [0x4a, 0x4f, 0x50, 0x49]
+    private static let resultDomain: ByteString = [0x4a, 0x52, 0x53, 0x54]
 
     private var sha256: SHA256Accumulator
 
@@ -91,7 +92,7 @@ public struct DatabaseJobResultDigestAccumulator: Sendable {
         self.sha256 = sha256
     }
 
-    public mutating func update(_ bytes: DatabaseBytes) {
+    public mutating func update(_ bytes: ByteString) {
         bytes.withUnsafeBytes { source in
             sha256.update(source)
         }

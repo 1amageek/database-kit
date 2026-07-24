@@ -1,3 +1,5 @@
+import DatabaseTypes
+import DatabaseValue
 import Graph
 import Testing
 
@@ -5,16 +7,16 @@ import Testing
 struct SHACLRDFDecoderTests {
     @Test("node and property shapes decode from canonical RDF")
     func nodeAndPropertyShapesDecode() throws {
-        let nodeShape = RDFTerm.iri("urn:PersonShape")
-        let propertyShape = RDFTerm.blankNode("name-property")
+        let nodeShape = Self.iri("urn:PersonShape")
+        let propertyShape = Self.blankNode("name-property")
         let dataset = RDFDataset(quads: [
-            Self.quad(nodeShape, Self.rdfType, .iri(Self.shNodeShape)),
-            Self.quad(nodeShape, Self.shTargetClass, .iri("urn:Person")),
+            Self.quad(nodeShape, Self.rdfType, Self.iri(Self.shNodeShape)),
+            Self.quad(nodeShape, Self.shTargetClass, Self.iri("urn:Person")),
             Self.quad(nodeShape, Self.shProperty, propertyShape),
-            Self.quad(propertyShape, Self.rdfType, .iri(Self.shPropertyShape)),
-            Self.quad(propertyShape, Self.shPath, .iri("urn:name")),
+            Self.quad(propertyShape, Self.rdfType, Self.iri(Self.shPropertyShape)),
+            Self.quad(propertyShape, Self.shPath, Self.iri("urn:name")),
             Self.quad(propertyShape, Self.shMinCount, Self.integer(1)),
-            Self.quad(propertyShape, Self.shDatatype, .iri(Self.xsdString)),
+            Self.quad(propertyShape, Self.shDatatype, Self.iri(Self.xsdString)),
             Self.quad(propertyShape, Self.shMessage, .string("A name is required"))
         ])
 
@@ -42,18 +44,18 @@ struct SHACLRDFDecoderTests {
 
     @Test("compound property paths decode through RDF lists")
     func compoundPathsDecode() throws {
-        let propertyShape = RDFTerm.iri("urn:AncestorNameShape")
-        let pathHead = RDFTerm.blankNode("path-head")
-        let pathTail = RDFTerm.blankNode("path-tail")
-        let inverse = RDFTerm.blankNode("inverse")
+        let propertyShape = Self.iri("urn:AncestorNameShape")
+        let pathHead = Self.blankNode("path-head")
+        let pathTail = Self.blankNode("path-tail")
+        let inverse = Self.blankNode("inverse")
         let dataset = RDFDataset(quads: [
-            Self.quad(propertyShape, Self.rdfType, .iri(Self.shPropertyShape)),
+            Self.quad(propertyShape, Self.rdfType, Self.iri(Self.shPropertyShape)),
             Self.quad(propertyShape, Self.shPath, pathHead),
             Self.quad(pathHead, Self.rdfFirst, inverse),
             Self.quad(pathHead, Self.rdfRest, pathTail),
-            Self.quad(pathTail, Self.rdfFirst, .iri("urn:name")),
-            Self.quad(pathTail, Self.rdfRest, .iri(Self.rdfNil)),
-            Self.quad(inverse, Self.shInversePath, .iri("urn:parent"))
+            Self.quad(pathTail, Self.rdfFirst, Self.iri("urn:name")),
+            Self.quad(pathTail, Self.rdfRest, Self.iri(Self.rdfNil)),
+            Self.quad(inverse, Self.shInversePath, Self.iri("urn:parent"))
         ])
 
         let graph = try SHACLRDFDecoder().decode(
@@ -76,13 +78,13 @@ struct SHACLRDFDecoderTests {
 
     @Test("unknown SHACL predicates are rejected")
     func unknownPredicatesAreRejected() {
-        let shape = RDFTerm.iri("urn:UnsupportedShape")
+        let shape = Self.iri("urn:UnsupportedShape")
         let dataset = RDFDataset(quads: [
-            Self.quad(shape, Self.rdfType, .iri(Self.shNodeShape)),
+            Self.quad(shape, Self.rdfType, Self.iri(Self.shNodeShape)),
             Self.quad(
                 shape,
                 "http://www.w3.org/ns/shacl#sparql",
-                .blankNode("constraint")
+                Self.blankNode("constraint")
             )
         ])
 
@@ -101,13 +103,29 @@ struct SHACLRDFDecoderTests {
     ) -> RDFQuad {
         RDFQuad(
             subject: subject,
-            predicate: .iri(predicate),
+            predicate: Self.iri(predicate),
             object: object
         )
     }
 
     private static func integer(_ value: Int) -> RDFTerm {
         .literal(.integer(value))
+    }
+
+    private static func iri(_ rawValue: String) -> RDFTerm {
+        do {
+            return try .iri(validating: rawValue)
+        } catch {
+            preconditionFailure("Invalid RDF IRI fixture: \(rawValue)")
+        }
+    }
+
+    private static func blankNode(_ rawValue: String) -> RDFTerm {
+        do {
+            return try .blankNode(identifier: rawValue)
+        } catch {
+            preconditionFailure("Invalid blank-node fixture: \(rawValue)")
+        }
     }
 
     private static let rdfNamespace =

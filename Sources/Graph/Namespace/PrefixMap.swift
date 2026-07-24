@@ -1,3 +1,4 @@
+import DatabaseTypes
 // PrefixMap.swift
 // Graph - IRI prefix/namespace management
 //

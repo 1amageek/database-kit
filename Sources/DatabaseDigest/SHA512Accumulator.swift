@@ -1,4 +1,4 @@
-public import DatabaseValue
+public import DatabaseTypes
 
 /// Incrementally computes a canonical SHA-512 digest.
 ///
@@ -11,7 +11,7 @@ public struct SHA512Accumulator: Sendable {
 
     public init() {}
 
-    public mutating func update(_ bytes: DatabaseBytes) {
+    public mutating func update(_ bytes: ByteString) {
         state.update(bytes)
     }
 
@@ -28,7 +28,7 @@ public struct SHA512Accumulator: Sendable {
         state.update(utf8: value)
     }
 
-    public consuming func finalize() -> DatabaseBytes {
+    public consuming func finalize() -> ByteString {
         state.finalize(digestByteCount: Self.digestByteCount)
     }
 

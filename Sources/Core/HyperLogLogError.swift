@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Errors produced by HyperLogLog configuration and merge operations.
 public enum HyperLogLogError: Error, Sendable, Equatable {
     case invalidPrecision(Int)

@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// IndexMetadataValue - Sendable, Hashable, and Codable metadata value
 ///
 /// Supports common types that can appear in IndexKind Codable representations.
@@ -11,7 +12,7 @@ public enum IndexMetadataValue: Sendable, Hashable, Codable {
     case bool(Bool)
     case stringArray([String])
     case intArray([Int])
-    case rdfTerm(DatabaseRDFTerm)
+    case rdfTerm(RDFTerm)
 
     // MARK: - Codable
 
@@ -47,7 +48,7 @@ public enum IndexMetadataValue: Sendable, Hashable, Codable {
             let value = try container.decode([Int].self, forKey: .value)
             self = .intArray(value)
         case .rdfTerm:
-            let value = try container.decode(DatabaseRDFTerm.self, forKey: .value)
+            let value = try container.decode(RDFTerm.self, forKey: .value)
             self = .rdfTerm(value)
         }
     }
@@ -112,7 +113,7 @@ public enum IndexMetadataValue: Sendable, Hashable, Codable {
         return nil
     }
 
-    public var rdfTermValue: DatabaseRDFTerm? {
+    public var rdfTermValue: RDFTerm? {
         if case .rdfTerm(let value) = self { return value }
         return nil
     }

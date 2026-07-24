@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum OntologyExecuteOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.ontologyExecute
@@ -234,14 +235,14 @@ public enum OntologyExecuteOperation: DatabaseOperation {
         public let revision: UInt64
         public let imports: [String]
         public let axioms: [DatabaseRDFQuad]
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
 
         public init(
             ontology: String,
             revision: UInt64,
             imports: [String],
             axioms: [DatabaseRDFQuad],
-            continuation: DatabaseBytes? = nil
+            continuation: ByteString? = nil
         ) {
             self.ontology = ontology
             self.revision = revision
@@ -290,12 +291,12 @@ public enum OntologyExecuteOperation: DatabaseOperation {
     public struct InferencePage: DatabaseWireValue, Hashable {
         public let inferredAxioms: [DatabaseRDFQuad]
         public let isComplete: Bool
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
 
         public init(
             inferredAxioms: [DatabaseRDFQuad],
             isComplete: Bool,
-            continuation: DatabaseBytes? = nil
+            continuation: ByteString? = nil
         ) {
             self.inferredAxioms = inferredAxioms
             self.isComplete = isComplete
@@ -356,9 +357,9 @@ public enum OntologyExecuteOperation: DatabaseOperation {
 
     public struct HierarchyPage: DatabaseWireValue, Hashable {
         public let entries: [HierarchyEntry]
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
 
-        public init(entries: [HierarchyEntry], continuation: DatabaseBytes? = nil) {
+        public init(entries: [HierarchyEntry], continuation: ByteString? = nil) {
             self.entries = entries
             self.continuation = continuation
         }

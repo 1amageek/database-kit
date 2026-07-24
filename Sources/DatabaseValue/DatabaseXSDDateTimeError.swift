@@ -1,5 +1,5 @@
-public enum DatabaseXSDDateTimeError: Error, Sendable, Equatable {
-    case invalidDate(DatabaseDate)
-    case invalidNanoseconds(UInt32)
+import DatabaseTypes
+
+public enum XSDDateTimeError: Error, Sendable, Equatable {
     case timestampOutOfSupportedYearRange
 }

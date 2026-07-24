@@ -1,4 +1,4 @@
-import DatabaseValue
+import DatabaseTypes
 
 /// A deterministic QueryIR structural resource-limit violation.
 public enum QueryStructuralValidationError: Error, Sendable, Equatable {
@@ -20,7 +20,7 @@ public enum QueryStructuralValidationError: Error, Sendable, Equatable {
         actual: UInt64,
         maximum: UInt64
     )
-    case invalidPersistableIdentifier(PersistableIdentifierValidationError)
+    case invalidReferenceIdentifier(ReferenceIdentifierValidationError)
 }
 
 extension QueryStructuralValidationError: CustomStringConvertible {
@@ -28,8 +28,8 @@ extension QueryStructuralValidationError: CustomStringConvertible {
         switch self {
         case .resourceLimitExceeded(let resource, let actual, let maximum):
             return "Query \(resource.rawValue) limit exceeded: \(actual) > \(maximum)"
-        case .invalidPersistableIdentifier(let error):
-            return "Query contains an invalid persistable identifier: \(error)"
+        case .invalidReferenceIdentifier(let error):
+            return "Query contains an invalid reference identifier: \(error)"
         }
     }
 }

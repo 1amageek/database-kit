@@ -1,13 +1,14 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public struct DatabaseCommandRequest: DatabaseWireValue, Hashable {
     public let command: String
-    public let input: DatabaseBytes
+    public let input: ByteString
     public let budget: DatabaseExecutionBudget
 
     public init(
         command: String,
-        input: DatabaseBytes = [],
+        input: ByteString = [],
         budget: DatabaseExecutionBudget = DatabaseExecutionBudget()
     ) {
         self.command = command

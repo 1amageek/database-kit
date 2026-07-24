@@ -1,6 +1,7 @@
+import DatabaseTypes
 import DatabaseValue
 
-extension DatabaseRDFLiteral: Codable {
+extension RDFLiteral: @retroactive Codable {
     private enum CodingKeys: String, CodingKey {
         case lexicalForm
         case annotation
@@ -35,9 +36,9 @@ extension DatabaseRDFLiteral: Codable {
                 String.self,
                 forKey: .datatype
             )
-            let datatype: DatabaseRDFTypedLiteralDatatype
+            let datatype: RDFTypedLiteralDatatype
             do {
-                datatype = try DatabaseRDFTypedLiteralDatatype(rawDatatype)
+                datatype = try RDFTypedLiteralDatatype(rawDatatype)
             } catch {
                 throw DecodingError.dataCorruptedError(
                     forKey: .datatype,
@@ -61,7 +62,7 @@ extension DatabaseRDFLiteral: Codable {
                 String.self,
                 forKey: .direction
             )
-            guard let direction = DatabaseRDFDirection(rawValue: rawDirection) else {
+            guard let direction = RDFDirection(rawValue: rawDirection) else {
                 throw DecodingError.dataCorruptedError(
                     forKey: .direction,
                     in: container,
@@ -101,10 +102,10 @@ extension DatabaseRDFLiteral: Codable {
 
     private static func decodeLanguage(
         from container: KeyedDecodingContainer<CodingKeys>
-    ) throws -> DatabaseRDFLanguageTag {
+    ) throws -> RDFLanguageTag {
         let rawLanguage = try container.decode(String.self, forKey: .language)
         do {
-            return try DatabaseRDFLanguageTag(rawLanguage)
+            return try RDFLanguageTag(rawLanguage)
         } catch {
             throw DecodingError.dataCorruptedError(
                 forKey: .language,

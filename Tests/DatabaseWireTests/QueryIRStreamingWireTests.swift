@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import DatabaseWire
 import QueryIR
@@ -24,7 +25,7 @@ struct QueryIRStreamingWireTests {
         )
 
         #expect(preparedByteCount == expected.count)
-        #expect(DatabaseBytes(streamed) == expected)
+        #expect(ByteString(streamed) == expected)
     }
 
     @Test("prepare failure occurs before the first sink emission")
@@ -118,7 +119,7 @@ struct QueryIRStreamingWireTests {
             consume: { streamed.append(contentsOf: $0) }
         )
 
-        #expect(DatabaseBytes(streamed) == expected)
+        #expect(ByteString(streamed) == expected)
     }
 
     private func canonicalStatement() -> QueryStatement {

@@ -1,3 +1,4 @@
+import DatabaseTypes
 import Testing
 import Foundation
 import DatabaseValue
@@ -127,7 +128,9 @@ struct FieldValueTests {
         #expect(maximum != roundedBeyondMaximum)
         #expect(maximum.compare(to: penultimate) == .orderedDescending)
         #expect(maximum.compare(to: roundedBeyondMaximum) == .orderedAscending)
-        #expect(try penultimate.stableHash() != maximum.stableHash())
+        let penultimateHash = try penultimate.stableHash()
+        let maximumHash = try maximum.stableHash()
+        #expect(penultimateHash != maximumHash)
     }
 
     // MARK: - Initialization
@@ -143,7 +146,7 @@ struct FieldValueTests {
     @Test("Init from Double")
     func testInitDouble() {
         let value = FieldValue.float64(3.14)
-        #expect(value.doubleValue == 3.14)
+        #expect(value.float64Value == 3.14)
         #expect(value.isNumeric == true)
         #expect(value.isNull == false)
     }
@@ -168,7 +171,7 @@ struct FieldValueTests {
 
     @Test("Init from Data")
     func testInitData() {
-        let data: DatabaseBytes = [1, 2, 3, 4]
+        let data: ByteString = [1, 2, 3, 4]
         let value = FieldValue.bytes(data)
 
         #expect(value.bytesValue == data)
@@ -196,42 +199,44 @@ struct FieldValueTests {
     @Test("Convert from Int32")
     func testConvertInt32() {
         let value = Int32(42).toFieldValue()
-        #expect(value.int64Value == 42)
+        #expect(value.int32Value == 42)
     }
 
     @Test("Convert from Float")
     func testConvertFloat() {
         let value = Float(3.14).toFieldValue()
-        #expect(value.doubleValue != nil)
+        #expect(value.float32Value != nil)
     }
 
     @Test("Optional conversion preserves value and absence")
-    func optionalConversionPreservesValueAndAbsence() {
+    func optionalConversionPreservesValueAndAbsence() throws {
         let present: String? = "calendar"
         let absent: String? = nil
+        let presentValue = try present.toFieldValue()
+        let absentValue = try absent.toFieldValue()
 
-        #expect(present.toFieldValue() == .string("calendar"))
-        #expect(absent.toFieldValue() == .null)
+        #expect(presentValue == .string("calendar"))
+        #expect(absentValue == .null)
     }
 
     // MARK: - Numeric projection
 
-    @Test("numericDoubleValue for int64")
-    func testNumericDoubleValueInt64() {
+    @Test("query numeric difference projects int64")
+    func testNumericDifferenceInt64() {
         let value = FieldValue.int64(42)
-        #expect(value.numericDoubleValue == 42.0)
+        #expect(value.numericDifference(from: .int64(0)) == 42.0)
     }
 
-    @Test("numericDoubleValue for double")
-    func testNumericDoubleValueDouble() {
+    @Test("query numeric difference projects float64")
+    func testNumericDifferenceDouble() {
         let value = FieldValue.float64(3.14)
-        #expect(value.numericDoubleValue == 3.14)
+        #expect(value.numericDifference(from: .float64(0)) == 3.14)
     }
 
-    @Test("numericDoubleValue for non-numeric returns nil")
-    func testNumericDoubleValueNonNumeric() {
+    @Test("query numeric difference rejects non-numeric values")
+    func testNumericDifferenceNonNumeric() {
         let value = FieldValue.string("hello")
-        #expect(value.numericDoubleValue == nil)
+        #expect(value.numericDifference(from: .int64(0)) == nil)
     }
 
     // MARK: - Comparable
@@ -255,16 +260,17 @@ struct FieldValueTests {
         #expect(!(b < a))
     }
 
-    @Test("Decimal ordering preserves exact storage identity")
-    func decimalOrderingPreservesExactStorageIdentity() {
-        let onePointZero = FieldValue.decimal(coefficient: 10, scale: 1)
+    @Test("Decimal identity uses its normalized canonical value")
+    func decimalIdentityUsesNormalizedValue() {
+        let onePointZero = FieldValue.decimal(
+            ExactDecimal(coefficient: 10, scale: 1)
+        )
         let onePointZeroZero = FieldValue.decimal(
-            coefficient: 100,
-            scale: 2
+            ExactDecimal(coefficient: 100, scale: 2)
         )
 
-        #expect(onePointZero != onePointZeroZero)
-        #expect(onePointZero < onePointZeroZero)
+        #expect(onePointZero == onePointZeroZero)
+        #expect(!(onePointZero < onePointZeroZero))
         #expect(!(onePointZeroZero < onePointZero))
     }
 
@@ -407,32 +413,45 @@ struct FieldValueTests {
         let intVal = FieldValue.int64(1)
         let strVal = FieldValue.string("1")
 
-        #expect(try intVal.stableHash() != strVal.stableHash())
+        let integerHash = try intVal.stableHash()
+        let stringHash = try strVal.stableHash()
+        #expect(integerHash != stringHash)
     }
 
     @Test("RDF stable hash is deterministic and semantic")
     func testRDFStableHash() throws {
-        let first = FieldValue.rdfTerm(.iri("urn:database:first"))
-        let same = FieldValue.rdfTerm(.iri("urn:database:first"))
-        let different = FieldValue.rdfTerm(.blankNode("urn:database:first"))
+        let first = FieldValue.rdfTerm(
+            try .iri(validating: "urn:database:first")
+        )
+        let same = FieldValue.rdfTerm(
+            try .iri(validating: "urn:database:first")
+        )
+        let different = FieldValue.rdfTerm(
+            try .blankNode(identifier: "urn:database:first")
+        )
 
-        #expect(try first.stableHash() == same.stableHash())
-        #expect(try first.stableHash() != different.stableHash())
+        let firstHash = try first.stableHash()
+        let sameHash = try same.stableHash()
+        let differentHash = try different.stableHash()
+        #expect(firstHash == sameHash)
+        #expect(firstHash != differentHash)
     }
 
     @Test("RDF language-tag identity and stable hash are consistent")
     func testRDFLanguageTagStableHash() throws {
-        let uppercase = FieldValue.rdfTerm(.literal(DatabaseRDFLiteral(
+        let uppercase = FieldValue.rdfTerm(.literal(RDFLiteral(
             lexicalForm: "hello",
-            language: try DatabaseRDFLanguageTag("EN-Latn-US")
+            language: try RDFLanguageTag("EN-Latn-US")
         )))
-        let lowercase = FieldValue.rdfTerm(.literal(DatabaseRDFLiteral(
+        let lowercase = FieldValue.rdfTerm(.literal(RDFLiteral(
             lexicalForm: "hello",
-            language: try DatabaseRDFLanguageTag("en-latn-us")
+            language: try RDFLanguageTag("en-latn-us")
         )))
 
         #expect(uppercase == lowercase)
-        #expect(try uppercase.stableHash() == lowercase.stableHash())
+        let uppercaseHash = try uppercase.stableHash()
+        let lowercaseHash = try lowercase.stableHash()
+        #expect(uppercaseHash == lowercaseHash)
     }
 
     @Test("Stable hash for all types")
@@ -456,17 +475,6 @@ struct FieldValueTests {
         #expect(hashes.count == values.count)
     }
 
-    @Test("invalid RDF values fail canonical hashing")
-    func invalidRDFHashFails() {
-        let value = FieldValue.rdfTerm(.iri("relative"))
-
-        #expect(
-            throws: DatabaseRDFTermCodecError.invalidIRI(.missingScheme)
-        ) {
-            _ = try value.stableHash()
-        }
-    }
-
     @Test("query numeric comparison does not alter stored identity")
     func queryNumericComparisonPreservesStoredIdentity() throws {
         let exactInteger = FieldValue.int64(42)
@@ -475,10 +483,14 @@ struct FieldValueTests {
         let roundedDouble = FieldValue.float64(9_007_199_254_740_992)
 
         #expect(exactInteger != exactDouble)
-        #expect(try exactInteger.stableHash() != exactDouble.stableHash())
+        let exactIntegerHash = try exactInteger.stableHash()
+        let exactDoubleHash = try exactDouble.stableHash()
+        #expect(exactIntegerHash != exactDoubleHash)
         #expect(exactInteger.compare(to: exactDouble) == .orderedSame)
         #expect(roundedInteger != roundedDouble)
-        #expect(try roundedInteger.stableHash() != roundedDouble.stableHash())
+        let roundedIntegerHash = try roundedInteger.stableHash()
+        let roundedDoubleHash = try roundedDouble.stableHash()
+        #expect(roundedIntegerHash != roundedDoubleHash)
         #expect(roundedInteger.compare(to: roundedDouble) == .orderedDescending)
     }
 }

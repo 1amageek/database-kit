@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Stable value representation of an index kind for schema catalogs and runtime dispatch.
 ///
 /// Contains the storage contract and kind-specific metadata required to restore

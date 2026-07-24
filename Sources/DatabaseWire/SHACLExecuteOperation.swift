@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum SHACLExecuteOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.shaclExecute
@@ -40,7 +41,7 @@ public enum SHACLExecuteOperation: DatabaseOperation {
 
     public enum DataGraph: Sendable, Hashable {
         case defaultGraph
-        case named(DatabaseRDFTerm)
+        case named(RDFTerm)
 
         fileprivate func encode(
             into writer: inout DatabaseWireWriter
@@ -61,7 +62,7 @@ public enum SHACLExecuteOperation: DatabaseOperation {
             case 1:
                 self = .defaultGraph
             case 2:
-                self = .named(try DatabaseRDFTerm(from: &reader))
+                self = .named(try RDFTerm(from: &reader))
             case let tag:
                 throw .invalidValueTag(tag)
             }
@@ -71,13 +72,13 @@ public enum SHACLExecuteOperation: DatabaseOperation {
     public struct DataSource: DatabaseWireValue, Hashable {
         public let entity: String
         public let index: String
-        public let partitions: [DatabaseObjectField]
+        public let partitions: FieldObject
         public let graph: DataGraph
 
         public init(
             entity: String,
             index: String,
-            partitions: [DatabaseObjectField] = [],
+            partitions: FieldObject = FieldObject(),
             graph: DataGraph
         ) {
             self.entity = entity
@@ -91,10 +92,7 @@ public enum SHACLExecuteOperation: DatabaseOperation {
         ) throws(DatabaseWireError) {
             try writer.writeString(entity)
             try writer.writeString(index)
-            try writer.writeCount(partitions.count)
-            for partition in partitions {
-                try partition.encode(into: &writer)
-            }
+            try partitions.encode(into: &writer)
             try graph.encode(into: &writer)
         }
 
@@ -103,16 +101,10 @@ public enum SHACLExecuteOperation: DatabaseOperation {
         ) throws(DatabaseWireError) {
             let entity = try reader.readString()
             let index = try reader.readString()
-            let count = try reader.readCount()
-            var partitions: [DatabaseObjectField] = []
-            partitions.reserveCapacity(count)
-            for _ in 0..<count {
-                partitions.append(try DatabaseObjectField(from: &reader))
-            }
             self.init(
                 entity: entity,
                 index: index,
-                partitions: partitions,
+                partitions: try FieldObject(from: &reader),
                 graph: try DataGraph(from: &reader)
             )
         }
@@ -120,8 +112,8 @@ public enum SHACLExecuteOperation: DatabaseOperation {
 
     public enum Focus: Sendable, Hashable {
         case targets
-        case nodes([DatabaseRDFTerm])
-        case entities([PersistableIdentity])
+        case nodes([RDFTerm])
+        case entities([EntityReference])
 
         fileprivate func encode(
             into writer: inout DatabaseWireWriter
@@ -152,18 +144,18 @@ public enum SHACLExecuteOperation: DatabaseOperation {
                 self = .targets
             case 2:
                 let count = try reader.readCount()
-                var nodes: [DatabaseRDFTerm] = []
+                var nodes: [RDFTerm] = []
                 nodes.reserveCapacity(count)
                 for _ in 0..<count {
-                    nodes.append(try DatabaseRDFTerm(from: &reader))
+                    nodes.append(try RDFTerm(from: &reader))
                 }
                 self = .nodes(nodes)
             case 3:
                 let count = try reader.readCount()
-                var identities: [PersistableIdentity] = []
+                var identities: [EntityReference] = []
                 identities.reserveCapacity(count)
                 for _ in 0..<count {
-                    identities.append(try PersistableIdentity(from: &reader))
+                    identities.append(try EntityReference(from: &reader))
                 }
                 self = .entities(identities)
             case let tag:
@@ -309,13 +301,13 @@ public enum SHACLExecuteOperation: DatabaseOperation {
         public let graph: String
         public let revision: UInt64
         public let shapes: [DatabaseRDFQuad]
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
 
         public init(
             graph: String,
             revision: UInt64,
             shapes: [DatabaseRDFQuad],
-            continuation: DatabaseBytes? = nil
+            continuation: ByteString? = nil
         ) {
             self.graph = graph
             self.revision = revision

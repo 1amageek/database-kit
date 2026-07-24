@@ -1,5 +1,5 @@
 import Foundation
-import DatabaseValue
+import DatabaseTypes
 import SwiftCompilerPlugin
 import SwiftSyntax
 import SwiftSyntaxBuilder
@@ -79,7 +79,7 @@ public struct OWLObjectPropertyMacro: MemberMacro, ExtensionMacro {
                 )
             ])
         }
-        guard DatabaseRDFIRIValidator.isAbsolute(iri) else {
+        guard RDFIRISyntax.isValid(iri) else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
@@ -115,7 +115,7 @@ public struct OWLObjectPropertyMacro: MemberMacro, ExtensionMacro {
             if let varDecl = member.decl.as(VariableDeclSyntax.self) {
                 guard let propertyAttr = getOWLDataPropertyAttribute(varDecl) else { continue }
                 let info = extractOWLDataPropertyInfo(from: propertyAttr)
-                guard DatabaseRDFIRIValidator.isAbsolute(info.iri) else {
+                guard RDFIRISyntax.isValid(info.iri) else {
                     throw DiagnosticsError(diagnostics: [
                         Diagnostic(
                             node: Syntax(propertyAttr),

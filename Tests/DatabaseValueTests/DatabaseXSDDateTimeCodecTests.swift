@@ -1,46 +1,47 @@
+import DatabaseTypes
 import DatabaseValue
 import Testing
 
 @Suite("Database XSD Date Time Codec")
-struct DatabaseXSDDateTimeCodecTests {
+struct XSDDateTimeCodecTests {
     @Test func formatsCanonicalDatesWithoutIntermediateFormattingObjects() throws {
         #expect(
-            try DatabaseXSDDateTimeCodec.format(
-                date: DatabaseDate(year: 2026, month: 7, day: 20)
+            XSDDateTimeCodec.format(
+                date: try CivilDate(year: 2026, month: 7, day: 20)
             ) == "2026-07-20"
         )
         #expect(
-            try DatabaseXSDDateTimeCodec.format(
-                date: DatabaseDate(year: 10_000, month: 1, day: 2)
+            XSDDateTimeCodec.format(
+                date: try CivilDate(year: 10_000, month: 1, day: 2)
             ) == "10000-01-02"
         )
         #expect(
-            try DatabaseXSDDateTimeCodec.format(
-                date: DatabaseDate(year: 0, month: 2, day: 29)
+            XSDDateTimeCodec.format(
+                date: try CivilDate(year: 0, month: 2, day: 29)
             ) == "0000-02-29"
         )
     }
 
-    @Test func rejectsInvalidAndNonCanonicalDateLexicalForms() {
+    @Test func rejectsInvalidAndNonCanonicalDateLexicalForms() throws {
         #expect(
-            DatabaseXSDDateTimeCodec.parseDate("2024-02-29")
-                == DatabaseDate(year: 2024, month: 2, day: 29)
+            XSDDateTimeCodec.parseDate("2024-02-29")
+                == (try CivilDate(year: 2024, month: 2, day: 29))
         )
-        #expect(DatabaseXSDDateTimeCodec.parseDate("2023-02-29") == nil)
-        #expect(DatabaseXSDDateTimeCodec.parseDate("02026-07-20") == nil)
-        #expect(DatabaseXSDDateTimeCodec.parseDate("2026-7-20") == nil)
-        #expect(DatabaseXSDDateTimeCodec.parseDate("2026-07-20Z") == nil)
+        #expect(XSDDateTimeCodec.parseDate("2023-02-29") == nil)
+        #expect(XSDDateTimeCodec.parseDate("02026-07-20") == nil)
+        #expect(XSDDateTimeCodec.parseDate("2026-7-20") == nil)
+        #expect(XSDDateTimeCodec.parseDate("2026-07-20Z") == nil)
     }
 
     @Test func formatsCanonicalUTCTimestamps() throws {
         #expect(
-            try DatabaseXSDDateTimeCodec.format(
-                timestamp: DatabaseTimestamp(secondsSinceUnixEpoch: 0)
+            try XSDDateTimeCodec.format(
+                timestamp: Timestamp(secondsSinceUnixEpoch: 0)
             ) == "1970-01-01T00:00:00Z"
         )
         #expect(
-            try DatabaseXSDDateTimeCodec.format(
-                timestamp: DatabaseTimestamp(
+            try XSDDateTimeCodec.format(
+                timestamp: try Timestamp(
                     secondsSinceUnixEpoch: -1,
                     nanoseconds: 120_000_000
                 )
@@ -49,25 +50,25 @@ struct DatabaseXSDDateTimeCodecTests {
     }
 
     @Test func normalizesOffsetsAndEndOfDayWithoutPrecisionLoss() {
-        let normalized = DatabaseXSDDateTimeCodec.parseTimestamp(
+        let normalized = XSDDateTimeCodec.parseTimestamp(
             "2026-07-20T05:30:00Z"
         )
         #expect(
-            DatabaseXSDDateTimeCodec.parseTimestamp(
+            XSDDateTimeCodec.parseTimestamp(
                 "2026-07-20T14:30:00+09:00"
             ) == normalized
         )
         #expect(
-            DatabaseXSDDateTimeCodec.parseTimestamp(
+            XSDDateTimeCodec.parseTimestamp(
                 "2026-07-20T24:00:00Z"
-            ) == DatabaseXSDDateTimeCodec.parseTimestamp(
+            ) == XSDDateTimeCodec.parseTimestamp(
                 "2026-07-21T00:00:00Z"
             )
         )
         #expect(
-            DatabaseXSDDateTimeCodec.parseTimestamp(
+            XSDDateTimeCodec.parseTimestamp(
                 "2026-07-20T00:00:00.1234567890Z"
-            ) == DatabaseXSDDateTimeCodec.parseTimestamp(
+            ) == XSDDateTimeCodec.parseTimestamp(
                 "2026-07-20T00:00:00.123456789Z"
             )
         )
@@ -75,44 +76,52 @@ struct DatabaseXSDDateTimeCodecTests {
 
     @Test func rejectsTimestampValuesThatCannotBeRepresentedExactly() {
         #expect(
-            DatabaseXSDDateTimeCodec.parseTimestamp(
+            XSDDateTimeCodec.parseTimestamp(
                 "2026-07-20T24:00:00.000000001Z"
             ) == nil
         )
         #expect(
-            DatabaseXSDDateTimeCodec.parseTimestamp(
+            XSDDateTimeCodec.parseTimestamp(
                 "2026-07-20T00:00:00.1234567891Z"
             ) == nil
         )
         #expect(
-            DatabaseXSDDateTimeCodec.parseTimestamp(
+            XSDDateTimeCodec.parseTimestamp(
                 "2026-07-20T00:00:00"
             ) == nil
         )
         #expect(
-            DatabaseXSDDateTimeCodec.parseTimestamp(
+            XSDDateTimeCodec.parseTimestamp(
                 "2026-07-20T00:00:00+14:01"
             ) == nil
         )
     }
 
-    @Test func rejectsInvalidValuesAtTheFormattingBoundary() {
-        #expect(throws: DatabaseXSDDateTimeError.self) {
-            try DatabaseXSDDateTimeCodec.format(
-                date: DatabaseDate(year: 2026, month: 2, day: 29)
+    @Test func rejectsInvalidPrimitiveValuesAtConstruction() {
+        #expect(
+            throws: CivilDateError.invalidDay(
+                29,
+                year: 2026,
+                month: 2,
+                maximum: 28
+            )
+        ) {
+            _ = try CivilDate(year: 2026, month: 2, day: 29)
+        }
+        #expect(
+            throws: TimestampError.invalidNanoseconds(1_000_000_000)
+        ) {
+            _ = try Timestamp(
+                secondsSinceUnixEpoch: 0,
+                nanoseconds: 1_000_000_000
             )
         }
-        #expect(throws: DatabaseXSDDateTimeError.self) {
-            try DatabaseXSDDateTimeCodec.format(
-                timestamp: DatabaseTimestamp(
-                    secondsSinceUnixEpoch: 0,
-                    nanoseconds: 1_000_000_000
-                )
-            )
-        }
-        #expect(throws: DatabaseXSDDateTimeError.self) {
-            try DatabaseXSDDateTimeCodec.format(
-                timestamp: DatabaseTimestamp(
+    }
+
+    @Test func rejectsTimestampsOutsideTheXSDYearRange() throws {
+        #expect(throws: XSDDateTimeError.self) {
+            try XSDDateTimeCodec.format(
+                timestamp: Timestamp(
                     secondsSinceUnixEpoch: .max
                 )
             )

@@ -1,3 +1,5 @@
+import DatabaseTypes
+import DatabaseValue
 import Testing
 import SwiftSyntaxMacrosTestSupport
 import CoreMacros

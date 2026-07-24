@@ -1,3 +1,4 @@
+import DatabaseTypes
 public enum DatabaseRetryability: UInt8, Sendable, Hashable {
     case never = 1
     case immediate = 2

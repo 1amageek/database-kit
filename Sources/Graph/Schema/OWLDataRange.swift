@@ -1,3 +1,4 @@
+import DatabaseTypes
 // OWLDataRange.swift
 // Graph - OWL DL data range definitions
 //
@@ -58,47 +59,47 @@ public indirect enum OWLDataRange: Sendable, Codable, Hashable {
 extension OWLDataRange {
     /// Create a string datatype range
     public static var string: OWLDataRange {
-        .datatype(XSDDatatype.string.iri)
+        .datatype(XSDDatatype.string.iri.rawValue)
     }
 
     /// Create an integer datatype range
     public static var integer: OWLDataRange {
-        .datatype(XSDDatatype.integer.iri)
+        .datatype(XSDDatatype.integer.iri.rawValue)
     }
 
     /// Create a boolean datatype range
     public static var boolean: OWLDataRange {
-        .datatype(XSDDatatype.boolean.iri)
+        .datatype(XSDDatatype.boolean.iri.rawValue)
     }
 
     /// Create a decimal datatype range
     public static var decimal: OWLDataRange {
-        .datatype(XSDDatatype.decimal.iri)
+        .datatype(XSDDatatype.decimal.iri.rawValue)
     }
 
     /// Create a double datatype range
     public static var double: OWLDataRange {
-        .datatype(XSDDatatype.double.iri)
+        .datatype(XSDDatatype.double.iri.rawValue)
     }
 
     /// Create a float datatype range
     public static var float: OWLDataRange {
-        .datatype(XSDDatatype.float.iri)
+        .datatype(XSDDatatype.float.iri.rawValue)
     }
 
     /// Create a date datatype range
     public static var date: OWLDataRange {
-        .datatype(XSDDatatype.date.iri)
+        .datatype(XSDDatatype.date.iri.rawValue)
     }
 
     /// Create a dateTime datatype range
     public static var dateTime: OWLDataRange {
-        .datatype(XSDDatatype.dateTime.iri)
+        .datatype(XSDDatatype.dateTime.iri.rawValue)
     }
 
     /// Create an anyURI datatype range
     public static var anyURI: OWLDataRange {
-        .datatype(XSDDatatype.anyURI.iri)
+        .datatype(XSDDatatype.anyURI.iri.rawValue)
     }
 
     /// Create an integer range with min/max bounds
@@ -110,7 +111,10 @@ extension OWLDataRange {
         if let max = max {
             facets.append(.maxInclusive(max))
         }
-        return .datatypeRestriction(datatype: XSDDatatype.integer.iri, facets: facets)
+        return .datatypeRestriction(
+            datatype: XSDDatatype.integer.iri.rawValue,
+            facets: facets
+        )
     }
 
     /// Create a string range with length constraints
@@ -122,12 +126,18 @@ extension OWLDataRange {
         if let max = max {
             facets.append(.maxLength(max))
         }
-        return .datatypeRestriction(datatype: XSDDatatype.string.iri, facets: facets)
+        return .datatypeRestriction(
+            datatype: XSDDatatype.string.iri.rawValue,
+            facets: facets
+        )
     }
 
     /// Create a string range with pattern constraint
     public static func stringPattern(_ regex: String) -> OWLDataRange {
-        .datatypeRestriction(datatype: XSDDatatype.string.iri, facets: [.pattern(regex)])
+        .datatypeRestriction(
+            datatype: XSDDatatype.string.iri.rawValue,
+            facets: [.pattern(regex)]
+        )
     }
 }
 
@@ -161,7 +171,8 @@ extension OWLDataRange {
     public func couldContain(_ literal: OWLLiteral) -> Bool {
         switch self {
         case .datatype(let dt):
-            return literal.datatype == dt || isSubtypeOf(literal.datatype, dt)
+            return literal.datatypeIRI.rawValue == dt
+                || isSubtypeOf(literal.datatypeIRI.rawValue, dt)
 
         case .dataIntersectionOf(let ranges):
             return ranges.allSatisfy { $0.couldContain(literal) }
@@ -176,7 +187,8 @@ extension OWLDataRange {
             return literals.contains(literal)
 
         case .datatypeRestriction(let dt, _):
-            return literal.datatype == dt || isSubtypeOf(literal.datatype, dt)
+            return literal.datatypeIRI.rawValue == dt
+                || isSubtypeOf(literal.datatypeIRI.rawValue, dt)
         }
     }
 
@@ -184,25 +196,25 @@ extension OWLDataRange {
     private func isSubtypeOf(_ sub: String, _ sup: String) -> Bool {
         // XSD type hierarchy (simplified)
         let hierarchy: [String: [String]] = [
-            XSDDatatype.integer.iri: [XSDDatatype.decimal.iri],
-            XSDDatatype.long.iri: [XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.int.iri: [XSDDatatype.long.iri, XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.short.iri: [XSDDatatype.int.iri, XSDDatatype.long.iri, XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.byte.iri: [XSDDatatype.short.iri, XSDDatatype.int.iri, XSDDatatype.long.iri, XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.nonNegativeInteger.iri: [XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.positiveInteger.iri: [XSDDatatype.nonNegativeInteger.iri, XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.unsignedLong.iri: [XSDDatatype.nonNegativeInteger.iri, XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.unsignedInt.iri: [XSDDatatype.unsignedLong.iri, XSDDatatype.nonNegativeInteger.iri, XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.unsignedShort.iri: [XSDDatatype.unsignedInt.iri, XSDDatatype.unsignedLong.iri, XSDDatatype.nonNegativeInteger.iri, XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.unsignedByte.iri: [XSDDatatype.unsignedShort.iri, XSDDatatype.unsignedInt.iri, XSDDatatype.unsignedLong.iri, XSDDatatype.nonNegativeInteger.iri, XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.nonPositiveInteger.iri: [XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.negativeInteger.iri: [XSDDatatype.nonPositiveInteger.iri, XSDDatatype.integer.iri, XSDDatatype.decimal.iri],
-            XSDDatatype.normalizedString.iri: [XSDDatatype.string.iri],
-            XSDDatatype.token.iri: [XSDDatatype.normalizedString.iri, XSDDatatype.string.iri],
-            XSDDatatype.language.iri: [XSDDatatype.token.iri, XSDDatatype.normalizedString.iri, XSDDatatype.string.iri],
-            XSDDatatype.nmtoken.iri: [XSDDatatype.token.iri, XSDDatatype.normalizedString.iri, XSDDatatype.string.iri],
-            XSDDatatype.name.iri: [XSDDatatype.token.iri, XSDDatatype.normalizedString.iri, XSDDatatype.string.iri],
-            XSDDatatype.ncname.iri: [XSDDatatype.name.iri, XSDDatatype.token.iri, XSDDatatype.normalizedString.iri, XSDDatatype.string.iri],
+            XSDDatatype.integer.iri.rawValue: [XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.long.iri.rawValue: [XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.int.iri.rawValue: [XSDDatatype.long.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.short.iri.rawValue: [XSDDatatype.int.iri.rawValue, XSDDatatype.long.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.byte.iri.rawValue: [XSDDatatype.short.iri.rawValue, XSDDatatype.int.iri.rawValue, XSDDatatype.long.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.nonNegativeInteger.iri.rawValue: [XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.positiveInteger.iri.rawValue: [XSDDatatype.nonNegativeInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.unsignedLong.iri.rawValue: [XSDDatatype.nonNegativeInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.unsignedInt.iri.rawValue: [XSDDatatype.unsignedLong.iri.rawValue, XSDDatatype.nonNegativeInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.unsignedShort.iri.rawValue: [XSDDatatype.unsignedInt.iri.rawValue, XSDDatatype.unsignedLong.iri.rawValue, XSDDatatype.nonNegativeInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.unsignedByte.iri.rawValue: [XSDDatatype.unsignedShort.iri.rawValue, XSDDatatype.unsignedInt.iri.rawValue, XSDDatatype.unsignedLong.iri.rawValue, XSDDatatype.nonNegativeInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.nonPositiveInteger.iri.rawValue: [XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.negativeInteger.iri.rawValue: [XSDDatatype.nonPositiveInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
+            XSDDatatype.normalizedString.iri.rawValue: [XSDDatatype.string.iri.rawValue],
+            XSDDatatype.token.iri.rawValue: [XSDDatatype.normalizedString.iri.rawValue, XSDDatatype.string.iri.rawValue],
+            XSDDatatype.language.iri.rawValue: [XSDDatatype.token.iri.rawValue, XSDDatatype.normalizedString.iri.rawValue, XSDDatatype.string.iri.rawValue],
+            XSDDatatype.nmtoken.iri.rawValue: [XSDDatatype.token.iri.rawValue, XSDDatatype.normalizedString.iri.rawValue, XSDDatatype.string.iri.rawValue],
+            XSDDatatype.name.iri.rawValue: [XSDDatatype.token.iri.rawValue, XSDDatatype.normalizedString.iri.rawValue, XSDDatatype.string.iri.rawValue],
+            XSDDatatype.ncname.iri.rawValue: [XSDDatatype.name.iri.rawValue, XSDDatatype.token.iri.rawValue, XSDDatatype.normalizedString.iri.rawValue, XSDDatatype.string.iri.rawValue],
         ]
         return hierarchy[sub]?.contains(sup) ?? false
     }

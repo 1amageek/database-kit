@@ -1,3 +1,4 @@
+import DatabaseTypes
 // GraphIndexKind.swift
 // Graph - Property graph index metadata
 

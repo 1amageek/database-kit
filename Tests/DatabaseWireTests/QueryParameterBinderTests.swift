@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import QueryIR
 import Testing
@@ -20,9 +21,9 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            DatabaseObjectField(number: 1, name: "id", value: .string("event-1")),
-            DatabaseObjectField(number: 2, name: "title", value: .string("Festival")),
-            DatabaseObjectField(number: 3, name: "projection", value: .int64(42)),
+            QueryParameter(position: 1, name: "id", value: .string("event-1")),
+            QueryParameter(position: 2, name: "title", value: .string("Festival")),
+            QueryParameter(position: 3, name: "projection", value: .int64(42)),
         ])
 
         let bound = try binder.bind(statement)
@@ -50,7 +51,7 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            DatabaseObjectField(number: 1, name: "id", value: .string("event-1")),
+            QueryParameter(position: 1, name: "id", value: .string("event-1")),
         ])
 
         #expect(throws: QueryParameterBindingError.missingPosition(2)) {
@@ -58,14 +59,14 @@ struct QueryParameterBinderTests {
         }
         #expect(throws: QueryParameterBindingError.duplicatePosition(1)) {
             _ = try QueryParameterBinder(parameters: [
-                DatabaseObjectField(number: 1, name: "first", value: .null),
-                DatabaseObjectField(number: 1, name: "second", value: .null),
+                QueryParameter(position: 1, name: "first", value: .null),
+                QueryParameter(position: 1, name: "second", value: .null),
             ])
         }
         #expect(throws: QueryParameterBindingError.duplicateName("same")) {
             _ = try QueryParameterBinder(parameters: [
-                DatabaseObjectField(number: 1, name: "same", value: .null),
-                DatabaseObjectField(number: 2, name: "same", value: .null),
+                QueryParameter(position: 1, name: "same", value: .null),
+                QueryParameter(position: 2, name: "same", value: .null),
             ])
         }
     }
@@ -82,15 +83,17 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            DatabaseObjectField(
-                number: 1,
+            QueryParameter(
+                position: 1,
                 name: "count",
                 value: .uint64(UInt64.max)
             ),
-            DatabaseObjectField(
-                number: 2,
+            QueryParameter(
+                position: 2,
                 name: "amount",
-                value: .decimal(coefficient: 1234, scale: 2)
+                value: .decimal(
+                    ExactDecimal(coefficient: 1234, scale: 2)
+                )
             ),
         ])
 
@@ -113,11 +116,11 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            DatabaseObjectField(
-                number: 1,
+            QueryParameter(
+                position: 1,
                 name: "reference",
                 value: .reference(
-                    PersistableIdentity(
+                    try EntityReference(
                         entity: "Event",
                         id: .string("event-1")
                     )
@@ -143,8 +146,8 @@ struct QueryParameterBinderTests {
         )
         let binder = try QueryParameterBinder(
             parameters: [
-                DatabaseObjectField(
-                    number: 1,
+                QueryParameter(
+                    position: 1,
                     name: "values",
                     value: .array([.int64(1), .int64(2), .int64(3)])
                 ),
@@ -183,9 +186,8 @@ struct QueryParameterBinderTests {
         )
         let binder = try QueryParameterBinder(
             parameters: [
-                DatabaseObjectField(
-                    number: 1,
-                    name: "",
+                QueryParameter(
+                    position: 1,
                     value: parameterValue
                 ),
             ],
@@ -238,8 +240,8 @@ struct QueryParameterBinderTests {
         let statement = QueryStatement.ask(AskQuery(pattern: pattern))
         let binder = try QueryParameterBinder(
             parameters: [
-                DatabaseObjectField(
-                    number: 1,
+                QueryParameter(
+                    position: 1,
                     name: "enabled",
                     value: .bool(true)
                 ),
@@ -273,7 +275,7 @@ struct QueryParameterBinderTests {
 
     @Test("UUID parameters retain their canonical type")
     func uuidParametersRetainType() throws {
-        let uuid = DatabaseUUID(
+        let uuid = DatabaseTypes.UUID(
             high: 0x0011_2233_4455_6677,
             low: 0x8899_AABB_CCDD_EEFF
         )
@@ -284,7 +286,7 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            DatabaseObjectField(number: 1, name: "id", value: .uuid(uuid)),
+            QueryParameter(position: 1, name: "id", value: .uuid(uuid)),
         ])
 
         guard case .select(let query) = try binder.bind(statement) else {
@@ -313,8 +315,8 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            DatabaseObjectField(number: 1, name: "group", value: .string("g")),
-            DatabaseObjectField(number: 2, name: "having", value: .bool(true)),
+            QueryParameter(position: 1, name: "group", value: .string("g")),
+            QueryParameter(position: 2, name: "having", value: .bool(true)),
         ])
 
         guard case .ask(let query) = try binder.bind(statement) else {
@@ -366,8 +368,8 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            DatabaseObjectField(
-                number: 1,
+            QueryParameter(
+                position: 1,
                 name: "enabled",
                 value: .bool(true)
             ),

@@ -1,5 +1,6 @@
 import DatabaseValue
 import DatabaseValueCodable
+import DatabaseTypes
 
 /// A validated RDF named-graph identifier.
 ///
@@ -7,20 +8,12 @@ import DatabaseValueCodable
 /// by `nil`. This value can only contain an absolute IRI or a non-empty blank
 /// node identifier.
 public struct RDFGraphName: Sendable, Hashable, Codable, Comparable {
-    public let term: DatabaseRDFTerm
+    public let term: RDFTerm
 
-    public init(_ term: DatabaseRDFTerm) throws {
+    public init(_ term: RDFTerm) throws {
         switch term {
-        case .iri(let value):
-            guard DatabaseRDFIRIValidator.isAbsolute(value) else {
-                throw RDFDatasetValidationError.invalidIRI(value)
-            }
-        case .blankNode(let identifier):
-            guard !identifier.isEmpty else {
-                throw RDFDatasetValidationError.invalidBlankNodeIdentifier(
-                    identifier
-                )
-            }
+        case .iri, .blankNode:
+            break
         case .literal, .tripleTerm:
             throw RDFDatasetValidationError.invalidGraphName(term)
         }
@@ -28,15 +21,17 @@ public struct RDFGraphName: Sendable, Hashable, Codable, Comparable {
     }
 
     public init(iri: String) throws {
-        try self.init(.iri(iri))
+        try self.init(.iri(try RDFIRI(iri)))
     }
 
     public init(blankNodeIdentifier: String) throws {
-        try self.init(.blankNode(blankNodeIdentifier))
+        try self.init(
+            .blankNode(try RDFBlankNodeIdentifier(blankNodeIdentifier))
+        )
     }
 
     public init(from decoder: any Decoder) throws {
-        try self.init(DatabaseRDFTerm(from: decoder))
+        try self.init(RDFTerm(from: decoder))
     }
 
     public func encode(to encoder: any Encoder) throws {

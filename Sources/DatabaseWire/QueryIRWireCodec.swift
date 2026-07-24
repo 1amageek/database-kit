@@ -1,12 +1,13 @@
-public import DatabaseValue
-public import QueryIR
+import DatabaseTypes
+import DatabaseValue
+import QueryIR
 
 /// Canonical binary codec for the Foundation-independent query intermediate representation.
 public enum QueryIRWireCodec {
     public static func encode(
         _ statement: QueryStatement,
         limits: DatabaseWireLimits = .default
-    ) throws(DatabaseWireError) -> DatabaseBytes {
+    ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             try encodeStatement(statement, into: &writer)
@@ -37,7 +38,7 @@ public enum QueryIRWireCodec {
     }
 
     public static func decode(
-        _ bytes: DatabaseBytes,
+        _ bytes: ByteString,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> QueryStatement {
         var reader = DatabaseWireReader(bytes, limits: limits)

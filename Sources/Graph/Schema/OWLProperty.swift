@@ -1,3 +1,4 @@
+import DatabaseTypes
 // OWLProperty.swift
 // Graph - OWL DL property definitions
 //

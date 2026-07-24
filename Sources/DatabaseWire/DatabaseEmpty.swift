@@ -1,3 +1,4 @@
+import DatabaseTypes
 public struct DatabaseEmpty: DatabaseWireValue, Hashable {
     public init() {}
 

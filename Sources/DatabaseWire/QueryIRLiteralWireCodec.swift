@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import QueryIR
 
@@ -183,10 +184,10 @@ private extension QueryIRLiteralWireCodec {
         case .uint(let value):
             writer.writeUInt8(15)
             writer.writeUInt64(value)
-        case .decimal(let coefficient, let scale):
+        case .decimal(let value):
             writer.writeUInt8(16)
-            writer.writeInt64(coefficient)
-            writer.writeInt32(scale)
+            writer.writeInt128(value.coefficient)
+            writer.writeInt32(value.scale)
         case .rdfTerm(let term):
             writer.writeUInt8(17)
             try term.encode(into: &writer)
@@ -209,20 +210,29 @@ private extension QueryIRLiteralWireCodec {
         case 4:
             return .string(try reader.readString())
         case 5:
-            return .date(
-                DatabaseDate(
-                    year: try reader.readInt32(),
-                    month: try reader.readUInt8(),
-                    day: try reader.readUInt8()
+            let year = try reader.readInt32()
+            let month = try reader.readUInt8()
+            let day = try reader.readUInt8()
+            do {
+                return .date(
+                    try CivilDate(year: year, month: month, day: day)
                 )
-            )
+            } catch let error {
+                throw .invalidCivilDate(error)
+            }
         case 6:
-            return .timestamp(
-                DatabaseTimestamp(
-                    secondsSinceUnixEpoch: try reader.readInt64(),
-                    nanoseconds: try reader.readUInt32()
+            let seconds = try reader.readInt64()
+            let nanoseconds = try reader.readUInt32()
+            do {
+                return .timestamp(
+                    try Timestamp(
+                        secondsSinceUnixEpoch: seconds,
+                        nanoseconds: nanoseconds
+                    )
                 )
-            )
+            } catch {
+                throw .invalidTimestamp
+            }
         case 7:
             return .binary(try reader.readBytes())
         case 8:
@@ -249,7 +259,7 @@ private extension QueryIRLiteralWireCodec {
             )
         case 14:
             return .uuid(
-                DatabaseUUID(
+                DatabaseTypes.UUID(
                     high: try reader.readUInt64(),
                     low: try reader.readUInt64()
                 )
@@ -258,11 +268,13 @@ private extension QueryIRLiteralWireCodec {
             return .uint(try reader.readUInt64())
         case 16:
             return .decimal(
-                coefficient: try reader.readInt64(),
-                scale: try reader.readInt32()
+                ExactDecimal(
+                    coefficient: try reader.readInt128(),
+                    scale: try reader.readInt32()
+                )
             )
         case 17:
-            return .rdfTerm(try DatabaseRDFTerm(from: &reader))
+            return .rdfTerm(try RDFTerm(from: &reader))
         default:
             throw .invalidValueTag(tag)
         }

@@ -1,3 +1,4 @@
+import DatabaseTypes
 extension TimeWindowLeaderboardIndexKind {
     public init(
         canonical kind: IndexKindMetadata

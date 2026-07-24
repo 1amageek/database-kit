@@ -1,3 +1,4 @@
+import DatabaseTypes
 public enum DatabaseErrorCategory: UInt8, Sendable, Hashable {
     case invalidRequest = 1
     case authentication = 2

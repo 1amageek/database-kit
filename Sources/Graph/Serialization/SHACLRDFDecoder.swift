@@ -1,3 +1,4 @@
+import DatabaseTypes
 public struct SHACLRDFDecoder: Sendable {
     public init() {}
 
@@ -36,7 +37,9 @@ public struct SHACLRDFDecoder: Sendable {
         }
         let nextStack = shapeStack.union([node])
         let types = Set(index.objects(node, Vocabulary.rdfType))
-        if types.contains(.iri(Vocabulary.propertyShape)) ||
+        if types.contains(where: {
+            Self.hasIRI($0, Vocabulary.propertyShape)
+        }) ||
             !index.objects(node, Vocabulary.path).isEmpty {
             return .property(
                 try decodePropertyShape(
@@ -330,7 +333,9 @@ public struct SHACLRDFDecoder: Sendable {
         index: Index,
         pathStack: Set<RDFTerm>
     ) throws -> SHACLPath {
-        if case .iri(let value) = node { return .predicate(value) }
+        if case .iri(let value) = node {
+            return .predicate(value.rawValue)
+        }
         guard !pathStack.contains(node) else {
             throw SHACLRDFDecodingError.recursivePath(node.description)
         }
@@ -374,11 +379,11 @@ public struct SHACLRDFDecoder: Sendable {
         _ head: RDFTerm,
         index: Index
     ) throws -> [RDFTerm] {
-        if head == .iri(Vocabulary.rdfNil) { return [] }
+        if Self.hasIRI(head, Vocabulary.rdfNil) { return [] }
         var values: [RDFTerm] = []
         var visited = Set<RDFTerm>()
         var current = head
-        while current != .iri(Vocabulary.rdfNil) {
+        while !Self.hasIRI(current, Vocabulary.rdfNil) {
             guard visited.insert(current).inserted,
                   let first = index.onlyObject(current, Vocabulary.rdfFirst),
                   let rest = index.onlyObject(current, Vocabulary.rdfRest) else {
@@ -410,9 +415,11 @@ public struct SHACLRDFDecoder: Sendable {
         index: Index
     ) throws {
         for predicate in index.predicates(node) where
-            predicate.hasPrefix(Vocabulary.namespace) &&
-            !Vocabulary.supportedPredicates.contains(predicate) {
-            throw SHACLRDFDecodingError.unsupportedPredicate(predicate)
+            predicate.rawValue.hasPrefix(Vocabulary.namespace) &&
+            !Vocabulary.supportedPredicates.contains(predicate.rawValue) {
+            throw SHACLRDFDecodingError.unsupportedPredicate(
+                predicate.rawValue
+            )
         }
     }
 
@@ -431,7 +438,7 @@ public struct SHACLRDFDecoder: Sendable {
         guard case .iri(let value) = term else {
             throw SHACLRDFDecodingError.invalidIRI(term.description)
         }
-        return value
+        return value.rawValue
     }
 
     private func optionalIRI(_ term: RDFTerm?) throws -> String? {
@@ -528,7 +535,7 @@ public struct SHACLRDFDecoder: Sendable {
     }
 
     private struct Index {
-        private var values: [RDFTerm: [String: [RDFTerm]]] = [:]
+        private var values: [RDFTerm: [RDFIRI: [RDFTerm]]] = [:]
 
         init(_ quads: [RDFQuad]) {
             for quad in quads {
@@ -539,7 +546,7 @@ public struct SHACLRDFDecoder: Sendable {
         }
 
         func objects(_ subject: RDFTerm, _ predicate: String) -> [RDFTerm] {
-            values[subject]?[predicate] ?? []
+            values[subject]?[Vocabulary.requiredIRI(predicate)] ?? []
         }
 
         func firstObject(
@@ -557,8 +564,11 @@ public struct SHACLRDFDecoder: Sendable {
             return matches.count == 1 ? matches[0] : nil
         }
 
-        func predicates(_ subject: RDFTerm) -> [String] {
-            Array(values[subject]?.keys ?? Dictionary<String, [RDFTerm]>().keys)
+        func predicates(_ subject: RDFTerm) -> [RDFIRI] {
+            Array(
+                values[subject]?.keys
+                    ?? Dictionary<RDFIRI, [RDFTerm]>().keys
+            )
         }
 
         func subjects(
@@ -566,10 +576,11 @@ public struct SHACLRDFDecoder: Sendable {
             objects: Set<String>
         ) -> Set<RDFTerm> {
             Set(values.compactMap { subject, predicates in
-                let matches = predicates[predicate] ?? []
+                let matches =
+                    predicates[Vocabulary.requiredIRI(predicate)] ?? []
                 return matches.contains { term in
                     if case .iri(let value) = term {
-                        return objects.contains(value)
+                        return objects.contains(value.rawValue)
                     }
                     return false
                 } ? subject : nil
@@ -662,5 +673,25 @@ public struct SHACLRDFDecoder: Sendable {
             in_, inversePath, alternativePath, zeroOrMorePath, oneOrMorePath,
             zeroOrOnePath
         ]
+
+        static func requiredIRI(_ value: String) -> RDFIRI {
+            do {
+                return try RDFIRI(value)
+            } catch {
+                preconditionFailure(
+                    "Invalid built-in SHACL vocabulary IRI: \(value)"
+                )
+            }
+        }
+    }
+
+    private static func hasIRI(
+        _ term: RDFTerm,
+        _ rawValue: String
+    ) -> Bool {
+        guard case .iri(let iri) = term else {
+            return false
+        }
+        return iri == Vocabulary.requiredIRI(rawValue)
     }
 }

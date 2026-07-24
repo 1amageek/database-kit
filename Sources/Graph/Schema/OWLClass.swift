@@ -1,3 +1,4 @@
+import DatabaseTypes
 // OWLClass.swift
 // Graph - OWL DL class and class expression definitions
 //

@@ -1,3 +1,5 @@
+import DatabaseTypes
+import DatabaseValue
 import Testing
 import Graph
 
@@ -39,7 +41,7 @@ struct OWLOntologyBuilderTests {
                 iri: "ex:occurredOnDate",
                 label: "occurred on date",
                 domains: [.named("ex:Event")],
-                ranges: [.datatype(XSDDatatype.date.iri)]
+                ranges: [.datatype(XSDDatatype.date.iri.rawValue)]
             )
         }
         #expect(ontology.dataProperties.count == 1)
@@ -221,7 +223,7 @@ struct OWLOntologyBuilderTests {
                 iri: "ex:occurredOnDate",
                 label: "occurred on date",
                 domains: [.named("ex:Event")],
-                ranges: [.datatype(XSDDatatype.date.iri)]
+                ranges: [.datatype(XSDDatatype.date.iri.rawValue)]
             )
         }
 

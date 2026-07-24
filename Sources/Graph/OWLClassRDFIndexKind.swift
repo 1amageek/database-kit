@@ -1,3 +1,4 @@
+import DatabaseTypes
 import Core
 import DatabaseValue
 import DatabaseValueCodable
@@ -23,7 +24,7 @@ public struct OWLClassRDFIndexKind<Root: OWLClassEntity>: IndexKind, Sendable, C
     public let individualIRIBase: String
 
     /// Fixed graph for the projection. `nil` writes to the default graph.
-    public let graph: DatabaseRDFTerm?
+    public let graph: RDFTerm?
 
     public var metadata: [String: IndexMetadataValue] {
         var values: [String: IndexMetadataValue] = [
@@ -37,7 +38,7 @@ public struct OWLClassRDFIndexKind<Root: OWLClassEntity>: IndexKind, Sendable, C
 
     public init(
         individualIRIBase: String,
-        graph: DatabaseRDFTerm? = nil
+        graph: RDFTerm? = nil
     ) {
         self.individualIRIBase = individualIRIBase
         self.graph = graph

@@ -1,3 +1,4 @@
+import DatabaseTypes
 // IndexDescriptor.swift
 // FDBModel - Index descriptor (metadata)
 //

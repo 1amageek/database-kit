@@ -1,3 +1,4 @@
+import DatabaseTypes
 // DiffError.swift
 // Core - Diff computation errors
 //

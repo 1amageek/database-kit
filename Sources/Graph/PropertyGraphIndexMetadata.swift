@@ -1,3 +1,4 @@
+import DatabaseTypes
 import Core
 
 /// Canonical, non-generic property graph index metadata.

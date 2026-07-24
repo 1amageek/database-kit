@@ -1,4 +1,4 @@
-public import DatabaseValue
+public import DatabaseTypes
 
 /// Incrementally computes a canonical SHA-256 digest.
 ///
@@ -14,7 +14,7 @@ public struct SHA256Accumulator: Sendable {
 
     public init() {}
 
-    public mutating func update(_ bytes: DatabaseBytes) {
+    public mutating func update(_ bytes: ByteString) {
         bytes.withUnsafeBytes { source in
             update(source)
         }
@@ -93,9 +93,9 @@ public struct SHA256Accumulator: Sendable {
         }
     }
 
-    public consuming func finalize() -> DatabaseBytes {
+    public consuming func finalize() -> ByteString {
         withUnsafeDigestBytes { digestBytes in
-            DatabaseBytes.copying(count: digestBytes.count) { destination in
+            ByteString.copying(count: digestBytes.count) { destination in
                 destination.copyMemory(from: digestBytes)
             }
         }

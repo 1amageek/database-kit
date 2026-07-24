@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import QueryIR
 import Testing
@@ -171,9 +172,11 @@ struct SPARQLSemanticValidatorTests {
         "RDF nodes embedded in Literal cannot bypass canonical SPARQLTerm cases",
         arguments: [
             Literal.blankNode("hidden"),
-            Literal.rdfTerm(.blankNode("hidden")),
+            Literal.rdfTerm(
+                .blankNode(fixtureBlankNode("hidden"))
+            ),
             Literal.iri("urn:hidden"),
-            Literal.rdfTerm(.iri("urn:hidden")),
+            Literal.rdfTerm(.iri(fixtureIRI("urn:hidden"))),
         ]
     )
     func rdfNodesEmbeddedInLiteralAreInvalid(_ literal: Literal) {
@@ -186,7 +189,7 @@ struct SPARQLSemanticValidatorTests {
 
     @Test("Canonical RDF literals embedded in Literal remain valid")
     func canonicalRDFLiteralIsValid() throws {
-        let literal = DatabaseRDFLiteral(
+        let literal = RDFLiteral(
             lexicalForm: "value",
             datatype: .xsdString
         )
@@ -200,7 +203,9 @@ struct SPARQLSemanticValidatorTests {
         "Blank node constants cannot occur in expressions",
         arguments: [
             Literal.blankNode("hidden"),
-            Literal.rdfTerm(.blankNode("hidden")),
+            Literal.rdfTerm(
+                .blankNode(fixtureBlankNode("hidden"))
+            ),
         ]
     )
     func blankNodeExpressionIsInvalid(_ literal: Literal) {
@@ -223,7 +228,9 @@ struct SPARQLSemanticValidatorTests {
         "Blank node constants cannot occur in VALUES",
         arguments: [
             Literal.blankNode("hidden"),
-            Literal.rdfTerm(.blankNode("hidden")),
+            Literal.rdfTerm(
+                .blankNode(fixtureBlankNode("hidden"))
+            ),
         ]
     )
     func blankNodeValueIsInvalid(_ literal: Literal) {
@@ -995,5 +1002,23 @@ struct SPARQLSemanticValidatorTests {
             )
         }
         return term
+    }
+}
+
+private func fixtureIRI(_ rawValue: String) -> RDFIRI {
+    do {
+        return try RDFIRI(rawValue)
+    } catch {
+        preconditionFailure("Invalid RDF IRI fixture: \(rawValue)")
+    }
+}
+
+private func fixtureBlankNode(
+    _ rawValue: String
+) -> RDFBlankNodeIdentifier {
+    do {
+        return try RDFBlankNodeIdentifier(rawValue)
+    } catch {
+        preconditionFailure("Invalid blank-node fixture: \(rawValue)")
     }
 }

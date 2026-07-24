@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Schema evolution compatibility reporting.
 ///
 /// Defines append-only compatibility checks for persisted schema metadata so

@@ -7,12 +7,12 @@
 // https://www.w3.org/TR/owl2-syntax/#Literals
 
 import DatabaseValue
+import DatabaseTypes
 
 /// The canonical RDF literal used by OWL declarations and RDF datasets.
-public typealias OWLLiteral = DatabaseRDFLiteral
-public typealias XSDDatatype = DatabaseXSDDatatype
+public typealias OWLLiteral = DatabaseTypes.RDFLiteral
 
-extension DatabaseRDFLiteral {
+extension RDFLiteral {
     /// Create a string literal
     public static func string(_ value: String) -> OWLLiteral {
         OWLLiteral(
@@ -62,19 +62,19 @@ extension DatabaseRDFLiteral {
     }
 
     /// Create a canonical XSD date literal.
-    public static func date(_ value: DatabaseDate) throws -> OWLLiteral {
+    public static func date(_ value: CivilDate) -> OWLLiteral {
         OWLLiteral(
-            lexicalForm: try DatabaseXSDDateTimeCodec.format(date: value),
+            lexicalForm: XSDDateTimeCodec.format(date: value),
             datatype: XSDDatatype.date.typedLiteralDatatype
         )
     }
 
     /// Create a canonical UTC XSD dateTime literal.
     public static func dateTime(
-        _ value: DatabaseTimestamp
+        _ value: Timestamp
     ) throws -> OWLLiteral {
         OWLLiteral(
-            lexicalForm: try DatabaseXSDDateTimeCodec.format(timestamp: value),
+            lexicalForm: try XSDDateTimeCodec.format(timestamp: value),
             datatype: XSDDatatype.dateTime.typedLiteralDatatype
         )
     }
@@ -82,7 +82,7 @@ extension DatabaseRDFLiteral {
     /// Create a language-tagged string
     public static func langString(
         _ value: String,
-        language: DatabaseRDFLanguageTag
+        language: RDFLanguageTag
     ) -> OWLLiteral {
         OWLLiteral(
             lexicalForm: value,
@@ -96,14 +96,14 @@ extension DatabaseRDFLiteral {
     ) throws -> OWLLiteral {
         OWLLiteral(
             lexicalForm: value,
-            language: try DatabaseRDFLanguageTag(language)
+            language: try RDFLanguageTag(language)
         )
     }
 
     /// Create a literal with custom datatype
     public static func typed(
         _ value: String,
-        datatype: DatabaseRDFTypedLiteralDatatype
+        datatype: RDFTypedLiteralDatatype
     ) -> OWLLiteral {
         OWLLiteral(lexicalForm: value, datatype: datatype)
     }
@@ -114,7 +114,7 @@ extension DatabaseRDFLiteral {
     ) throws -> OWLLiteral {
         OWLLiteral(
             lexicalForm: value,
-            datatype: try DatabaseRDFTypedLiteralDatatype(datatype)
+            datatype: try RDFTypedLiteralDatatype(datatype)
         )
     }
 }
@@ -142,15 +142,15 @@ extension OWLLiteral {
     }
 
     /// Extract an untimezoned XSD date without losing timezone information.
-    public var databaseDateValue: DatabaseDate? {
-        guard datatype == XSDDatatype.date.iri else { return nil }
-        return DatabaseXSDDateTimeCodec.parseDate(lexicalForm)
+    public var databaseDateValue: CivilDate? {
+        guard datatypeIRI == XSDDatatype.date.iri else { return nil }
+        return XSDDateTimeCodec.parseDate(lexicalForm)
     }
 
     /// Extract a timezoned XSD dateTime as an absolute timestamp.
-    public var timestampValue: DatabaseTimestamp? {
-        guard datatype == XSDDatatype.dateTime.iri else { return nil }
-        return DatabaseXSDDateTimeCodec.parseTimestamp(lexicalForm)
+    public var timestampValue: Timestamp? {
+        guard datatypeIRI == XSDDatatype.dateTime.iri else { return nil }
+        return XSDDateTimeCodec.parseTimestamp(lexicalForm)
     }
 
     /// String value (always available)

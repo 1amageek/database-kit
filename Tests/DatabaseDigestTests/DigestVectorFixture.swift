@@ -1,11 +1,11 @@
-import DatabaseValue
+import DatabaseTypes
 
 enum DigestVectorFixture {
-    static func bytes(repeating byte: UInt8, count: Int) -> DatabaseBytes {
-        DatabaseBytes([UInt8](repeating: byte, count: count))
+    static func bytes(repeating byte: UInt8, count: Int) -> ByteString {
+        ByteString([UInt8](repeating: byte, count: count))
     }
 
-    static func hexadecimalString(of bytes: DatabaseBytes) -> String {
+    static func hexadecimalString(of bytes: ByteString) -> String {
         bytes.withUnsafeBytes { source in
             hexadecimalString(of: source)
         }

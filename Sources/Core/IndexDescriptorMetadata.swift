@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// Stable value representation of an index descriptor for schema catalogs.
 ///
 /// Combines `IndexKindMetadata` with common index options while preserving all

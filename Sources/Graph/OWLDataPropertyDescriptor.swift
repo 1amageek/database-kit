@@ -1,3 +1,4 @@
+import DatabaseTypes
 import Core
 
 /// Metadata descriptor for an OWL DatatypeProperty field.

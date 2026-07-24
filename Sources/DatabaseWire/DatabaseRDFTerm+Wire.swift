@@ -1,6 +1,7 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
-extension DatabaseRDFTerm {
+extension RDFTerm {
     public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
         try writer.writeCanonicalRDFTerm(self)
     }
@@ -12,8 +13,8 @@ extension DatabaseRDFTerm {
 
 extension DatabaseWireReader {
     mutating func readCanonicalRDFTerm(
-        role: DatabaseRDFTermRole
-    ) throws(DatabaseWireError) -> DatabaseRDFTerm {
+        role: RDFTermRole
+    ) throws(DatabaseWireError) -> RDFTerm {
         let bytes = try readBytes()
         guard limits.maximumObjectCount > registeredObjectCount else {
             let (actual, overflow) = registeredObjectCount
@@ -32,20 +33,20 @@ extension DatabaseWireReader {
             )
         }
         let remainingDepth = limits.maximumNestingDepth - currentNestingDepth
-        let codecLimits = DatabaseRDFTermCodecLimits(
+        let codecLimits = RDFTermCodecLimits(
             maximumBytes: self.limits.maximumByteStringBytes,
             maximumDepth: remainingDepth,
             maximumObjectCount: remainingObjectCount
         )
         do {
-            let result = try DatabaseRDFTermCodec.decodeWithMetrics(
+            let result = try RDFTermCodec.decodeWithMetrics(
                 bytes,
                 role: role,
                 limits: codecLimits
             )
             try registerObjects(result.objectCount)
             return result.term
-        } catch let error as DatabaseRDFTermCodecError {
+        } catch let error as RDFTermCodecError {
             throw mapCanonicalRDFTermError(error)
         } catch let error as DatabaseWireError {
             throw error
@@ -55,7 +56,7 @@ extension DatabaseWireReader {
     }
 
     private func mapCanonicalRDFTermError(
-        _ error: DatabaseRDFTermCodecError
+        _ error: RDFTermCodecError
     ) -> DatabaseWireError {
         switch error {
         case .maximumBytesExceeded(let actual, _):

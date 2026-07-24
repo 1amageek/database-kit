@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import Graph
 import Testing
@@ -8,25 +9,29 @@ struct RDFGraphNameTests {
     func acceptsNamedGraphTerms() throws {
         let iri = try RDFGraphName(iri: "https://example.com/graphs/events")
         let blankNode = try RDFGraphName(blankNodeIdentifier: "graph-1")
+        let expectedIRI = try RDFTerm.iri(
+            validating: "https://example.com/graphs/events"
+        )
+        let expectedBlankNode = try RDFTerm.blankNode(
+            identifier: "graph-1"
+        )
 
-        #expect(iri.term == .iri("https://example.com/graphs/events"))
-        #expect(blankNode.term == .blankNode("graph-1"))
+        #expect(iri.term == expectedIRI)
+        #expect(blankNode.term == expectedBlankNode)
     }
 
     @Test(
         "Rejects terms that cannot name an RDF graph",
         arguments: [
-            DatabaseRDFTerm.iri("relative"),
-            .blankNode(""),
-            .literal(
-                DatabaseRDFLiteral(
+            RDFTerm.literal(
+                RDFLiteral(
                     lexicalForm: "events",
-                    datatype: DatabaseXSDDatatype.string.typedLiteralDatatype
+                    datatype: XSDDatatype.string.typedLiteralDatatype
                 )
             ),
         ]
     )
-    func rejectsInvalidGraphNames(_ term: DatabaseRDFTerm) {
+    func rejectsInvalidGraphNames(_ term: RDFTerm) {
         #expect(throws: RDFDatasetValidationError.self) {
             _ = try RDFGraphName(term)
         }

@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import QueryIR
 import Testing
@@ -49,16 +50,15 @@ struct QueryStructuralValidatorTests {
     }
 
     @Test("Table partition values cannot bypass collection limits")
-    func tablePartitionValueCollectionOverflow() {
+    func tablePartitionValueCollectionOverflow() throws {
         let target = TableRef(
             "events",
-            partitions: [
-                DatabaseObjectField(
-                    number: 1,
-                    name: "tenant",
+            partitions: try FieldObject([
+                (
+                    key: "tenant",
                     value: .array([.int64(1), .int64(2), .int64(3)])
-                )
-            ]
+                ),
+            ])
         )
         let statement = QueryStatement.insert(
             InsertQuery(target: target, source: .defaultValues)
@@ -234,12 +234,12 @@ struct QueryStructuralValidatorTests {
 
     @Test("Parameter values are bounded before recursive binding")
     func parameterValueDepthOverflow() {
-        var value = FieldValue.object([])
+        var value = FieldValue.object(FieldObject())
         for _ in 0..<4 {
             value = .array([value])
         }
         let parameters = [
-            DatabaseObjectField(number: 1, name: "value", value: value),
+            QueryParameter(position: 1, name: "value", value: value),
         ]
 
         #expect(

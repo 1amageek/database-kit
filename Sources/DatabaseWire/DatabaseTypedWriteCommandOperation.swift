@@ -1,3 +1,4 @@
+import DatabaseTypes
 public enum DatabaseTypedWriteCommandOperation<
     Command: DatabaseWriteCommandDescriptor
 >: DatabaseOperation {

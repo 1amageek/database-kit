@@ -1,3 +1,4 @@
+import DatabaseTypes
 import Core
 
 /// Protocol for Persistable types that materialize an OWL ObjectProperty.

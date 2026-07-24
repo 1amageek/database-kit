@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import Graph
 import Testing
@@ -9,9 +10,9 @@ struct RDFTextCodecTests {
         let literal = "slash \\ quote \" line\nreturn\rtab\t"
         let dataset = RDFDataset(quads: [
             RDFQuad(
-                subject: .iri("urn:subject"),
-                predicate: .iri("urn:predicate"),
-                object: .literal(DatabaseRDFLiteral(
+                subject: try .iri(validating: "urn:subject"),
+                predicate: try .iri(validating: "urn:predicate"),
+                object: .literal(RDFLiteral(
                     lexicalForm: literal,
                     datatype: .xsdString
                 ))
@@ -55,7 +56,13 @@ struct RDFTextCodecTests {
             from: "@base <https://example.com/> . <child> <urn:p> <value> ."
         )
 
-        #expect(dataset.quads.first?.subject == .iri("https://example.com/child"))
-        #expect(dataset.quads.first?.object == .iri("https://example.com/value"))
+        let expectedSubject = try RDFTerm.iri(
+            validating: "https://example.com/child"
+        )
+        let expectedObject = try RDFTerm.iri(
+            validating: "https://example.com/value"
+        )
+        #expect(dataset.quads.first?.subject == expectedSubject)
+        #expect(dataset.quads.first?.object == expectedObject)
     }
 }

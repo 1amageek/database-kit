@@ -1,3 +1,4 @@
+import DatabaseTypes
 import Core
 import DatabaseValue
 import Relationship
@@ -7,20 +8,19 @@ import Testing
 struct DatabaseReferenceTests {
     @Test("References round-trip as canonical record identities")
     func recordRoundTrip() throws {
-        let firstIdentity = PersistableIdentity(
+        let firstIdentity = try EntityReference(
             entity: DatabaseReferenceTarget.persistableType,
             id: .string("target-1"),
-            partitions: [
-                DatabaseObjectField(
-                    number: 2,
-                    name: "tenantID",
-                    value: .string("tenant-a")
-                )
-            ]
+            partitions: try FieldObject([
+                (key: "tenantID", value: .string("tenant-a")),
+            ])
         )
-        let secondIdentity = PersistableIdentity(
+        let secondIdentity = try EntityReference(
             entity: DatabaseReferenceTarget.persistableType,
-            id: .string("target-2")
+            id: .string("target-2"),
+            partitions: try FieldObject([
+                (key: "tenantID", value: .string("tenant-a")),
+            ])
         )
         let first = try DatabaseReference<DatabaseReferenceTarget>(identity: firstIdentity)
         let second = try DatabaseReference<DatabaseReferenceTarget>(identity: secondIdentity)
@@ -47,10 +47,13 @@ struct DatabaseReferenceTests {
     }
 
     @Test("Reference rejects a mismatched target entity")
-    func rejectsMismatchedEntity() {
+    func rejectsMismatchedEntity() throws {
         #expect(throws: DatabaseReferenceError.self) {
             try DatabaseReference<DatabaseReferenceTarget>(
-                identity: PersistableIdentity(entity: "Other", id: .string("target-1"))
+                identity: try EntityReference(
+                    entity: "Other",
+                    id: .string("target-1")
+                )
             )
         }
     }

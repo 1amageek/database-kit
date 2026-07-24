@@ -1,3 +1,4 @@
+import DatabaseTypes
 // OWLOntologyBuilder.swift
 // Graph - Result builder DSL for OWLOntology construction
 

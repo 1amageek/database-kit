@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import DatabaseWire
 import Testing
@@ -19,7 +20,7 @@ struct CanonicalDatabaseWireTests {
             request: DatabaseWireRequestEnvelope(
                 requestID: 0x0102_0304_0506_0708,
                 operation: .queryExecute,
-                payload: DatabaseBytes(
+                payload: ByteString(
                     [UInt8](repeating: 0xa5, count: payloadByteCount)
                 )
             ),
@@ -77,7 +78,7 @@ struct CanonicalDatabaseWireTests {
 
     @Test("FieldValue preserves every canonical value family")
     func fieldValueRoundTrips() throws {
-        let identity = PersistableIdentity(
+        let identity = try EntityReference(
             entity: "Event",
             id: .composite([
                 .int8(-1),
@@ -90,66 +91,82 @@ struct CanonicalDatabaseWireTests {
                 .uint64(4),
                 .string("event-1"),
             ]),
-            partitions: [
-                DatabaseObjectField(number: 1, name: "snapshot", value: .string("snapshot-a")),
-            ]
+            partitions: try FieldObject([
+                (key: "snapshot", value: .string("snapshot-a")),
+            ])
         )
-        let value = FieldValue.object([
-            DatabaseObjectField(number: 1, name: "null", value: .null),
-            DatabaseObjectField(number: 2, name: "bool", value: .bool(true)),
-            DatabaseObjectField(number: 3, name: "signed", value: .int64(-42)),
-            DatabaseObjectField(number: 4, name: "unsigned", value: .uint64(42)),
-            DatabaseObjectField(number: 5, name: "float64", value: .float64(4.25)),
-            DatabaseObjectField(number: 6, name: "decimal", value: .decimal(coefficient: 12345, scale: 2)),
-            DatabaseObjectField(number: 7, name: "string", value: .string("calendar")),
-            DatabaseObjectField(number: 8, name: "bytes", value: .bytes([0, 1, 2])),
-            DatabaseObjectField(number: 9, name: "date", value: .date(DatabaseDate(year: 2026, month: 7, day: 16))),
-            DatabaseObjectField(
-                number: 10,
-                name: "timestamp",
-                value: .timestamp(DatabaseTimestamp(secondsSinceUnixEpoch: 1_784_131_200, nanoseconds: 123))
-            ),
-            DatabaseObjectField(number: 11, name: "array", value: .array([.string("a"), .int64(1)])),
-            DatabaseObjectField(number: 12, name: "reference", value: .reference(identity)),
-            DatabaseObjectField(
-                number: 13,
-                name: "rdf",
-                value: .rdfTerm(
-                    .literal(
-                        DatabaseRDFLiteral(
-                            lexicalForm: "東京",
-                            language: try DatabaseRDFLanguageTag("ja")
+        let value = FieldValue.object(
+            try FieldObject([
+                (key: "null", value: .null),
+                (key: "bool", value: .bool(true)),
+                (key: "signed", value: .int64(-42)),
+                (key: "unsigned", value: .uint64(42)),
+                (key: "float64", value: .float64(4.25)),
+                (
+                    key: "decimal",
+                    value: .decimal(
+                        ExactDecimal(coefficient: 12345, scale: 2)
+                    )
+                ),
+                (key: "string", value: .string("calendar")),
+                (key: "bytes", value: .bytes([0, 1, 2])),
+                (
+                    key: "date",
+                    value: .date(
+                        CivilDate(year: 2026, month: 7, day: 16)
+                    )
+                ),
+                (
+                    key: "timestamp",
+                    value: .timestamp(
+                        try Timestamp(
+                            secondsSinceUnixEpoch: 1_784_131_200,
+                            nanoseconds: 123
                         )
                     )
-                )
-            ),
-            DatabaseObjectField(
-                number: 14,
-                name: "uuid",
-                value: .uuid(
-                    DatabaseUUID(
-                        high: 0x0011_2233_4455_6677,
-                        low: 0x8899_AABB_CCDD_EEFF
+                ),
+                (
+                    key: "array",
+                    value: .array([.string("a"), .int64(1)])
+                ),
+                (key: "reference", value: .reference(identity)),
+                (
+                    key: "rdf",
+                    value: .rdfTerm(
+                        .literal(
+                            RDFLiteral(
+                                lexicalForm: "東京",
+                                language: try RDFLanguageTag("ja")
+                            )
+                        )
                     )
-                )
-            ),
-            DatabaseObjectField(
-                number: 15,
-                name: "fixedWidthNumbers",
-                value: .array([
-                    .int8(-8),
-                    .int16(-16),
-                    .int32(-32),
-                    .int64(-64),
-                    .uint8(8),
-                    .uint16(16),
-                    .uint32(32),
-                    .uint64(64),
-                    .float32(3.25),
-                    .float64(6.5),
-                ])
-            ),
-        ])
+                ),
+                (
+                    key: "uuid",
+                    value: .uuid(
+                        DatabaseTypes.UUID(
+                            high: 0x0011_2233_4455_6677,
+                            low: 0x8899_AABB_CCDD_EEFF
+                        )
+                    )
+                ),
+                (
+                    key: "fixedWidthNumbers",
+                    value: .array([
+                        .int8(-8),
+                        .int16(-16),
+                        .int32(-32),
+                        .int64(-64),
+                        .uint8(8),
+                        .uint16(16),
+                        .uint32(32),
+                        .uint64(64),
+                        .float32(3.25),
+                        .float64(6.5),
+                    ])
+                ),
+            ])
+        )
         var writer = DatabaseWireWriter()
         try value.encode(into: &writer)
         var reader = DatabaseWireReader(writer.bytes)
@@ -160,13 +177,13 @@ struct CanonicalDatabaseWireTests {
 
     @Test("language-tag spelling has one canonical wire representation")
     func languageTagWireCanonicalization() throws {
-        let uppercase = DatabaseRDFTerm.literal(DatabaseRDFLiteral(
+        let uppercase = RDFTerm.literal(RDFLiteral(
             lexicalForm: "hello",
-            language: try DatabaseRDFLanguageTag("EN-Latn-US")
+            language: try RDFLanguageTag("EN-Latn-US")
         ))
-        let lowercase = DatabaseRDFTerm.literal(DatabaseRDFLiteral(
+        let lowercase = RDFTerm.literal(RDFLiteral(
             lexicalForm: "hello",
-            language: try DatabaseRDFLanguageTag("en-latn-us")
+            language: try RDFLanguageTag("en-latn-us")
         ))
         var uppercaseWriter = DatabaseWireWriter()
         var lowercaseWriter = DatabaseWireWriter()
@@ -177,16 +194,16 @@ struct CanonicalDatabaseWireTests {
         #expect(uppercaseWriter.bytes == lowercaseWriter.bytes)
     }
 
-    @Test("DatabaseUUID has a stable canonical representation")
+    @Test("DatabaseTypes.UUID has a stable canonical representation")
     func databaseUUIDCanonicalRepresentation() {
-        let uuid = DatabaseUUID(
+        let uuid = DatabaseTypes.UUID(
             high: 0x0011_2233_4455_6677,
             low: 0x8899_AABB_CCDD_EEFF
         )
 
         #expect(uuid.description == "00112233-4455-6677-8899-aabbccddeeff")
-        #expect(DatabaseUUID(bytes: uuid.bytes) == uuid)
-        #expect(DatabaseUUID(bytes: [0]) == nil)
+        #expect(DatabaseTypes.UUID(bytes: uuid.bytes) == uuid)
+        #expect(DatabaseTypes.UUID(bytes: [0]) == nil)
     }
 
     @Test("query result variants round-trip deterministically")
@@ -194,9 +211,12 @@ struct CanonicalDatabaseWireTests {
         let results: [QueryExecuteOperation.Response] = [
             .rows(
                 QueryExecuteOperation.RowPage(
+                    columns: [
+                        .init(number: 1, name: "title"),
+                    ],
                     rows: [
                         QueryExecuteOperation.Row(
-                            values: [DatabaseObjectField(number: 1, name: "title", value: .string("Event"))],
+                            values: [.string("Event")],
                             version: [0x01, 0x02]
                         ),
                     ],
@@ -209,12 +229,14 @@ struct CanonicalDatabaseWireTests {
                 QueryExecuteOperation.GraphPage(
                     triples: [
                         try DatabaseRDFQuad(
-                            subject: .iri("urn:event:1"),
-                            predicate: .iri("urn:calendar:startsAt"),
+                            subject: .iri(try RDFIRI("urn:event:1")),
+                            predicate: .iri(
+                                try RDFIRI("urn:calendar:startsAt")
+                            ),
                             object: .literal(
-                                DatabaseRDFLiteral(
+                                RDFLiteral(
                                     lexicalForm: "2026-07-16",
-                                    datatype: DatabaseXSDDatatype.date
+                                    datatype: XSDDatatype.date
                                         .typedLiteralDatatype
                                 )
                             )
@@ -238,7 +260,7 @@ struct CanonicalDatabaseWireTests {
 
     @Test("mutation requests and typed result families round-trip")
     func mutationFamiliesRoundTrip() throws {
-        let identity = PersistableIdentity(
+        let identity = try EntityReference(
             entity: "Event",
             id: .string("event-1")
         )
@@ -247,23 +269,15 @@ struct CanonicalDatabaseWireTests {
                 MutationExecuteOperation.Change(
                     kind: .update,
                     identity: identity,
-                    fields: [
-                        DatabaseObjectField(
-                            number: 1,
-                            name: "title",
-                            value: .string("Updated")
-                        ),
-                    ]
+                    fields: try FieldObject([
+                        (key: "title", value: .string("Updated")),
+                    ])
                 ),
             ]),
             preconditions: [.mustExist(identity)],
-            graphPartitions: [
-                DatabaseObjectField(
-                    number: 1,
-                    name: "calendar",
-                    value: .string("primary")
-                ),
-            ]
+            graphPartitions: try FieldObject([
+                (key: "calendar", value: .string("primary")),
+            ])
         )
         let recordResponse = MutationExecuteOperation.Response(
             commitVersion: 4,
@@ -318,7 +332,7 @@ struct CanonicalDatabaseWireTests {
         unsupportedVersion[4] = 2
         #expect(throws: DatabaseWireError.unsupportedProtocolVersionValue(2)) {
             _ = try DatabaseEnvelopeCodec.decodeRequest(
-                DatabaseBytes(unsupportedVersion)
+                ByteString(unsupportedVersion)
             )
         }
 
@@ -329,7 +343,7 @@ struct CanonicalDatabaseWireTests {
         unknownOperation[16] = 0xFF
         #expect(throws: DatabaseWireError.invalidOperationIdentifier(0xFFFF)) {
             _ = try DatabaseEnvelopeCodec.decodeRequest(
-                DatabaseBytes(unknownOperation)
+                ByteString(unknownOperation)
             )
         }
     }
@@ -460,9 +474,9 @@ struct CanonicalDatabaseWireTests {
     @Test("canonical RDF consumes the enclosing wire budget")
     func canonicalRDFUsesGlobalBudget() throws {
         let value = FieldValue.rdfTerm(.tripleTerm(
-            subject: .iri("urn:subject"),
-            predicate: .iri("urn:predicate"),
-            object: .iri("urn:object")
+            subject: .iri(try RDFIRI("urn:subject")),
+            predicate: try RDFPredicateIRI("urn:predicate"),
+            object: .iri(try RDFIRI("urn:object"))
         ))
         let acceptedLimits = try DatabaseWireLimits(
             maximumFrameBytes: 1_024,
@@ -524,7 +538,9 @@ struct CanonicalDatabaseWireTests {
             code: "precondition_failed",
             message: "The active snapshot changed",
             retryability: .backoff,
-            details: [DatabaseObjectField(number: 1, name: "actualVersion", value: .uint64(9))]
+            details: try FieldObject([
+                (key: "actualVersion", value: .uint64(9)),
+            ])
         )
         let response = DatabaseWireResponseEnvelope(
             requestID: 42,

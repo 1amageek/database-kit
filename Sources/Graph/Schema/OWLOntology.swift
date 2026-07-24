@@ -1,3 +1,4 @@
+import DatabaseTypes
 // OWLOntology.swift
 // Graph - OWL DL ontology container
 //

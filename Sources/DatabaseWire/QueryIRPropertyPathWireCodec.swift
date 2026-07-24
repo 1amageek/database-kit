@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import QueryIR
 
@@ -307,7 +308,7 @@ private extension QueryIRPropertyPathWireCodec {
     }
 
     static func writeOptionalPredicateIRIs(
-        _ values: Set<DatabaseRDFPredicateIRI>?,
+        _ values: Set<RDFPredicateIRI>?,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         guard let values else {
@@ -324,12 +325,12 @@ private extension QueryIRPropertyPathWireCodec {
 
     static func readOptionalPredicateIRIs(
         from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> Set<DatabaseRDFPredicateIRI>? {
+    ) throws(DatabaseWireError) -> Set<RDFPredicateIRI>? {
         guard try reader.readBool() else { return nil }
         let count = try reader.readCount()
-        var result = Set<DatabaseRDFPredicateIRI>()
+        var result = Set<RDFPredicateIRI>()
         result.reserveCapacity(count)
-        var previous: DatabaseRDFPredicateIRI?
+        var previous: RDFPredicateIRI?
 
         for _ in 0..<count {
             let predicate = try readPredicateIRI(from: &reader)
@@ -344,10 +345,10 @@ private extension QueryIRPropertyPathWireCodec {
 
     static func readPredicateIRI(
         from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> DatabaseRDFPredicateIRI {
+    ) throws(DatabaseWireError) -> RDFPredicateIRI {
         let value = try reader.readString()
         do {
-            return try DatabaseRDFPredicateIRI(value)
+            return try RDFPredicateIRI(value)
         } catch {
             throw .invalidRDFPredicateIRI(value)
         }

@@ -1,3 +1,4 @@
+import DatabaseTypes
 // FieldAccessLevel.swift
 // Core - Field-level access control
 

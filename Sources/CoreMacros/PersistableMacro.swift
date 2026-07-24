@@ -899,7 +899,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             "String", "Int", "Int8", "Int16", "Int32", "Int64",
             "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
             "Double", "Float", "Bool", "Date", "UUID", "Data",
-            "DatabaseRDFTerm"
+            "RDFTerm"
         ]
         var enumMetadataCases: [String] = []
         for fieldInfo in fieldInfos {
@@ -1504,13 +1504,14 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
         schemaType = "float32"
     case "Bool":
         schemaType = "bool"
-    case "Date":
+    case "Date", "Foundation.Date", "FoundationEssentials.Date":
         schemaType = "date"
-    case "UUID":
+    case "UUID", "Foundation.UUID", "FoundationEssentials.UUID",
+         "DatabaseTypes.UUID":
         schemaType = "uuid"
-    case "Data":
+    case "Data", "Foundation.Data", "FoundationEssentials.Data":
         schemaType = "data"
-    case "DatabaseRDFTerm":
+    case "RDFTerm", "DatabaseTypes.RDFTerm":
         schemaType = "rdfTerm"
     default:
         // Non-primitive type: resolve at runtime via RawRepresentable check.

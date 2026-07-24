@@ -1,3 +1,4 @@
+import DatabaseTypes
 // SecurityPolicy.swift
 // Core - Security policy protocol for declarative access control
 

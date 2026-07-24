@@ -1,6 +1,6 @@
-import DatabaseValue
+import DatabaseTypes
 
-extension DatabaseRDFTerm: Codable {
+extension RDFTerm: @retroactive Codable {
     private enum CodingKeys: String, CodingKey {
         case kind
         case value
@@ -25,24 +25,30 @@ extension DatabaseRDFTerm: Codable {
                 [.literal, .subject, .predicate, .object],
                 in: container
             )
-            let identifier = try container.decode(String.self, forKey: .value)
-            guard !identifier.isEmpty else {
+            do {
+                self = .blankNode(
+                    try RDFBlankNodeIdentifier(
+                        container.decode(String.self, forKey: .value)
+                    )
+                )
+            } catch {
                 throw DecodingError.dataCorruptedError(
                     forKey: .value,
                     in: container,
-                    debugDescription: "RDF blank-node identifiers must not be empty"
+                    debugDescription: "Invalid RDF blank-node identifier"
                 )
             }
-            self = .blankNode(identifier)
-
         case .iri:
             try Self.reject(
                 [.literal, .subject, .predicate, .object],
                 in: container
             )
-            let value = try container.decode(String.self, forKey: .value)
             do {
-                _ = try DatabaseRDFIRI(value)
+                self = .iri(
+                    try RDFIRI(
+                        container.decode(String.self, forKey: .value)
+                    )
+                )
             } catch {
                 throw DecodingError.dataCorruptedError(
                     forKey: .value,
@@ -50,54 +56,48 @@ extension DatabaseRDFTerm: Codable {
                     debugDescription: "Invalid absolute RDF IRI"
                 )
             }
-            self = .iri(value)
-
         case .literal:
             try Self.reject(
                 [.value, .subject, .predicate, .object],
                 in: container
             )
             self = .literal(
-                try container.decode(
-                    DatabaseRDFLiteral.self,
-                    forKey: .literal
-                )
+                try container.decode(RDFLiteral.self, forKey: .literal)
             )
-
         case .tripleTerm:
             try Self.reject([.value, .literal], in: container)
-            let subject = try container.decode(
-                DatabaseRDFTerm.self,
+            let subjectTerm = try container.decode(
+                RDFTerm.self,
                 forKey: .subject
             )
-            let predicate = try container.decode(
-                DatabaseRDFTerm.self,
+            let predicateTerm = try container.decode(
+                RDFTerm.self,
                 forKey: .predicate
             )
-            let object = try container.decode(
-                DatabaseRDFTerm.self,
-                forKey: .object
-            )
-            do {
-                try DatabaseRDFTermCodec.validate(
-                    subject,
-                    role: .subject
-                )
-                try DatabaseRDFTermCodec.validate(
-                    predicate,
-                    role: .predicate
-                )
-            } catch {
+            let subject: RDFSubject
+            switch subjectTerm {
+            case .iri(let value):
+                subject = .iri(value)
+            case .blankNode(let value):
+                subject = .blankNode(value)
+            case .literal, .tripleTerm:
                 throw DecodingError.dataCorruptedError(
                     forKey: .subject,
                     in: container,
-                    debugDescription: "Invalid RDF quoted-triple subject or predicate"
+                    debugDescription: "RDF triple subject must be an IRI or blank node"
+                )
+            }
+            guard case .iri(let predicateIRI) = predicateTerm else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .predicate,
+                    in: container,
+                    debugDescription: "RDF triple predicate must be an IRI"
                 )
             }
             self = .tripleTerm(
                 subject: subject,
-                predicate: predicate,
-                object: object
+                predicate: RDFPredicateIRI(predicateIRI),
+                object: try container.decode(RDFTerm.self, forKey: .object)
             )
         }
     }
@@ -106,59 +106,18 @@ extension DatabaseRDFTerm: Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
         case .blankNode(let identifier):
-            guard !identifier.isEmpty else {
-                throw EncodingError.invalidValue(
-                    self,
-                    .init(
-                        codingPath: encoder.codingPath,
-                        debugDescription: "RDF blank-node identifiers must not be empty"
-                    )
-                )
-            }
             try container.encode(EncodedTermKind.blankNode, forKey: .kind)
-            try container.encode(identifier, forKey: .value)
-
+            try container.encode(identifier.rawValue, forKey: .value)
         case .iri(let value):
-            do {
-                _ = try DatabaseRDFIRI(value)
-            } catch {
-                throw EncodingError.invalidValue(
-                    self,
-                    .init(
-                        codingPath: encoder.codingPath,
-                        debugDescription: "Invalid absolute RDF IRI"
-                    )
-                )
-            }
             try container.encode(EncodedTermKind.iri, forKey: .kind)
-            try container.encode(value, forKey: .value)
-
+            try container.encode(value.rawValue, forKey: .value)
         case .literal(let literal):
             try container.encode(EncodedTermKind.literal, forKey: .kind)
             try container.encode(literal, forKey: .literal)
-
         case .tripleTerm(let subject, let predicate, let object):
-            do {
-                try DatabaseRDFTermCodec.validate(
-                    subject,
-                    role: .subject
-                )
-                try DatabaseRDFTermCodec.validate(
-                    predicate,
-                    role: .predicate
-                )
-            } catch {
-                throw EncodingError.invalidValue(
-                    self,
-                    .init(
-                        codingPath: encoder.codingPath,
-                        debugDescription: "Invalid RDF quoted-triple subject or predicate"
-                    )
-                )
-            }
             try container.encode(EncodedTermKind.tripleTerm, forKey: .kind)
-            try container.encode(subject, forKey: .subject)
-            try container.encode(predicate, forKey: .predicate)
+            try container.encode(subject.term, forKey: .subject)
+            try container.encode(predicate.term, forKey: .predicate)
             try container.encode(object, forKey: .object)
         }
     }

@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum JobStatusOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.jobStatus
@@ -25,7 +26,7 @@ public enum JobStatusOperation: DatabaseOperation {
     public struct Request: DatabaseWireValue, Hashable {
         public let job: DatabaseJobIdentity
 
-        public var jobID: DatabaseUUID { job.jobID }
+        public var jobID: DatabaseTypes.UUID { job.jobID }
         public var operation: DatabaseJobOperationIdentifier { job.operation }
 
         public init(job: DatabaseJobIdentity) {
@@ -55,8 +56,8 @@ public enum JobStatusOperation: DatabaseOperation {
         public let unsuccessfulOutcomeCommitAttempt: UInt64
         public let lastUnsuccessfulOutcomeCommitError: DatabaseRemoteError?
         public let cancellationRequested: Bool
-        public let nextAttemptAt: DatabaseTimestamp?
-        public let updatedAt: DatabaseTimestamp
+        public let nextAttemptAt: Timestamp?
+        public let updatedAt: Timestamp
 
         public var operation: DatabaseJobOperationIdentifier { job.operation }
 
@@ -70,8 +71,8 @@ public enum JobStatusOperation: DatabaseOperation {
             unsuccessfulOutcomeCommitAttempt: UInt64 = 0,
             lastUnsuccessfulOutcomeCommitError: DatabaseRemoteError? = nil,
             cancellationRequested: Bool = false,
-            nextAttemptAt: DatabaseTimestamp? = nil,
-            updatedAt: DatabaseTimestamp
+            nextAttemptAt: Timestamp? = nil,
+            updatedAt: Timestamp
         ) throws(DatabaseWireError) {
             try Self.validate(
                 state: state,
@@ -147,9 +148,9 @@ public enum JobStatusOperation: DatabaseOperation {
                     : nil,
                 cancellationRequested: try reader.readBool(),
                 nextAttemptAt: try reader.readBool()
-                    ? try DatabaseTimestamp(from: &reader)
+                    ? try Timestamp(from: &reader)
                     : nil,
-                updatedAt: try DatabaseTimestamp(from: &reader)
+                updatedAt: try Timestamp(from: &reader)
             )
         }
 
@@ -162,8 +163,8 @@ public enum JobStatusOperation: DatabaseOperation {
             unsuccessfulOutcomeCommitAttempt: UInt64,
             lastUnsuccessfulOutcomeCommitError: DatabaseRemoteError?,
             cancellationRequested: Bool,
-            nextAttemptAt: DatabaseTimestamp?,
-            updatedAt: DatabaseTimestamp
+            nextAttemptAt: Timestamp?,
+            updatedAt: Timestamp
         ) throws(DatabaseWireError) {
             guard executionCount >= UInt64(currentSliceAttempt),
                   totalWorkUnits.map({ $0 >= completedWorkUnits }) ?? true,

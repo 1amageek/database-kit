@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 @testable import DatabaseWire
 import QueryIR
@@ -13,7 +14,7 @@ struct QueryIRRecursiveWireCodecTests {
         ])
         let literalBytes = try encodeLiteral(literal, limits: .default)
         #expect(
-            literalBytes == DatabaseBytes([
+            literalBytes == ByteString([
                 8, 2, 0, 0, 0,
                 2, 42, 0, 0, 0, 0, 0, 0, 0,
                 8, 1, 0, 0, 0,
@@ -26,7 +27,7 @@ struct QueryIRRecursiveWireCodecTests {
         )
         let dataTypeBytes = try encodeDataType(dataType, limits: .default)
         #expect(
-            dataTypeBytes == DatabaseBytes([
+            dataTypeBytes == ByteString([
                 20, 20, 6,
                 1, 12, 0, 0, 0, 0, 0, 0, 0,
                 1, 3, 0, 0, 0, 0, 0, 0, 0,
@@ -43,7 +44,7 @@ struct QueryIRRecursiveWireCodecTests {
             limits: .default
         )
         #expect(
-            labelExpressionBytes == DatabaseBytes([
+            labelExpressionBytes == ByteString([
                 3, 3, 0, 0, 0,
                 0, 1, 0, 0, 0, 97,
                 1, 1, 0, 0, 0, 98,
@@ -502,7 +503,7 @@ struct QueryIRRecursiveWireCodecTests {
     private func encodeLiteral(
         _ literal: Literal,
         limits: DatabaseWireLimits
-    ) throws(DatabaseWireError) -> DatabaseBytes {
+    ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
             try QueryIRWireCodec.encodeLiteral(literal, into: &writer)
@@ -510,7 +511,7 @@ struct QueryIRRecursiveWireCodecTests {
     }
 
     private func decodeLiteral(
-        _ bytes: DatabaseBytes,
+        _ bytes: ByteString,
         limits: DatabaseWireLimits
     ) throws(DatabaseWireError) -> Literal {
         var reader = DatabaseWireReader(bytes, limits: limits)
@@ -522,7 +523,7 @@ struct QueryIRRecursiveWireCodecTests {
     private func encodeDataType(
         _ dataType: DataType,
         limits: DatabaseWireLimits
-    ) throws(DatabaseWireError) -> DatabaseBytes {
+    ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
             try QueryIRWireCodec.encodeDataType(dataType, into: &writer)
@@ -530,7 +531,7 @@ struct QueryIRRecursiveWireCodecTests {
     }
 
     private func decodeDataType(
-        _ bytes: DatabaseBytes,
+        _ bytes: ByteString,
         limits: DatabaseWireLimits
     ) throws(DatabaseWireError) -> DataType {
         var reader = DatabaseWireReader(bytes, limits: limits)
@@ -542,7 +543,7 @@ struct QueryIRRecursiveWireCodecTests {
     private func encodeLabelExpression(
         _ expression: LabelExpression,
         limits: DatabaseWireLimits
-    ) throws(DatabaseWireError) -> DatabaseBytes {
+    ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
             try QueryIRLabelExpressionWireCodec.encode(
@@ -553,7 +554,7 @@ struct QueryIRRecursiveWireCodecTests {
     }
 
     private func decodeLabelExpression(
-        _ bytes: DatabaseBytes,
+        _ bytes: ByteString,
         limits: DatabaseWireLimits
     ) throws(DatabaseWireError) -> LabelExpression {
         var reader = DatabaseWireReader(bytes, limits: limits)

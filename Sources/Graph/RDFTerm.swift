@@ -1,51 +1,61 @@
-public import DatabaseValue
+public import DatabaseTypes
+import DatabaseValue
 
-/// The canonical RDF term used by graph, query, storage, and wire layers.
-public typealias RDFTerm = DatabaseRDFTerm
+extension RDFTerm {
+    public static func iri(
+        validating value: String
+    ) throws(RDFIRIError) -> RDFTerm {
+        .iri(try RDFIRI(value))
+    }
 
-extension DatabaseRDFTerm {
-    public static func string(_ value: String) -> DatabaseRDFTerm {
+    public static func blankNode(
+        identifier value: String
+    ) throws(RDFBlankNodeIdentifierError) -> RDFTerm {
+        .blankNode(try RDFBlankNodeIdentifier(value))
+    }
+
+    public static func string(_ value: String) -> RDFTerm {
         .literal(
-            DatabaseRDFLiteral(
+            RDFLiteral(
                 lexicalForm: value,
-                datatype: DatabaseXSDDatatype.string.typedLiteralDatatype
+                datatype: XSDDatatype.string.typedLiteralDatatype
             )
         )
     }
 
-    public static func integer(_ value: Int) -> DatabaseRDFTerm {
+    public static func integer(_ value: Int) -> RDFTerm {
         .literal(
-            DatabaseRDFLiteral(
+            RDFLiteral(
                 lexicalForm: String(value),
-                datatype: DatabaseXSDDatatype.integer.typedLiteralDatatype
+                datatype: XSDDatatype.integer.typedLiteralDatatype
             )
         )
     }
 
-    public static func decimal(_ value: Double) -> DatabaseRDFTerm {
+    public static func decimal(_ value: Double) -> RDFTerm {
         .literal(
-            DatabaseRDFLiteral(
+            RDFLiteral(
                 lexicalForm: String(value),
-                datatype: DatabaseXSDDatatype.decimal.typedLiteralDatatype
+                datatype: XSDDatatype.decimal.typedLiteralDatatype
             )
         )
     }
 
-    public static func boolean(_ value: Bool) -> DatabaseRDFTerm {
+    public static func boolean(_ value: Bool) -> RDFTerm {
         .literal(
-            DatabaseRDFLiteral(
+            RDFLiteral(
                 lexicalForm: value ? "true" : "false",
-                datatype: DatabaseXSDDatatype.boolean.typedLiteralDatatype
+                datatype: XSDDatatype.boolean.typedLiteralDatatype
             )
         )
     }
 
     public static func langString(
         _ value: String,
-        language: DatabaseRDFLanguageTag
-    ) -> DatabaseRDFTerm {
+        language: RDFLanguageTag
+    ) -> RDFTerm {
         .literal(
-            DatabaseRDFLiteral(
+            RDFLiteral(
                 lexicalForm: value,
                 language: language
             )
@@ -55,7 +65,7 @@ extension DatabaseRDFTerm {
     public static func langString(
         _ value: String,
         language: String
-    ) throws -> DatabaseRDFTerm {
-        .langString(value, language: try DatabaseRDFLanguageTag(language))
+    ) throws -> RDFTerm {
+        .langString(value, language: try RDFLanguageTag(language))
     }
 }

@@ -1,3 +1,4 @@
+import DatabaseTypes
 /// A point-in-time persisted model plus relationships loaded at the same read version.
 @dynamicMemberLookup
 public struct Snapshot<T: Persistable>: Sendable {

@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 
 public struct PersistableFieldDecoder: Sendable {
@@ -68,7 +69,7 @@ public struct PersistableFieldDecoder: Sendable {
         guard case .object(let fields) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an object")
         }
-        return try Value.decodePersistedFields(fields)
+        return try Value.decodePersistedObject(fields)
     }
 
     public func decode<Value: PersistableReferenceValue>(
@@ -128,7 +129,7 @@ public struct PersistableFieldDecoder: Sendable {
             guard case .object(let fields) = value else {
                 throw PersistableDecodingError.invalidValue(field: field, expected: "an array of objects")
             }
-            return try Element.decodePersistedFields(fields)
+            return try Element.decodePersistedObject(fields)
         }
     }
 
@@ -177,7 +178,7 @@ public struct PersistableFieldDecoder: Sendable {
         guard case .object(let fields) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an object")
         }
-        return try Value.decodePersistedFields(fields)
+        return try Value.decodePersistedObject(fields)
     }
 
     public func decodeIfPresent<Value: PersistableReferenceValue>(
@@ -233,7 +234,7 @@ public struct PersistableFieldDecoder: Sendable {
             guard case .object(let fields) = value else {
                 throw PersistableDecodingError.invalidValue(field: field, expected: "an array of objects")
             }
-            return try Element.decodePersistedFields(fields)
+            return try Element.decodePersistedObject(fields)
         }
     }
 

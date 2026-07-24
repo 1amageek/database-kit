@@ -1,3 +1,4 @@
+import DatabaseTypes
 import DatabaseValue
 import QueryIR
 
@@ -20,7 +21,7 @@ extension QueryIRWireCodec {
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         do {
-            _ = try DatabaseRDFTypedLiteralDatatype(value)
+            _ = try RDFTypedLiteralDatatype(value)
         } catch {
             throw .invalidRDFDatatypeIRI
         }
@@ -32,7 +33,7 @@ extension QueryIRWireCodec {
     ) throws(DatabaseWireError) -> String {
         let value = try reader.readString()
         do {
-            _ = try DatabaseRDFTypedLiteralDatatype(value)
+            _ = try RDFTypedLiteralDatatype(value)
         } catch {
             throw .invalidRDFDatatypeIRI
         }
@@ -43,9 +44,9 @@ extension QueryIRWireCodec {
         _ value: String,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
-        let language: DatabaseRDFLanguageTag
+        let language: RDFLanguageTag
         do {
-            language = try DatabaseRDFLanguageTag(value)
+            language = try RDFLanguageTag(value)
         } catch {
             throw .invalidRDFLanguageTag
         }
@@ -59,9 +60,9 @@ extension QueryIRWireCodec {
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) -> String {
         let value = try reader.readString()
-        let language: DatabaseRDFLanguageTag
+        let language: RDFLanguageTag
         do {
-            language = try DatabaseRDFLanguageTag(value)
+            language = try RDFLanguageTag(value)
         } catch {
             throw .invalidRDFLanguageTag
         }
@@ -75,7 +76,7 @@ extension QueryIRWireCodec {
         _ value: String,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
-        guard DatabaseRDFDirection(rawValue: value) != nil else {
+        guard RDFDirection(rawValue: value) != nil else {
             throw .invalidRDFDirectionValue(value)
         }
         try writer.writeString(value)
@@ -85,7 +86,7 @@ extension QueryIRWireCodec {
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) -> String {
         let value = try reader.readString()
-        guard DatabaseRDFDirection(rawValue: value) != nil else {
+        guard RDFDirection(rawValue: value) != nil else {
             throw .invalidRDFDirectionValue(value)
         }
         return value

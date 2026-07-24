@@ -1,3 +1,4 @@
+import DatabaseTypes
 // Restricted.swift
 // Core - Property wrapper for field-level access control
 

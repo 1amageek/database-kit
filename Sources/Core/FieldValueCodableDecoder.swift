@@ -1,3 +1,5 @@
+import DatabaseTypes
+import DatabaseTypesFoundation
 import DatabaseValue
 import DatabaseValueCodable
 #if canImport(FoundationEssentials)
@@ -22,22 +24,17 @@ private enum DatabaseValueDecoding {
         codingPath: [CodingKey]
     ) throws -> Value {
         if type == Data.self, case .bytes(let bytes) = value {
-            return try cast(Data(bytes), to: type, codingPath: codingPath)
+            return try cast(Data(copying: bytes), to: type, codingPath: codingPath)
         }
-        if type == UUID.self, case .uuid(let uuid) = value {
-            let decoded = UUID(uuid: (
-                uuid[0], uuid[1], uuid[2], uuid[3],
-                uuid[4], uuid[5], uuid[6], uuid[7],
-                uuid[8], uuid[9], uuid[10], uuid[11],
-                uuid[12], uuid[13], uuid[14], uuid[15]
-            ))
+        if type == Foundation.UUID.self, case .uuid(let uuid) = value {
+            let decoded = Foundation.UUID(uuid)
             return try cast(decoded, to: type, codingPath: codingPath)
         }
         if type == Date.self {
             let decoded = try decodeDate(value, codingPath: codingPath)
             return try cast(decoded, to: type, codingPath: codingPath)
         }
-        if type == DatabaseRDFTerm.self, case .rdfTerm(let term) = value {
+        if type == RDFTerm.self, case .rdfTerm(let term) = value {
             return try cast(term, to: type, codingPath: codingPath)
         }
         return try Value(from: DatabaseValueDecoder(value: value, codingPath: codingPath))
@@ -77,13 +74,7 @@ private enum DatabaseValueDecoding {
     ) throws -> Date {
         switch value {
         case .timestamp(let timestamp):
-            guard timestamp.nanoseconds < 1_000_000_000 else {
-                throw typeMismatch(Date.self, value: value, codingPath: codingPath)
-            }
-            return Date(
-                timeIntervalSince1970: Double(timestamp.secondsSinceUnixEpoch)
-                    + Double(timestamp.nanoseconds) / 1_000_000_000
-            )
+            return Date(timestamp)
         case .date(let date):
             guard let days = daysSinceUnixEpoch(date) else {
                 throw typeMismatch(Date.self, value: value, codingPath: codingPath)
@@ -94,7 +85,7 @@ private enum DatabaseValueDecoding {
         }
     }
 
-    private static func daysSinceUnixEpoch(_ date: DatabaseDate) -> Int64? {
+    private static func daysSinceUnixEpoch(_ date: CivilDate) -> Int64? {
         let year = Int64(date.year)
         let month = Int64(date.month)
         let day = Int64(date.day)
@@ -176,16 +167,16 @@ private struct DatabaseValueKeyedDecodingContainer<Key: CodingKey>: KeyedDecodin
     let allKeys: [Key]
     private let values: [String: FieldValue]
 
-    init(fields: [DatabaseObjectField], codingPath: [CodingKey]) throws {
+    init(fields: FieldObject, codingPath: [CodingKey]) throws {
         var mapped: [String: FieldValue] = [:]
         var keys: [Key] = []
-        for field in fields {
-            guard mapped.updateValue(field.value, forKey: field.name) == nil else {
+        for field in fields.fields {
+            guard mapped.updateValue(field.value, forKey: field.key) == nil else {
                 throw DecodingError.dataCorrupted(
-                    .init(codingPath: codingPath, debugDescription: "Duplicate object field '\(field.name)'")
+                    .init(codingPath: codingPath, debugDescription: "Duplicate object field '\(field.key)'")
                 )
             }
-            if let key = Key(stringValue: field.name) {
+            if let key = Key(stringValue: field.key) {
                 keys.append(key)
             }
         }
@@ -228,7 +219,7 @@ private struct DatabaseValueKeyedDecodingContainer<Key: CodingKey>: KeyedDecodin
     }
 
     func superDecoder() throws -> Decoder {
-        DatabaseValueDecoder(value: .object([]), codingPath: codingPath)
+        DatabaseValueDecoder(value: .object(FieldObject()), codingPath: codingPath)
     }
 
     func superDecoder(forKey key: Key) throws -> Decoder { try decoder(for: key) }

@@ -1,3 +1,4 @@
+import DatabaseTypes
 // TriGCodec.swift
 // Graph - TriG dataset codec
 
@@ -517,13 +518,13 @@ private struct TriGParser {
         switch current {
         case .iri(let iri):
             advance()
-            return .iri(resolveIRI(iri))
+            return try .iri(validating: resolveIRI(iri))
         case .prefixedName(let name):
             advance()
-            return .iri(try expandPrefixed(name))
+            return try .iri(validating: expandPrefixed(name))
         case .blankNode(let label):
             advance()
-            return .blankNode(label)
+            return try .blankNode(identifier: label)
         case .openBracket:
             return try parseBlankNodePropertyList(graph: graph)
         case .openParen:
@@ -537,13 +538,16 @@ private struct TriGParser {
         switch current {
         case .a:
             advance()
-            return .iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+            return try .iri(
+                validating:
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+            )
         case .iri(let iri):
             advance()
-            return .iri(resolveIRI(iri))
+            return try .iri(validating: resolveIRI(iri))
         case .prefixedName(let name):
             advance()
-            return .iri(try expandPrefixed(name))
+            return try .iri(validating: expandPrefixed(name))
         default:
             throw unexpected("predicate")
         }
@@ -553,13 +557,13 @@ private struct TriGParser {
         switch current {
         case .iri(let iri):
             advance()
-            return .iri(resolveIRI(iri))
+            return try .iri(validating: resolveIRI(iri))
         case .prefixedName(let name):
             advance()
-            return .iri(try expandPrefixed(name))
+            return try .iri(validating: expandPrefixed(name))
         case .blankNode(let label):
             advance()
-            return .blankNode(label)
+            return try .blankNode(identifier: label)
         case .openBracket:
             return try parseBlankNodePropertyList(graph: graph)
         case .openParen:
@@ -587,7 +591,10 @@ private struct TriGParser {
             return .literal(.boolean(value == "true"))
         case .a:
             advance()
-            return .iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+            return try .iri(
+                validating:
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+            )
         default:
             throw unexpected("object")
         }
@@ -618,7 +625,7 @@ private struct TriGParser {
 
     private mutating func parseBlankNodePropertyList(graph: RDFTerm?) throws -> RDFTerm {
         advance()
-        let blank = freshBlankNode()
+        let blank = try freshBlankNode()
         if case .closeBracket = current {
             advance()
             return blank
@@ -640,17 +647,29 @@ private struct TriGParser {
         }
 
         if items.isEmpty {
-            return .iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
+            return try .iri(
+                validating:
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
+            )
         }
 
-        let rdfFirst = RDFTerm.iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
-        let rdfRest = RDFTerm.iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
-        let rdfNil = RDFTerm.iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
+        let rdfFirst = try RDFTerm.iri(
+            validating:
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
+        )
+        let rdfRest = try RDFTerm.iri(
+            validating:
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"
+        )
+        let rdfNil = try RDFTerm.iri(
+            validating:
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
+        )
 
         var head: RDFTerm?
         var previous: RDFTerm?
         for item in items {
-            let node = freshBlankNode()
+            let node = try freshBlankNode()
             if head == nil { head = node }
             quads.append(RDFQuad(subject: node, predicate: rdfFirst, object: item, graph: graph))
             if let previous {
@@ -668,13 +687,13 @@ private struct TriGParser {
         switch current {
         case .iri(let iri):
             advance()
-            return .iri(resolveIRI(iri))
+            return try .iri(validating: resolveIRI(iri))
         case .prefixedName(let name):
             advance()
-            return .iri(try expandPrefixed(name))
+            return try .iri(validating: expandPrefixed(name))
         case .blankNode(let label):
             advance()
-            return .blankNode(label)
+            return try .blankNode(identifier: label)
         default:
             throw unexpected("graph name")
         }
@@ -701,9 +720,10 @@ private struct TriGParser {
         return iri
     }
 
-    private mutating func freshBlankNode() -> RDFTerm {
+    private mutating func freshBlankNode()
+        throws(RDFBlankNodeIdentifierError) -> RDFTerm {
         blankNodeCounter += 1
-        return .blankNode("_b\(blankNodeCounter)")
+        return try .blankNode(identifier: "_b\(blankNodeCounter)")
     }
 
     private var startsGraphBlock: Bool {

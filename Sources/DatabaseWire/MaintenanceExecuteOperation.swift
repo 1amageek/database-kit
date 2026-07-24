@@ -1,4 +1,5 @@
-public import DatabaseValue
+import DatabaseTypes
+import DatabaseValue
 
 public enum MaintenanceExecuteOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.maintenanceExecute
@@ -9,12 +10,12 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
         case indexStatus(
             entity: String?,
             index: String?,
-            partitions: [DatabaseObjectField]
+            partitions: FieldObject
         )
         case rebuildIndex(
             entity: String,
             index: String,
-            partitions: [DatabaseObjectField],
+            partitions: FieldObject,
             batchSize: UInt32
         )
         case compact
@@ -83,36 +84,27 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
         }
 
         private static func encode(
-            partitions: [DatabaseObjectField],
+            partitions: FieldObject,
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
-            try writer.writeCount(partitions.count)
-            for partition in partitions {
-                try partition.encode(into: &writer)
-            }
+            try partitions.encode(into: &writer)
         }
 
         private static func decodePartitions(
             from reader: inout DatabaseWireReader
-        ) throws(DatabaseWireError) -> [DatabaseObjectField] {
-            let count = try reader.readCount()
-            var partitions: [DatabaseObjectField] = []
-            partitions.reserveCapacity(count)
-            for _ in 0..<count {
-                partitions.append(try DatabaseObjectField(from: &reader))
-            }
-            return partitions
+        ) throws(DatabaseWireError) -> FieldObject {
+            try FieldObject(from: &reader)
         }
     }
 
     public struct Request: DatabaseWireValue, Hashable {
         public let invocation: Invocation
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
         public let budget: DatabaseExecutionBudget
 
         public init(
             invocation: Invocation,
-            continuation: DatabaseBytes? = nil,
+            continuation: ByteString? = nil,
             budget: DatabaseExecutionBudget = DatabaseExecutionBudget()
         ) {
             self.invocation = invocation
@@ -209,7 +201,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
     public struct IndexStatus: DatabaseWireValue, Hashable {
         public let entity: String
         public let index: String
-        public let partitions: [DatabaseObjectField]
+        public let partitions: FieldObject
         public let state: IndexState
         public let indexedEntityCount: UInt64
         public let detail: String?
@@ -217,7 +209,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
         public init(
             entity: String,
             index: String,
-            partitions: [DatabaseObjectField],
+            partitions: FieldObject,
             state: IndexState,
             indexedEntityCount: UInt64,
             detail: String? = nil
@@ -235,10 +227,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
         ) throws(DatabaseWireError) {
             try writer.writeString(entity)
             try writer.writeString(index)
-            try writer.writeCount(partitions.count)
-            for partition in partitions {
-                try partition.encode(into: &writer)
-            }
+            try partitions.encode(into: &writer)
             writer.writeUInt8(state.rawValue)
             writer.writeUInt64(indexedEntityCount)
             try writer.writeOptionalString(detail)
@@ -249,16 +238,10 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
         ) throws(DatabaseWireError) {
             let entity = try reader.readString()
             let index = try reader.readString()
-            let count = try reader.readCount()
-            var partitions: [DatabaseObjectField] = []
-            partitions.reserveCapacity(count)
-            for _ in 0..<count {
-                partitions.append(try DatabaseObjectField(from: &reader))
-            }
             self.init(
                 entity: entity,
                 index: index,
-                partitions: partitions,
+                partitions: try FieldObject(from: &reader),
                 state: try IndexState(from: &reader),
                 indexedEntityCount: try reader.readUInt64(),
                 detail: try reader.readOptionalString()
@@ -268,9 +251,9 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
 
     public struct IndexStatusPage: DatabaseWireValue, Hashable {
         public let indexes: [IndexStatus]
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
 
-        public init(indexes: [IndexStatus], continuation: DatabaseBytes? = nil) {
+        public init(indexes: [IndexStatus], continuation: ByteString? = nil) {
             self.indexes = indexes
             self.continuation = continuation
         }
@@ -320,14 +303,14 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
         public let completedWorkUnits: UInt64
         public let commitVersion: UInt64?
         public let isComplete: Bool
-        public let continuation: DatabaseBytes?
+        public let continuation: ByteString?
 
         public init(
             kind: ExecutionKind,
             completedWorkUnits: UInt64,
             commitVersion: UInt64? = nil,
             isComplete: Bool,
-            continuation: DatabaseBytes? = nil
+            continuation: ByteString? = nil
         ) {
             self.kind = kind
             self.completedWorkUnits = completedWorkUnits

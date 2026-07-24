@@ -1,3 +1,4 @@
+import DatabaseTypes
 // BuiltInIndexKinds.swift
 // Built-in IndexKind definitions
 //

@@ -1,3 +1,4 @@
+import DatabaseTypes
 // RestrictedFieldMetadata.swift
 // Core - Static metadata for restricted fields
 

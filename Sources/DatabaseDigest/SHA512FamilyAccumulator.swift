@@ -1,4 +1,4 @@
-import DatabaseValue
+import DatabaseTypes
 
 /// Shared streaming state for SHA-384 and SHA-512.
 ///
@@ -14,7 +14,7 @@ struct SHA512FamilyAccumulator: Sendable {
         state = variant.initialState
     }
 
-    mutating func update(_ bytes: DatabaseBytes) {
+    mutating func update(_ bytes: ByteString) {
         bytes.withUnsafeBytes { source in
             update(source)
         }
@@ -91,9 +91,9 @@ struct SHA512FamilyAccumulator: Sendable {
         }
     }
 
-    consuming func finalize(digestByteCount: Int) -> DatabaseBytes {
+    consuming func finalize(digestByteCount: Int) -> ByteString {
         withUnsafeDigestBytes(digestByteCount: digestByteCount) { digestBytes in
-            DatabaseBytes.copying(count: digestBytes.count) { destination in
+            ByteString.copying(count: digestBytes.count) { destination in
                 destination.copyMemory(from: digestBytes)
             }
         }
