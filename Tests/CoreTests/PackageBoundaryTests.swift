@@ -46,19 +46,24 @@ struct PackageBoundaryTests {
         )
         let forbiddenDeclarations: Set<String> = [
             "AlternativePlan",
+            "ChangeType",
             "CollectionStatistics",
             "DiffError",
             "DiffOptions",
+            "FieldChange",
             "GraphIndexScanPlanner",
             "HyperLogLog",
             "HyperLogLogError",
+            "IndexError",
             "IndexBuildState",
             "IndexStatistics",
+            "ModelDiff",
             "PlanType",
             "QueryExecutionStats",
             "QueryPlan",
             "RelationshipSnapshot",
             "Snapshot",
+            "VersionInfo",
         ]
 
         var violations: [String] = []
