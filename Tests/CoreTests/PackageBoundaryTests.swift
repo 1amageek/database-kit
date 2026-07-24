@@ -38,6 +38,48 @@ struct PackageBoundaryTests {
         )
     }
 
+    @Test("Sources do not declare framework-owned execution models")
+    func sourcesDoNotDeclareExecutionModels() throws {
+        let root = Self.packageRoot()
+        let sourceFiles = try Self.swiftFiles(
+            under: root.appendingPathComponent("Sources")
+        )
+        let forbiddenDeclarations: Set<String> = [
+            "AlternativePlan",
+            "CollectionStatistics",
+            "GraphIndexScanPlanner",
+            "IndexBuildState",
+            "IndexStatistics",
+            "PlanType",
+            "QueryExecutionStats",
+            "QueryPlan",
+        ]
+
+        var violations: [String] = []
+        for file in sourceFiles {
+            let text = try String(contentsOf: file, encoding: .utf8)
+            let relativePath = Self.relativePath(file, from: root)
+            for (lineIndex, line) in text
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .enumerated() {
+                guard let declaration = Self.declaredTypeName(
+                    from: String(line)
+                ),
+                forbiddenDeclarations.contains(declaration) else {
+                    continue
+                }
+                violations.append(
+                    "\(relativePath):\(lineIndex + 1) declares \(declaration)"
+                )
+            }
+        }
+
+        #expect(
+            violations.isEmpty,
+            "database-kit must not own planning, execution, or runtime statistics: \(violations.joined(separator: ", "))"
+        )
+    }
+
     @Test("CoreTests declares direct dependencies for imported local modules")
     func coreTestsDeclaresDirectDependenciesForImportedLocalModules() throws {
         let root = Self.packageRoot()
@@ -128,6 +170,23 @@ struct PackageBoundaryTests {
         }
 
         return remainder.split(separator: " ").first.map(String.init)
+    }
+
+    private static func declaredTypeName(from line: String) -> String? {
+        let tokens = line
+            .trimmingCharacters(in: .whitespaces)
+            .split(separator: " ")
+        guard let declarationIndex = tokens.firstIndex(where: {
+            $0 == "struct" || $0 == "enum" || $0 == "class"
+                || $0 == "actor" || $0 == "protocol"
+        }),
+        declarationIndex + 1 < tokens.count else {
+            return nil
+        }
+        return String(
+            tokens[declarationIndex + 1]
+                .prefix(while: { $0.isLetter || $0.isNumber || $0 == "_" })
+        )
     }
 
     private static func coreTestsDependencyBlock(from packageText: String) throws -> String {
