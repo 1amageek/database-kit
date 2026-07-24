@@ -4,4 +4,5 @@ public protocol DatabaseCommandDescriptor: Sendable {
     associatedtype Output: DatabaseWireValue
 
     static var identifier: String { get }
+    static var access: DatabaseCommandAccess { get }
 }

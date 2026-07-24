@@ -15,7 +15,9 @@ public struct DatabaseTypedCommandRequest<Command: DatabaseCommandDescriptor>:
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
+        try DatabaseCommandRequest.validateIdentifier(Command.identifier)
         try writer.writeString(Command.identifier)
+        try Command.access.encode(into: &writer)
         try writer.writeLengthPrefixed {
             (payloadWriter: inout DatabaseWireWriter) throws(DatabaseWireError) in
             try input.encode(into: &payloadWriter)
@@ -26,11 +28,21 @@ public struct DatabaseTypedCommandRequest<Command: DatabaseCommandDescriptor>:
     public init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
-        let command = try reader.readString()
+        let command = try reader.readString(
+            maximumUTF8Bytes: DatabaseCommandRequest.maximumIdentifierUTF8Bytes
+        )
+        try DatabaseCommandRequest.validateIdentifier(command)
         guard command == Command.identifier else {
             throw .invalidCommandIdentifier(
                 expected: Command.identifier,
                 actual: command
+            )
+        }
+        let actualAccess = try DatabaseCommandAccess(from: &reader)
+        guard actualAccess == Command.access else {
+            throw .mismatchedCommandAccess(
+                expected: Command.access.rawValue,
+                actual: actualAccess.rawValue
             )
         }
         let input = try reader.readLengthPrefixed {

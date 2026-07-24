@@ -64,8 +64,7 @@ public struct DatabaseJobOperationIdentifier:
              .graphAlgorithm,
              .ontologyExecute,
              .shaclExecute,
-             .commandRead,
-             .commandWrite,
+             .commandExecute,
              .maintenanceExecute:
             return true
         case .capabilitiesDescribe,

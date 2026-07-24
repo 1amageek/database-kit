@@ -7,8 +7,7 @@ public enum DatabaseOperationIdentifier: UInt16, Sendable, Hashable, CaseIterabl
     case graphAlgorithm = 0x0401
     case ontologyExecute = 0x0501
     case shaclExecute = 0x0601
-    case commandRead = 0x0701
-    case commandWrite = 0x0702
+    case commandExecute = 0x0701
     case maintenanceExecute = 0x0801
     case jobStart = 0x0901
     case jobStatus = 0x0902

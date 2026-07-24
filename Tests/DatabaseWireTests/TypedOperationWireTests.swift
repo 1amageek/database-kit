@@ -308,19 +308,21 @@ struct TypedOperationWireTests {
         try expectRoundTrip(
             DatabaseCommandRequest(
                 command: "calendar.activateImport",
+                access: .readWrite,
                 input: [0x72, 0x75, 0x6E, 0x2D, 0x31]
             )
         )
         try expectRoundTrip(
-            CommandReadOperation.Response(
+            CommandExecuteOperation.Response.read(
                 output: [1],
                 continuation: [2]
             )
         )
         try expectRoundTrip(
-            CommandWriteOperation.Response(
+            CommandExecuteOperation.Response.write(
                 output: [1],
-                commitVersion: 42
+                commitVersion: 42,
+                continuation: nil
             )
         )
 
@@ -407,6 +409,7 @@ struct TypedOperationWireTests {
         let rawRequest = try DatabaseEnvelopeCodec.encode(
             DatabaseCommandRequest(
                 command: ActivateImportCommand.identifier,
+                access: .readWrite,
                 input: encodedInput,
                 budget: budget
             )
@@ -426,14 +429,14 @@ struct TypedOperationWireTests {
         )
 
         let rawResponse = try DatabaseEnvelopeCodec.encode(
-            CommandWriteOperation.Response(
+            CommandExecuteOperation.Response.write(
                 output: encodedOutput,
                 commitVersion: 42,
                 continuation: [3, 2, 1]
             )
         )
         let typedResponse = try DatabaseEnvelopeCodec.encode(
-            DatabaseTypedWriteCommandResponse(
+            DatabaseTypedCommandResponse<ActivateImportCommand>(
                 output: output,
                 commitVersion: 42,
                 continuation: [3, 2, 1]
@@ -442,24 +445,116 @@ struct TypedOperationWireTests {
         #expect(typedResponse == rawResponse)
         #expect(
             try DatabaseEnvelopeCodec.decode(
-                DatabaseTypedWriteCommandResponse<ActivateImportCommandOutput>.self,
+                DatabaseTypedCommandResponse<ActivateImportCommand>.self,
                 from: rawResponse
             ).output == output
         )
 
         let rawReadResponse = try DatabaseEnvelopeCodec.encode(
-            CommandReadOperation.Response(
+            CommandExecuteOperation.Response.read(
                 output: encodedOutput,
                 continuation: [1, 2, 3]
             )
         )
         let typedReadResponse = try DatabaseEnvelopeCodec.encode(
-            DatabaseTypedReadCommandResponse(
+            DatabaseTypedCommandResponse<InspectImportCommand>(
                 output: output,
                 continuation: [1, 2, 3]
             )
         )
         #expect(typedReadResponse == rawReadResponse)
+    }
+
+    @Test("command access and identifiers are validated at both wire boundaries")
+    func commandContractValidationIsStrict() throws {
+        #expect(
+            throws: DatabaseWireError.invalidCommandAccess(2)
+        ) {
+            try DatabaseEnvelopeCodec.decode(
+                DatabaseCommandAccess.self,
+                from: [2]
+            )
+        }
+
+        let input = ActivateImportCommandInput(
+            runID: "run-1",
+            expectedRevision: 7
+        )
+        let mismatchedRequest = try DatabaseWireWriter.encode {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try writer.writeString(ActivateImportCommand.identifier)
+            try DatabaseCommandAccess.readOnly.encode(into: &writer)
+            try writer.writeLengthPrefixed {
+                (payloadWriter: inout DatabaseWireWriter)
+                    throws(DatabaseWireError) in
+                try input.encode(into: &payloadWriter)
+            }
+            try ExecutionBudget().encode(into: &writer)
+        }
+        #expect(
+            throws: DatabaseWireError.mismatchedCommandAccess(
+                expected: DatabaseCommandAccess.readWrite.rawValue,
+                actual: DatabaseCommandAccess.readOnly.rawValue
+            )
+        ) {
+            try DatabaseEnvelopeCodec.decode(
+                DatabaseTypedCommandRequest<ActivateImportCommand>.self,
+                from: mismatchedRequest
+            )
+        }
+
+        #expect(
+            throws: DatabaseWireError.mismatchedCommandAccess(
+                expected: DatabaseCommandAccess.readWrite.rawValue,
+                actual: DatabaseCommandAccess.readOnly.rawValue
+            )
+        ) {
+            try DatabaseEnvelopeCodec.decode(
+                DatabaseTypedCommandResponse<ActivateImportCommand>.self,
+                from: [DatabaseCommandAccess.readOnly.rawValue]
+            )
+        }
+
+        #expect(throws: DatabaseWireError.invalidCommandIdentifierValue) {
+            try DatabaseEnvelopeCodec.encode(
+                DatabaseCommandRequest(
+                    command: "",
+                    access: .readOnly
+                )
+            )
+        }
+
+        let oversizedIdentifier = String(
+            repeating: "a",
+            count: DatabaseCommandRequest.maximumIdentifierUTF8Bytes + 1
+        )
+        #expect(
+            throws: DatabaseWireError.stringTooLarge(
+                actual: oversizedIdentifier.utf8.count,
+                maximum: DatabaseCommandRequest.maximumIdentifierUTF8Bytes
+            )
+        ) {
+            try DatabaseEnvelopeCodec.encode(
+                DatabaseCommandRequest(
+                    command: oversizedIdentifier,
+                    access: .readOnly
+                )
+            )
+        }
+
+        let emptyIdentifierRequest = try DatabaseWireWriter.encode {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try writer.writeString("")
+            try DatabaseCommandAccess.readOnly.encode(into: &writer)
+            try writer.writeBytes([])
+            try ExecutionBudget().encode(into: &writer)
+        }
+        #expect(throws: DatabaseWireError.invalidCommandIdentifierValue) {
+            try DatabaseEnvelopeCodec.decode(
+                DatabaseCommandRequest.self,
+                from: emptyIdentifierRequest
+            )
+        }
     }
 
     @Test("durable job lifecycle uses canonical identifiers and outcomes")
@@ -696,7 +791,7 @@ struct TypedOperationWireTests {
     @Test("capabilities advertise a canonical exact job operation set")
     func capabilitiesAdvertiseCanonicalJobOperations() throws {
         let command = try DatabaseJobOperationIdentifier(
-            family: .commandWrite,
+            family: .commandExecute,
             kind: "calendar.import.validate"
         )
         let maintenance = try DatabaseMaintenanceJobDescriptor
@@ -843,20 +938,20 @@ struct TypedOperationWireTests {
     @Test("job operation identifiers enforce their canonical bounded grammar")
     func jobOperationIdentifierValidationIsStrict() throws {
         let valid = try DatabaseJobOperationIdentifier(
-            family: .commandWrite,
+            family: .commandExecute,
             kind: "calendar.import.validate"
         )
         try expectRoundTrip(valid)
 
         #expect(throws: DatabaseWireError.invalidJobOperationKind) {
             try DatabaseJobOperationIdentifier(
-                family: .commandWrite,
+                family: .commandExecute,
                 kind: "Calendar.Import.Validate"
             )
         }
         #expect(throws: DatabaseWireError.invalidJobOperationKind) {
             try DatabaseJobOperationIdentifier(
-                family: .commandWrite,
+                family: .commandExecute,
                 kind: "calendar..validate"
             )
         }
@@ -878,7 +973,7 @@ struct TypedOperationWireTests {
         let encoded = try DatabaseWireWriter.encode {
             (writer: inout DatabaseWireWriter)
                 throws(DatabaseWireError) in
-            DatabaseOperationIdentifier.commandWrite.encode(into: &writer)
+            DatabaseOperationIdentifier.commandExecute.encode(into: &writer)
             try writer.writeString(oversizedKind)
         }
         #expect(
@@ -1110,4 +1205,11 @@ private enum ActivateImportCommand: DatabaseWriteCommandDescriptor {
     typealias Output = ActivateImportCommandOutput
 
     static let identifier = "calendar.activateImport"
+}
+
+private enum InspectImportCommand: DatabaseReadCommandDescriptor {
+    typealias Input = ActivateImportCommandInput
+    typealias Output = ActivateImportCommandOutput
+
+    static let identifier = "calendar.inspectImport"
 }

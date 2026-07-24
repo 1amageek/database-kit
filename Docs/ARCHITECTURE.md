@@ -86,6 +86,27 @@ and response types. Protocol failures remain typed and distinguish malformed
 input, resource limits, unsupported identifiers, authorization, conflicts,
 retryability, and server failures.
 
+The version 1 operation families are fixed:
+
+| Family | Contract |
+|---|---|
+| `capabilities.describe` | Runtime capability catalog |
+| `schema.describe` | Validated schema catalog |
+| `query.execute` | SQL, graph pattern, and SPARQL queries |
+| `mutation.execute` | Typed mutation batches |
+| `graph.algorithm` | Graph algorithm invocation and paging |
+| `ontology.execute` | Ontology operations |
+| `shacl.execute` | SHACL operations |
+| `command.execute` | Application command execution |
+| `maintenance.execute` | Migration and index maintenance |
+| `job.start/status/result/cancel` | Durable operation lifecycle |
+
+`command.execute` is one operation family. Each command descriptor declares
+`readOnly` or `readWrite` access, and that access is encoded in both request and
+response payloads. A read response carries output and continuation. A write
+response additionally carries the commit version. Typed decoding rejects an
+access value that does not match the statically selected command descriptor.
+
 ## Runtime Boundary
 
 database-framework interprets the declarations and operations from this package.
