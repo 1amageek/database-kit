@@ -10,13 +10,13 @@ struct ModelMacroTests {
 
     /// Test basic @Persistable expansion
     @Test("Basic @Persistable generates id and metadata")
-    func basicModel() {
+    func basicModel() throws {
         // Verify generated properties
         #expect(BasicUser.persistableType == "BasicUser")
         #expect(BasicUser.allFields.contains("id"))
         #expect(BasicUser.allFields.contains("email"))
         #expect(BasicUser.allFields.contains("name"))
-        #expect(BasicUser.indexDescriptors.isEmpty)
+        #expect(try BasicUser.indexDescriptors.isEmpty)
 
         // Verify auto-generated id
         let user = BasicUser(email: "test@example.com", name: "Alice")
@@ -25,11 +25,12 @@ struct ModelMacroTests {
 
     /// Test @Persistable with #Index
     @Test("@Persistable with single Index")
-    func modelWithIndex() {
+    func modelWithIndex() throws {
         // Verify index descriptors
-        #expect(IndexedUser.indexDescriptors.count == 1)
+        let indexes = try IndexedUser.indexDescriptors
+        #expect(indexes.count == 1)
 
-        let emailIndex = IndexedUser.indexDescriptors[0]
+        let emailIndex = indexes[0]
         #expect(emailIndex.name == "IndexedUser_email")
         #expect(emailIndex.fieldNames == ["email"])
         #expect(emailIndex.kind.fieldNames == ["email"])
@@ -39,12 +40,13 @@ struct ModelMacroTests {
 
     /// Test @Persistable with multiple indexes
     @Test("@Persistable with multiple indexes")
-    func modelWithMultipleIndexes() {
+    func modelWithMultipleIndexes() throws {
         // Verify multiple indexes
-        #expect(Product.indexDescriptors.count == 2)
+        let indexes = try Product.indexDescriptors
+        #expect(indexes.count == 2)
 
         // First index: category
-        let categoryIndex = Product.indexDescriptors[0]
+        let categoryIndex = indexes[0]
         #expect(categoryIndex.name == "Product_category")
         #expect(categoryIndex.fieldNames == ["category"])
         #expect(categoryIndex.kind.fieldNames == ["category"])
@@ -52,7 +54,7 @@ struct ModelMacroTests {
         #expect(categoryIndex.isUnique == false)
 
         // Second index: category + price
-        let compositeIndex = Product.indexDescriptors[1]
+        let compositeIndex = indexes[1]
         #expect(compositeIndex.name == "Product_category_price")
         #expect(compositeIndex.fieldNames == ["category", "price"])
         #expect(compositeIndex.kind.fieldNames == ["category", "price"])
@@ -61,10 +63,11 @@ struct ModelMacroTests {
 
     /// Test @Persistable with custom index name
     @Test("@Persistable with custom index name")
-    func modelWithCustomIndexName() {
+    func modelWithCustomIndexName() throws {
         // Verify custom index name
-        #expect(CustomNamedUser.indexDescriptors.count == 1)
-        let emailIndex = CustomNamedUser.indexDescriptors[0]
+        let indexes = try CustomNamedUser.indexDescriptors
+        #expect(indexes.count == 1)
+        let emailIndex = indexes[0]
         #expect(emailIndex.name == "user_email_idx")
     }
 
@@ -96,17 +99,18 @@ struct ModelMacroTests {
 
     /// Test @Persistable with different IndexKinds
     @Test("@Persistable with different IndexKind types")
-    func modelWithDifferentIndexKinds() {
+    func modelWithDifferentIndexKinds() throws {
         // Verify different index kinds
-        #expect(Analytics.indexDescriptors.count == 3)
+        let indexes = try Analytics.indexDescriptors
+        #expect(indexes.count == 3)
 
-        let scalarIndex = Analytics.indexDescriptors[0]
+        let scalarIndex = indexes[0]
         #expect(scalarIndex.kindIdentifier == "scalar")
 
-        let countIndex = Analytics.indexDescriptors[1]
+        let countIndex = indexes[1]
         #expect(countIndex.kindIdentifier == "count")
 
-        let sumIndex = Analytics.indexDescriptors[2]
+        let sumIndex = indexes[2]
         #expect(sumIndex.kindIdentifier == "sum")
     }
 
@@ -453,13 +457,15 @@ extension MacroPolymorphicDocument {
     }
 
     static var polymorphicIndexDescriptors: [IndexDescriptor] {
-        [
-            IndexDescriptor(
-                name: "MacroPolymorphicDocument_title",
-                keyPaths: [\Self.title],
-                kind: ScalarIndexKind<Self>(fields: [\Self.title])
-            )
-        ]
+        get throws(IndexDeclarationError) {
+            try [
+                IndexDescriptor(
+                    name: "MacroPolymorphicDocument_title",
+                    keyPaths: [\Self.title],
+                    kind: ScalarIndexKind<Self>(fields: [\Self.title])
+                )
+            ]
+        }
     }
 }
 

@@ -20,10 +20,7 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
     case emptyIndexFieldName(indexName: String)
     case unknownIndexField(indexName: String, fieldName: String)
     case unknownStoredField(indexName: String, fieldName: String)
-    case invalidIndexDeclaration(
-        indexName: String,
-        error: IndexTypeValidationError
-    )
+    case invalidIndexDeclaration(IndexDeclarationError)
     case unknownEnumField(String)
     case enumMetadataOnNonEnumField(String)
     case emptyEnumCase(fieldName: String)
@@ -68,8 +65,8 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Index '\(indexName)' references unknown field '\(fieldName)'."
         case .unknownStoredField(let indexName, let fieldName):
             return "Index '\(indexName)' stores unknown field '\(fieldName)'."
-        case .invalidIndexDeclaration(let indexName, let error):
-            return "Index '\(indexName)' is invalid: \(error.description)"
+        case .invalidIndexDeclaration(let error):
+            return error.description
         case .unknownEnumField(let fieldName):
             return "Enum metadata references unknown field '\(fieldName)'."
         case .enumMetadataOnNonEnumField(let fieldName):

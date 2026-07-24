@@ -133,14 +133,18 @@ public protocol Polymorphable: Persistable {
     /// ```
     ///
     /// **Note**: Index fields must be properties defined in the protocol.
-    static var polymorphicIndexDescriptors: [IndexDescriptor] { get }
+    static var polymorphicIndexDescriptors: [IndexDescriptor] {
+        get throws(IndexDeclarationError)
+    }
 }
 
 // MARK: - Default Implementations
 
 public extension Polymorphable {
     /// Default implementation returns empty array (no polymorphic indexes)
-    static var polymorphicIndexDescriptors: [IndexDescriptor] { [] }
+    static var polymorphicIndexDescriptors: [IndexDescriptor] {
+        get throws(IndexDeclarationError) { [] }
+    }
 
     /// Default implementation returns `.default` layer
     static var polymorphicDirectoryLayer: DirectoryLayer { .default }

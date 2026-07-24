@@ -332,11 +332,15 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
 
         let owlRDFDecl: DeclSyntax = """
             public static var _owlRDFIndexDescriptors: [IndexDescriptor] {
-                [IndexDescriptor(name: \(raw: structName).persistableType + "_owl_rdf", keyPaths: [] as [PartialKeyPath<\(raw: structName)>], kind: OWLClassRDFIndexKind<\(raw: structName)>(individualIRIBase: "\(raw: individualIRIBase)", graph: Self.ontologyGraph))]
+                get throws(IndexDeclarationError) {
+                    try [IndexDescriptor(name: \(raw: structName).persistableType + "_owl_rdf", keyPaths: [] as [PartialKeyPath<\(raw: structName)>], kind: OWLClassRDFIndexKind<\(raw: structName)>(individualIRIBase: "\(raw: individualIRIBase)", graph: Self.ontologyGraph))]
+                }
             }
 
             public static var _owlRDFDescriptors: [any Descriptor] {
-                _owlRDFIndexDescriptors.map { $0 as any Descriptor }
+                get throws(IndexDeclarationError) {
+                    try _owlRDFIndexDescriptors.map { $0 as any Descriptor }
+                }
             }
             """
         decls.append(owlRDFDecl)

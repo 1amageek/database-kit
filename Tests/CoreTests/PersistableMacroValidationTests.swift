@@ -41,12 +41,13 @@ struct ModelMacroValidationTests {
 
     /// Test that indexDescriptors are correctly ordered
     @Test("Index descriptors maintain definition order")
-    func indexDescriptorsOrder() {
+    func indexDescriptorsOrder() throws {
         // Verify that indexes are in the order they were defined
-        #expect(OrderedIndexProduct.indexDescriptors.count == 3)
-        #expect(OrderedIndexProduct.indexDescriptors[0].name == "OrderedIndexProduct_category")
-        #expect(OrderedIndexProduct.indexDescriptors[1].name == "OrderedIndexProduct_price")
-        #expect(OrderedIndexProduct.indexDescriptors[2].name == "OrderedIndexProduct_name")
+        let descriptors = try OrderedIndexProduct.indexDescriptors
+        #expect(descriptors.count == 3)
+        #expect(descriptors[0].name == "OrderedIndexProduct_category")
+        #expect(descriptors[1].name == "OrderedIndexProduct_price")
+        #expect(descriptors[2].name == "OrderedIndexProduct_name")
     }
 
     /// Test that field numbers are stable

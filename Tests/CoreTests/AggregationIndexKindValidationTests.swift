@@ -135,7 +135,9 @@ struct AggregationIndexKindValidationTests {
 
     private static func descriptor(named name: String) throws -> IndexDescriptor {
         try #require(
-            AggregationKindValidationRecord.indexDescriptors.first { $0.name == name }
+            try AggregationKindValidationRecord.indexDescriptors.first {
+                $0.name == name
+            }
         )
     }
 

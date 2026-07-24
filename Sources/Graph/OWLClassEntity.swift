@@ -19,10 +19,14 @@ public protocol OWLClassEntity: Persistable, _OWLClassIRIProvider, _DataProperty
     ///
     /// Contains an `OWLClassRDFIndexKind` descriptor that enables canonical
     /// entity-to-RDF materialization via OntologyIndex.
-    static var _owlRDFDescriptors: [any Descriptor] { get }
+    static var _owlRDFDescriptors: [any Descriptor] {
+        get throws(IndexDeclarationError)
+    }
 
     /// OWL RDF index descriptors without dynamic type recovery.
-    static var _owlRDFIndexDescriptors: [IndexDescriptor] { get }
+    static var _owlRDFIndexDescriptors: [IndexDescriptor] {
+        get throws(IndexDeclarationError)
+    }
 }
 
 extension OWLClassEntity {
@@ -37,10 +41,14 @@ extension OWLClassEntity {
 /// when the type conforms to `OWLClassEntity`, thanks to Swift protocol extension priority rules.
 extension Persistable where Self: OWLClassEntity {
     public static var descriptors: [any Descriptor] {
-        _persistableDescriptors + _owlRDFDescriptors
+        get throws(IndexDeclarationError) {
+            try _persistableDescriptors + _owlRDFDescriptors
+        }
     }
 
     public static var indexDescriptors: [IndexDescriptor] {
-        _persistableIndexDescriptors + _owlRDFIndexDescriptors
+        get throws(IndexDeclarationError) {
+            try _persistableIndexDescriptors + _owlRDFIndexDescriptors
+        }
     }
 }

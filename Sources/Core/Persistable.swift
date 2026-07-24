@@ -112,27 +112,33 @@ public protocol Persistable: Sendable, Codable {
     /// **Example**:
     /// ```swift
     /// // Access all descriptors
-    /// let allDescriptors = User.descriptors
+    /// let allDescriptors = try User.descriptors
     ///
     /// // Type-safe access via extensions
-    /// let indexes = User.indexDescriptors
+    /// let indexes = try User.indexDescriptors
     /// let relationships = User.relationshipDescriptors  // requires Relationship module
     /// ```
     /// Macro-generated descriptors from @Persistable (#Index, @Relationship, @OWLObjectProperty).
     ///
     /// Override point for @Persistable macro. Other macros provide descriptors
     /// through separate properties (e.g., `_owlRDFDescriptors` from @OWLClass).
-    static var _persistableDescriptors: [any Descriptor] { get }
+    static var _persistableDescriptors: [any Descriptor] {
+        get throws(IndexDeclarationError)
+    }
 
     /// Macro-generated index descriptors without dynamic type recovery.
-    static var _persistableIndexDescriptors: [IndexDescriptor] { get }
+    static var _persistableIndexDescriptors: [IndexDescriptor] {
+        get throws(IndexDeclarationError)
+    }
 
     /// Unified descriptor array merging all sources.
     ///
     /// Default implementation returns `_persistableDescriptors`.
     /// Constrained extensions on protocols like `OWLClassEntity` override this
     /// to merge additional descriptors.
-    static var descriptors: [any Descriptor] { get }
+    static var descriptors: [any Descriptor] {
+        get throws(IndexDeclarationError)
+    }
 
     // MARK: - Directory Metadata
 
@@ -328,22 +334,32 @@ public extension Persistable {
     }
 
     /// Default: no macro-generated descriptors.
-    static var _persistableDescriptors: [any Descriptor] { [] }
+    static var _persistableDescriptors: [any Descriptor] {
+        get throws(IndexDeclarationError) { [] }
+    }
 
     /// Default: no macro-generated indexes.
-    static var _persistableIndexDescriptors: [IndexDescriptor] { [] }
+    static var _persistableIndexDescriptors: [IndexDescriptor] {
+        get throws(IndexDeclarationError) { [] }
+    }
 
     /// Default: unified descriptors = macro-generated descriptors only.
     ///
     /// Overridden by constrained extensions (e.g., `Persistable where Self: OWLClassEntity`)
     /// to merge additional descriptor sources.
-    static var descriptors: [any Descriptor] { _persistableDescriptors }
+    static var descriptors: [any Descriptor] {
+        get throws(IndexDeclarationError) {
+            try _persistableDescriptors
+        }
+    }
 
     /// Type-safe access to index descriptors
     ///
     /// Filters `descriptors` to return only `IndexDescriptor` instances.
     static var indexDescriptors: [IndexDescriptor] {
-        _persistableIndexDescriptors
+        get throws(IndexDeclarationError) {
+            try _persistableIndexDescriptors
+        }
     }
 
     /// Default implementation uses persistableType as single path component

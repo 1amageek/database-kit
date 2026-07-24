@@ -141,9 +141,15 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
             }
             .with(\.leftSquare, .leftSquareToken(trailingTrivia: .newline))
             .with(\.rightSquare, .rightSquareToken(leadingTrivia: .newline))
+            let throwingDescriptorsArray = TryExprSyntax(
+                tryKeyword: .keyword(.try, trailingTrivia: .space),
+                expression: descriptorsArray
+            )
             extensionMembers.append("""
                 public static var polymorphicIndexDescriptors: [IndexDescriptor] {
-                    \(descriptorsArray)
+                    get throws(IndexDeclarationError) {
+                        \(throwingDescriptorsArray)
+                    }
                 }
             """)
         }

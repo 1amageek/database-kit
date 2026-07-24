@@ -54,6 +54,8 @@ extension RelationshipDescriptor: CustomStringConvertible {
 
 extension Persistable {
     public static var relationshipDescriptors: [RelationshipDescriptor] {
-        descriptors.compactMap { $0 as? RelationshipDescriptor }
+        get throws(IndexDeclarationError) {
+            try descriptors.compactMap { $0 as? RelationshipDescriptor }
+        }
     }
 }

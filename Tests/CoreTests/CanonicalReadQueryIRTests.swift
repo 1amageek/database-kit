@@ -78,18 +78,20 @@ extension IndexedCanonicalReadDocument {
         [.staticPath("indexed-canonical-read-documents")]
     }
     static var polymorphicIndexDescriptors: [IndexDescriptor] {
-        [
-            IndexDescriptor(
-                name: "IndexedCanonicalReadDocument_title",
-                keyPaths: [\Self.title],
-                kind: ScalarIndexKind<Self>(fields: [\Self.title])
-            ),
-            IndexDescriptor(
-                name: "IndexedCanonicalReadDocument_id",
-                keyPaths: [\Self.id],
-                kind: ScalarIndexKind<Self>(fields: [\Self.id])
-            )
-        ]
+        get throws(IndexDeclarationError) {
+            try [
+                IndexDescriptor(
+                    name: "IndexedCanonicalReadDocument_title",
+                    keyPaths: [\Self.title],
+                    kind: ScalarIndexKind<Self>(fields: [\Self.title])
+                ),
+                IndexDescriptor(
+                    name: "IndexedCanonicalReadDocument_id",
+                    keyPaths: [\Self.id],
+                    kind: ScalarIndexKind<Self>(fields: [\Self.id])
+                )
+            ]
+        }
     }
 }
 

@@ -50,15 +50,17 @@ struct PolymorphableMacroExpansionTests {
                     .default
                 }
                 public static var polymorphicIndexDescriptors: [IndexDescriptor] {
-                    [
-                        IndexDescriptor(
-                            name: "MacroEntity_title",
-                            keyPaths: [\\Self.title],
-                            kind: ScalarIndexKind<Self>(fields: [\\Self.title]),
-                            commonOptions: .init(unique: true),
-                            storedFieldNames: ["id"]
-                        )
-                    ]
+                    get throws(IndexDeclarationError) {
+                        try [
+                            IndexDescriptor(
+                                name: "MacroEntity_title",
+                                keyPaths: [\\Self.title],
+                                kind: ScalarIndexKind<Self>(fields: [\\Self.title]),
+                                commonOptions: .init(unique: true),
+                                storedFieldNames: ["id"]
+                            )
+                        ]
+                    }
                 }
             }
             """,
@@ -101,14 +103,16 @@ struct PolymorphableMacroExpansionTests {
                     .default
                 }
                 public static var polymorphicIndexDescriptors: [IndexDescriptor] {
-                    [
-                        IndexDescriptor(
-                            name: "GlobalCountEntity_count",
-                            keyPaths: [PartialKeyPath<Self>](),
-                            kind: CountIndexKind<Self>(groupBy: []),
-                            commonOptions: .init()
-                        )
-                    ]
+                    get throws(IndexDeclarationError) {
+                        try [
+                            IndexDescriptor(
+                                name: "GlobalCountEntity_count",
+                                keyPaths: [PartialKeyPath<Self>](),
+                                kind: CountIndexKind<Self>(groupBy: []),
+                                commonOptions: .init()
+                            )
+                        ]
+                    }
                 }
             }
             """,

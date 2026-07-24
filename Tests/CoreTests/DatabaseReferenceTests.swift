@@ -60,7 +60,7 @@ struct DatabaseReferenceTests {
 
     @Test("Relationship metadata is derived from typed fields")
     func relationshipMetadata() throws {
-        let descriptors = DatabaseReferenceOwner.relationshipDescriptors
+        let descriptors = try DatabaseReferenceOwner.relationshipDescriptors
 
         #expect(descriptors.count == 3)
         let required = try #require(descriptors.first { $0.propertyName == "required" })
@@ -80,6 +80,6 @@ struct DatabaseReferenceTests {
         #expect(many.propertyFieldNumber == 4)
         #expect(many.cardinality == .toMany)
         #expect(many.deleteRule == .cascade)
-        #expect(DatabaseReferenceOwner.indexDescriptors.isEmpty)
+        #expect(try DatabaseReferenceOwner.indexDescriptors.isEmpty)
     }
 }

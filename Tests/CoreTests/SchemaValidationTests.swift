@@ -138,15 +138,15 @@ struct SchemaValidationTests {
     }
 
     @Test("Duplicate index names fail schema construction")
-    func duplicateIndexNamesFailConstruction() {
-        let first = IndexDescriptor(
+    func duplicateIndexNamesFailConstruction() throws {
+        let first = try IndexDescriptor(
             name: "duplicate_index",
             keyPaths: [\SchemaValidationEntity.first],
             kind: ScalarIndexKind<SchemaValidationEntity>(
                 fields: [\SchemaValidationEntity.first]
             )
         )
-        let second = IndexDescriptor(
+        let second = try IndexDescriptor(
             name: "duplicate_index",
             keyPaths: [\SchemaValidationEntity.second],
             kind: ScalarIndexKind<SchemaValidationEntity>(
@@ -183,11 +183,13 @@ struct SchemaValidationTests {
         #expect(
             throws: SchemaError.invalidEntity(
                 .invalidIndexDeclaration(
-                    indexName: "invalid_scalar",
-                    error: .unsupportedType(
-                        index: "scalar",
-                        type: [String].self,
-                        reason: "Scalar index requires Comparable types"
+                    IndexDeclarationError(
+                        indexName: "invalid_scalar",
+                        validationError: .unsupportedType(
+                            index: "scalar",
+                            type: [String].self,
+                            reason: "Scalar index requires Comparable types"
+                        )
                     )
                 )
             )
@@ -201,10 +203,12 @@ struct SchemaValidationTests {
         #expect(
             throws: SchemaError.invalidEntity(
                 .invalidIndexDeclaration(
-                    indexName: "invalid_vector",
-                    error: .invalidConfiguration(
-                        index: "vector",
-                        reason: "Vector dimensions must be positive"
+                    IndexDeclarationError(
+                        indexName: "invalid_vector",
+                        validationError: .invalidConfiguration(
+                            index: "vector",
+                            reason: "Vector dimensions must be positive"
+                        )
                     )
                 )
             )
@@ -222,26 +226,21 @@ struct SchemaValidationTests {
 
     @Test("Descriptor key paths must match the concrete index kind")
     func descriptorKeyPathsMustMatchKind() {
-        let descriptor = IndexDescriptor(
-            name: "mismatched_descriptor",
-            keyPaths: [\SchemaValidationEntity.second],
-            kind: ScalarIndexKind<SchemaValidationEntity>(
-                fields: [\SchemaValidationEntity.first]
-            )
-        )
-
         #expect(
-            throws: SchemaError.invalidIndexDeclaration(
+            throws: IndexDeclarationError(
                 indexName: "mismatched_descriptor",
-                error: .invalidConfiguration(
+                validationError: .invalidConfiguration(
                     index: "scalar",
                     reason: "Descriptor key paths must match the index kind fields"
                 )
             )
         ) {
-            try Schema(
-                [SchemaValidationEntity.self],
-                indexDescriptors: [descriptor]
+            try IndexDescriptor(
+                name: "mismatched_descriptor",
+                keyPaths: [\SchemaValidationEntity.second],
+                kind: ScalarIndexKind<SchemaValidationEntity>(
+                    fields: [\SchemaValidationEntity.first]
+                )
             )
         }
     }

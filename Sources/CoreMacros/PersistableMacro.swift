@@ -712,16 +712,30 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         let descriptorsArray = descriptorInits.isEmpty
             ? "[]"
             : "[\n            \(descriptorInits.joined(separator: ",\n            "))\n        ]"
+        let descriptorsExpression = indexDescriptorInits.isEmpty
+            ? descriptorsArray
+            : "try \(descriptorsArray)"
         let descriptorsDecl: DeclSyntax = """
-            public static var _persistableDescriptors: [any Descriptor] { \(raw: descriptorsArray) }
+            public static var _persistableDescriptors: [any Descriptor] {
+                get throws(IndexDeclarationError) {
+                    \(raw: descriptorsExpression)
+                }
+            }
             """
         decls.append(descriptorsDecl)
 
         let indexDescriptorsArray = indexDescriptorInits.isEmpty
             ? "[]"
             : "[\n            \(indexDescriptorInits.joined(separator: ",\n            "))\n        ]"
+        let indexDescriptorsExpression = indexDescriptorInits.isEmpty
+            ? indexDescriptorsArray
+            : "try \(indexDescriptorsArray)"
         let indexDescriptorsDecl: DeclSyntax = """
-            public static var _persistableIndexDescriptors: [IndexDescriptor] { \(raw: indexDescriptorsArray) }
+            public static var _persistableIndexDescriptors: [IndexDescriptor] {
+                get throws(IndexDeclarationError) {
+                    \(raw: indexDescriptorsExpression)
+                }
+            }
             """
         decls.append(indexDescriptorsDecl)
 

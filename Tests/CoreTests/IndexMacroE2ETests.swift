@@ -14,7 +14,7 @@ struct IndexMacroE2ETests {
 
     @Test("#Index builds descriptors for every database-kit index kind")
     func buildsDescriptorsForEveryIndexKind() throws {
-        let descriptors = IndexMacroE2ERecord.indexDescriptors
+        let descriptors = try IndexMacroE2ERecord.indexDescriptors
         #expect(descriptors.map(\.name) == Self.expectedSpecs.map(\.name))
 
         for spec in Self.expectedSpecs {
@@ -174,7 +174,9 @@ struct IndexMacroE2ETests {
     ]
 
     private static func descriptor(named name: String) throws -> IndexDescriptor {
-        try #require(IndexMacroE2ERecord.indexDescriptors.first { $0.name == name })
+        try #require(
+            try IndexMacroE2ERecord.indexDescriptors.first { $0.name == name }
+        )
     }
 }
 

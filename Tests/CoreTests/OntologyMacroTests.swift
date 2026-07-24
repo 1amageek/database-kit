@@ -242,8 +242,8 @@ struct OntologyMacroTests {
     }
 
     @Test("ObjectProperty auto-generates reverse index with @OWLDataProperty")
-    func objectPropertyReverseIndex() {
-        let indexes = OntEmployeeWithFK.indexDescriptors
+    func objectPropertyReverseIndex() throws {
+        let indexes = try OntEmployeeWithFK.indexDescriptors
         let reverseIdx = indexes.first { $0.name.contains("departmentID") }
         #expect(reverseIdx != nil)
     }
@@ -251,14 +251,14 @@ struct OntologyMacroTests {
     // -- Contract 4: Record feature coexistence --
 
     @Test("OWL features coexist with #Index and @Transient")
-    func coexistenceWithRecordFeatures() {
+    func coexistenceWithRecordFeatures() throws {
         #expect(OntProduct.ontologyClassIRI == "https://example.org/onto#Product")
 
         let propDescs = OntProduct.ontologyPropertyDescriptors
         #expect(propDescs.count == 1)
         #expect(propDescs[0].fieldName == "productName")
 
-        let idxDescs = OntProduct.indexDescriptors
+        let idxDescs = try OntProduct.indexDescriptors
         #expect(idxDescs.contains { $0.name.contains("category") })
 
         #expect(!OntProduct.allFields.contains("cached"))
@@ -335,8 +335,8 @@ struct OntologyMacroTests {
     }
 
     @Test("Full IRI @OWLClass ObjectProperty generates reverse index")
-    func fullIRIObjectPropertyReverseIndex() {
-        let indexes = OntFullEmployee.indexDescriptors
+    func fullIRIObjectPropertyReverseIndex() throws {
+        let indexes = try OntFullEmployee.indexDescriptors
         let reverseIdx = indexes.first { $0.name.contains("departmentID") }
         #expect(reverseIdx != nil)
     }
@@ -344,7 +344,7 @@ struct OntologyMacroTests {
     // -- Contract 10: Full IRI @OWLClass + standard feature coexistence --
 
     @Test("Full IRI @OWLClass coexists with #Index and @Transient")
-    func fullIRICoexistence() {
+    func fullIRICoexistence() throws {
         #expect(OntFullProduct.ontologyClassIRI == "http://example.org/onto#FullProduct")
 
         let propDescs = OntFullProduct.ontologyPropertyDescriptors
@@ -352,7 +352,7 @@ struct OntologyMacroTests {
         #expect(propDescs[0].fieldName == "productName")
         #expect(propDescs[0].iri == "http://example.org/onto#productName")
 
-        let idxDescs = OntFullProduct.indexDescriptors
+        let idxDescs = try OntFullProduct.indexDescriptors
         #expect(idxDescs.contains { $0.name.contains("category") })
 
         #expect(!OntFullProduct.allFields.contains("cached"))
@@ -431,16 +431,16 @@ struct OntologyMacroTests {
     }
 
     @Test("@OWLObjectProperty auto-generates graph index")
-    func objectPropertyAutoGraphIndex() {
-        let indexes = OntAssignment.indexDescriptors
+    func objectPropertyAutoGraphIndex() throws {
+        let indexes = try OntAssignment.indexDescriptors
         let graphIdx = indexes.first { $0.name.contains("graph") }
         #expect(graphIdx != nil)
         #expect(graphIdx?.name == "OntAssignment_graph_employeeID_projectID")
     }
 
     @Test("@OWLObjectProperty generates OWLObjectPropertyDescriptor")
-    func objectPropertyDescriptorGenerated() {
-        let descs = OntAssignment.owlObjectPropertyDescriptors
+    func objectPropertyDescriptorGenerated() throws {
+        let descs = try OntAssignment.owlObjectPropertyDescriptors
         #expect(descs.count == 1)
         #expect(descs[0].iri == "https://example.org/onto#employs")
         #expect(descs[0].fromFieldName == "employeeID")
@@ -496,15 +496,15 @@ struct DescriptorOwnershipTests {
     // -- _persistableDescriptors --
 
     @Test("@Persistable generates _persistableDescriptors")
-    func persistableDescriptorsGenerated() {
+    func persistableDescriptorsGenerated() throws {
         // OntPlainModel has no #Index → empty
-        #expect(OntPlainModel._persistableDescriptors.isEmpty)
+        #expect(try OntPlainModel._persistableDescriptors.isEmpty)
     }
 
     @Test("_persistableDescriptors contains #Index descriptors")
-    func persistableDescriptorsContainsIndex() {
+    func persistableDescriptorsContainsIndex() throws {
         // OntProduct has #Index(ScalarIndexKind<...>(fields: [\.category]))
-        let descs = OntProduct._persistableDescriptors
+        let descs = try OntProduct._persistableDescriptors
         let indexDescs = descs.compactMap { $0 as? IndexDescriptor }
         #expect(indexDescs.contains { $0.name.contains("category") })
     }
@@ -512,8 +512,8 @@ struct DescriptorOwnershipTests {
     // -- _owlRDFDescriptors --
 
     @Test("@OWLClass generates its canonical RDF index descriptor")
-    func owlRDFDescriptorsGenerated() {
-        let descs = OntEmployee._owlRDFDescriptors
+    func owlRDFDescriptorsGenerated() throws {
+        let descs = try OntEmployee._owlRDFDescriptors
         #expect(descs.count == 1)
 
         let indexDesc = descs[0] as? IndexDescriptor
@@ -523,10 +523,10 @@ struct DescriptorOwnershipTests {
     }
 
     @Test("Non-OWL type has no OWL RDF index descriptor")
-    func plainTypeNoOwlDescriptors() {
+    func plainTypeNoOwlDescriptors() throws {
         // OntPlainModel is @Persistable but NOT @OWLClass
         // The protocol requirement is unavailable without @OWLClass conformance.
-        let indexDescs = OntPlainModel.indexDescriptors
+        let indexDescs = try OntPlainModel.indexDescriptors
         let owlRDF = indexDescs.first { $0.kindIdentifier == "owl_class_rdf" }
         #expect(owlRDF == nil)
     }
@@ -534,9 +534,9 @@ struct DescriptorOwnershipTests {
     // -- Descriptor merging --
 
     @Test("OWLClassEntity.descriptors merges record and RDF descriptors")
-    func descriptorsMerge() {
+    func descriptorsMerge() throws {
         // OntProduct has @OWLClass + #Index(ScalarIndexKind) + @Transient
-        let all = OntProduct.descriptors
+        let all = try OntProduct.descriptors
         let indexDescs = all.compactMap { $0 as? IndexDescriptor }
 
         // The record index and RDF projection are both registered.
@@ -548,10 +548,10 @@ struct DescriptorOwnershipTests {
     }
 
     @Test("Plain type descriptors == _persistableDescriptors (no merge)")
-    func plainTypeDescriptorsDefault() {
+    func plainTypeDescriptorsDefault() throws {
         // No @OWLClass → descriptors defaults to _persistableDescriptors
-        let descs = OntPlainModel.descriptors
-        let persistable = OntPlainModel._persistableDescriptors
+        let descs = try OntPlainModel.descriptors
+        let persistable = try OntPlainModel._persistableDescriptors
         #expect(descs.count == persistable.count)
     }
 
