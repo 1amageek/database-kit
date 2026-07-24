@@ -34,7 +34,7 @@ extension DatabaseWireReader {
         }
         let remainingDepth = limits.maximumNestingDepth - currentNestingDepth
         let codecLimits = RDFTermCodecLimits(
-            maximumBytes: self.limits.maximumByteStringBytes,
+            validatedMaximumBytes: self.limits.maximumByteStringBytes,
             maximumDepth: remainingDepth,
             maximumObjectCount: remainingObjectCount
         )

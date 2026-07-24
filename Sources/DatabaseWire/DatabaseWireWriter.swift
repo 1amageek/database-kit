@@ -531,7 +531,7 @@ public struct DatabaseWireWriter {
         }
         let remainingDepth = limits.maximumNestingDepth - nestingDepth
         let codecLimits = RDFTermCodecLimits(
-            maximumBytes: limits.maximumByteStringBytes,
+            validatedMaximumBytes: limits.maximumByteStringBytes,
             maximumDepth: remainingDepth,
             maximumObjectCount: remainingObjectCount
         )
