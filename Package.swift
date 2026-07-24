@@ -216,6 +216,14 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "QueryIRTests",
+            dependencies: [
+                "DatabaseValue",
+                "QueryIR",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
+        ),
+        .testTarget(
             name: "GraphValueTests",
             dependencies: [
                 "DatabaseValue",
