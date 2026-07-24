@@ -1,6 +1,5 @@
 import DatabaseTypes
-import DatabaseValue
-import QueryIR
+import DatabaseKit
 
 /// Canonical binary codec for the Foundation-independent query intermediate representation.
 public enum QueryIRWireCodec {

@@ -1,6 +1,5 @@
 import DatabaseTypes
-import DatabaseValue
-import QueryIR
+import DatabaseKit
 
 /// Encodes and decodes recursive literal arrays without process-stack recursion.
 enum QueryIRLiteralWireCodec {

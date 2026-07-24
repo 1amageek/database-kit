@@ -1,5 +1,5 @@
+import DatabaseKit
 import DatabaseTypes
-import DatabaseValue
 
 extension RDFTerm {
     public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {

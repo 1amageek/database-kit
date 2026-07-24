@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 public struct CommandRequest: DatabaseWireValue, Hashable {
     public static let maximumIdentifierUTF8Bytes = 256

@@ -15,7 +15,7 @@ as `swift-memory`.
 
 ## Developer Interface
 
-The desired public shape is:
+The public contract is:
 
 ```swift
 @Polymorphable
@@ -178,7 +178,7 @@ The schema must not build a shared polymorphic descriptor by taking
 `memberTypes.first`. A descriptor containing `\Person.embedding` is not valid for
 `Organization` or `BobTask`.
 
-The schema should preserve member-specific descriptors:
+The schema preserves member-specific descriptors:
 
 ```swift
 polymorphicDescriptors[
@@ -214,9 +214,13 @@ actual concrete model being written.
 
 `database-client` owns:
 
-- Client-facing query builders.
-- Wire-safe polymorphic group metadata.
-- Decoding of mixed concrete results using schema metadata.
+- Typed invocation of the query and schema contracts from `database-kit`.
+- Pagination and streaming facades over canonical operation results.
+- Transport adaptation and response correlation.
+
+`database-client` consumes polymorphic schema metadata but does not own or
+redeclare it. QueryIR and canonical wire-safe schema metadata remain owned by
+`database-kit`.
 
 Downstream packages such as `swift-memory` should declare domain protocols and
 models using this API. They should not work around polymorphic indexes by

@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 public struct DatabaseEncodedSuccessResponse: Sendable {
     public let frame: ByteString

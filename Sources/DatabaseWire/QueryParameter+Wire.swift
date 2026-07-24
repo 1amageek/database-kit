@@ -1,5 +1,5 @@
 import DatabaseTypes
-import QueryIR
+import DatabaseKit
 
 extension QueryParameter {
     func encode(

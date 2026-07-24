@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 /// Little-endian reader used by database-kit wire DTOs.
 public struct DatabaseWireReader: Sendable {
@@ -211,7 +210,7 @@ public struct DatabaseWireReader: Sendable {
         }
         let encoded = bytes[offset..<(offset + count)]
         offset += count
-        guard let value = UTF8Decoder.decode(encoded) else {
+        guard let value = DatabaseWireTextDecoder.decode(encoded) else {
             throw DatabaseWireError.invalidUTF8
         }
         return value

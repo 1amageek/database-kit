@@ -1,5 +1,5 @@
 import DatabaseTypes
-import QueryIR
+import DatabaseKit
 
 /// Encodes and decodes recursive label expressions without process-stack recursion.
 enum QueryIRLabelExpressionWireCodec {

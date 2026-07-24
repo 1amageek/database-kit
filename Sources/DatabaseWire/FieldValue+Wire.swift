@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 extension FieldValue {
     public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {

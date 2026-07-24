@@ -1,5 +1,5 @@
+import DatabaseKit
 import DatabaseTypes
-import DatabaseValue
 
 public enum SchemaDescribeOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.schemaDescribe

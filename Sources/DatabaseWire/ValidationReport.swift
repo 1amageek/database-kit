@@ -1,5 +1,5 @@
+import DatabaseKit
 import DatabaseTypes
-import DatabaseValue
 
 public struct ValidationReport: DatabaseWireValue, Hashable {
     public enum Severity: UInt8, Sendable, Hashable {

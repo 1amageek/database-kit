@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 public enum OntologyExecuteOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.ontologyExecute

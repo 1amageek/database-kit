@@ -1,5 +1,5 @@
+import DatabaseKit
 import DatabaseTypes
-import DatabaseValue
 
 /// Little-endian writer used by database-kit wire DTOs.
 ///

@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 public enum SHACLExecuteOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.shaclExecute

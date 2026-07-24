@@ -1,7 +1,6 @@
 import DatabaseTypes
-import DatabaseValue
 import DatabaseWire
-import QueryIR
+import DatabaseKit
 import Testing
 
 @Suite("QueryIR wire codec")

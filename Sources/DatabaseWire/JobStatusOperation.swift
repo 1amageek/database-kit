@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 public enum JobStatusOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.jobStatus

@@ -1,6 +1,5 @@
 import DatabaseTypes
-import DatabaseValue
-import QueryIR
+import DatabaseKit
 
 extension QueryIRWireCodec {
     static func encodeLiteral(

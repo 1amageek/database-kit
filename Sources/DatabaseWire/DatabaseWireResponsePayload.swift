@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 public enum DatabaseWireResponsePayload: Sendable, Hashable {
     case success(ByteString)

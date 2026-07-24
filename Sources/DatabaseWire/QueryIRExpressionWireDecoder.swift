@@ -1,5 +1,5 @@
 import DatabaseTypes
-import QueryIR
+import DatabaseKit
 
 /// Decodes expression trees without recursive process-stack growth.
 enum QueryIRExpressionWireDecoder {

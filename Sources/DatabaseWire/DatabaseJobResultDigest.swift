@@ -1,6 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
-import DatabaseDigest
 
 /// Canonical SHA-256 digest of a completed job response payload.
 public struct DatabaseJobResultDigest:

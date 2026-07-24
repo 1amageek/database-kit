@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 /// An RDF quad carried by database operations.
 ///

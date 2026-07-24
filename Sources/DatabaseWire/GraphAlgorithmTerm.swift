@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 extension GraphAlgorithmOperation {
     /// A vertex or edge label in either a property graph or an RDF graph.

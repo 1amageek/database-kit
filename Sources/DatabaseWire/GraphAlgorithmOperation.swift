@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 public enum GraphAlgorithmOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.graphAlgorithm

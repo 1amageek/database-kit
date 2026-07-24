@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 extension DatabaseWireWriter {
     public mutating func writeOptionalString(_ value: String?) throws(DatabaseWireError) {

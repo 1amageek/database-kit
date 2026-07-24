@@ -1,5 +1,5 @@
 import DatabaseTypes
-import QueryIR
+import DatabaseKit
 
 /// Encodes and decodes recursive SPARQL-star terms without process-stack recursion.
 enum QueryIRSPARQLTermWireCodec {

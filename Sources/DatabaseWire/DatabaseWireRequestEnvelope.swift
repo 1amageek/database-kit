@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 public struct DatabaseWireRequestEnvelope: Sendable, Hashable {
     public let requestID: UInt64

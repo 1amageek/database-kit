@@ -1,5 +1,5 @@
 import DatabaseTypes
-import QueryIR
+import DatabaseKit
 
 /// Encodes expression trees with an explicit continuation stack.
 ///

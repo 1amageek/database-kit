@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 /// Identifies one persistent job and the exact runtime operation that owns it.
 public struct DatabaseJobIdentity: DatabaseWireValue, Hashable {

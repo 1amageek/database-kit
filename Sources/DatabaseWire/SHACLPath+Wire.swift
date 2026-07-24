@@ -1,5 +1,5 @@
+import DatabaseKit
 import DatabaseTypes
-import DatabaseValue
 
 extension SHACLPath: DatabaseWireValue {
     public func encode(

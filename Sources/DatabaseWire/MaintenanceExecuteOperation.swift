@@ -1,5 +1,5 @@
+import DatabaseKit
 import DatabaseTypes
-import DatabaseValue
 
 public enum MaintenanceExecuteOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.maintenanceExecute

@@ -1,5 +1,5 @@
+import DatabaseKit
 import DatabaseTypes
-import DatabaseValue
 
 /// Errors raised by DatabaseKit wire binary codecs.
 public enum DatabaseWireError: Error, Sendable, Equatable {

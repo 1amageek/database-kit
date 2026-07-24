@@ -1,5 +1,4 @@
 import DatabaseTypes
-import DatabaseValue
 
 public struct DatabaseRemoteError: Error, Sendable, Hashable {
     public let category: DatabaseErrorCategory
