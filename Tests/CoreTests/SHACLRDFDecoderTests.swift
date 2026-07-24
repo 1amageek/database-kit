@@ -36,7 +36,7 @@ struct SHACLRDFDecoderTests {
         #expect(decodedNode.targets == [.class_("urn:Person")])
         #expect(decodedNode.identifier == nodeShape)
         #expect(decodedProperty.identifier == propertyShape)
-        #expect(decodedProperty.path == .predicate("urn:name"))
+        #expect(decodedProperty.path == .predicate(try Self.predicate("urn:name")))
         #expect(decodedProperty.constraints.contains(.minCount(1)))
         #expect(decodedProperty.constraints.contains(.datatype(Self.xsdString)))
         #expect(decodedProperty.messages == ["A name is required"])
@@ -69,10 +69,12 @@ struct SHACLRDFDecoderTests {
             return
         }
         #expect(
-            property.path == .sequence([
-                .inverse(.predicate("urn:parent")),
-                .predicate("urn:name")
-            ])
+            property.path == .sequence(
+                try SHACLPathList([
+                    .inverse(.predicate(try Self.predicate("urn:parent"))),
+                    .predicate(try Self.predicate("urn:name"))
+                ])
+            )
         )
     }
 
@@ -133,6 +135,12 @@ struct SHACLRDFDecoderTests {
         } catch {
             preconditionFailure("Invalid RDF IRI fixture: \(rawValue)")
         }
+    }
+
+    private static func predicate(
+        _ rawValue: String
+    ) throws(RDFIRIError) -> RDFPredicateIRI {
+        try RDFPredicateIRI(rawValue)
     }
 
     private static func blankNode(_ rawValue: String) -> RDFTerm {

@@ -67,6 +67,8 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidRDFDirection(UInt8)
     case invalidRDFDirectionValue(String)
     case invalidCanonicalRDFTerm(RDFTermCodecError)
+    case invalidSHACLPath(SHACLPathError)
+    case invalidSHACLPathWireState
     case invalidPropertyPathNegatedSet
     case nonCanonicalPropertyPathPredicateSet
     case invalidPropertyPathRange(minimum: Int, maximum: Int?)

@@ -20,7 +20,7 @@ import DatabaseTypes
 ///             targets: [.class_("ex:Person")],
 ///             propertyShapes: [
 ///                 PropertyShape(
-///                     path: .predicate("ex:name"),
+///                     path: .predicate(try RDFPredicateIRI("ex:name")),
 ///                     constraints: [.minCount(1), .datatype("xsd:string")]
 ///                 )
 ///             ]

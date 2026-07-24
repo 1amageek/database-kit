@@ -4,8 +4,8 @@ import DatabaseValue
 import Synchronization
 import Testing
 
-@Suite("Database Bytes Ownership Tests")
-struct DatabaseBytesOwnershipTests {
+@Suite("ByteString ownership")
+struct ByteStringOwnershipTests {
     @Test func successPayloadIsAViewIntoTheSingleFinalFrameAllocation() throws {
         let source = ByteString(
             [UInt8](repeating: 0xa5, count: 1_048_576)
@@ -292,11 +292,11 @@ struct DatabaseBytesOwnershipTests {
 
 private final class ReleaseObservedByteOwner: ByteStringOwner {
     let bytes: [UInt8]
-    let releaseProbe: DatabaseBytesOwnershipTests.ReleaseProbe
+    let releaseProbe: ByteStringOwnershipTests.ReleaseProbe
 
     init(
         bytes: [UInt8],
-        releaseProbe: DatabaseBytesOwnershipTests.ReleaseProbe
+        releaseProbe: ByteStringOwnershipTests.ReleaseProbe
     ) {
         self.bytes = bytes
         self.releaseProbe = releaseProbe

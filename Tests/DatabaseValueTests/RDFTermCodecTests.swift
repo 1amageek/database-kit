@@ -3,7 +3,7 @@ import DatabaseValue
 import Synchronization
 import Testing
 
-@Suite("Database RDF term codec")
+@Suite("RDF term codec")
 struct RDFTermCodecTests {
     @Test("canonical terms round-trip from one owned payload")
     func roundTrip() throws {

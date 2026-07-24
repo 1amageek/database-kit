@@ -1006,13 +1006,29 @@ struct TypedOperationWireTests {
                     code: "MIN_COUNT",
                     messages: ["Required value is missing"],
                     focusNode: .iri(try RDFIRI("urn:event:1")),
-                    path: .sequence([
-                        .predicate("urn:calendar:venue"),
-                        .alternative([
-                            .predicate("urn:calendar:name"),
-                            .inverse(.predicate("urn:calendar:labelFor")),
-                        ]),
-                    ]),
+                    path: .sequence(
+                        try SHACLPathList([
+                            .predicate(
+                                try RDFPredicateIRI("urn:calendar:venue")
+                            ),
+                            .alternative(
+                                try SHACLPathList([
+                                    .predicate(
+                                        try RDFPredicateIRI(
+                                            "urn:calendar:name"
+                                        )
+                                    ),
+                                    .inverse(
+                                        .predicate(
+                                            try RDFPredicateIRI(
+                                                "urn:calendar:labelFor"
+                                            )
+                                        )
+                                    ),
+                                ])
+                            ),
+                        ])
+                    ),
                     value: .literal(
                         .init(
                             lexicalForm: "",

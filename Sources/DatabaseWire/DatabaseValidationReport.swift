@@ -23,7 +23,7 @@ public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
         public let code: String
         public let messages: [String]
         public let focusNode: RDFTerm?
-        public let path: DatabaseSHACLPath?
+        public let path: SHACLPath?
         public let value: RDFTerm?
         public let sourceConstraintComponent: String?
         public let sourceShape: RDFTerm?
@@ -34,7 +34,7 @@ public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
             code: String,
             messages: [String] = [],
             focusNode: RDFTerm? = nil,
-            path: DatabaseSHACLPath? = nil,
+            path: SHACLPath? = nil,
             value: RDFTerm? = nil,
             sourceConstraintComponent: String? = nil,
             sourceShape: RDFTerm? = nil,
@@ -108,7 +108,7 @@ public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
         }
 
         private static func encodeOptionalPath(
-            _ path: DatabaseSHACLPath?,
+            _ path: SHACLPath?,
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             writer.writeBool(path != nil)
@@ -117,8 +117,8 @@ public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
 
         private static func decodeOptionalPath(
             from reader: inout DatabaseWireReader
-        ) throws(DatabaseWireError) -> DatabaseSHACLPath? {
-            try reader.readBool() ? try DatabaseSHACLPath(from: &reader) : nil
+        ) throws(DatabaseWireError) -> SHACLPath? {
+            try reader.readBool() ? try SHACLPath(from: &reader) : nil
         }
     }
 

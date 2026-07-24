@@ -3,7 +3,7 @@ import DatabaseValue
 import QueryIR
 import Testing
 
-@Suite("Database literal conversion")
+@Suite("Query literal conversion")
 struct QueryLiteralConvertibleTests {
     @Test("standard integer conversions preserve signedness and range")
     func integerConversionsPreserveRange() {

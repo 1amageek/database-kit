@@ -1,5 +1,6 @@
 import Core
 import DatabaseTypes
+import DatabaseValue
 
 @Persistable
 struct PersistablePrimitiveTestDocument {

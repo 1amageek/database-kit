@@ -1,4 +1,5 @@
 import DatabaseTypes
+import DatabaseValue
 public struct SHACLRDFDecoder: Sendable {
     public init() {}
 
@@ -334,7 +335,7 @@ public struct SHACLRDFDecoder: Sendable {
         pathStack: Set<RDFTerm>
     ) throws -> SHACLPath {
         if case .iri(let value) = node {
-            return .predicate(value.rawValue)
+            return .predicate(RDFPredicateIRI(value))
         }
         guard !pathStack.contains(node) else {
             throw SHACLRDFDecodingError.recursivePath(node.description)
@@ -347,9 +348,11 @@ public struct SHACLRDFDecoder: Sendable {
         }
         if let value = index.firstObject(node, Vocabulary.alternativePath) {
             return .alternative(
-                try decodeList(value, index: index).map {
-                    try decodePath($0, index: index, pathStack: nextStack)
-                }
+                try SHACLPathList(
+                    decodeList(value, index: index).map {
+                        try decodePath($0, index: index, pathStack: nextStack)
+                    }
+                )
             )
         }
         if let value = index.firstObject(node, Vocabulary.zeroOrMorePath) {
@@ -369,9 +372,11 @@ public struct SHACLRDFDecoder: Sendable {
         }
         let sequence = try decodeList(node, index: index)
         return .sequence(
-            try sequence.map {
-                try decodePath($0, index: index, pathStack: nextStack)
-            }
+            try SHACLPathList(
+                sequence.map {
+                    try decodePath($0, index: index, pathStack: nextStack)
+                }
+            )
         )
     }
 

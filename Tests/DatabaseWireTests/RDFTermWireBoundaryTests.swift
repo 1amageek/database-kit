@@ -3,7 +3,7 @@ import DatabaseValue
 import DatabaseWire
 import Testing
 
-@Suite("Database RDF term wire boundaries")
+@Suite("RDF term wire boundaries")
 struct RDFTermWireBoundaryTests {
     @Test("wire decoding rejects invalid RDF state")
     func invalidDecodeState() {
