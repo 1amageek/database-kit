@@ -1,9 +1,10 @@
 import DatabaseTypes
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
+
+public enum QueryComparison: Sendable, Equatable {
+    case lessThan
+    case equal
+    case greaterThan
+}
 
 extension FieldValue {
     public var isNumeric: Bool {
@@ -18,11 +19,11 @@ extension FieldValue {
     }
 
     public func isEqual(to other: FieldValue) -> Bool {
-        compare(to: other) == .orderedSame
+        compare(to: other) == .equal
     }
 
     public func isLessThan(_ other: FieldValue) -> Bool {
-        compare(to: other) == .orderedAscending
+        compare(to: other) == .lessThan
     }
 
     public func numericDifference(from other: FieldValue) -> Double? {
@@ -37,32 +38,32 @@ extension FieldValue {
     ///
     /// Persisted value identity remains exact; numeric coercion is applied only
     /// while evaluating a query comparison.
-    public func compare(to other: FieldValue) -> ComparisonResult? {
+    public func compare(to other: FieldValue) -> QueryComparison? {
         if isNumeric, other.isNumeric {
             return compareNumeric(to: other)
         }
         switch (self, other) {
         case (.null, .null):
-            return .orderedSame
+            return .equal
         case (.null, _):
-            return .orderedAscending
+            return .lessThan
         case (_, .null):
-            return .orderedDescending
+            return .greaterThan
         case (.bool(let left), .bool(let right)):
-            if left == right { return .orderedSame }
-            return left ? .orderedDescending : .orderedAscending
+            if left == right { return .equal }
+            return left ? .greaterThan : .lessThan
         case (.string(let left), .string(let right)):
             if utf8Equal(left, right) {
-                return .orderedSame
+                return .equal
             }
             return utf8LessThan(left, right)
-                ? .orderedAscending
-                : .orderedDescending
+                ? .lessThan
+                : .greaterThan
         case (.bytes(let left), .bytes(let right)):
-            if left == right { return .orderedSame }
+            if left == right { return .equal }
             return left.lexicographicallyPrecedes(right)
-                ? .orderedAscending
-                : .orderedDescending
+                ? .lessThan
+                : .greaterThan
         case (.date(let left), .date(let right)):
             return order(left, right)
         case (.time(let left), .time(let right)):
@@ -84,10 +85,10 @@ extension FieldValue {
         case (.uuid(let left), .uuid(let right)):
             return order(left, right)
         case (.array(let left), .array(let right)):
-            if left == right { return .orderedSame }
+            if left == right { return .equal }
             return left.lexicographicallyPrecedes(right)
-                ? .orderedAscending
-                : .orderedDescending
+                ? .lessThan
+                : .greaterThan
         case (.object(let left), .object(let right)):
             return order(left, right)
         case (.reference(let left), .reference(let right)):
@@ -99,7 +100,7 @@ extension FieldValue {
         }
     }
 
-    private func compareNumeric(to other: FieldValue) -> ComparisonResult? {
+    private func compareNumeric(to other: FieldValue) -> QueryComparison? {
         let leftValue = widenedNumericValue
         let rightValue = other.widenedNumericValue
         switch (leftValue, rightValue) {
@@ -111,10 +112,10 @@ extension FieldValue {
             guard !left.isNaN, !right.isNaN else { return nil }
             return order(left, right)
         case (.int64(let left), .uint64(let right)):
-            if left < 0 { return .orderedAscending }
+            if left < 0 { return .lessThan }
             return order(UInt64(left), right)
         case (.uint64(let left), .int64(let right)):
-            if right < 0 { return .orderedDescending }
+            if right < 0 { return .greaterThan }
             return order(left, UInt64(right))
         case (.int64(let left), .float64(let right)):
             return Self.compare(left, to: right)
@@ -161,72 +162,72 @@ extension FieldValue {
         }
     }
 
-    private func comparisonResult(_ value: Int) -> ComparisonResult {
-        if value < 0 { return .orderedAscending }
-        if value > 0 { return .orderedDescending }
-        return .orderedSame
+    private func comparisonResult(_ value: Int) -> QueryComparison {
+        if value < 0 { return .lessThan }
+        if value > 0 { return .greaterThan }
+        return .equal
     }
 
     private func order<Value: Comparable>(
         _ left: Value,
         _ right: Value
-    ) -> ComparisonResult {
-        if left < right { return .orderedAscending }
-        if right < left { return .orderedDescending }
-        return .orderedSame
+    ) -> QueryComparison {
+        if left < right { return .lessThan }
+        if right < left { return .greaterThan }
+        return .equal
     }
 
     private static func compare(
         _ integer: Int64,
         to value: Double
-    ) -> ComparisonResult? {
+    ) -> QueryComparison? {
         guard !value.isNaN else { return nil }
-        if value == .infinity { return .orderedAscending }
-        if value == -.infinity { return .orderedDescending }
+        if value == .infinity { return .lessThan }
+        if value == -.infinity { return .greaterThan }
 
         let upperExclusive = 9_223_372_036_854_775_808.0
         let lowerInclusive = -9_223_372_036_854_775_808.0
-        if value >= upperExclusive { return .orderedAscending }
-        if value < lowerInclusive { return .orderedDescending }
+        if value >= upperExclusive { return .lessThan }
+        if value < lowerInclusive { return .greaterThan }
 
         let truncated = Int64(value)
-        if integer < truncated { return .orderedAscending }
-        if integer > truncated { return .orderedDescending }
-        if value > Double(truncated) { return .orderedAscending }
-        return .orderedSame
+        if integer < truncated { return .lessThan }
+        if integer > truncated { return .greaterThan }
+        if value > Double(truncated) { return .lessThan }
+        return .equal
     }
 
     private static func compare(
         _ integer: UInt64,
         to value: Double
-    ) -> ComparisonResult? {
+    ) -> QueryComparison? {
         guard !value.isNaN else { return nil }
-        if value == .infinity { return .orderedAscending }
-        if value == -.infinity || value < 0 { return .orderedDescending }
+        if value == .infinity { return .lessThan }
+        if value == -.infinity || value < 0 { return .greaterThan }
 
         let upperExclusive = 18_446_744_073_709_551_616.0
-        if value >= upperExclusive { return .orderedAscending }
+        if value >= upperExclusive { return .lessThan }
 
         let truncated = UInt64(value)
-        if integer < truncated { return .orderedAscending }
-        if integer > truncated { return .orderedDescending }
-        if value > Double(truncated) { return .orderedAscending }
-        return .orderedSame
+        if integer < truncated { return .lessThan }
+        if integer > truncated { return .greaterThan }
+        if value > Double(truncated) { return .lessThan }
+        return .equal
     }
 
     private static func compareFiniteNumericFallback(
         _ left: FieldValue,
         _ right: FieldValue
-    ) -> ComparisonResult? {
+    ) -> QueryComparison? {
         guard let left = left.queryNumericDoubleValue,
               let right = right.queryNumericDoubleValue,
               left.isFinite,
               right.isFinite else {
             return nil
         }
-        if left < right { return .orderedAscending }
-        if left > right { return .orderedDescending }
-        return .orderedSame
+        if left < right { return .lessThan }
+        if left > right { return .greaterThan }
+        return .equal
     }
 
     private var exactDecimalValue: ExactDecimal? {
@@ -303,15 +304,15 @@ extension FieldValue {
     }
 }
 
-private extension ComparisonResult {
-    var reversed: ComparisonResult {
+private extension QueryComparison {
+    var reversed: QueryComparison {
         switch self {
-        case .orderedAscending:
-            return .orderedDescending
-        case .orderedSame:
-            return .orderedSame
-        case .orderedDescending:
-            return .orderedAscending
+        case .lessThan:
+            return .greaterThan
+        case .equal:
+            return .equal
+        case .greaterThan:
+            return .lessThan
         }
     }
 }

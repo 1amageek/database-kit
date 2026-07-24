@@ -7,11 +7,6 @@ import DatabaseTypes
 // Reference: W3C OWL 2 Web Ontology Language
 // https://www.w3.org/TR/owl2-syntax/#Individuals
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
 /// OWL Named Individual
 ///
 /// Represents a named individual (instance) in an OWL ontology.
@@ -72,11 +67,9 @@ public struct OWLAnonymousIndividual: Sendable, Codable, Hashable {
         self.nodeID = nodeID
     }
 
-    /// Create a new anonymous individual with a unique ID
-    public static func create() -> OWLAnonymousIndividual {
-        OWLAnonymousIndividual(
-            nodeID: "_:b\(FoundationUUID().uuidString.prefix(8))"
-        )
+    /// Creates an anonymous individual from an application-assigned node identifier.
+    public static func anonymous(nodeID: String) -> OWLAnonymousIndividual {
+        OWLAnonymousIndividual(nodeID: nodeID)
     }
 }
 
@@ -133,9 +126,9 @@ extension OWLIndividual {
         .named(OWLNamedIndividual(iri: iri))
     }
 
-    /// Create an anonymous individual
-    public static func anonymous() -> OWLIndividual {
-        .anonymous(OWLAnonymousIndividual.create())
+    /// Creates an anonymous individual from an application-assigned node identifier.
+    public static func anonymous(nodeID: String) -> OWLIndividual {
+        .anonymous(OWLAnonymousIndividual(nodeID: nodeID))
     }
 }
 

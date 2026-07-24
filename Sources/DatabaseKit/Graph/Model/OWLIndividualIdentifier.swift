@@ -1,9 +1,4 @@
 import DatabaseTypes
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
 
 public protocol OWLIndividualIdentifier: Sendable {
     var owlIndividualIdentifierLexicalForm: String { get }
@@ -71,19 +66,13 @@ extension Float: OWLIndividualIdentifier {
     }
 }
 
-extension FoundationUUID: OWLIndividualIdentifier {
-    public var owlIndividualIdentifierLexicalForm: String {
-        uuidString.lowercased()
-    }
-}
-
 extension DatabaseTypes.UUID: OWLIndividualIdentifier {
     public var owlIndividualIdentifierLexicalForm: String { description }
 }
 
-extension Data: OWLIndividualIdentifier {
+extension ByteString: OWLIndividualIdentifier {
     public var owlIndividualIdentifierLexicalForm: String {
-        let base64 = base64EncodedString()
+        let base64 = QueryLiteralEncoding.base64(self)
         var result = ""
         result.reserveCapacity(base64.utf8.count)
         for byte in base64.utf8 {

@@ -85,16 +85,6 @@ public struct PersistableFieldDecoder: Sendable {
         return try Value.decodePersistedReference(identity)
     }
 
-    public func decode<Value: Decodable & Sendable>(
-        _ type: Value.Type,
-        for field: String
-    ) throws -> Value {
-        try FieldValueCodableDecoder.decode(
-            type,
-            from: requiredValue(for: field)
-        )
-    }
-
     public func decode<Value: RawRepresentable>(
         _ type: Value.Type,
         for field: String
@@ -192,14 +182,6 @@ public struct PersistableFieldDecoder: Sendable {
             )
         }
         return try Value.decodePersistedReference(identity)
-    }
-
-    public func decodeIfPresent<Value: Decodable & Sendable>(
-        _ type: Value.Type,
-        for field: String
-    ) throws -> Value? {
-        guard let value = optionalValue(for: field) else { return nil }
-        return try FieldValueCodableDecoder.decode(type, from: value)
     }
 
     public func decodeIfPresent<Value: RawRepresentable>(

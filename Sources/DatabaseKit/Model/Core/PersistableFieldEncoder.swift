@@ -1,10 +1,4 @@
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
 import DatabaseTypes
-import DatabaseTypesFoundation
 
 public enum PersistableFieldEncoder {
     public static func encode(
@@ -121,8 +115,6 @@ public enum PersistableFieldEncoder {
         case .bytes:
             if let scalar = raw as? ByteString {
                 value = .bytes(scalar)
-            } else if let scalar = raw as? Data {
-                value = .bytes(ByteString(retaining: scalar))
             } else if let scalar = raw as? [UInt8] {
                 value = .bytes(ByteString(scalar))
             } else {
@@ -135,13 +127,7 @@ public enum PersistableFieldEncoder {
         case .dateTime:
             value = (raw as? CivilDateTime).map(FieldValue.dateTime)
         case .timestamp:
-            if let scalar = raw as? Timestamp {
-                value = .timestamp(scalar)
-            } else if let scalar = raw as? Date {
-                value = .timestamp(try Timestamp(scalar))
-            } else {
-                value = nil
-            }
+            value = (raw as? Timestamp).map(FieldValue.timestamp)
         case .timeSpan:
             value = (raw as? TimeSpan).map(FieldValue.timeSpan)
         case .calendarPeriod:
@@ -153,9 +139,7 @@ public enum PersistableFieldEncoder {
         case .vector:
             value = (raw as? DatabaseTypes.Vector).map(FieldValue.vector)
         case .uuid:
-            if let scalar = raw as? FoundationUUID {
-                value = .uuid(DatabaseTypes.UUID(scalar))
-            } else if let scalar = raw as? DatabaseTypes.UUID {
+            if let scalar = raw as? DatabaseTypes.UUID {
                 value = .uuid(scalar)
             } else {
                 value = nil
@@ -181,13 +165,9 @@ public enum PersistableFieldEncoder {
         case .nested:
             if let nested = raw as? any Persistable {
                 value = .object(try fieldObject(from: encode(nested)))
-            } else if let nested = raw as? any Encodable {
-                let encoded = try FieldValueCodableEncoder.encode(nested)
-                if case .object = encoded {
-                    value = encoded
-                } else {
-                    value = nil
-                }
+            } else if let nested = raw as? any FieldValueConvertible,
+                      case .object = nested.toFieldValue() {
+                value = nested.toFieldValue()
             } else {
                 value = nil
             }

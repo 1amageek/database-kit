@@ -1,9 +1,4 @@
 import DatabaseTypes
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
 
 /// Scalar values that can be reconstructed by a canonical index runtime.
 public protocol IndexScalarValue: Codable, Sendable {
@@ -60,6 +55,10 @@ extension String: IndexComparableValue {
     public static var indexScalarType: IndexScalarType { .string }
 }
 
-extension Date: IndexComparableValue {
+extension CivilDate: IndexComparableValue {
     public static var indexScalarType: IndexScalarType { .date }
+}
+
+extension Timestamp: IndexComparableValue {
+    public static var indexScalarType: IndexScalarType { .timestamp }
 }

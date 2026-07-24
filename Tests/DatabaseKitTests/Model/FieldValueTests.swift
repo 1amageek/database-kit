@@ -74,11 +74,11 @@ struct FieldValueTests {
             try Set(unsignedAndDouble.map { try $0.stableHash() }).count == 2
         )
 
-        #expect(FieldValue.int64(0).compare(to: .uint64(0)) == .orderedSame)
+        #expect(FieldValue.int64(0).compare(to: .uint64(0)) == .equal)
         #expect(
             FieldValue.uint64(unsignedDoubleBoundary).compare(
                 to: .float64(Double(unsignedDoubleBoundary))
-            ) == .orderedSame
+            ) == .equal
         )
     }
 
@@ -95,11 +95,11 @@ struct FieldValueTests {
         #expect(FieldValue.uint64(adjacent) < .float64(rounded))
         #expect(
             FieldValue.uint64(exactDoubleBoundary).compare(to: .float64(rounded))
-                == .orderedSame
+                == .equal
         )
         #expect(
             FieldValue.uint64(adjacent).compare(to: .float64(rounded))
-                == .orderedDescending
+                == .greaterThan
         )
 
         #expect(
@@ -125,8 +125,8 @@ struct FieldValueTests {
         #expect(penultimate < maximum)
         #expect(maximum < roundedBeyondMaximum)
         #expect(maximum != roundedBeyondMaximum)
-        #expect(maximum.compare(to: penultimate) == .orderedDescending)
-        #expect(maximum.compare(to: roundedBeyondMaximum) == .orderedAscending)
+        #expect(maximum.compare(to: penultimate) == .greaterThan)
+        #expect(maximum.compare(to: roundedBeyondMaximum) == .lessThan)
         let penultimateHash = try penultimate.stableHash()
         let maximumHash = try maximum.stableHash()
         #expect(penultimateHash != maximumHash)
@@ -211,8 +211,8 @@ struct FieldValueTests {
     func optionalConversionPreservesValueAndAbsence() throws {
         let present: String? = "calendar"
         let absent: String? = nil
-        let presentValue = try present.toFieldValue()
-        let absentValue = try absent.toFieldValue()
+        let presentValue = present.toFieldValue()
+        let absentValue = absent.toFieldValue()
 
         #expect(presentValue == .string("calendar"))
         #expect(absentValue == .null)
@@ -289,7 +289,7 @@ struct FieldValueTests {
 
         #expect(composed != decomposed)
         #expect(decomposed < composed)
-        #expect(decomposed.compare(to: composed) == .orderedAscending)
+        #expect(decomposed.compare(to: composed) == .lessThan)
     }
 
     @Test("Bool comparison (false < true)")
@@ -500,11 +500,11 @@ struct FieldValueTests {
         let exactIntegerHash = try exactInteger.stableHash()
         let exactDoubleHash = try exactDouble.stableHash()
         #expect(exactIntegerHash != exactDoubleHash)
-        #expect(exactInteger.compare(to: exactDouble) == .orderedSame)
+        #expect(exactInteger.compare(to: exactDouble) == .equal)
         #expect(roundedInteger != roundedDouble)
         let roundedIntegerHash = try roundedInteger.stableHash()
         let roundedDoubleHash = try roundedDouble.stableHash()
         #expect(roundedIntegerHash != roundedDoubleHash)
-        #expect(roundedInteger.compare(to: roundedDouble) == .orderedDescending)
+        #expect(roundedInteger.compare(to: roundedDouble) == .greaterThan)
     }
 }

@@ -96,9 +96,10 @@ struct User {
     #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
     #Index(ScalarIndexKind<User>(fields: [\.createdAt]))
 
+    var id: String
     var email: String
     var name: String
-    var createdAt: Date
+    var createdAt: Timestamp
 }
 ```
 
@@ -124,6 +125,7 @@ struct Product {
     #Index(ScalarIndexKind<Product>(fields: [\.category, \.price]))
     #Index(ScalarIndexKind<Product>(fields: [\.name]), unique: true)
 
+    var id: String
     var name: String
     var category: String
     var price: Double
@@ -133,7 +135,9 @@ struct Product {
 }
 ```
 
-**Generated code**: `var id`, `persistableType`, `allFields`, `fieldSchemas`, `indexDescriptors`, `Codable`/`Sendable` conformance, dynamic member lookup.
+**Generated code**: `persistableType`, `allFields`, `fieldSchemas`,
+`indexDescriptors`, canonical field adaptation, `Sendable` conformance, and
+dynamic member lookup. The model declares `id` and owns its generation policy.
 
 ## Polymorphic Persistence
 

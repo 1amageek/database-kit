@@ -1,30 +1,19 @@
 import DatabaseTypes
-#if canImport(FoundationEssentials)
-import struct FoundationEssentials.Date
-#else
-import struct Foundation.Date
-#endif
 
 /// ULID (Universally Unique Lexicographically Sortable Identifier)
 ///
 /// A 128-bit identifier that is:
 /// - Lexicographically sortable
 /// - Time-ordered (first 48 bits are timestamp)
-/// - Randomly generated (last 80 bits are random)
+/// - Carries application-supplied entropy (last 80 bits)
 /// - Case-insensitive and URL-safe
 ///
 /// **Format**: `TTTTTTTTTTRRRRRRRRRRRRRRRRR` (26 characters, Crockford's Base32)
 /// - `T`: Timestamp (10 chars, 48 bits, milliseconds since Unix epoch)
 /// - `R`: Randomness (16 chars, 80 bits)
 ///
-/// **Usage**:
-/// ```swift
-/// let ulid = ULID()
-/// print(ulid.ulidString)  // "01HXK5M3N2P4Q5R6S7T8U9V0WX"
-/// ```
-///
 /// **Reference**: https://github.com/ulid/spec
-public struct ULID: Sendable, Hashable, Codable, CustomStringConvertible {
+public struct ULID: Sendable, Hashable, CustomStringConvertible {
 
     /// The raw 128-bit value (16 bytes)
     public let rawValue: (UInt64, UInt64)
@@ -49,24 +38,32 @@ public struct ULID: Sendable, Hashable, Codable, CustomStringConvertible {
         return map
     }()
 
-    /// Creates a new ULID with current timestamp and random data
-    public init() {
-        let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
-
-        // Generate 10 random bytes using Swift's cross-platform RNG
-        var rng = SystemRandomNumberGenerator()
-        var randomBytes = [UInt8](repeating: 0, count: 10)
-        for i in 0..<10 {
-            randomBytes[i] = UInt8.random(in: 0...255, using: &rng)
+    /// Creates a ULID from an application-supplied timestamp and 80 bits of entropy.
+    ///
+    /// Clock access and entropy generation are policies of the calling application.
+    /// Keeping those policies outside this value type makes construction deterministic
+    /// and preserves the Foundation-independent semantic boundary.
+    public init(
+        timestampMilliseconds: UInt64,
+        randomness: ByteString
+    ) throws(ULIDError) {
+        guard timestampMilliseconds <= 0xFFFF_FFFF_FFFF else {
+            throw .timestampOutOfRange(timestampMilliseconds)
+        }
+        guard randomness.count == 10 else {
+            throw .invalidRandomnessByteCount(actual: randomness.count)
         }
 
-        // First 64 bits: timestamp (48 bits) + random (16 bits)
-        let high = (timestamp << 16) | (UInt64(randomBytes[0]) << 8) | UInt64(randomBytes[1])
-
-        // Last 64 bits: random (64 bits)
-        let low = randomBytes[2...9].reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
-
-        self.rawValue = (high, low)
+        self.rawValue = randomness.withUnsafeBytes { bytes in
+            let high = (timestampMilliseconds << 16)
+                | (UInt64(bytes[0]) << 8)
+                | UInt64(bytes[1])
+            var low: UInt64 = 0
+            for byte in bytes[2...] {
+                low = (low << 8) | UInt64(byte)
+            }
+            return (high, low)
+        }
     }
 
     /// Creates a ULID from a string representation
@@ -214,34 +211,10 @@ public struct ULID: Sendable, Hashable, Codable, CustomStringConvertible {
         rawValue.0 >> 16
     }
 
-    /// The timestamp as a Date
-    public var date: Date {
-        Date(timeIntervalSince1970: Double(timestamp) / 1000.0)
-    }
-
     // MARK: - CustomStringConvertible
 
     public var description: String {
         ulidString
-    }
-
-    // MARK: - Codable
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        let string = try container.decode(String.self)
-        guard let ulid = ULID(ulidString: string) else {
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Invalid ULID string: \(string)"
-            )
-        }
-        self = ulid
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(ulidString)
     }
 
     // MARK: - Hashable

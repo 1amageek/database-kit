@@ -3,6 +3,7 @@ import DatabaseKit
 
 @Persistable
 struct DatabaseReferenceTarget {
+    var id: String = "fixture-id"
     #Directory<DatabaseReferenceTarget>(
         "targets",
         Field<DatabaseReferenceTarget>(\.tenantID)

@@ -1,12 +1,12 @@
 import DatabaseTypes
 import DatabaseKit
-import Foundation
 
 @Persistable
 struct PersistableFieldEncoderTestDocument {
+    var id: String = "fixture-id"
     var title: String
-    var externalID: Foundation.UUID
-    var occurredAt: Date
+    var externalID: DatabaseTypes.UUID
+    var occurredAt: Timestamp
     var note: String? = nil
     var values: [UInt32]
 }

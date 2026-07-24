@@ -2,7 +2,7 @@ import DatabaseTypes
 
 /// A value that can be represented by the canonical database field model.
 public protocol FieldValueConvertible: Sendable {
-    func toFieldValue() throws(FieldValueConversionError) -> FieldValue
+    func toFieldValue() -> FieldValue
 }
 
 extension Bool: FieldValueConvertible {
@@ -122,21 +122,21 @@ extension RDFTerm: FieldValueConvertible {
 }
 
 extension Array: FieldValueConvertible where Element: FieldValueConvertible {
-    public func toFieldValue() throws(FieldValueConversionError) -> FieldValue {
+    public func toFieldValue() -> FieldValue {
         var values: [FieldValue] = []
         values.reserveCapacity(count)
         for element in self {
-            values.append(try element.toFieldValue())
+            values.append(element.toFieldValue())
         }
         return .array(values)
     }
 }
 
 extension Optional: FieldValueConvertible where Wrapped: FieldValueConvertible {
-    public func toFieldValue() throws(FieldValueConversionError) -> FieldValue {
+    public func toFieldValue() -> FieldValue {
         switch self {
         case .some(let value):
-            return try value.toFieldValue()
+            return value.toFieldValue()
         case .none:
             return .null
         }

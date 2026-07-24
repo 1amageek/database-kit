@@ -6,12 +6,14 @@ import DatabaseKit
 
 @Persistable
 private struct SchemaValidationEntity {
+    var id: String = "fixture-id"
     var first: String
     var second: String
 }
 
 @Persistable
 private struct InvalidScalarIndexEntity {
+    var id: String = "fixture-id"
     #Index(
         ScalarIndexKind<InvalidScalarIndexEntity>(fields: [\.tags]),
         name: "invalid_scalar"
@@ -22,6 +24,7 @@ private struct InvalidScalarIndexEntity {
 
 @Persistable
 private struct InvalidVectorConfigurationEntity {
+    var id: String = "fixture-id"
     #Index(
         VectorIndexKind<InvalidVectorConfigurationEntity>(
             embedding: \.embedding,
@@ -35,6 +38,7 @@ private struct InvalidVectorConfigurationEntity {
 
 @Persistable
 private struct OptionalScalarIndexEntity {
+    var id: String = "fixture-id"
     #Index(
         ScalarIndexKind<OptionalScalarIndexEntity>(fields: [\.value]),
         name: "optional_scalar"

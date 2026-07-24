@@ -13,6 +13,7 @@ import DatabaseKit
     individualIRIBase: "https://example.org/individual/"
 )
 struct OntEmployee {
+    var id: String = "fixture-id"
     @OWLDataProperty("https://example.org/onto#name", label: "Name")
     var name: String
 
@@ -27,6 +28,7 @@ struct OntEmployee {
     individualIRIBase: "https://example.org/individual/"
 )
 struct OntEmployeeWithFK {
+    var id: String = "fixture-id"
     @OWLDataProperty("https://example.org/onto#name")
     var name: String
 
@@ -40,6 +42,7 @@ struct OntEmployeeWithFK {
     individualIRIBase: "https://example.org/individual/"
 )
 struct OntDepartment {
+    var id: String = "fixture-id"
     var name: String
 }
 
@@ -50,6 +53,7 @@ struct OntDepartment {
     individualIRIBase: "https://example.org/individual/"
 )
 struct OntProduct {
+    var id: String = "fixture-id"
     #Index(ScalarIndexKind<OntProduct>(fields: [\.category]))
 
     @OWLDataProperty("https://example.org/onto#productName")
@@ -68,6 +72,7 @@ struct OntProduct {
     individualIRIBase: "https://example.org/individual/"
 )
 struct OntMixed {
+    var id: String = "fixture-id"
     @OWLDataProperty("https://example.org/onto#localProp")
     var localProp: String
 
@@ -85,6 +90,7 @@ struct OntMixed {
     individualIRIBase: "http://example.org/individual/"
 )
 struct OntFullIRI {
+    var id: String = "fixture-id"
     @OWLDataProperty("http://example.org/onto#localField")
     var localField: String
 }
@@ -96,6 +102,7 @@ struct OntFullIRI {
     individualIRIBase: "http://example.org/individual/"
 )
 struct OntFullEmployee {
+    var id: String = "fixture-id"
     @OWLDataProperty("http://example.org/onto#name", label: "Name")
     var name: String
 
@@ -112,6 +119,7 @@ struct OntFullEmployee {
     individualIRIBase: "http://example.org/individual/"
 )
 struct OntFullDepartment {
+    var id: String = "fixture-id"
     var name: String
 }
 
@@ -122,6 +130,7 @@ struct OntFullDepartment {
     individualIRIBase: "http://example.org/individual/"
 )
 struct OntFullProduct {
+    var id: String = "fixture-id"
     #Index(ScalarIndexKind<OntFullProduct>(fields: [\.category]))
 
     @OWLDataProperty("http://example.org/onto#productName")
@@ -140,6 +149,7 @@ struct OntFullProduct {
     individualIRIBase: "http://example.org/individual/"
 )
 struct OntSlashIRI {
+    var id: String = "fixture-id"
     @OWLDataProperty("http://example.org/onto/localField")
     var localField: String
 
@@ -157,6 +167,7 @@ struct OntSlashIRI {
     individualIRIBase: "http://example.org/individual/"
 )
 struct OntHashMixed {
+    var id: String = "fixture-id"
     @OWLDataProperty("http://example.org/onto#localProp")
     var localProp: String
 
@@ -175,16 +186,18 @@ struct OntHashMixed {
     to: "projectID"
 )
 struct OntAssignment {
+    var id: String = "fixture-id"
     var employeeID: String = ""
     var projectID: String = ""
 
     @OWLDataProperty("https://example.org/onto#since")
-    var startDate: Date = Date()
+    var startDate: Timestamp? = nil
 }
 
 // --- Contract 16: Plain model (no ontology) ---
 @Persistable
 struct OntPlainModel {
+    var id: String = "fixture-id"
     var name: String = ""
 }
 
@@ -276,7 +289,7 @@ struct OntologyMacroTests {
         #expect(OntEmployee.allFields.contains("age"))
 
         let e = OntEmployee(name: "Bob", age: 25)
-        #expect(e.id.count == 26)
+        #expect(e.id == "fixture-id")
     }
 
     // -- Contract 7: Absolute IRI preservation --
@@ -408,7 +421,7 @@ struct OntologyMacroTests {
         #expect(OntFullEmployee.allFields.contains("departmentID"))
 
         let e = OntFullEmployee(name: "Charlie", age: 40, departmentID: nil)
-        #expect(e.id.count == 26)
+        #expect(e.id == "fixture-id")
     }
 
     // -- Contract 20: @OWLObjectProperty --

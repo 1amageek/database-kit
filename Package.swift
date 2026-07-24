@@ -31,10 +31,6 @@ let package = Package(
             dependencies: [
                 "DatabaseKitMacros",
                 .product(name: "DatabaseTypes", package: "database-types"),
-                .product(
-                    name: "DatabaseTypesFoundation",
-                    package: "database-types"
-                ),
             ]
         ),
         .macro(

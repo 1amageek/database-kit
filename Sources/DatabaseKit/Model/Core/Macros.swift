@@ -1,7 +1,7 @@
 import DatabaseTypes
 /// @Persistable macro declaration
 ///
-/// Generates Persistable protocol conformance with metadata methods and ID management.
+/// Generates Persistable protocol conformance and static model metadata.
 ///
 /// **Supports all data model layers**:
 /// - Entity layer (RDB): Structured entities with indexes
@@ -13,7 +13,7 @@ import DatabaseTypes
 /// ```swift
 /// @Persistable
 /// struct User {
-///     var id: String = ULID().ulidString  // Optional: auto-generated if omitted
+///     var id: String
 ///
 ///     #Directory<User>("users")
 ///     #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
@@ -27,27 +27,21 @@ import DatabaseTypes
 /// ```swift
 /// @Persistable(type: "User")
 /// struct Member {
-///     var id: String = ULID().ulidString
+///     var id: String
 ///     var name: String
 /// }
 /// // persistableType = "User" (not "Member")
 /// ```
 ///
 /// **Generated code**:
-/// - `var id: String = ULID().ulidString` (if not user-defined)
 /// - `static var persistableType: String`
 /// - `static var allFields: [String]`
 /// - `static var indexDescriptors: [IndexDescriptor]`
 /// - `static func fieldNumber(for fieldName: String) -> Int?`
 /// - `static func enumMetadata(for fieldName: String) -> EnumMetadata?`
-/// - `init(...)` (without `id` parameter)
-///
-/// **ID Behavior**:
-/// - If user defines `id` field: uses that type and default value
-/// - If user omits `id` field: macro adds `var id: String = ULID().ulidString`
-/// - `id` is NOT included in the generated initializer
-@attached(member, names: named(id), named(persistableType), named(allFields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys), arbitrary)
-@attached(extension, conformances: Persistable, Codable, Sendable)
+/// - `init(...)`
+@attached(member, names: named(persistableType), named(allFields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), arbitrary)
+@attached(extension, conformances: Persistable, Sendable)
 public macro Persistable() = #externalMacro(module: "DatabaseKitMacros", type: "PersistableMacro")
 
 /// @Persistable macro with custom type name
@@ -56,12 +50,13 @@ public macro Persistable() = #externalMacro(module: "DatabaseKitMacros", type: "
 /// ```swift
 /// @Persistable(type: "User")
 /// struct Member {
+///     var id: String
 ///     var name: String
 /// }
 /// // persistableType = "User"
 /// ```
-@attached(member, names: named(id), named(persistableType), named(allFields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), named(CodingKeys), arbitrary)
-@attached(extension, conformances: Persistable, Codable, Sendable)
+@attached(member, names: named(persistableType), named(allFields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), arbitrary)
+@attached(extension, conformances: Persistable, Sendable)
 public macro Persistable(type: String) = #externalMacro(module: "DatabaseKitMacros", type: "PersistableMacro")
 
 /// #Index macro declaration

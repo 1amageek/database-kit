@@ -1,6 +1,5 @@
 import DatabaseTypes
 import Testing
-import Foundation
 @testable import DatabaseKit
 
 @Suite("ULID Tests")
@@ -12,8 +11,8 @@ struct ULIDTests {
     func testRoundTripPreservesAllBits() throws {
         // This test would have failed before the fix:
         // The old implementation dropped the upper 14 bits of the timestamp
-        for _ in 0..<100 {
-            let original = ULID()
+        for index in 0..<100 {
+            let original = try makeULID(sequence: UInt64(index))
             let string = original.ulidString
             guard let decoded = ULID(ulidString: string) else {
                 Issue.record("Failed to decode ULID string: \(string)")
@@ -30,8 +29,8 @@ struct ULIDTests {
 
     @Test("ULID bytes round-trip preserves all 128 bits")
     func testBytesRoundTripPreservesAllBits() throws {
-        for _ in 0..<100 {
-            let original = ULID()
+        for index in 0..<100 {
+            let original = try makeULID(sequence: UInt64(index))
             let bytes = original.bytes
             let decoded = try ULID(bytes: bytes)
 
@@ -57,7 +56,7 @@ struct ULIDTests {
     func testTimestampPreservedAfterRoundTrip() throws {
         // This test specifically checks that the timestamp (upper 48 bits of high)
         // is preserved correctly after encoding and decoding
-        let original = ULID()
+        let original = try makeULID(sequence: 42)
         let originalTimestamp = original.timestamp
 
         let string = original.ulidString
@@ -132,7 +131,7 @@ struct ULIDTests {
         // Generate multiple ULIDs and verify string ordering matches value ordering
         var ulids: [ULID] = []
         for _ in 0..<100 {
-            ulids.append(ULID())
+            ulids.append(try makeULID(sequence: UInt64(100 - ulids.count)))
         }
 
         let sortedByValue = ulids.sorted()
@@ -146,10 +145,8 @@ struct ULIDTests {
 
     @Test("Earlier ULID has smaller string representation")
     func testTemporalOrdering() throws {
-        let earlier = ULID()
-        // Small delay to ensure different timestamp
-        Thread.sleep(forTimeInterval: 0.002)
-        let later = ULID()
+        let earlier = try makeULID(sequence: 1)
+        let later = try makeULID(sequence: 2)
 
         #expect(earlier < later, "Earlier ULID should be less than later ULID")
         #expect(earlier.ulidString < later.ulidString,
@@ -218,21 +215,6 @@ struct ULIDTests {
         }
     }
 
-    // MARK: - Codable Round-trip Tests
-
-    @Test("ULID Codable round-trip preserves value")
-    func testCodableRoundTrip() throws {
-        let original = ULID()
-
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(original)
-
-        let decoder = JSONDecoder()
-        let decoded = try decoder.decode(ULID.self, from: data)
-
-        #expect(decoded == original, "Codable round-trip should preserve ULID")
-    }
-
     // MARK: - Invalid Input Tests
 
     @Test("ULID rejects invalid first character")
@@ -267,6 +249,17 @@ struct ULIDTests {
         let withU = "0123456789ABCDEFGHJKMNPQRU"
         #expect(ULID(ulidString: withU) == nil, "Should reject string with 'U'")
     }
+}
+
+private func makeULID(sequence: UInt64) throws -> ULID {
+    var randomness = [UInt8](repeating: 0, count: 10)
+    for offset in 0..<8 {
+        randomness[9 - offset] = UInt8((sequence >> (offset * 8)) & 0xFF)
+    }
+    return try ULID(
+        timestampMilliseconds: sequence,
+        randomness: ByteString(randomness)
+    )
 }
 
 // Extension to create ULID from raw value for testing

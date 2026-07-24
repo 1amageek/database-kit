@@ -13,6 +13,7 @@ public enum IndexScalarType: String, Sendable, Codable, CaseIterable {
     case float64
     case string
     case date
+    case timestamp
 
     public var isNumeric: Bool {
         switch self {
@@ -20,7 +21,7 @@ public enum IndexScalarType: String, Sendable, Codable, CaseIterable {
              .uint8, .uint16, .uint32, .uint64,
              .float32, .float64:
             return true
-        case .string, .date:
+        case .string, .date, .timestamp:
             return false
         }
     }

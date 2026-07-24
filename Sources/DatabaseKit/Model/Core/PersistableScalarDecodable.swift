@@ -1,12 +1,6 @@
 import DatabaseTypes
-import DatabaseTypesFoundation
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
 
-public protocol PersistableScalarDecodable: Sendable, Decodable {
+public protocol PersistableScalarDecodable: Sendable {
     static func decodePersistedScalar(
         _ value: FieldValue,
         field: String
@@ -205,30 +199,6 @@ extension ByteString: PersistableScalarDecodable {
     }
 }
 
-extension Data: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
-        _ value: FieldValue,
-        field: String
-    ) throws -> Data {
-        guard case .bytes(let scalar) = value else {
-            throw PersistableDecodingError.invalidValue(field: field, expected: "bytes")
-        }
-        return Data(copying: scalar)
-    }
-}
-
-extension FoundationUUID: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
-        _ value: FieldValue,
-        field: String
-    ) throws -> Self {
-        guard case .uuid(let scalar) = value else {
-            throw PersistableDecodingError.invalidValue(field: field, expected: "a UUID")
-        }
-        return Self(scalar)
-    }
-}
-
 extension DatabaseTypes.UUID: PersistableScalarDecodable {
     public static func decodePersistedScalar(
         _ value: FieldValue,
@@ -286,18 +256,6 @@ extension Timestamp: PersistableScalarDecodable {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a timestamp")
         }
         return scalar
-    }
-}
-
-extension Date: PersistableScalarDecodable {
-    public static func decodePersistedScalar(
-        _ value: FieldValue,
-        field: String
-    ) throws -> Date {
-        guard case .timestamp(let timestamp) = value else {
-            throw PersistableDecodingError.invalidValue(field: field, expected: "a date or timestamp")
-        }
-        return Date(timestamp)
     }
 }
 

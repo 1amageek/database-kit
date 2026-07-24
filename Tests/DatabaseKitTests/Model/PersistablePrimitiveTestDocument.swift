@@ -3,6 +3,7 @@ import DatabaseTypes
 
 @Persistable
 struct PersistablePrimitiveTestDocument {
+    var id: String = "fixture-id"
     var decimal: DatabaseTypes.ExactDecimal
     var bytes: DatabaseTypes.ByteString
     var date: DatabaseTypes.CivilDate

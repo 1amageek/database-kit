@@ -1,17 +1,19 @@
 import DatabaseTypes
 import DatabaseKit
-import Foundation
 import Testing
 
 @Suite("Persistable field encoding")
 struct PersistableFieldEncoderTests {
     @Test("Compiled documents round-trip without JSON")
     func compiledDocumentRoundTrip() throws {
-        let parsedExternalID = Foundation.UUID(
-            uuidString: "00112233-4455-6677-8899-aabbccddeeff"
+        let externalID = DatabaseTypes.UUID(
+            high: 0x0011_2233_4455_6677,
+            low: 0x8899_AABB_CCDD_EEFF
         )
-        let externalID = try #require(parsedExternalID)
-        let occurredAt = Date(timeIntervalSince1970: 1_721_234_567.125)
+        let occurredAt = try Timestamp(
+            secondsSinceUnixEpoch: 1_721_234_567,
+            nanoseconds: 125_000_000
+        )
         let document = PersistableFieldEncoderTestDocument(
             title: "Runtime",
             externalID: externalID,
@@ -38,7 +40,7 @@ struct PersistableFieldEncoderTests {
         #expect(decoded.values == document.values)
     }
 
-    @Test("Nested Codable values round-trip as canonical objects")
+    @Test("Nested values round-trip as canonical objects")
     func nestedValueRoundTrip() throws {
         let current = PersistableFieldNestedValue(label: "current", priority: 2)
         let history = [
@@ -156,8 +158,8 @@ struct PersistableFieldEncoderTests {
         #expect(decoded.rdfTerm == document.rdfTerm)
     }
 
-    @Test("Foundation Date is described and persisted as an absolute timestamp")
-    func foundationDateUsesTimestampSchema() throws {
+    @Test("Timestamp uses the absolute timestamp schema")
+    func timestampUsesTimestampSchema() throws {
         let occurredAtSchema = try #require(
             PersistableFieldEncoderTestDocument.fieldSchemas.first {
                 $0.name == "occurredAt"
@@ -165,14 +167,17 @@ struct PersistableFieldEncoderTests {
         )
         #expect(occurredAtSchema.type == .timestamp)
 
-        let parsedExternalID = Foundation.UUID(
-            uuidString: "00112233-4455-6677-8899-aabbccddeeff"
+        let externalID = DatabaseTypes.UUID(
+            high: 0x0011_2233_4455_6677,
+            low: 0x8899_AABB_CCDD_EEFF
         )
-        let externalID = try #require(parsedExternalID)
         let document = PersistableFieldEncoderTestDocument(
             title: "Timestamp",
             externalID: externalID,
-            occurredAt: Date(timeIntervalSince1970: 1_721_234_567.125),
+            occurredAt: try Timestamp(
+                secondsSinceUnixEpoch: 1_721_234_567,
+                nanoseconds: 125_000_000
+            ),
             values: []
         )
         let field = try #require(
@@ -181,7 +186,7 @@ struct PersistableFieldEncoderTests {
             }
         )
         guard case .timestamp = field.value else {
-            Issue.record("Foundation Date must persist as FieldValue.timestamp")
+            Issue.record("Timestamp must persist as FieldValue.timestamp")
             return
         }
     }

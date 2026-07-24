@@ -4,12 +4,14 @@ import Testing
 
 @Persistable(type: "SchemaEvolutionUser")
 struct SchemaEvolutionUserV1 {
+    var id: String = "fixture-id"
     var name: String
     var email: String
 }
 
 @Persistable(type: "SchemaEvolutionUser")
 struct SchemaEvolutionUserV2AppendOnly {
+    var id: String = "fixture-id"
     var name: String
     var email: String
     var age: Int32 = 0
@@ -17,12 +19,14 @@ struct SchemaEvolutionUserV2AppendOnly {
 
 @Persistable(type: "SchemaEvolutionUser")
 struct SchemaEvolutionUserV2Reordered {
+    var id: String = "fixture-id"
     var email: String
     var name: String
 }
 
 @Persistable(type: "SchemaEvolutionUser")
 struct SchemaEvolutionUserV2Renamed {
+    var id: String = "fixture-id"
     var fullName: String
     var email: String
 }

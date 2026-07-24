@@ -4,6 +4,7 @@ import DatabaseKit
 
 @Persistable
 struct DatabaseReferenceOwner {
+    var id: String = "fixture-id"
     @Relationship(deleteRule: .deny)
     var required: DatabaseReference<DatabaseReferenceTarget>
 

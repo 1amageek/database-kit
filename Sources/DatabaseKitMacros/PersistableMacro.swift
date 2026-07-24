@@ -6,7 +6,7 @@ import SwiftDiagnostics
 
 /// @Persistable macro implementation
 ///
-/// Generates Persistable protocol conformance with metadata methods and ID management.
+/// Generates Persistable protocol conformance and static model metadata.
 ///
 /// **Supports all layers**:
 /// - Entity layer (RDB): Structured entities with indexes
@@ -14,23 +14,18 @@ import SwiftDiagnostics
 /// - GraphLayer (GraphDB): Define nodes with relationships
 ///
 /// **Generated code includes**:
-/// - `var id: String = ULID().ulidString` (if not user-defined)
 /// - `static var persistableType: String`
 /// - `static var allFields: [String]`
 /// - `static var indexDescriptors: [IndexDescriptor]`
 /// - `static func fieldNumber(for fieldName: String) -> Int?`
 /// - `static func enumMetadata(for fieldName: String) -> EnumMetadata?`
-/// - `init(...)` (without `id` parameter)
-///
-/// **ID Behavior**:
-/// - If user defines `id` field: uses that type and default value
-/// - If user omits `id` field: macro adds `var id: String = ULID().ulidString`
-/// - `id` is NOT included in the generated initializer
+/// - `init(...)`
 ///
 /// **Usage**:
 /// ```swift
 /// @Persistable
 /// struct User {
+///     var id: String
 ///     #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
 ///
 ///     var email: String
@@ -80,8 +75,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 
         // Check if user defined `id` field
         var hasUserDefinedId = false
-        var userIdHasDefault = false
-        var userIdBinding: PatternBindingSyntax?
 
         // Extract all stored properties (fields) and @Relationship declarations
         var allFields: [String] = []
@@ -181,8 +174,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 
                             if fieldName == "id" {
                                 hasUserDefinedId = true
-                                userIdHasDefault = hasDefault
-                                userIdBinding = binding
                             }
 
                             if let relAttr = relationshipAttr {
@@ -232,8 +223,8 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                         defaultExpr = "false"
                                     } else if fieldType.hasPrefix("[") || fieldType.hasPrefix("Array<") {
                                         defaultExpr = "[]"
-                                    } else if fieldType == "Data" {
-                                        defaultExpr = "Data()"
+                                    } else if fieldType == "ByteString" {
+                                        defaultExpr = "ByteString()"
                                     } else {
                                         // For other types, use the initializer default if available
                                         defaultExpr = defaultValue ?? "/* unknown default */"
@@ -253,22 +244,12 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             }
         }
 
-        // Validate: User-defined id MUST have a default value
-        // Because id is excluded from the generated initializer
-        if hasUserDefinedId && !userIdHasDefault {
-            let diagnosticNode: Syntax
-            if let binding = userIdBinding {
-                diagnosticNode = Syntax(binding)
-            } else {
-                diagnosticNode = Syntax(node)
-            }
+        guard hasUserDefinedId else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
-                    node: diagnosticNode,
+                    node: Syntax(node),
                     message: MacroExpansionErrorMessage(
-                        "User-defined 'id' field must have a default value. " +
-                        "The generated initializer does not include 'id' parameter. " +
-                        "Example: var id: UUID = UUID() or var id: Int64 = Int64(Date().timeIntervalSince1970 * 1000)"
+                        "@Persistable requires an explicit 'id' field whose type conforms to PersistableIdentifier"
                     )
                 )
             ])
@@ -323,32 +304,10 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             if fieldType.hasPrefix("[") || fieldType.hasPrefix("Array<") {
                 return "[]"
             }
-            if fieldType == "Data" {
-                return "Data()"
+            if fieldType == "ByteString" {
+                return "ByteString()"
             }
             return "\(fieldType)()"
-        }
-
-        func decodeExpr(
-            for fieldInfo: (name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)
-        ) -> String {
-            if fieldInfo.isTransient {
-                return defaultInitializationExpr(for: fieldInfo)
-            }
-
-            let fieldType = normalizedTypeName(fieldInfo.type)
-            if fieldInfo.hasDefault {
-                let decodableType = isOptionalType(fieldType) ? wrappedTypeName(for: fieldType) : fieldType
-                let fallback = defaultInitializationExpr(for: fieldInfo)
-                return "(try container.decodeIfPresent(\(decodableType).self, forKey: .\(fieldInfo.name))) ?? \(fallback)"
-            }
-
-            if isOptionalType(fieldType) {
-                let wrappedType = wrappedTypeName(for: fieldType)
-                return "try container.decodeIfPresent(\(wrappedType).self, forKey: .\(fieldInfo.name))"
-            }
-
-            return "try container.decode(\(fieldType).self, forKey: .\(fieldInfo.name))"
         }
 
         func persistableFieldDecodeExpr(
@@ -595,18 +554,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         }
 
         var decls: [DeclSyntax] = []
-
-        // Generate `id` field if not user-defined
-        if !hasUserDefinedId {
-            let idDecl: DeclSyntax = """
-                public var id: String = ULID().ulidString
-                """
-            decls.append(idDecl)
-
-            // Add id to allFields at the beginning
-            allFields.insert("id", at: 0)
-            fieldInfos.insert((name: "id", type: "String", hasDefault: true, defaultValue: "ULID().ulidString", isTransient: false), at: 0)
-        }
 
         // Generate persistableType property
         let persistableTypeDecl: DeclSyntax = """
@@ -913,9 +860,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             "String", "Int", "Int8", "Int16", "Int32", "Int64",
             "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
             "Double", "Float", "Bool",
-            "Date", "Foundation.Date", "FoundationEssentials.Date",
-            "UUID", "Foundation.UUID", "FoundationEssentials.UUID",
-            "Data", "Foundation.Data", "FoundationEssentials.Data",
+            "UUID",
             "ExactDecimal", "ByteString", "CivilDate", "CivilTime",
             "CivilDateTime", "Timestamp", "TimeSpan", "CalendarPeriod",
             "GeographicPoint", "GeographicPosition", "Vector",
@@ -1135,10 +1080,9 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(fieldNameFallbackDecl)
 
-        // Generate init without `id` parameter and transient fields
-        // Only include fields that are NOT `id` and NOT @Transient
+        // Generate an initializer for all persisted fields.
         let initParams = fieldInfos
-            .filter { $0.name != "id" && !$0.isTransient }
+            .filter { !$0.isTransient }
             .map { info -> String in
                 if info.hasDefault, let defaultValue = info.defaultValue {
                     return "\(info.name): \(info.type) = \(defaultValue)"
@@ -1149,7 +1093,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             .joined(separator: ", ")
 
         let initAssignments = fieldInfos
-            .filter { $0.name != "id" && !$0.isTransient }
+            .filter { !$0.isTransient }
             .map { "self.\($0.name) = \($0.name)" }
             .joined(separator: "\n        ")
 
@@ -1161,36 +1105,12 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 """
             decls.append(initDecl)
         } else {
-            // No fields other than id
+            // A model with no persisted fields is rejected before this point.
             let initDecl: DeclSyntax = """
                 public init() {}
                 """
             decls.append(initDecl)
         }
-
-        // Generate CodingKeys for the opt-in Codable model adapter.
-        let codableFieldInfos = fieldInfos.filter { !$0.isTransient }
-        let codingKeyCases = codableFieldInfos.map { "case \($0.name)" }
-
-        let codingKeysDecl: DeclSyntax = """
-            private enum CodingKeys: String, CodingKey {
-                \(raw: codingKeyCases.joined(separator: "\n            "))
-            }
-            """
-        decls.append(codingKeysDecl)
-
-        let decodeAssignments = fieldInfos
-            .map { fieldInfo in
-                "self.\(fieldInfo.name) = \(decodeExpr(for: fieldInfo))"
-            }
-            .joined(separator: "\n        ")
-        let decodableInitDecl: DeclSyntax = """
-            public init(from decoder: Decoder) throws {
-                let container = try decoder.container(keyedBy: CodingKeys.self)
-                \(raw: decodeAssignments)
-            }
-            """
-        decls.append(decodableInitDecl)
 
         return decls
     }
@@ -1203,7 +1123,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         in context: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
         let conformanceExt: DeclSyntax = """
-            extension \(type.trimmed): Persistable, Codable, Sendable {}
+            extension \(type.trimmed): Persistable, Sendable {}
             """
 
         if let extensionDecl = conformanceExt.as(ExtensionDeclSyntax.self) {
@@ -1505,8 +1425,6 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
         schemaType = "bool"
     case "ExactDecimal", "DatabaseTypes.ExactDecimal":
         schemaType = "decimal"
-    case "Date", "Foundation.Date", "FoundationEssentials.Date":
-        schemaType = "timestamp"
     case "CivilDate", "DatabaseTypes.CivilDate":
         schemaType = "date"
     case "CivilTime", "DatabaseTypes.CivilTime":
@@ -1525,11 +1443,8 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
         schemaType = "geographicPosition"
     case "Vector", "DatabaseTypes.Vector":
         schemaType = "vector"
-    case "UUID", "Foundation.UUID", "FoundationEssentials.UUID",
-         "DatabaseTypes.UUID":
+    case "UUID", "DatabaseTypes.UUID":
         schemaType = "uuid"
-    case "Data", "Foundation.Data", "FoundationEssentials.Data":
-        schemaType = "bytes"
     case "ByteString", "DatabaseTypes.ByteString":
         schemaType = "bytes"
     case "FieldObject", "DatabaseTypes.FieldObject":

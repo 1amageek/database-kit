@@ -63,6 +63,7 @@ struct DirectoryMacroE2ETests {
 
 @Persistable
 private struct StaticDirectoryRecord {
+    var id: String = "fixture-id"
     #Directory<StaticDirectoryRecord>("macro-e2e", "static-records")
 
     var title: String
@@ -70,6 +71,7 @@ private struct StaticDirectoryRecord {
 
 @Persistable
 private struct PartitionedDirectoryRecord {
+    var id: String = "fixture-id"
     #Directory<PartitionedDirectoryRecord>(
         "tenants",
         Field<PartitionedDirectoryRecord>(\.tenantID),

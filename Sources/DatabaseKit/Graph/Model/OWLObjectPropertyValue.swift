@@ -1,11 +1,5 @@
 import DatabaseTypes
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#elseif canImport(Foundation)
-import Foundation
-#endif
-
 public protocol OWLObjectPropertyValue: Sendable {
     var owlObjectPropertyIdentifierLexicalForms: [String] { get }
 }
@@ -30,12 +24,8 @@ extension UInt64: OWLObjectPropertyValue {}
 extension Bool: OWLObjectPropertyValue {}
 extension Double: OWLObjectPropertyValue {}
 extension Float: OWLObjectPropertyValue {}
-
-#if canImport(FoundationEssentials) || canImport(Foundation)
-extension FoundationUUID: OWLObjectPropertyValue {}
 extension DatabaseTypes.UUID: OWLObjectPropertyValue {}
-extension Data: OWLObjectPropertyValue {}
-#endif
+extension ByteString: OWLObjectPropertyValue {}
 
 extension Optional: OWLObjectPropertyValue where Wrapped: OWLIndividualIdentifier {
     public var owlObjectPropertyIdentifierLexicalForms: [String] {

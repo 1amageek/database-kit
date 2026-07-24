@@ -190,6 +190,7 @@ private struct NonComparableAggregationField {}
 
 @Persistable
 private struct AggregationKindValidationRecord {
+    var id: String = "fixture-id"
     #Index(
         CountIndexKind<AggregationKindValidationRecord>(groupBy: []),
         name: "global_count"

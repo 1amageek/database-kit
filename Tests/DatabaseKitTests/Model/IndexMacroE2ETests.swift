@@ -193,6 +193,7 @@ private struct ExpectedIndexSpec: Sendable {
 
 @Persistable
 private struct IndexMacroE2ERecord {
+    var id: String = "fixture-id"
     #Index(
         ScalarIndexKind<IndexMacroE2ERecord>(fields: [\.category]),
         storedFields: [\IndexMacroE2ERecord.title],

@@ -1,6 +1,5 @@
 import DatabaseTypes
 import Testing
-import Foundation
 @testable import DatabaseKit
 
 /// Tests for @Persistable macro
@@ -113,18 +112,11 @@ struct ModelMacroTests {
         #expect(sumIndex.kindIdentifier == "sum")
     }
 
-    /// Test @Persistable Codable conformance
-    @Test("@Persistable generates Codable conformance")
-    func modelCodableConformance() throws {
+    @Test("@Persistable generates canonical field adaptation")
+    func modelCanonicalFieldAdaptation() throws {
         let user = CodableUser(email: "test@example.com", name: "Alice")
-
-        // Verify Codable works
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(user)
-        #expect(data.count > 0)
-
-        let decoder = JSONDecoder()
-        let decoded = try decoder.decode(CodableUser.self, from: data)
+        let fields = try PersistableFieldEncoder.encode(user)
+        let decoded = try CodableUser.decodePersistedFields(fields)
         #expect(decoded.id == user.id)
         #expect(decoded.email == user.email)
         #expect(decoded.name == user.name)
@@ -137,15 +129,10 @@ struct ModelMacroTests {
         let _: any Sendable = SendableUser(email: "test@example.com")
     }
 
-    /// Test @Persistable init without id parameter
-    @Test("@Persistable init does not include id parameter")
-    func initWithoutIdParameter() {
-        // Create user without specifying id
+    @Test("@Persistable preserves the model's explicit id policy")
+    func explicitIDPolicy() {
         let user = BasicUser(email: "test@example.com", name: "Alice")
-
-        // id should be auto-generated (ULID format: 26 characters)
-        #expect(user.id.count == 26)
-        #expect(!user.id.isEmpty)
+        #expect(user.id == "fixture-id")
     }
 
     /// Test @Persistable dynamic member lookup
@@ -176,15 +163,9 @@ struct ModelMacroTests {
         #expect(model[dynamicMember: "seedData"] == nil)
         #expect(StaticAndComputedMemberModel.seedData.isEmpty)
 
-        let data = try JSONEncoder().encode(model)
-        let json = String(data: data, encoding: .utf8)!
-        #expect(json.contains("email"))
-        #expect(json.contains("name"))
-        #expect(!json.contains("displayName"))
-        #expect(!json.contains("seedData"))
-        #expect(!json.contains("supportedScopes"))
-
-        let decoded = try JSONDecoder().decode(StaticAndComputedMemberModel.self, from: data)
+        let fields = try PersistableFieldEncoder.encode(model)
+        #expect(fields.map(\.name) == ["id", "email", "name"])
+        let decoded = try StaticAndComputedMemberModel.decodePersistedFields(fields)
         #expect(decoded.email == model.email)
         #expect(decoded.name == model.name)
         #expect(decoded.displayName == "Alice <test@example.com>")
@@ -307,31 +288,16 @@ struct ModelMacroTests {
         #expect(TransientUser.fieldNumber(for: "isOnline") == nil)
     }
 
-    /// Test @Transient with Codable serialization
-    @Test("@Transient excludes fields from Codable")
-    func transientExcludesFromCodable() throws {
+    @Test("@Transient excludes fields from canonical persistence")
+    func transientExcludesFromCanonicalPersistence() throws {
         var user = TransientUser(email: "test@example.com", name: "Alice")
         user.cachedDisplayName = "Should not be encoded"
         user.sessionToken = "secret-token"
         user.isOnline = true
 
-        // Encode
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(user)
-        let json = String(data: data, encoding: .utf8)!
-
-        // Transient fields should not be in JSON
-        #expect(!json.contains("cachedDisplayName"))
-        #expect(!json.contains("sessionToken"))
-        #expect(!json.contains("isOnline"))
-
-        // Persisted fields should be in JSON
-        #expect(json.contains("email"))
-        #expect(json.contains("name"))
-
-        // Decode
-        let decoder = JSONDecoder()
-        let decoded = try decoder.decode(TransientUser.self, from: data)
+        let fields = try PersistableFieldEncoder.encode(user)
+        #expect(fields.map(\.name) == ["id", "email", "name"])
+        let decoded = try TransientUser.decodePersistedFields(fields)
 
         // Persisted fields are restored
         #expect(decoded.email == "test@example.com")
@@ -348,12 +314,14 @@ struct ModelMacroTests {
 
 @Persistable
 struct BasicUser {
+    var id: String = "fixture-id"
     var email: String
     var name: String
 }
 
 @Persistable
 struct StaticAndComputedMemberModel {
+    var id: String = "fixture-id"
     static let supportedScopes = ["public", "private"]
     static var seedData: [StaticAndComputedMemberModel] { [] }
 
@@ -364,6 +332,7 @@ struct StaticAndComputedMemberModel {
 
 @Persistable
 struct IndexedUser {
+    var id: String = "fixture-id"
     #Index(ScalarIndexKind<IndexedUser>(fields: [\.email]), unique: true)
 
     var email: String
@@ -372,6 +341,7 @@ struct IndexedUser {
 
 @Persistable
 struct Product {
+    var id: String = "fixture-id"
     #Index(ScalarIndexKind<Product>(fields: [\.category]))
     #Index(ScalarIndexKind<Product>(fields: [\.category, \.price]))
 
@@ -382,6 +352,7 @@ struct Product {
 
 @Persistable
 struct CustomNamedUser {
+    var id: String = "fixture-id"
     #Index(ScalarIndexKind<CustomNamedUser>(fields: [\.email]), name: "user_email_idx")
 
     var email: String
@@ -389,24 +360,27 @@ struct CustomNamedUser {
 
 @Persistable(type: "User")
 struct Member {
+    var id: String = "fixture-id"
     var name: String
 }
 
 @Persistable
 struct Order {
-    var id: Int64 = Int64(Date().timeIntervalSince1970 * 1000)  // User-defined id with default
+    var id: Int64 = 1
     var orderID: Int64
     var amount: Double
 }
 
 @Persistable
 struct FieldNumberUser {
+    var id: String = "fixture-id"
     var email: String
     var name: String
 }
 
 @Persistable
 struct Analytics {
+    var id: String = "fixture-id"
     #Index(ScalarIndexKind<Analytics>(fields: [\.category]))
     #Index(CountIndexKind<Analytics>(groupBy: [\.category]))
     #Index(SumIndexKind<Analytics, Double>(groupBy: [\.category], value: \.value))
@@ -417,12 +391,14 @@ struct Analytics {
 
 @Persistable
 struct CodableUser {
+    var id: String = "fixture-id"
     var email: String
     var name: String
 }
 
 @Persistable
 struct SendableUser {
+    var id: String = "fixture-id"
     var email: String
 }
 
@@ -430,6 +406,7 @@ struct SendableUser {
 
 @Persistable
 struct TransientUser {
+    var id: String = "fixture-id"
     var email: String
     var name: String
 
@@ -470,6 +447,7 @@ extension MacroPolymorphicDocument {
 
 @Persistable
 struct MacroPolymorphicArticle: MacroPolymorphicDocument {
+    var id: String = "fixture-id"
     #Directory<MacroPolymorphicArticle>("macro-polymorphic-articles")
 
     var title: String
@@ -477,6 +455,7 @@ struct MacroPolymorphicArticle: MacroPolymorphicDocument {
 
 @Persistable
 struct MacroPolymorphicReport: MacroPolymorphicDocument {
+    var id: String = "fixture-id"
     #Directory<MacroPolymorphicReport>("macro-polymorphic-reports")
 
     var title: String
@@ -490,10 +469,12 @@ protocol MacroGeneratedPolymorphicDocument: Polymorphable {
 
 @Persistable
 struct MacroGeneratedPolymorphicArticle: MacroGeneratedPolymorphicDocument {
+    var id: String = "fixture-id"
     var title: String
 }
 
 @Persistable
 struct MacroGeneratedPolymorphicReport: MacroGeneratedPolymorphicDocument {
+    var id: String = "fixture-id"
     var title: String
 }

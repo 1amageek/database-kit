@@ -1,9 +1,4 @@
 import DatabaseTypes
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
 
 public protocol OWLDataPropertyScalar: OWLDataPropertyValue {
     func owlDataPropertyTerm() throws -> RDFTerm
@@ -132,20 +127,17 @@ extension Timestamp: OWLDataPropertyScalar {
     }
 }
 
-extension FoundationUUID: OWLDataPropertyScalar {
-    public func owlDataPropertyTerm() throws -> RDFTerm {
-        OWLRDFVocabulary.literal(uuidString.lowercased(), datatype: .string)
-    }
-}
-
 extension DatabaseTypes.UUID: OWLDataPropertyScalar {
     public func owlDataPropertyTerm() throws -> RDFTerm {
         OWLRDFVocabulary.literal(description, datatype: .string)
     }
 }
 
-extension Data: OWLDataPropertyScalar {
+extension ByteString: OWLDataPropertyScalar {
     public func owlDataPropertyTerm() throws -> RDFTerm {
-        OWLRDFVocabulary.literal(base64EncodedString(), datatype: .base64Binary)
+        OWLRDFVocabulary.literal(
+            QueryLiteralEncoding.base64(self),
+            datatype: .base64Binary
+        )
     }
 }
