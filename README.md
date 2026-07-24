@@ -94,7 +94,7 @@ struct User {
 ### Schema
 
 ```swift
-let schema = Schema(
+let schema = try Schema(
     entities: [
         Schema.Entity(from: User.self),
         Schema.Entity(from: Product.self),

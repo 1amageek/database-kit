@@ -95,6 +95,7 @@ struct PackageBoundaryTests {
             "DatabaseGraphTerm",
             "DatabaseRevisionMutationResult",
             "DatabaseValidationReport",
+            "FormerIndex",
             "IndexMetadataValue",
             "OWLLiteral",
             "ProtobufDecoder",

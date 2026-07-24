@@ -51,9 +51,9 @@ enum SchemaEvolutionSchemaV2Renamed: VersionedSchema {
 @Suite("Schema Evolution Tests")
 struct SchemaEvolutionTests {
     @Test("Append-only field additions remain lightweight-compatible")
-    func appendOnlyFieldAdditionIsCompatible() {
-        let current = SchemaEvolutionSchemaV2AppendOnly.makeSchema()
-        let previous = SchemaEvolutionSchemaV1.makeSchema()
+    func appendOnlyFieldAdditionIsCompatible() throws {
+        let current = try SchemaEvolutionSchemaV2AppendOnly.makeSchema()
+        let previous = try SchemaEvolutionSchemaV1.makeSchema()
         let report = current.compatibilityReport(from: previous)
 
         #expect(report.isLightweightCompatible)
@@ -62,7 +62,7 @@ struct SchemaEvolutionTests {
         #expect(report.entityReports.count == 1)
         #expect(report.entityReports[0].addedFields.map(\.name) == ["age"])
         #expect(report.entityReports[0].issues.isEmpty)
-        #expect(SchemaEvolutionSchemaV2AppendOnly.canLightweightMigrate(from: SchemaEvolutionSchemaV1.self))
+        #expect(try SchemaEvolutionSchemaV2AppendOnly.canLightweightMigrate(from: SchemaEvolutionSchemaV1.self))
     }
 
     @Test("Append-only field additions decode missing fields using defaults")
@@ -81,9 +81,9 @@ struct SchemaEvolutionTests {
     }
 
     @Test("Field reordering is rejected as incompatible")
-    func fieldReorderingIsRejected() {
-        let current = SchemaEvolutionSchemaV2Reordered.makeSchema()
-        let previous = SchemaEvolutionSchemaV1.makeSchema()
+    func fieldReorderingIsRejected() throws {
+        let current = try SchemaEvolutionSchemaV2Reordered.makeSchema()
+        let previous = try SchemaEvolutionSchemaV1.makeSchema()
         let report = current.compatibilityReport(from: previous)
 
         #expect(!report.isLightweightCompatible)
@@ -107,13 +107,13 @@ struct SchemaEvolutionTests {
                 )
             )
         )
-        #expect(!SchemaEvolutionSchemaV2Reordered.canLightweightMigrate(from: SchemaEvolutionSchemaV1.self))
+        #expect(try !SchemaEvolutionSchemaV2Reordered.canLightweightMigrate(from: SchemaEvolutionSchemaV1.self))
     }
 
     @Test("Field rename is rejected without explicit migration")
-    func fieldRenameIsRejected() {
-        let current = SchemaEvolutionSchemaV2Renamed.makeSchema()
-        let previous = SchemaEvolutionSchemaV1.makeSchema()
+    func fieldRenameIsRejected() throws {
+        let current = try SchemaEvolutionSchemaV2Renamed.makeSchema()
+        let previous = try SchemaEvolutionSchemaV1.makeSchema()
         let report = current.compatibilityReport(from: previous)
 
         #expect(!report.isLightweightCompatible)
@@ -136,6 +136,6 @@ struct SchemaEvolutionTests {
                 )
             )
         )
-        #expect(!SchemaEvolutionSchemaV2Renamed.canLightweightMigrate(from: SchemaEvolutionSchemaV1.self))
+        #expect(try !SchemaEvolutionSchemaV2Renamed.canLightweightMigrate(from: SchemaEvolutionSchemaV1.self))
     }
 }

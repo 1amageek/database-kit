@@ -226,7 +226,7 @@ public enum DirectoryLayer: String, Sendable, Codable, Hashable {
 /// **Server-side Usage**:
 /// ```swift
 /// // Schema includes all conforming types
-/// let schema = Schema([Article.self, Report.self, ...])
+/// let schema = try Schema([Article.self, Report.self, ...])
 ///
 /// // Polymorphic fetch - retrieves all types conforming to the protocol
 /// // NOTE: Use a concrete conforming type (not the protocol type itself)

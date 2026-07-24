@@ -73,8 +73,8 @@ extension VersionedSchema {
     /// configured database runtime.
     ///
     /// - Returns: Schema instance with version and models
-    public static func makeSchema() -> Schema {
-        return Schema(models, version: versionIdentifier)
+    public static func makeSchema() throws(SchemaError) -> Schema {
+        try Schema(models, version: versionIdentifier)
     }
 
     /// Get all concrete index descriptors from models in this schema version.
@@ -84,14 +84,18 @@ extension VersionedSchema {
     ///
     /// - Returns: Array of all index descriptors
     public static var allIndexDescriptors: [IndexDescriptor] {
-        return makeSchema().indexDescriptors
+        get throws(SchemaError) {
+            try makeSchema().indexDescriptors
+        }
     }
 
     /// Get all index names from this schema version
     ///
     /// - Returns: Set of index names
     public static var indexNames: Set<String> {
-        return makeSchema().allIndexNames
+        get throws(SchemaError) {
+            try makeSchema().allIndexNames
+        }
     }
 }
 
@@ -106,9 +110,9 @@ extension VersionedSchema {
     /// - Returns: Tuple of (added indexes, removed indexes)
     public static func indexChanges(
         from other: any VersionedSchema.Type
-    ) -> (added: Set<String>, removed: Set<String>) {
-        let currentIndexes = Self.indexNames
-        let otherIndexes = other.indexNames
+    ) throws(SchemaError) -> (added: Set<String>, removed: Set<String>) {
+        let currentIndexes = try Self.indexNames
+        let otherIndexes = try other.indexNames
 
         let added = currentIndexes.subtracting(otherIndexes)
         let removed = otherIndexes.subtracting(currentIndexes)
@@ -125,8 +129,8 @@ extension VersionedSchema {
     /// - Returns: true if lightweight migration is possible
     public static func canLightweightMigrate(
         from other: any VersionedSchema.Type
-    ) -> Bool {
-        let report = makeSchema().compatibilityReport(from: other.makeSchema())
+    ) throws(SchemaError) -> Bool {
+        let report = try makeSchema().compatibilityReport(from: other.makeSchema())
         return report.isLightweightCompatible
     }
 }

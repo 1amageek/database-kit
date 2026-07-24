@@ -11,7 +11,7 @@ public import DatabaseValue
 ///
 /// **Example usage**:
 /// ```swift
-/// let schema = Schema(
+/// let schema = try Schema(
 ///     [User.self, Order.self, Message.self],
 ///     version: Schema.Version(1, 0, 0)
 /// )
@@ -332,10 +332,6 @@ public final class Schema: Sendable {
     /// Runtime typed index descriptors for each concrete polymorphic member.
     private let polymorphicIndexDescriptorsByIdentifierAndMemberName: [String: [String: [IndexDescriptor]]]
 
-    /// Former indexes (schema evolution)
-    /// Records of deleted indexes (schema definition only)
-    public let formerIndexes: [String: FormerIndex]
-
     /// Index descriptors (metadata only)
     public let indexDescriptors: [IndexDescriptor]
 
@@ -364,13 +360,13 @@ public final class Schema: Sendable {
     ///
     /// **Example usage**:
     /// ```swift
-    /// let schema = Schema([User.self, Order.self])  // Indexes auto-collected
+    /// let schema = try Schema([User.self, Order.self])  // Indexes auto-collected
     /// ```
     public init(
         _ types: [any Persistable.Type],
         version: Version = Version(1, 0, 0),
         indexDescriptors: [IndexDescriptor] = []
-    ) {
+    ) throws(SchemaError) {
         self.version = version
         self.encodingVersion = version
 
@@ -381,6 +377,9 @@ public final class Schema: Sendable {
 
         for type in types {
             let entity = Entity(from: type)
+            guard entitiesByName[entity.name] == nil else {
+                throw .duplicateEntityName(entity.name)
+            }
             entities.append(entity)
             entitiesByName[entity.name] = entity
             if let polymorphicType = type as? any Polymorphable.Type {
@@ -391,7 +390,7 @@ public final class Schema: Sendable {
         self.entities = entities
         self.entitiesByName = entitiesByName
 
-        let runtimePolymorphicMetadata = Self.buildPolymorphicRuntimeMetadata(from: polymorphicMembers)
+        let runtimePolymorphicMetadata = try Self.buildPolymorphicRuntimeMetadata(from: polymorphicMembers)
         self.polymorphicGroups = runtimePolymorphicMetadata.groups
         self.polymorphicGroupsByIdentifier = Dictionary(
             uniqueKeysWithValues: runtimePolymorphicMetadata.groups.map { ($0.identifier, $0) }
@@ -415,23 +414,19 @@ public final class Schema: Sendable {
         var indexDescriptorsByName: [String: IndexDescriptor] = [:]
         for descriptor in allIndexDescriptors {
             if let existing = indexDescriptorsByName[descriptor.name] {
-                preconditionFailure(
-                    "Duplicate index name '\(descriptor.name)' detected. " +
-                    "Existing index fields: \(existing.fieldNames), " +
-                    "duplicate index fields: \(descriptor.fieldNames). " +
-                    "Index names must be unique across all entities in the schema."
+                throw .duplicateIndexName(
+                    indexName: descriptor.name,
+                    existingFields: existing.fieldNames,
+                    duplicateFields: descriptor.fieldNames
                 )
             }
             indexDescriptorsByName[descriptor.name] = descriptor
         }
-        Self.validatePolymorphicIndexNames(
+        try Self.validatePolymorphicIndexNames(
             runtimePolymorphicMetadata.groups,
             against: indexDescriptorsByName
         )
         self.indexDescriptorsByName = indexDescriptorsByName
-
-        // Former indexes (empty for now, future: migration support)
-        self.formerIndexes = [:]
     }
 
     /// Initializer for manual Schema construction
@@ -444,13 +439,16 @@ public final class Schema: Sendable {
         entities: [Entity],
         version: Version = Version(1, 0, 0),
         indexDescriptors: [IndexDescriptor] = []
-    ) {
+    ) throws(SchemaError) {
         self.version = version
         self.encodingVersion = version
 
         // Build entity maps
         var entitiesByName: [String: Entity] = [:]
         for entity in entities {
+            guard entitiesByName[entity.name] == nil else {
+                throw .duplicateEntityName(entity.name)
+            }
             entitiesByName[entity.name] = entity
         }
 
@@ -472,19 +470,15 @@ public final class Schema: Sendable {
         var indexDescriptorsByName: [String: IndexDescriptor] = [:]
         for descriptor in allIndexDescriptors {
             if let existing = indexDescriptorsByName[descriptor.name] {
-                preconditionFailure(
-                    "Duplicate index name '\(descriptor.name)' detected. " +
-                    "Existing index fields: \(existing.fieldNames), " +
-                    "duplicate index fields: \(descriptor.fieldNames). " +
-                    "Index names must be unique across all entities in the schema."
+                throw .duplicateIndexName(
+                    indexName: descriptor.name,
+                    existingFields: existing.fieldNames,
+                    duplicateFields: descriptor.fieldNames
                 )
             }
             indexDescriptorsByName[descriptor.name] = descriptor
         }
         self.indexDescriptorsByName = indexDescriptorsByName
-
-        // Former indexes (empty for test schemas)
-        self.formerIndexes = [:]
     }
 
     // MARK: - Entity Access
@@ -580,7 +574,7 @@ public final class Schema: Sendable {
 
     private static func buildPolymorphicRuntimeMetadata(
         from membersByIdentifier: [String: [any Persistable.Type]]
-    ) -> PolymorphicRuntimeMetadata {
+    ) throws(SchemaError) -> PolymorphicRuntimeMetadata {
         var groups: [PolymorphicGroup] = []
         var descriptorsByIdentifierAndMemberName: [String: [String: [IndexDescriptor]]] = [:]
 
@@ -606,14 +600,12 @@ public final class Schema: Sendable {
                 let components = PolymorphicGroup.extractDirectoryComponents(
                     from: polymorphicType.polymorphicDirectoryPathComponents
                 )
-                precondition(
-                    components == directoryComponents,
-                    "Polymorphic group '\(identifier)' has inconsistent directory components across member types."
-                )
-                precondition(
-                    polymorphicType.polymorphicDirectoryLayer == directoryLayer,
-                    "Polymorphic group '\(identifier)' has inconsistent directory layers across member types."
-                )
+                guard components == directoryComponents else {
+                    throw .inconsistentPolymorphicDirectory(group: identifier)
+                }
+                guard polymorphicType.polymorphicDirectoryLayer == directoryLayer else {
+                    throw .inconsistentPolymorphicDirectoryLayer(group: identifier)
+                }
             }
 
             let memberTypeNames = polymorphicTypes.map { $0.0.persistableType }.sorted()
@@ -629,17 +621,22 @@ public final class Schema: Sendable {
 
                 var seenNamesForMember: Set<String> = []
                 for descriptor in descriptors {
-                    precondition(
-                        seenNamesForMember.insert(descriptor.name).inserted,
-                        "Polymorphic group '\(identifier)' member '\(memberType.persistableType)' declares duplicate index '\(descriptor.name)'."
-                    )
+                    guard seenNamesForMember.insert(descriptor.name).inserted else {
+                        throw .duplicatePolymorphicIndex(
+                            group: identifier,
+                            member: memberType.persistableType,
+                            indexName: descriptor.name
+                        )
+                    }
 
                     let logicalDescriptor = IndexDescriptorMetadata(descriptor)
                     if let existing = logicalIndexByName[descriptor.name] {
-                        precondition(
-                            existing == logicalDescriptor,
-                            "Polymorphic group '\(identifier)' index '\(descriptor.name)' has inconsistent logical metadata across member types."
-                        )
+                        guard existing == logicalDescriptor else {
+                            throw .inconsistentPolymorphicIndex(
+                                group: identifier,
+                                indexName: descriptor.name
+                            )
+                        }
                     } else {
                         logicalIndexByName[descriptor.name] = logicalDescriptor
                         logicalIndexOrder.append(descriptor.name)
@@ -650,10 +647,14 @@ public final class Schema: Sendable {
             }
 
             for (indexName, declaringMembers) in membersByIndexName {
-                precondition(
-                    declaringMembers == allMemberNames,
-                    "Polymorphic group '\(identifier)' index '\(indexName)' must be declared by every member type. Declared by: \(declaringMembers.sorted().joined(separator: ", ")); expected: \(memberTypeNames.joined(separator: ", "))."
-                )
+                guard declaringMembers == allMemberNames else {
+                    throw .incompletePolymorphicIndex(
+                        group: identifier,
+                        indexName: indexName,
+                        declaringMembers: declaringMembers.sorted(),
+                        expectedMembers: memberTypeNames
+                    )
+                }
             }
 
             descriptorsByIdentifierAndMemberName[identifier] = descriptorsByMemberName
@@ -677,23 +678,22 @@ public final class Schema: Sendable {
     private static func validatePolymorphicIndexNames(
         _ groups: [PolymorphicGroup],
         against indexDescriptorsByName: [String: IndexDescriptor]
-    ) {
+    ) throws(SchemaError) {
         var groupByIndexName: [String: String] = [:]
         for group in groups {
             for index in group.indexes {
                 if let existing = indexDescriptorsByName[index.name] {
-                    preconditionFailure(
-                        "Duplicate index name '\(index.name)' detected. " +
-                        "Entity index fields: \(existing.fieldNames), " +
-                        "polymorphic group: \(group.identifier). " +
-                        "Index names must be unique across all entities and polymorphic groups."
+                    throw .duplicateIndexName(
+                        indexName: index.name,
+                        existingFields: existing.fieldNames,
+                        duplicateFields: ["polymorphic:\(group.identifier)"]
                     )
                 }
                 if let existingGroup = groupByIndexName[index.name] {
-                    preconditionFailure(
-                        "Duplicate polymorphic index name '\(index.name)' detected in groups " +
-                        "'\(existingGroup)' and '\(group.identifier)'. " +
-                        "Index names must be unique across all polymorphic groups."
+                    throw .duplicatePolymorphicIndexAcrossGroups(
+                        indexName: index.name,
+                        firstGroup: existingGroup,
+                        secondGroup: group.identifier
                     )
                 }
                 groupByIndexName[index.name] = group.identifier
@@ -744,45 +744,50 @@ extension Schema: Hashable {
     }
 }
 
-// MARK: - FormerIndex
-
-/// Former index metadata (for schema evolution)
-///
-/// Records when an index was added and removed, helping with
-/// schema migration and backward compatibility.
-public struct FormerIndex: Sendable, Hashable, Equatable {
-    /// Index name
-    public let name: String
-
-    /// Version when the index was originally added
-    public let addedVersion: Schema.Version
-
-    /// Timestamp when the index was removed (seconds since epoch)
-    public let removedTimestamp: Double
-
-    public init(
-        name: String,
-        addedVersion: Schema.Version,
-        removedTimestamp: Double
-    ) {
-        self.name = name
-        self.addedVersion = addedVersion
-        self.removedTimestamp = removedTimestamp
-    }
-}
-
 // MARK: - SchemaError
 
 /// Errors that can occur during Schema validation
-public enum SchemaError: Error, CustomStringConvertible, Sendable {
+public enum SchemaError: Error, CustomStringConvertible, Sendable, Equatable {
+    /// Duplicate entity name detected.
+    case duplicateEntityName(String)
+
     /// Duplicate index name detected across entities
     ///
     /// Index names must be unique across all entities in a schema.
     /// This error provides details about both the existing and duplicate index.
     case duplicateIndexName(indexName: String, existingFields: [String], duplicateFields: [String])
 
+    /// Concrete members disagree on the directory path of a polymorphic group.
+    case inconsistentPolymorphicDirectory(group: String)
+
+    /// Concrete members disagree on the directory layer of a polymorphic group.
+    case inconsistentPolymorphicDirectoryLayer(group: String)
+
+    /// A concrete member declares the same polymorphic index more than once.
+    case duplicatePolymorphicIndex(group: String, member: String, indexName: String)
+
+    /// Concrete members disagree on the logical metadata of a polymorphic index.
+    case inconsistentPolymorphicIndex(group: String, indexName: String)
+
+    /// A polymorphic index is not declared by every concrete member.
+    case incompletePolymorphicIndex(
+        group: String,
+        indexName: String,
+        declaringMembers: [String],
+        expectedMembers: [String]
+    )
+
+    /// Two polymorphic groups declare the same global index name.
+    case duplicatePolymorphicIndexAcrossGroups(
+        indexName: String,
+        firstGroup: String,
+        secondGroup: String
+    )
+
     public var description: String {
         switch self {
+        case .duplicateEntityName(let name):
+            return "Duplicate entity name '\(name)' detected. Entity names must be unique within a schema."
         case .duplicateIndexName(let indexName, let existingFields, let duplicateFields):
             let existingDesc = existingFields.joined(separator: ", ")
             let duplicateDesc = duplicateFields.joined(separator: ", ")
@@ -790,55 +795,26 @@ public enum SchemaError: Error, CustomStringConvertible, Sendable {
                    "Existing index fields: [\(existingDesc)], " +
                    "duplicate index fields: [\(duplicateDesc)]. " +
                    "Index names must be unique across all entities in the schema."
-        }
-    }
-}
-
-// MARK: - Schema Validation
-
-extension Schema {
-    /// Validate the schema for duplicate index names
-    ///
-    /// This method checks that all index names are unique across the entire schema,
-    /// including both entity-defined indexes and manually added indexes.
-    ///
-    /// **Note**: As of the current implementation, Schema initializer already enforces
-    /// unique index names via `preconditionFailure`. This method is kept for:
-    /// 1. Explicit validation in migration contexts
-    /// 2. Programmatic error handling (throws instead of crashing)
-    ///
-    /// **Usage**:
-    /// ```swift
-    /// let schema = Schema([User.self, Order.self])
-    /// try schema.validateIndexNames()  // Throws if duplicates found
-    /// ```
-    ///
-    /// - Throws: `SchemaError.duplicateIndexName` if duplicate index names are detected
-    public func validateIndexNames() throws {
-        var seenIndexes: [String: IndexDescriptor] = [:]
-
-        // Check ALL indexDescriptors (includes both entity-defined and manual indexes)
-        for descriptor in indexDescriptors {
-            if let existing = seenIndexes[descriptor.name] {
-                throw SchemaError.duplicateIndexName(
-                    indexName: descriptor.name,
-                    existingFields: existing.fieldNames,
-                    duplicateFields: descriptor.fieldNames
-                )
-            }
-            seenIndexes[descriptor.name] = descriptor
-        }
-
-        for group in polymorphicGroups {
-            for index in group.indexes {
-                if let existing = seenIndexes[index.name] {
-                    throw SchemaError.duplicateIndexName(
-                        indexName: index.name,
-                        existingFields: existing.fieldNames,
-                        duplicateFields: ["polymorphic:\(group.identifier)"]
-                    )
-                }
-            }
+        case .inconsistentPolymorphicDirectory(let group):
+            return "Polymorphic group '\(group)' has inconsistent directory components across member types."
+        case .inconsistentPolymorphicDirectoryLayer(let group):
+            return "Polymorphic group '\(group)' has inconsistent directory layers across member types."
+        case .duplicatePolymorphicIndex(let group, let member, let indexName):
+            return "Polymorphic group '\(group)' member '\(member)' declares duplicate index '\(indexName)'."
+        case .inconsistentPolymorphicIndex(let group, let indexName):
+            return "Polymorphic group '\(group)' index '\(indexName)' has inconsistent logical metadata across member types."
+        case .incompletePolymorphicIndex(
+            let group,
+            let indexName,
+            let declaringMembers,
+            let expectedMembers
+        ):
+            return "Polymorphic group '\(group)' index '\(indexName)' must be declared by every member type. " +
+                "Declared by: \(declaringMembers.joined(separator: ", ")); " +
+                "expected: \(expectedMembers.joined(separator: ", "))."
+        case .duplicatePolymorphicIndexAcrossGroups(let indexName, let firstGroup, let secondGroup):
+            return "Duplicate polymorphic index name '\(indexName)' detected in groups " +
+                "'\(firstGroup)' and '\(secondGroup)'."
         }
     }
 }
