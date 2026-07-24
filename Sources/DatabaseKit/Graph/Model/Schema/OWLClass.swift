@@ -16,7 +16,7 @@ import DatabaseTypes
 /// let person = OWLClass(iri: "ex:Person", label: "Person")
 /// let employee = OWLClass(iri: "ex:Employee", label: "Employee")
 /// ```
-public struct OWLClass: Sendable, Codable, Hashable {
+public struct OWLClass: Sendable, Hashable {
     /// Class IRI (identifier)
     public let iri: String
 
@@ -78,7 +78,7 @@ public struct OWLClass: Sendable, Codable, Hashable {
 ///     )
 /// ])
 /// ```
-public indirect enum OWLClassExpression: Sendable, Codable, Hashable {
+public indirect enum OWLClassExpression: Sendable, Hashable {
 
     // MARK: - Basic Class Expressions
 

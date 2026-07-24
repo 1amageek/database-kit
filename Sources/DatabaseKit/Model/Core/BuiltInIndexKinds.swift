@@ -38,7 +38,7 @@ public struct ScalarIndexKind<Root: Persistable>: IndexKind {
     public static var identifier: String { "scalar" }
     public static var subspaceStructure: SubspaceStructure { .flat }
 
-    /// Field names for this index (stored as strings for Codable)
+    /// Field names for this index (stored as canonical field names)
     public let fieldNames: [String]
 
     /// Default index name: "{TypeName}_{field1}_{field2}_..."
@@ -56,7 +56,7 @@ public struct ScalarIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = fields.map { Root.fieldName(for: $0) }
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(fieldNames: [String]) {
         self.fieldNames = fieldNames
     }
@@ -107,7 +107,7 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
     public static var identifier: String { "count" }
     public static var subspaceStructure: SubspaceStructure { .aggregation }
 
-    /// Field names for grouping (stored as strings for Codable)
+    /// Field names for grouping (stored as canonical field names)
     public let fieldNames: [String]
 
     /// Default index name: "{TypeName}_count_{field1}_{field2}_..."
@@ -128,7 +128,7 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = groupBy.map { Root.fieldName(for: $0) }
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(fieldNames: [String]) {
         self.fieldNames = fieldNames
     }
@@ -225,7 +225,7 @@ public struct SumIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKi
         self.valueType = Value.indexScalarType
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(
         groupByFieldNames: [String],
         valueFieldName: String,
@@ -332,7 +332,7 @@ public struct MinIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
         self.valueType = Value.indexScalarType
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(
         groupByFieldNames: [String],
         valueFieldName: String,
@@ -430,7 +430,7 @@ public struct MaxIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
         self.valueType = Value.indexScalarType
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(
         groupByFieldNames: [String],
         valueFieldName: String,
@@ -538,7 +538,7 @@ public struct AverageIndexKind<Root: Persistable, Value: IndexNumericValue>: Ind
         self.valueType = Value.indexScalarType
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(
         groupByFieldNames: [String],
         valueFieldName: String,
@@ -588,7 +588,7 @@ public struct AverageIndexKind<Root: Persistable, Value: IndexNumericValue>: Ind
 /// - `.keepAll`: Keep all versions (unlimited history)
 /// - `.keepLast(n)`: Keep only the last N versions
 /// - `.keepForDuration(seconds)`: Keep versions for specific duration
-public enum VersionHistoryStrategy: Sendable, Hashable, Codable {
+public enum VersionHistoryStrategy: Sendable, Hashable {
     /// Keep all versions (unlimited history)
     case keepAll
 
@@ -647,7 +647,7 @@ public struct VersionIndexKind<Root: Persistable>: IndexKind {
         self.strategy = strategy
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(fieldNames: [String], strategy: VersionHistoryStrategy = .keepAll) {
         self.fieldNames = fieldNames
         self.strategy = strategy
@@ -731,7 +731,7 @@ public struct CountUpdatesIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = [Root.fieldName(for: field)]
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(fieldNames: [String]) {
         self.fieldNames = fieldNames
     }
@@ -812,7 +812,7 @@ public struct CountNotNullIndexKind<Root: Persistable>: IndexKind {
         self.valueFieldName = Root.fieldName(for: value)
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(groupByFieldNames: [String], valueFieldName: String) {
         self.groupByFieldNames = groupByFieldNames
         self.valueFieldName = valueFieldName
@@ -902,7 +902,7 @@ public struct BitmapIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = fields.map { Root.fieldName(for: $0) }
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(fieldNames: [String]) {
         self.fieldNames = fieldNames
     }
@@ -1031,7 +1031,7 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
         self.windowCount = windowCount
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(
         scoreFieldName: String,
         groupByFieldNames: [String] = [],
@@ -1091,7 +1091,7 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
 }
 
 /// Leaderboard window type
-public enum LeaderboardWindowType: Sendable, Hashable, Codable {
+public enum LeaderboardWindowType: Sendable, Hashable {
     /// Hourly windows
     case hourly
     /// Daily windows (default)
@@ -1205,7 +1205,7 @@ public struct DistinctIndexKind<Root: Persistable>: IndexKind {
         self.precision = precision
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(groupByFieldNames: [String], valueFieldName: String, precision: Int = 14) {
         self.groupByFieldNames = groupByFieldNames
         self.valueFieldName = valueFieldName
@@ -1338,7 +1338,7 @@ public struct PercentileIndexKind<Root: Persistable, Value: IndexNumericValue>: 
         self.compression = compression
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(
         groupByFieldNames: [String],
         valueFieldName: String,

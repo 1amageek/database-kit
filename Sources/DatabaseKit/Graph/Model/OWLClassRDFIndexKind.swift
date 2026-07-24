@@ -5,7 +5,7 @@ import DatabaseTypes
 /// The entity remains the source of truth. The framework materializes one RDF
 /// quad for `rdf:type` and one quad for each declared OWL property in the same
 /// transaction as the entity mutation.
-public struct OWLClassRDFIndexKind<Root: OWLClassEntity>: IndexKind, Sendable, Codable, Hashable {
+public struct OWLClassRDFIndexKind<Root: OWLClassEntity>: IndexKind, Sendable, Hashable {
     public static var identifier: String { "owl_class_rdf" }
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 

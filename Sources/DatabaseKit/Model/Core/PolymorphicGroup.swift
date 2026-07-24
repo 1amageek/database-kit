@@ -5,7 +5,7 @@ import DatabaseTypes
 /// A polymorphic group is identified by the `@Polymorphable` protocol identifier
 /// and describes the shared directory and shared indexes that span all conforming
 /// concrete `Persistable` types.
-public struct PolymorphicGroup: Sendable, Codable, Equatable, Hashable {
+public struct PolymorphicGroup: Sendable, Equatable, Hashable {
     public let identifier: String
     public let directoryComponents: [DirectoryPathComponent]
     public let directoryLayer: DirectoryLayer

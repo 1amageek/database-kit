@@ -19,7 +19,7 @@ import DatabaseTypes
 ///     .maxCount(1)
 /// ]
 /// ```
-public indirect enum SHACLConstraint: Sendable, Codable, Hashable {
+public indirect enum SHACLConstraint: Sendable, Hashable {
 
     // MARK: - §4.1 Value Type Constraints
 
@@ -128,7 +128,7 @@ public indirect enum SHACLConstraint: Sendable, Codable, Hashable {
 /// SHACL Node Kind — categorizes RDF nodes
 ///
 /// Reference: W3C SHACL §4.1.3
-public enum SHACLNodeKind: String, Sendable, Codable, Hashable {
+public enum SHACLNodeKind: String, Sendable, Hashable {
     case blankNode          = "sh:BlankNode"
     case iri                = "sh:IRI"
     case literal            = "sh:Literal"
@@ -142,7 +142,7 @@ public enum SHACLNodeKind: String, Sendable, Codable, Hashable {
 /// SHACL Severity — severity level of a validation result
 ///
 /// Reference: W3C SHACL §2.1.5
-public enum SHACLSeverity: String, Sendable, Codable, Hashable {
+public enum SHACLSeverity: String, Sendable, Hashable {
     /// Constraint violation (default severity)
     case violation = "sh:Violation"
 

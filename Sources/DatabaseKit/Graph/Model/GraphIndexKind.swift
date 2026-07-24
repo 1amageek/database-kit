@@ -171,7 +171,7 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
         self.strategy = strategy
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(
         fromField: String,
         edgeField: String,
@@ -260,39 +260,6 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     /// Check if graph field is present
     public var hasGraphField: Bool {
         graphField != nil
-    }
-}
-
-// MARK: - Codable
-
-extension GraphIndexKind: Codable {
-    private enum CodingKeys: String, CodingKey {
-        case fromField
-        case edgeField
-        case toField
-        case graphField
-        case strategy
-    }
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.fromField = try container.decode(String.self, forKey: .fromField)
-        self.edgeField = try container.decode(String.self, forKey: .edgeField)
-        self.toField = try container.decode(String.self, forKey: .toField)
-        self.graphField = try container.decodeIfPresent(String.self, forKey: .graphField)
-        self.strategy = try container.decode(
-            PropertyGraphIndexStrategy.self,
-            forKey: .strategy
-        )
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(fromField, forKey: .fromField)
-        try container.encode(edgeField, forKey: .edgeField)
-        try container.encode(toField, forKey: .toField)
-        try container.encodeIfPresent(graphField, forKey: .graphField)
-        try container.encode(strategy, forKey: .strategy)
     }
 }
 

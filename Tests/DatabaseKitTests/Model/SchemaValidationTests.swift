@@ -1,5 +1,4 @@
 import DatabaseTypes
-import Foundation
 import Testing
 @testable import DatabaseKit
 import DatabaseKit
@@ -91,39 +90,6 @@ struct SchemaValidationTests {
                     FieldSchema(name: "second", fieldNumber: 1, type: .string),
                 ]
             )
-        }
-    }
-
-    @Test("Decoded entity metadata enforces the same invariants")
-    func decodedEntityMetadataIsValidated() throws {
-        let data = Data("""
-        {
-          "name": "DecodedEntity",
-          "fields": [
-            {
-              "name": "value",
-              "fieldNumber": 1,
-              "type": "string",
-              "isOptional": false,
-              "isArray": false
-            },
-            {
-              "name": "value",
-              "fieldNumber": 2,
-              "type": "string",
-              "isOptional": false,
-              "isArray": false
-            }
-          ],
-          "directoryComponents": [],
-          "directoryLayer": "default",
-          "indexes": [],
-          "enumMetadata": {}
-        }
-        """.utf8)
-
-        #expect(throws: DecodingError.self) {
-            try JSONDecoder().decode(Schema.Entity.self, from: data)
         }
     }
 

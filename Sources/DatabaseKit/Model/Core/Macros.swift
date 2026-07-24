@@ -155,7 +155,7 @@ public macro Directory<T>(_ elements: Any..., layer: DirectoryLayer = .default) 
 /// Directory layer type
 ///
 /// Used by #Directory macro to specify the directory layer type.
-public enum DirectoryLayer: String, Sendable, Codable, Hashable {
+public enum DirectoryLayer: String, Sendable, Hashable {
     /// Default directory
     case `default` = "default"
 
@@ -279,7 +279,7 @@ public macro Polymorphable() = #externalMacro(module: "DatabaseKitMacros", type:
 ///
 /// **Effects**:
 /// - Field is excluded from `allFields` array
-/// - Field is excluded from Codable serialization
+/// - Field is excluded from canonical persistence
 /// - Field is excluded from generated initializer
 /// - Field is excluded from `subscript(dynamicMember:)`
 ///

@@ -8,7 +8,7 @@ import DatabaseTypes
 /// - `fieldNames`: IndexKind.fieldNames
 /// - `metadata`: Kind-specific properties (dimensions, metric, strategy, etc.)
 
-public struct IndexKindMetadata: Sendable, Hashable, Codable {
+public struct IndexKindMetadata: Sendable, Hashable {
 
     /// Index kind identifier (e.g., "scalar", "vector", "com.mycompany.bloom_filter")
     public let identifier: String

@@ -13,7 +13,7 @@ import DatabaseTypes
 /// **Reference**: Weiss, C., Karras, P., & Bernstein, A. (2008).
 /// "Hexastore: sextuple indexing for semantic web data management"
 /// VLDB Endowment, 1(1), 1008-1019.
-public enum GraphIndexStrategy: String, Sendable, Codable, CaseIterable {
+public enum GraphIndexStrategy: String, Sendable, CaseIterable {
     /// 2-index: outgoing and incoming edges only
     ///
     /// Optimized for storage efficiency and basic adjacency queries.
@@ -139,7 +139,7 @@ public enum GraphIndexStrategy: String, Sendable, Codable, CaseIterable {
 /// Index ordering for triple store queries
 ///
 /// Used to specify which index to scan for a given query pattern.
-public enum GraphIndexOrdering: String, Sendable, Codable, CaseIterable {
+public enum GraphIndexOrdering: String, Sendable, CaseIterable {
     // Adjacency orderings
     case out    // [from]/[edge]/[to]
     case `in`   // [to]/[edge]/[from]

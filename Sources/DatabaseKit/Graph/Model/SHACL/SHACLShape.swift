@@ -22,7 +22,7 @@ import DatabaseTypes
 ///     ]
 /// ))
 /// ```
-public enum SHACLShape: Sendable, Codable, Hashable {
+public enum SHACLShape: Sendable, Hashable {
     /// A node shape (sh:NodeShape)
     case node(NodeShape)
 
@@ -82,7 +82,7 @@ extension SHACLShape {
 /// and declares property shapes that constrain property values.
 ///
 /// Reference: W3C SHACL §2.1.1
-public struct NodeShape: Sendable, Codable, Hashable {
+public struct NodeShape: Sendable, Hashable {
 
     /// RDF node identifying the shape, or nil for an anonymous shape.
     public var identifier: RDFTerm?
@@ -132,7 +132,7 @@ public struct NodeShape: Sendable, Codable, Hashable {
 /// and applies constraints to those value nodes.
 ///
 /// Reference: W3C SHACL §2.1.2
-public struct PropertyShape: Sendable, Codable, Hashable {
+public struct PropertyShape: Sendable, Hashable {
 
     /// RDF node identifying the shape, or nil for an anonymous shape.
     public var identifier: RDFTerm?

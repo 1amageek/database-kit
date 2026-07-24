@@ -157,7 +157,7 @@ extension RDFLiteral {
 // MARK: - XSD Facets
 
 /// XSD facet types for datatype restrictions
-public enum XSDFacet: String, Sendable, Codable, CaseIterable {
+public enum XSDFacet: String, Sendable, CaseIterable {
     case minInclusive = "xsd:minInclusive"
     case maxInclusive = "xsd:maxInclusive"
     case minExclusive = "xsd:minExclusive"
@@ -173,7 +173,7 @@ public enum XSDFacet: String, Sendable, Codable, CaseIterable {
 }
 
 /// Facet restriction for datatype definitions
-public struct FacetRestriction: Sendable, Codable, Hashable {
+public struct FacetRestriction: Sendable, Hashable {
     public let facet: XSDFacet
     public let value: RDFLiteral
 

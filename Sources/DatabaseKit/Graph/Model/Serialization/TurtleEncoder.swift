@@ -10,8 +10,7 @@ import DatabaseTypes
 
 /// Encodes an OWLOntology into Turtle (RDF) format.
 ///
-/// Follows the `JSONEncoder` naming convention but does NOT conform to
-/// `Swift.Encoder` — RDF triple structure is incompatible with key-value encoding.
+/// Uses a familiar encoder-style API while preserving RDF triple structure.
 ///
 /// ```swift
 /// let turtle = TurtleEncoder().encode(ontology)

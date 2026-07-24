@@ -42,7 +42,7 @@ import DatabaseTypes
 ///     class_: .named("ex:Parent")
 /// ))
 /// ```
-public struct OWLOntology: Sendable, Codable, Hashable {
+public struct OWLOntology: Sendable, Hashable {
 
     // MARK: - Metadata
 

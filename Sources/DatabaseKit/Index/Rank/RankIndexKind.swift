@@ -89,7 +89,7 @@ public struct RankIndexKind<Root: Persistable, Score: IndexNumericValue>: IndexK
         self.bucketSize = bucketSize
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(
         fieldNames: [String],
         scoreType: IndexScalarType,

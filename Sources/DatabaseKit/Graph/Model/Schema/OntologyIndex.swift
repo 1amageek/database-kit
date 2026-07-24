@@ -3,7 +3,7 @@ import DatabaseTypes
 // Graph - O(1) axiom lookup index for OWL ontologies
 //
 // Provides pre-computed index structures for efficient axiom access.
-// OWLOntology is a Sendable/Codable/Hashable struct, so this index
+// OWLOntology is a Sendable/Hashable struct, so this index
 // is built separately and cached by the caller.
 //
 // Reference: Baader, F., et al. (2003).

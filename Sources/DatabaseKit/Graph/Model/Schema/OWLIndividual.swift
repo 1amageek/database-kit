@@ -17,7 +17,7 @@ import DatabaseTypes
 /// let alice = OWLNamedIndividual(iri: "ex:Alice", label: "Alice")
 /// let bob = OWLNamedIndividual(iri: "ex:Bob", label: "Bob")
 /// ```
-public struct OWLNamedIndividual: Sendable, Codable, Hashable {
+public struct OWLNamedIndividual: Sendable, Hashable {
     /// Individual IRI (identifier)
     public let iri: String
 
@@ -59,7 +59,7 @@ public struct OWLNamedIndividual: Sendable, Codable, Hashable {
 /// // Represents an anonymous individual created during reasoning
 /// let anon = OWLAnonymousIndividual(nodeID: "_:b1")
 /// ```
-public struct OWLAnonymousIndividual: Sendable, Codable, Hashable {
+public struct OWLAnonymousIndividual: Sendable, Hashable {
     /// Internal node identifier (blank node ID)
     public let nodeID: String
 
@@ -79,7 +79,7 @@ public struct OWLAnonymousIndividual: Sendable, Codable, Hashable {
 ///
 /// Represents either a named or anonymous individual.
 /// Used in contexts where both types are valid.
-public enum OWLIndividual: Sendable, Codable, Hashable {
+public enum OWLIndividual: Sendable, Hashable {
     case named(OWLNamedIndividual)
     case anonymous(OWLAnonymousIndividual)
 

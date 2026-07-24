@@ -21,7 +21,7 @@ import DatabaseTypes
 ///
 /// **Reference**: OWL 2 Property Characteristics
 /// https://www.w3.org/TR/owl2-syntax/#Object_Property_Characteristics
-public enum PropertyCharacteristic: String, Sendable, Codable, CaseIterable {
+public enum PropertyCharacteristic: String, Sendable, CaseIterable {
     // MARK: - Basic Characteristics
 
     /// Functional: R(x,y) ∧ R(x,z) → y=z
@@ -78,7 +78,7 @@ public enum PropertyCharacteristic: String, Sendable, Codable, CaseIterable {
 /// var ancestorOf = OWLObjectProperty(iri: "ex:ancestorOf")
 /// ancestorOf.characteristics.insert(.transitive)
 /// ```
-public struct OWLObjectProperty: Sendable, Codable, Hashable {
+public struct OWLObjectProperty: Sendable, Hashable {
     /// Property IRI (identifier)
     public let iri: String
 
@@ -223,7 +223,7 @@ extension OWLObjectProperty {
 /// var hasEmail = OWLDataProperty(iri: "ex:hasEmail")
 /// hasEmail.ranges = [.stringPattern("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+")]
 /// ```
-public struct OWLDataProperty: Sendable, Codable, Hashable {
+public struct OWLDataProperty: Sendable, Hashable {
     /// Property IRI (identifier)
     public let iri: String
 
@@ -295,7 +295,7 @@ public struct OWLDataProperty: Sendable, Codable, Hashable {
 /// **Standard Annotation Properties**:
 /// - rdfs:label, rdfs:comment, rdfs:seeAlso
 /// - owl:versionInfo, owl:deprecated
-public struct OWLAnnotationProperty: Sendable, Codable, Hashable {
+public struct OWLAnnotationProperty: Sendable, Hashable {
     /// Property IRI (identifier)
     public let iri: String
 

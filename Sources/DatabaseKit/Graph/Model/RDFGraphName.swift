@@ -5,7 +5,7 @@ import DatabaseTypes
 /// The RDF default graph has no name and is therefore represented elsewhere
 /// by `nil`. This value can only contain an absolute IRI or a non-empty blank
 /// node identifier.
-public struct RDFGraphName: Sendable, Hashable, Codable, Comparable {
+public struct RDFGraphName: Sendable, Hashable, Comparable {
     public let subject: RDFSubject
 
     public var term: RDFTerm {
@@ -37,14 +37,6 @@ public struct RDFGraphName: Sendable, Hashable, Codable, Comparable {
                 try RDFBlankNodeIdentifier(blankNodeIdentifier)
             )
         )
-    }
-
-    public init(from decoder: any Decoder) throws {
-        try self.init(RDFTerm(from: decoder))
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        try term.encode(to: encoder)
     }
 
     public static func < (lhs: RDFGraphName, rhs: RDFGraphName) -> Bool {

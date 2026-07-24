@@ -36,7 +36,7 @@ import DatabaseTypes
 ///     class_: .named("ex:Person")
 /// )
 /// ```
-public enum OWLAxiom: Sendable, Codable, Hashable {
+public enum OWLAxiom: Sendable, Hashable {
 
     // ========================================
     // MARK: - TBox Axioms (Class Relations)

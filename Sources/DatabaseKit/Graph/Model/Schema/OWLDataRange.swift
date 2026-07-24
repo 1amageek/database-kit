@@ -34,7 +34,7 @@ import DatabaseTypes
 ///     facets: [.pattern("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}")]
 /// )
 /// ```
-public indirect enum OWLDataRange: Sendable, Codable, Hashable {
+public indirect enum OWLDataRange: Sendable, Hashable {
     /// Basic datatype (xsd:string, xsd:integer, xsd:boolean, etc.)
     case datatype(String)
 

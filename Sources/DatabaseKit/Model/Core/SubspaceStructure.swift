@@ -20,7 +20,7 @@ import DatabaseTypes
 /// // Count index
 /// let structure = SubspaceStructure.aggregation
 /// ```
-public enum SubspaceStructure: String, Sendable, Codable, Hashable {
+public enum SubspaceStructure: String, Sendable, Hashable {
     /// Flat structure: [value][primaryKey] = ''
     ///
     /// **Key structure**: Simple 2-level

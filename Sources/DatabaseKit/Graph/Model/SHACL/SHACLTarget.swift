@@ -20,7 +20,7 @@ import DatabaseTypes
 /// // All subjects that have an ex:email property
 /// let target: SHACLTarget = .subjectsOf("ex:email")
 /// ```
-public enum SHACLTarget: Sendable, Codable, Hashable {
+public enum SHACLTarget: Sendable, Hashable {
     /// sh:targetNode — a specific RDF node
     case node(RDFTerm)
 

@@ -9,7 +9,7 @@ import DatabaseTypes
 /// - `.cosine`: Cosine distance (1 - cosine_similarity), range [0, 2]
 /// - `.euclidean`: L2 (Euclidean) distance, range [0, ∞)
 /// - `.dotProduct`: Negative dot product, range (-∞, ∞)
-public enum VectorMetric: String, Sendable, Codable, Hashable {
+public enum VectorMetric: String, Sendable, Hashable {
     /// Cosine distance: 1 - cosine_similarity
     /// Best for: Normalized vectors, text embeddings
     case cosine
@@ -101,7 +101,7 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
         self.metric = metric
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(fieldNames: [String], dimensions: Int, metric: VectorMetric = .cosine) {
         self.fieldNames = fieldNames
         self.dimensions = dimensions

@@ -11,7 +11,7 @@ extension RDFTerm {
 }
 
 /// RDF quad. `graph == nil` represents the default graph.
-public struct RDFQuad: Sendable, Hashable, Codable {
+public struct RDFQuad: Sendable, Hashable {
     public var subject: RDFSubject
     public var predicate: RDFPredicateIRI
     public var object: RDFTerm
@@ -49,34 +49,10 @@ public struct RDFQuad: Sendable, Hashable, Codable {
         try RDFTermCodec.validate(object, role: .object)
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case subject
-        case predicate
-        case object
-        case graph
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        try self.init(
-            validatingSubject: container.decode(RDFTerm.self, forKey: .subject),
-            predicate: container.decode(RDFTerm.self, forKey: .predicate),
-            object: container.decode(RDFTerm.self, forKey: .object),
-            graph: container.decodeIfPresent(RDFTerm.self, forKey: .graph)
-        )
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(subject.term, forKey: .subject)
-        try container.encode(predicate.term, forKey: .predicate)
-        try container.encode(object, forKey: .object)
-        try container.encodeIfPresent(graph?.term, forKey: .graph)
-    }
 }
 
 /// RDF triple in the default graph.
-public struct RDFTriple: Sendable, Hashable, Codable {
+public struct RDFTriple: Sendable, Hashable {
     public var subject: RDFSubject
     public var predicate: RDFPredicateIRI
     public var object: RDFTerm
@@ -105,31 +81,10 @@ public struct RDFTriple: Sendable, Hashable, Codable {
         self.object = object
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case subject
-        case predicate
-        case object
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        try self.init(
-            validatingSubject: container.decode(RDFTerm.self, forKey: .subject),
-            predicate: container.decode(RDFTerm.self, forKey: .predicate),
-            object: container.decode(RDFTerm.self, forKey: .object)
-        )
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(subject.term, forKey: .subject)
-        try container.encode(predicate.term, forKey: .predicate)
-        try container.encode(object, forKey: .object)
-    }
 }
 
 /// RDF dataset with optional base IRI, prefixes, and quads.
-public struct RDFDataset: Sendable, Hashable, Codable {
+public struct RDFDataset: Sendable, Hashable {
     public var baseIRI: String?
     public var prefixes: [String: String]
     public var quads: [RDFQuad]

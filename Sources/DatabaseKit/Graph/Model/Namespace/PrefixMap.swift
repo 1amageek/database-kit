@@ -19,7 +19,7 @@ import DatabaseTypes
 /// prefixes.expand("ex:Person")    // → "http://example.org/Person"
 /// prefixes.compact("http://example.org/Person")  // → "ex:Person"
 /// ```
-public struct PrefixMap: Sendable, Codable, Hashable {
+public struct PrefixMap: Sendable, Hashable {
 
     // MARK: - Storage
 

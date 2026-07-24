@@ -1,7 +1,7 @@
 import DatabaseTypes
 
 /// Scalar values that can be reconstructed by a canonical index runtime.
-public protocol IndexScalarValue: Codable, Sendable {
+public protocol IndexScalarValue: Sendable {
     static var indexScalarType: IndexScalarType { get }
 }
 

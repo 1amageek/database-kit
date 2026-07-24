@@ -59,7 +59,7 @@ import DatabaseTypes
 ///     }
 /// }
 /// ```
-public protocol IndexKind: Sendable, Codable, Hashable {
+public protocol IndexKind: Sendable, Hashable {
     /// Unique identifier for this kind
     ///
     /// **Naming convention**:
@@ -98,7 +98,7 @@ public protocol IndexKind: Sendable, Codable, Hashable {
 
     /// Field names used by this index
     ///
-    /// Stored as strings for Codable compatibility.
+    /// Stored as canonical field names for type-erased metadata.
     /// Order matters for composite indexes.
     var fieldNames: [String] { get }
 

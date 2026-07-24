@@ -23,7 +23,7 @@ import DatabaseTypes
 /// ```
 ///
 /// Reference: W3C SHACL §3.6.1
-public struct SHACLValidationReport: Sendable, Codable {
+public struct SHACLValidationReport: Sendable {
 
     /// sh:conforms — true if no violations were found
     public let conforms: Bool
@@ -85,7 +85,7 @@ extension SHACLValidationReport {
 /// A single validation result indicating a constraint violation, warning, or info.
 ///
 /// Reference: W3C SHACL §3.6.2
-public struct SHACLValidationResult: Sendable, Codable {
+public struct SHACLValidationResult: Sendable {
 
     /// sh:focusNode — the node that was validated
     public let focusNode: RDFTerm

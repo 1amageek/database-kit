@@ -16,7 +16,7 @@ extension CanonicalReadDocument {
     }
 }
 
-struct CanonicalReadArticle: Persistable, Codable, Sendable, CanonicalReadDocument {
+struct CanonicalReadArticle: Persistable, Sendable, CanonicalReadDocument {
     typealias ID = String
 
     var id: String
@@ -41,7 +41,7 @@ struct CanonicalReadArticle: Persistable, Codable, Sendable, CanonicalReadDocume
     }
 }
 
-struct CanonicalReadReport: Persistable, Codable, Sendable, CanonicalReadDocument {
+struct CanonicalReadReport: Persistable, Sendable, CanonicalReadDocument {
     typealias ID = String
 
     var id: String
@@ -94,7 +94,7 @@ extension IndexedCanonicalReadDocument {
     }
 }
 
-struct IndexedCanonicalReadArticle: Persistable, Codable, Sendable, IndexedCanonicalReadDocument {
+struct IndexedCanonicalReadArticle: Persistable, Sendable, IndexedCanonicalReadDocument {
     typealias ID = String
 
     var id: String
@@ -129,7 +129,7 @@ struct IndexedCanonicalReadArticle: Persistable, Codable, Sendable, IndexedCanon
     }
 }
 
-struct IndexedCanonicalReadReport: Persistable, Codable, Sendable, IndexedCanonicalReadDocument {
+struct IndexedCanonicalReadReport: Persistable, Sendable, IndexedCanonicalReadDocument {
     typealias ID = String
 
     var id: String

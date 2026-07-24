@@ -1,6 +1,6 @@
 import DatabaseTypes
 /// Stable scalar types supported by typed index runtimes.
-public enum IndexScalarType: String, Sendable, Codable, CaseIterable {
+public enum IndexScalarType: String, Sendable, CaseIterable {
     case int8
     case int16
     case int32

@@ -8,7 +8,7 @@ import DatabaseTypes
 /// **Design**: Analogous to PostgreSQL's `pg_attribute` catalog.
 
 /// Schema metadata for a single field of a Persistable type
-public struct FieldSchema: Sendable, Codable, Equatable, Hashable {
+public struct FieldSchema: Sendable, Equatable, Hashable {
     /// Field name (e.g., "email", "price")
     public let name: String
 
@@ -48,7 +48,7 @@ public struct FieldSchema: Sendable, Codable, Equatable, Hashable {
 ///
 /// Maps Swift types to the canonical persisted value categories.
 /// Used by model adapters to interpret values without a concrete property key path.
-public enum FieldSchemaType: String, Sendable, Codable, Equatable {
+public enum FieldSchemaType: String, Sendable, Equatable {
     case bool
     case int8
     case int16

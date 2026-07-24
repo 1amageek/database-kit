@@ -3,7 +3,7 @@ import DatabaseTypes
 ///
 /// Persistable macros emit this value model directly so runtime directory
 /// resolution never depends on existential casts or key-path metadata.
-public enum DirectoryPathComponent: Sendable, Codable, Equatable, Hashable {
+public enum DirectoryPathComponent: Sendable, Equatable, Hashable {
     case staticPath(String)
     case dynamicField(fieldName: String)
 }

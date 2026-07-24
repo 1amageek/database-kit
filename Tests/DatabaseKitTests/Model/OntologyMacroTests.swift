@@ -1,6 +1,5 @@
 import DatabaseTypes
 import Testing
-import Foundation
 @testable import DatabaseKit
 import DatabaseKit
 
@@ -483,15 +482,6 @@ struct OntologyMacroTests {
         #expect(entity.objectPropertyToField == "projectID")
     }
 
-    @Test("Schema.Entity ontology metadata round-trips through JSON")
-    func schemaEntityOntologyMetadataRoundTrip() throws {
-        let entity = try Schema.Entity(from: OntEmployee.self)
-        let data = try JSONEncoder().encode(entity)
-        let decoded = try JSONDecoder().decode(Schema.Entity.self, from: data)
-        #expect(decoded.ontologyClassIRI == "https://example.org/onto#Employee")
-        #expect(decoded.objectPropertyIRI == nil)
-    }
-
     @Test("Schema.Entity without ontology has nil ontology fields")
     func schemaEntityNoOntology() throws {
         let entity = try Schema.Entity(from: OntPlainModel.self)
@@ -589,17 +579,6 @@ struct DescriptorOwnershipTests {
             graph: graph
         )
         #expect(kind.graph == graph)
-    }
-
-    @Test("OWLClassRDFIndexKind Codable round-trip")
-    func owlRDFIndexKindCodable() throws {
-        let kind = OWLClassRDFIndexKind<OntEmployee>(
-            individualIRIBase: "https://example.org/individual/",
-            graph: try RDFGraphName(iri: "https://example.org/graph/test")
-        )
-        let data = try JSONEncoder().encode(kind)
-        let decoded = try JSONDecoder().decode(OWLClassRDFIndexKind<OntEmployee>.self, from: data)
-        #expect(decoded == kind)
     }
 
     @Test("OWLClassRDFIndexKind Hashable")

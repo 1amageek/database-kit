@@ -1,7 +1,7 @@
 import DatabaseTypes
 
 /// A type-safe reference to a persisted entity.
-public struct DatabaseReference<Target: Persistable>: Sendable, Hashable, Codable {
+public struct DatabaseReference<Target: Persistable>: Sendable, Hashable {
     public let identity: EntityReference
 
     public init(

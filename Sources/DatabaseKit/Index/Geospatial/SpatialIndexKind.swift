@@ -4,7 +4,7 @@
 import DatabaseTypes
 
 /// Spatial encoding type
-public enum SpatialEncoding: String, Sendable, Codable, Hashable {
+public enum SpatialEncoding: String, Sendable, Hashable {
     /// S2 Geometry encoding (Hilbert curve on sphere)
     /// Best for: Geographic coordinates (latitude/longitude)
     case s2
@@ -90,7 +90,7 @@ public struct SpatialIndexKind<Root: Persistable>: IndexKind {
         self.level = level
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(fieldNames: [String], encoding: SpatialEncoding = .s2, level: Int = 15) {
         self.fieldNames = fieldNames
         self.encoding = encoding

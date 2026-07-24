@@ -1,6 +1,6 @@
 import DatabaseTypes
 /// Storage strategies that are valid for property-graph entities.
-public enum PropertyGraphIndexStrategy: String, Sendable, Codable, CaseIterable {
+public enum PropertyGraphIndexStrategy: String, Sendable, CaseIterable {
     case adjacency
     case tripleStore
     case hexastore

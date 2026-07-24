@@ -3,7 +3,6 @@ public struct Permutation:
     Sendable,
     Equatable,
     Hashable,
-    Codable,
     CustomStringConvertible {
     /// Every integer in `0..<count`, in the order produced by the permutation.
     public let indices: [Int]

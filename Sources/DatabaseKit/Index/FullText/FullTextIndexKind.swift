@@ -4,7 +4,7 @@
 import DatabaseTypes
 
 /// Tokenization strategy for full-text search
-public enum TokenizationStrategy: String, Sendable, Codable, Hashable {
+public enum TokenizationStrategy: String, Sendable, Hashable {
     /// Simple whitespace and punctuation tokenization
     /// - Splits on whitespace and punctuation
     /// - Lowercases all tokens
@@ -117,7 +117,7 @@ public struct FullTextIndexKind<Root: Persistable>: IndexKind {
         self.minTermLength = minTermLength
     }
 
-    /// Initialize with field name strings (for Codable reconstruction)
+    /// Initialize with field name strings (from canonical metadata)
     public init(
         fieldNames: [String],
         tokenizer: TokenizationStrategy = .simple,

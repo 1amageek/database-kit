@@ -4,6 +4,57 @@ import Foundation
 
 @Suite("Package Boundary Tests")
 struct PackageBoundaryTests {
+    @Test("Canonical targets exclude platform and Codable contracts")
+    func canonicalTargetsExcludePlatformAndCodableContracts() throws {
+        let root = Self.packageRoot()
+        let canonicalRoots = [
+            root.appendingPathComponent("Sources/DatabaseKit"),
+            root.appendingPathComponent("Sources/DatabaseWire"),
+        ]
+        let forbiddenImports: Set<String> = [
+            "Foundation",
+            "FoundationEssentials",
+            "DatabaseTypesFoundation",
+        ]
+        let forbiddenConformanceFragments = [
+            ": Codable",
+            ", Codable",
+            ": Encodable",
+            ", Encodable",
+            ": Decodable",
+            ", Decodable",
+        ]
+
+        var violations: [String] = []
+        for canonicalRoot in canonicalRoots {
+            for file in try Self.swiftFiles(under: canonicalRoot) {
+                let text = try String(contentsOf: file, encoding: .utf8)
+                let relativePath = Self.relativePath(file, from: root)
+                for (lineIndex, lineSlice) in text
+                    .split(separator: "\n", omittingEmptySubsequences: false)
+                    .enumerated() {
+                    let line = String(lineSlice)
+                    if let module = Self.importedModuleName(from: line),
+                       forbiddenImports.contains(module) {
+                        violations.append(
+                            "\(relativePath):\(lineIndex + 1) imports \(module)"
+                        )
+                    }
+                    for fragment in forbiddenConformanceFragments
+                    where line.contains(fragment) {
+                        violations.append(
+                            "\(relativePath):\(lineIndex + 1) contains \(fragment)"
+                        )
+                    }
+                }
+            }
+        }
+
+        #expect(
+            violations.isEmpty,
+            "Canonical targets must remain Foundation- and Codable-independent: \(violations.joined(separator: ", "))"
+        )
+    }
 
     @Test("Sources keep storage and runtime backends out of database-kit")
     func sourcesDoNotImportBackendRuntimeModules() throws {

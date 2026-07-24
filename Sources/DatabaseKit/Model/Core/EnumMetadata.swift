@@ -85,8 +85,8 @@ public protocol _EnumMetadataProvider {
 /// The `@Persistable` macro generates `EnumMetadata.extract(from: Status.self)`
 /// for fields whose type is not a known primitive. If the type conforms to
 /// `PersistableEnum`, metadata is returned; otherwise `nil`.
-public protocol PersistableEnum: Sendable, Codable, CaseIterable, RawRepresentable, _EnumMetadataProvider
-    where RawValue: Sendable & Codable {}
+public protocol PersistableEnum: Sendable, CaseIterable, RawRepresentable, _EnumMetadataProvider
+    where RawValue: Sendable {}
 
 extension PersistableEnum where RawValue == String {
     public static var _enumMetadata: EnumMetadata {

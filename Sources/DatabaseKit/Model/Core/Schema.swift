@@ -34,21 +34,14 @@ public final class Schema: Sendable {
 
     // MARK: - Entity
 
-    /// Entity metadata (type-independent, Codable)
+    /// Entity metadata (type-independent)
     ///
     /// Represents the complete schema definition for a Persistable type.
     /// Designed after SwiftData's `Schema.Entity` — Entity IS the metadata.
     ///
-    /// **Codable properties**: name, fields, directoryComponents, directoryLayer,
-    /// indexes, enumMetadata
-    /// **Runtime-only properties**: persistableType, indexDescriptors
-    ///
     /// **Usage**:
     /// - Runtime: `Entity(from: User.self)` — full metadata + runtime type
-    /// - Wire/CLI: `JSONDecoder().decode(Entity.self, from: data)` — metadata only
-    public struct Entity: Sendable, Codable, Equatable, Hashable {
-
-        // MARK: - Codable Properties
+    public struct Entity: Sendable, Equatable, Hashable {
 
         /// Entity name (same as Persistable.persistableType)
         public let name: String
@@ -62,7 +55,7 @@ public final class Schema: Sendable {
         /// Directory resolution strategy compiled from `#Directory`.
         public let directoryLayer: DirectoryLayer
 
-        /// Index definitions (type-erased, Codable)
+        /// Index definitions (type-erased)
         public let indexes: [IndexDescriptorMetadata]
 
         /// Enum metadata: fieldName → case names
@@ -94,63 +87,16 @@ public final class Schema: Sendable {
         /// - Access directory path components at runtime
         /// - Check Polymorphable conformance
         ///
-        /// nil when Entity is decoded from wire (no compiled type available)
+        /// nil when the entity describes a type unavailable in this process.
         public let persistableType: (any Persistable.Type)?
 
         /// Typed index descriptors (runtime only, requires KeyPath)
         ///
-        /// Empty when Entity is decoded from wire.
+        /// Empty when no compiled descriptor is available.
         public let indexDescriptors: [IndexDescriptor]
 
         private let fieldsByName: [String: FieldSchema]
         private let fieldsByNumber: [Int: FieldSchema]
-
-        // MARK: - Custom Codable (exclude runtime fields)
-
-        private enum CodingKeys: String, CodingKey {
-            case name, fields, directoryComponents, directoryLayer, indexes, enumMetadata
-            case ontologyClassIRI, objectPropertyIRI, objectPropertyFromField, objectPropertyToField
-            case dataPropertyIRIs
-        }
-
-        public init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            do {
-                try self.init(
-                    name: container.decode(String.self, forKey: .name),
-                    fields: container.decode([FieldSchema].self, forKey: .fields),
-                    directoryComponents: container.decode(
-                        [DirectoryPathComponent].self,
-                        forKey: .directoryComponents
-                    ),
-                    directoryLayer: container.decode(DirectoryLayer.self, forKey: .directoryLayer),
-                    indexes: container.decode([IndexDescriptorMetadata].self, forKey: .indexes),
-                    enumMetadata: container.decode([String: [String]].self, forKey: .enumMetadata),
-                    ontologyClassIRI: container.decodeIfPresent(String.self, forKey: .ontologyClassIRI),
-                    objectPropertyIRI: container.decodeIfPresent(String.self, forKey: .objectPropertyIRI),
-                    objectPropertyFromField: container.decodeIfPresent(
-                        String.self,
-                        forKey: .objectPropertyFromField
-                    ),
-                    objectPropertyToField: container.decodeIfPresent(
-                        String.self,
-                        forKey: .objectPropertyToField
-                    ),
-                    dataPropertyIRIs: container.decodeIfPresent(
-                        [String].self,
-                        forKey: .dataPropertyIRIs
-                    )
-                )
-            } catch let error as SchemaEntityError {
-                throw DecodingError.dataCorrupted(
-                    .init(
-                        codingPath: decoder.codingPath,
-                        debugDescription: error.description,
-                        underlyingError: error
-                    )
-                )
-            }
-        }
 
         // MARK: - Computed Properties
 
@@ -159,12 +105,12 @@ public final class Schema: Sendable {
             fields.map(\.name)
         }
 
-        /// Build field name → FieldSchema map (for Encoder)
+        /// Build field name → FieldSchema map (for encoding)
         public var fieldMapByName: [String: FieldSchema] {
             fieldsByName
         }
 
-        /// Build field number → FieldSchema map (for Decoder)
+        /// Build field number → FieldSchema map (for decoding)
         public var fieldMapByNumber: [Int: FieldSchema] {
             fieldsByNumber
         }
@@ -312,7 +258,7 @@ public final class Schema: Sendable {
             self.fieldsByNumber = fieldMaps.byNumber
         }
 
-        // MARK: - Custom Equatable (compare only Codable fields)
+        // MARK: - Custom Equatable (compare semantic fields)
 
         public static func == (lhs: Entity, rhs: Entity) -> Bool {
             lhs.name == rhs.name &&
@@ -328,7 +274,7 @@ public final class Schema: Sendable {
             lhs.dataPropertyIRIs == rhs.dataPropertyIRIs
         }
 
-        // MARK: - Custom Hashable (hash only Codable fields)
+        // MARK: - Custom Hashable (hash semantic fields)
 
         public func hash(into hasher: inout Hasher) {
             hasher.combine(name)

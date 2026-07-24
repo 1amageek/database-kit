@@ -1,6 +1,6 @@
 
 /// Runtime metadata for a typed entity relationship.
-public struct RelationshipDescriptor: RuntimeMaintainedDescriptor, Sendable, Codable {
+public struct RelationshipDescriptor: RuntimeMaintainedDescriptor, Sendable {
     public let ownerTypeName: String
     public let propertyName: String
     public let propertyFieldNumber: UInt32

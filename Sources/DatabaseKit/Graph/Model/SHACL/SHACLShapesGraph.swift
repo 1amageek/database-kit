@@ -31,7 +31,7 @@ import DatabaseTypes
 /// ```
 ///
 /// Reference: W3C SHACL §2.1
-public struct SHACLShapesGraph: Sendable, Codable, Hashable {
+public struct SHACLShapesGraph: Sendable, Hashable {
 
     /// IRI identifying this shapes graph
     public let iri: String
@@ -65,7 +65,7 @@ public struct SHACLShapesGraph: Sendable, Codable, Hashable {
 /// Determines whether inference is applied to the data graph before validation.
 ///
 /// Reference: W3C SHACL §3.2
-public enum SHACLEntailment: String, Sendable, Codable, Hashable {
+public enum SHACLEntailment: String, Sendable, Hashable {
     /// No entailment — validate raw data graph (SHACL Core default)
     case none
 

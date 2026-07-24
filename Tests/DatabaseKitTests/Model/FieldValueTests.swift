@@ -1,6 +1,5 @@
 import DatabaseTypes
 import Testing
-import Foundation
 @testable import DatabaseKit
 
 @Suite("FieldValue Tests")
@@ -33,20 +32,6 @@ struct FieldValueTests {
         #expect(try Set(values.map { try $0.stableHash() }).count == values.count)
         #expect(FieldValue.float32(-0.0) != .float32(0.0))
         #expect(FieldValue.float64(-0.0) != .float64(0.0))
-    }
-
-    @Test("UInt64 survives FieldValue and Codable round trips")
-    func uint64RoundTripsWithoutNarrowing() throws {
-        let original = FieldValue.array([
-            .uint64(0),
-            .uint64(UInt64(Int64.max)),
-            .uint64(UInt64(Int64.max) + 1),
-            .uint64(UInt64.max),
-        ])
-
-        let encoded = try JSONEncoder().encode(original)
-        let decoded = try JSONDecoder().decode(FieldValue.self, from: encoded)
-        #expect(decoded == original)
     }
 
     @Test("Stored numeric types preserve distinct identity and hashes")
@@ -357,42 +342,6 @@ struct FieldValueTests {
 
         #expect(dict[.string("key1")] == "value1")
         #expect(dict[.string("key2")] == "value2")
-    }
-
-    // MARK: - Codable
-
-    @Test("Encode and decode int64")
-    func testCodableInt64() throws {
-        let original = FieldValue.int64(42)
-
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(original)
-
-        let decoder = JSONDecoder()
-        let restored = try decoder.decode(FieldValue.self, from: data)
-
-        #expect(original == restored)
-    }
-
-    @Test("Encode and decode all types")
-    func testCodableAllTypes() throws {
-        let values: [FieldValue] = [
-            .int64(42),
-            .float64(3.14),
-            .string("hello"),
-            .bool(true),
-            .bytes([1, 2, 3]),
-            .null
-        ]
-
-        let encoder = JSONEncoder()
-        let decoder = JSONDecoder()
-
-        for original in values {
-            let data = try encoder.encode(original)
-            let restored = try decoder.decode(FieldValue.self, from: data)
-            #expect(original == restored)
-        }
     }
 
     // MARK: - Stable Hash

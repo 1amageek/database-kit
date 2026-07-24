@@ -7,7 +7,7 @@ import DatabaseTypes
 /// - `kind`: Index kind metadata
 /// - `commonOptions`: Options shared by every index kind
 /// - `storedFieldNames`: Fields copied into the index value
-public struct IndexDescriptorMetadata: Sendable, Hashable, Codable {
+public struct IndexDescriptorMetadata: Sendable, Hashable {
 
     /// Index name (unique identifier)
     public let name: String

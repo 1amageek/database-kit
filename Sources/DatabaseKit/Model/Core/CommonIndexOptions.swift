@@ -16,7 +16,7 @@ import DatabaseTypes
 ///     sparse: false
 /// )
 /// ```
-public struct CommonIndexOptions: Sendable, Codable, Hashable {
+public struct CommonIndexOptions: Sendable, Hashable {
     /// Whether the index enforces uniqueness of indexed values.
     ///
     /// - `true`: Index values must be unique across all entities
