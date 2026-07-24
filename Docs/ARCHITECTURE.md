@@ -29,7 +29,7 @@ The arrows point from a consumer to a dependency.
 
 | Module | Owns | Does not own |
 |---|---|---|
-| `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, and SHACL declarations | Primitive values, Codable, execution, transport |
+| `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, and SHACL declarations | Primitive values, Codable-based canonical persistence, execution, transport |
 | `DatabaseWire` | Version 1 envelopes, typed operations, bounded binary encoding and decoding, and internal canonical digest support | Semantic meaning, network transport, or operation execution |
 | Compiler plugin | Static generation for `DatabaseKit` contracts | Runtime behavior or a public library product |
 
@@ -40,7 +40,9 @@ UUID, geographic values, vectors, entity references, and RDF terms are owned by
 `database-types`. database-kit consumes those values without redeclaring,
 wrapping, or aliasing them.
 
-database-kit intentionally has no generic value or Codable product.
+database-kit intentionally has no generic value or Codable-only product.
+`Codable` remains valid for a Native application's own external formats; it is
+not the canonical persistence dependency shared with Embedded Swift.
 Foundation-independent persistence identity, model adaptation, query, and graph
 meaning belong to `DatabaseKit`. Feature categories are source directories
 inside that module rather than products.
@@ -91,8 +93,8 @@ database-client ──▶ DatabaseWire ──▶ DatabaseKit ──▶ DatabaseT
 ```
 
 `DatabaseKit` and `DatabaseWire` must compile with the Swift 6.4 Embedded WASM
-SDK. They must not import Foundation, FoundationEssentials, Codable,
-URLSession, JavaScriptKit, or database runtime implementations.
+SDK. Their canonical path must not import Foundation, FoundationEssentials,
+Codable, URLSession, JavaScriptKit, or database runtime implementations.
 
 `DatabaseWireReader` applies frame, string, byte-string, collection, nesting,
 and object budgets before allocating or constructing decoded values.

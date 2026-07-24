@@ -272,7 +272,7 @@ public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
     public let fieldNames: [String]
     public let resolution: TimeResolution
 
-    public enum TimeResolution: String, Codable, Sendable, Hashable {
+    public enum TimeResolution: String, Sendable, Hashable {
         case second, minute, hour, day
     }
 

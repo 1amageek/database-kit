@@ -120,9 +120,11 @@ not change the metadata contract. Descriptors are always materialized through
 `@Persistable`:
 
 - Applies to concrete structs.
-- Generates `Persistable`, `Codable`, and `Sendable` conformance.
-- Generates field metadata, directory metadata, index descriptors, and coding
-  support.
+- Generates `Persistable` and `Sendable` conformance.
+- Generates field metadata, directory metadata, index descriptors, and static
+  adaptation to and from canonical `FieldValue` values.
+- Does not generate or require `Codable`. A Native-only application may add
+  `Codable` independently for an application-owned external format.
 
 `Polymorphable` protocol:
 
