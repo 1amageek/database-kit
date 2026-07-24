@@ -115,7 +115,9 @@ public enum DatabaseEnvelopeCodec {
             writer.writeUInt8(1)
             try writer.writeLengthPrefixed(encodePayload)
         }
-        precondition(frame.count >= successResponseFixedByteCount)
+        guard frame.count >= successResponseFixedByteCount else {
+            throw .byteCountOverflow
+        }
         return DatabaseEncodedSuccessResponse(
             frame: frame,
             payload: frame[successResponseFixedByteCount..<frame.count]

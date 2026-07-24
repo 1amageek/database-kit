@@ -7,60 +7,23 @@ import DatabaseValue
 /// The mutable pointer is confined to the synchronous `encode` call and never
 /// crosses a concurrency boundary.
 public struct DatabaseWireWriter {
+    private enum Destination {
+        case measuring
+        case fixed(UnsafeMutableRawBufferPointer)
+        case borrowed((UnsafeRawBufferPointer) -> Void)
+    }
+
     public let limits: DatabaseWireLimits
-    private var arrayBytes: [UInt8]?
-    private var fixedOutput: UnsafeMutableRawBufferPointer?
-    private var borrowedSink: ((UnsafeRawBufferPointer) -> Void)?
-    private let isMeasuring: Bool
+    private var destination: Destination
     private var measuredByteCount: Int
     private var outputOffset: Int
     private var nestingDepth: Int
     private var encodedObjectCount: Int
     private var deferredError: DatabaseWireError?
 
-    public var bytes: [UInt8] {
-        guard let arrayBytes else {
-            preconditionFailure(
-                "Exact-size and measuring writers do not expose mutable array storage"
-            )
-        }
-        return arrayBytes
-    }
-
-    public init(limits: DatabaseWireLimits = .default) {
-        self.arrayBytes = []
-        self.fixedOutput = nil
-        self.borrowedSink = nil
-        self.limits = limits
-        self.isMeasuring = false
-        self.measuredByteCount = 0
-        self.outputOffset = 0
-        self.nestingDepth = 0
-        self.encodedObjectCount = 0
-        self.deferredError = nil
-    }
-
-    public init(capacity: Int, limits: DatabaseWireLimits = .default) {
-        var bytes: [UInt8] = []
-        bytes.reserveCapacity(capacity)
-        self.arrayBytes = bytes
-        self.fixedOutput = nil
-        self.borrowedSink = nil
-        self.limits = limits
-        self.isMeasuring = false
-        self.measuredByteCount = 0
-        self.outputOffset = 0
-        self.nestingDepth = 0
-        self.encodedObjectCount = 0
-        self.deferredError = nil
-    }
-
     init(measuring limits: DatabaseWireLimits) {
-        self.arrayBytes = nil
-        self.fixedOutput = nil
-        self.borrowedSink = nil
+        self.destination = .measuring
         self.limits = limits
-        self.isMeasuring = true
         self.measuredByteCount = 0
         self.outputOffset = 0
         self.nestingDepth = 0
@@ -72,11 +35,8 @@ public struct DatabaseWireWriter {
         fixedOutput: UnsafeMutableRawBufferPointer,
         limits: DatabaseWireLimits
     ) {
-        self.arrayBytes = nil
-        self.fixedOutput = fixedOutput
-        self.borrowedSink = nil
+        self.destination = .fixed(fixedOutput)
         self.limits = limits
-        self.isMeasuring = false
         self.measuredByteCount = 0
         self.outputOffset = 0
         self.nestingDepth = 0
@@ -88,11 +48,8 @@ public struct DatabaseWireWriter {
         borrowedSink: @escaping (UnsafeRawBufferPointer) -> Void,
         limits: DatabaseWireLimits
     ) {
-        self.arrayBytes = nil
-        self.fixedOutput = nil
-        self.borrowedSink = borrowedSink
+        self.destination = .borrowed(borrowedSink)
         self.limits = limits
-        self.isMeasuring = false
         self.measuredByteCount = 0
         self.outputOffset = 0
         self.nestingDepth = 0
@@ -100,17 +57,18 @@ public struct DatabaseWireWriter {
         self.deferredError = nil
     }
 
-    public var writtenByteCount: Int {
-        if isMeasuring {
+    private var writtenByteCount: Int {
+        if case .measuring = destination {
             return measuredByteCount
         }
-        if fixedOutput != nil || borrowedSink != nil {
-            return outputOffset
+        return outputOffset
+    }
+
+    private var isMeasuring: Bool {
+        if case .measuring = destination {
+            return true
         }
-        guard let arrayBytes else {
-            preconditionFailure("Database wire writer has no output storage")
-        }
-        return arrayBytes.count
+        return false
     }
 
     /// Returns the canonical encoded byte count after applying all writer and
@@ -460,11 +418,17 @@ public struct DatabaseWireWriter {
     public mutating func writeLengthPrefixed(
         _ encode: (inout DatabaseWireWriter) throws(DatabaseWireError) -> Void
     ) throws(DatabaseWireError) {
-        guard borrowedSink == nil else {
+        if case .borrowed = destination {
             // Streaming output cannot be back-patched. Canonical streaming
             // codecs must write known lengths before emitting their payload.
             throw .invalidQueryIRWireState
         }
+        try writeBackpatchedLengthPrefixed(encode)
+    }
+
+    private mutating func writeBackpatchedLengthPrefixed(
+        _ encode: (inout DatabaseWireWriter) throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) {
         let lengthOffset = writtenByteCount
         writeUInt32(0)
         let payloadOffset = writtenByteCount
@@ -591,7 +555,8 @@ public struct DatabaseWireWriter {
             deferredError = .byteCountOverflow
             return
         }
-        if let output = fixedOutput {
+        switch destination {
+        case .fixed(let output):
             guard outputOffset <= output.count,
                   source.count <= output.count - outputOffset else {
                 deferredError = .byteCountOverflow
@@ -602,36 +567,29 @@ public struct DatabaseWireWriter {
             )
             destination.copyMemory(from: source)
             outputOffset = nextOffset
-            return
-        }
-        if let borrowedSink {
+        case .borrowed(let borrowedSink):
             borrowedSink(source)
             outputOffset = nextOffset
-            return
+        case .measuring:
+            recordMeasuredBytes(source.count)
         }
-        guard arrayBytes != nil else {
-            preconditionFailure("Database wire writer has no output storage")
-        }
-        arrayBytes!.append(contentsOf: source)
-        outputOffset = nextOffset
     }
 
     private mutating func replaceUInt32(_ value: UInt32, at offset: Int) {
-        precondition(offset >= 0 && offset + 4 <= writtenByteCount)
-        if let output = fixedOutput {
-            output[offset] = UInt8(truncatingIfNeeded: value)
-            output[offset + 1] = UInt8(truncatingIfNeeded: value >> 8)
-            output[offset + 2] = UInt8(truncatingIfNeeded: value >> 16)
-            output[offset + 3] = UInt8(truncatingIfNeeded: value >> 24)
+        guard offset >= 0,
+              offset <= writtenByteCount,
+              writtenByteCount - offset >= 4 else {
+            deferredError = .byteCountOverflow
             return
         }
-        guard arrayBytes != nil else {
-            preconditionFailure("Database wire writer has no output storage")
+        guard case .fixed(let output) = destination else {
+            deferredError = .invalidQueryIRWireState
+            return
         }
-        arrayBytes![offset] = UInt8(truncatingIfNeeded: value)
-        arrayBytes![offset + 1] = UInt8(truncatingIfNeeded: value >> 8)
-        arrayBytes![offset + 2] = UInt8(truncatingIfNeeded: value >> 16)
-        arrayBytes![offset + 3] = UInt8(truncatingIfNeeded: value >> 24)
+        output[offset] = UInt8(truncatingIfNeeded: value)
+        output[offset + 1] = UInt8(truncatingIfNeeded: value >> 8)
+        output[offset + 2] = UInt8(truncatingIfNeeded: value >> 16)
+        output[offset + 3] = UInt8(truncatingIfNeeded: value >> 24)
     }
 
     private mutating func recordMeasuredBytes(_ count: Int) {

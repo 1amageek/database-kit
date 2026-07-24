@@ -45,18 +45,28 @@ public struct DatabaseWireLimits: Sendable, Hashable {
         self.maximumObjectCount = maximumObjectCount
     }
 
-    public static let `default`: DatabaseWireLimits = {
-        do {
-            return try DatabaseWireLimits(
-                maximumFrameBytes: 4 * 1_024 * 1_024,
-                maximumStringBytes: 1 * 1_024 * 1_024,
-                maximumByteStringBytes: 4 * 1_024 * 1_024,
-                maximumCollectionCount: 100_000,
-                maximumNestingDepth: 64,
-                maximumObjectCount: 250_000
-            )
-        } catch {
-            preconditionFailure("The canonical database wire limits are invalid")
-        }
-    }()
+    public static let `default` = DatabaseWireLimits(
+        canonicalMaximumFrameBytes: 4 * 1_024 * 1_024,
+        maximumStringBytes: 1 * 1_024 * 1_024,
+        maximumByteStringBytes: 4 * 1_024 * 1_024,
+        maximumCollectionCount: 100_000,
+        maximumNestingDepth: 64,
+        maximumObjectCount: 250_000
+    )
+
+    private init(
+        canonicalMaximumFrameBytes maximumFrameBytes: Int,
+        maximumStringBytes: Int,
+        maximumByteStringBytes: Int,
+        maximumCollectionCount: Int,
+        maximumNestingDepth: Int,
+        maximumObjectCount: Int
+    ) {
+        self.maximumFrameBytes = maximumFrameBytes
+        self.maximumStringBytes = maximumStringBytes
+        self.maximumByteStringBytes = maximumByteStringBytes
+        self.maximumCollectionCount = maximumCollectionCount
+        self.maximumNestingDepth = maximumNestingDepth
+        self.maximumObjectCount = maximumObjectCount
+    }
 }

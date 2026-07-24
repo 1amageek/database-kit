@@ -78,9 +78,7 @@ public struct DatabaseJobResultDigestAccumulator: Sendable {
         withUnsafeBytes(of: &family) { bytes in
             sha256.update(bytes)
         }
-        guard let kindByteCount = UInt32(exactly: operation.kind.utf8.count) else {
-            preconditionFailure("Job operation kind exceeds UInt32")
-        }
+        let kindByteCount = UInt32(operation.kind.utf8.count)
         var encodedKindByteCount = kindByteCount.bigEndian
         withUnsafeBytes(of: &encodedKindByteCount) { bytes in
             sha256.update(bytes)

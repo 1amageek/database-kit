@@ -167,9 +167,11 @@ struct CanonicalDatabaseWireTests {
                 ),
             ])
         )
-        var writer = DatabaseWireWriter()
-        try value.encode(into: &writer)
-        var reader = DatabaseWireReader(writer.bytes)
+        let bytes = try DatabaseWireWriter.encode {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try value.encode(into: &writer)
+        }
+        var reader = DatabaseWireReader(bytes)
 
         #expect(try FieldValue(from: &reader) == value)
         try reader.ensureFullyRead()
@@ -185,13 +187,16 @@ struct CanonicalDatabaseWireTests {
             lexicalForm: "hello",
             language: try RDFLanguageTag("en-latn-us")
         ))
-        var uppercaseWriter = DatabaseWireWriter()
-        var lowercaseWriter = DatabaseWireWriter()
+        let uppercaseBytes = try DatabaseWireWriter.encode {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try uppercase.encode(into: &writer)
+        }
+        let lowercaseBytes = try DatabaseWireWriter.encode {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try lowercase.encode(into: &writer)
+        }
 
-        try uppercase.encode(into: &uppercaseWriter)
-        try lowercase.encode(into: &lowercaseWriter)
-
-        #expect(uppercaseWriter.bytes == lowercaseWriter.bytes)
+        #expect(uppercaseBytes == lowercaseBytes)
     }
 
     @Test("DatabaseTypes.UUID has a stable canonical representation")
@@ -228,7 +233,7 @@ struct CanonicalDatabaseWireTests {
             .rdfGraph(
                 QueryExecuteOperation.GraphPage(
                     triples: [
-                        try RDFQuadValue(
+                        RDFQuadValue(
                             subject: .iri(try RDFIRI("urn:event:1")),
                             predicate: RDFPredicateIRI(
                                 try RDFIRI("urn:calendar:startsAt")
@@ -364,9 +369,11 @@ struct CanonicalDatabaseWireTests {
         }
 
         let nested = FieldValue.array([.array([.array([.null])])])
-        var writer = DatabaseWireWriter()
-        try nested.encode(into: &writer)
-        var nestedReader = DatabaseWireReader(writer.bytes, limits: limits)
+        let bytes = try DatabaseWireWriter.encode {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try nested.encode(into: &writer)
+        }
+        var nestedReader = DatabaseWireReader(bytes, limits: limits)
         #expect(throws: DatabaseWireError.nestingTooDeep(actual: 3, maximum: 2)) {
             _ = try FieldValue(from: &nestedReader)
         }
