@@ -48,6 +48,8 @@ struct PackageBoundaryTests {
             "AlternativePlan",
             "CollectionStatistics",
             "GraphIndexScanPlanner",
+            "HyperLogLog",
+            "HyperLogLogError",
             "IndexBuildState",
             "IndexStatistics",
             "PlanType",
