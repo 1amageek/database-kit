@@ -266,7 +266,7 @@ struct TurtleDecoderTests {
             ex:name "Alice" .
         """
         let ont = try TurtleDecoder().decode(from: turtle)
-        let assertions = ont.axioms.compactMap { axiom -> OWLLiteral? in
+        let assertions = ont.axioms.compactMap { axiom -> RDFLiteral? in
             if case .dataPropertyAssertion(_, _, let value) = axiom { return value }
             return nil
         }
@@ -280,7 +280,7 @@ struct TurtleDecoderTests {
             ex:birthDate "1990-01-01"^^xsd:date .
         """
         let ont = try TurtleDecoder().decode(from: turtle)
-        let assertions = ont.axioms.compactMap { axiom -> OWLLiteral? in
+        let assertions = ont.axioms.compactMap { axiom -> RDFLiteral? in
             if case .dataPropertyAssertion(_, _, let value) = axiom { return value }
             return nil
         }
@@ -297,7 +297,7 @@ struct TurtleDecoderTests {
             ex:greeting "hello"@en .
         """
         let ont = try TurtleDecoder().decode(from: turtle)
-        let assertions = ont.axioms.compactMap { axiom -> OWLLiteral? in
+        let assertions = ont.axioms.compactMap { axiom -> RDFLiteral? in
             if case .dataPropertyAssertion(_, _, let value) = axiom { return value }
             return nil
         }
@@ -312,11 +312,46 @@ struct TurtleDecoderTests {
             ex:age 30 .
         """
         let ont = try TurtleDecoder().decode(from: turtle)
-        let assertions = ont.axioms.compactMap { axiom -> OWLLiteral? in
+        let assertions = ont.axioms.compactMap { axiom -> RDFLiteral? in
             if case .dataPropertyAssertion(_, _, let value) = axiom { return value }
             return nil
         }
         #expect(assertions.first?.intValue == 30)
+    }
+
+    @Test("Integer literal preserves arbitrary-precision lexical form")
+    func arbitraryPrecisionIntegerLiteral() throws {
+        let lexicalForm = "999999999999999999999999999999999999"
+        let turtle = standardPrefixes + """
+        ex:Alice a owl:NamedIndividual ;
+            ex:count \(lexicalForm) .
+        """
+
+        let ontology = try TurtleDecoder().decode(from: turtle)
+        let literal = ontology.axioms.compactMap { axiom -> RDFLiteral? in
+            if case .dataPropertyAssertion(_, _, let value) = axiom {
+                return value
+            }
+            return nil
+        }.first
+
+        #expect(literal?.lexicalForm == lexicalForm)
+        #expect(
+            literal?.datatypeIRI
+                == XSDDatatype.integer.typedLiteralDatatype.iri
+        )
+    }
+
+    @Test("Numeric literal rejects an exponent without digits")
+    func numericLiteralRequiresExponentDigits() {
+        let turtle = standardPrefixes + """
+        ex:Alice a owl:NamedIndividual ;
+            ex:measurement 1e .
+        """
+
+        #expect(throws: TurtleDecodingError.self) {
+            try TurtleDecoder().decode(from: turtle)
+        }
     }
 
     // MARK: - Individuals

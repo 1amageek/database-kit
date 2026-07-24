@@ -58,63 +58,87 @@ extension ExactDecimal: QueryLiteralConvertible {
 extension FieldValue: QueryLiteralConvertible {
     public var queryLiteral: Literal {
         get throws(QueryLiteralConversionError) {
-            switch self {
-            case .null:
-                return .null
-            case .bool(let value):
-                return .bool(value)
-            case .int8(let value):
-                return .int(Int64(value))
-            case .int16(let value):
-                return .int(Int64(value))
-            case .int32(let value):
-                return .int(Int64(value))
-            case .int64(let value):
-                return .int(value)
-            case .uint8(let value):
-                return .uint(UInt64(value))
-            case .uint16(let value):
-                return .uint(UInt64(value))
-            case .uint32(let value):
-                return .uint(UInt64(value))
-            case .uint64(let value):
-                return .uint(value)
-            case .float32(let value):
-                return .double(Double(value))
-            case .float64(let value):
-                return .double(value)
-            case .decimal(let value):
-                return .decimal(value)
-            case .string(let value):
-                return .string(value)
-            case .bytes(let value):
-                return .binary(value)
-            case .date(let value):
-                return .date(value)
-            case .timestamp(let value):
-                return .timestamp(value)
-            case .uuid(let value):
-                return .uuid(value)
-            case .array(let values):
-                var literals: [Literal] = []
-                literals.reserveCapacity(values.count)
-                for value in values {
-                    literals.append(try value.queryLiteral)
+            var steps: [FieldValueLiteralConversionStep] = [.value(self)]
+            var results: [Literal] = []
+
+            while let step = steps.popLast() {
+                switch step {
+                case .value(let value):
+                    switch value {
+                    case .null:
+                        results.append(.null)
+                    case .bool(let value):
+                        results.append(.bool(value))
+                    case .int8(let value):
+                        results.append(.int(Int64(value)))
+                    case .int16(let value):
+                        results.append(.int(Int64(value)))
+                    case .int32(let value):
+                        results.append(.int(Int64(value)))
+                    case .int64(let value):
+                        results.append(.int(value))
+                    case .uint8(let value):
+                        results.append(.uint(UInt64(value)))
+                    case .uint16(let value):
+                        results.append(.uint(UInt64(value)))
+                    case .uint32(let value):
+                        results.append(.uint(UInt64(value)))
+                    case .uint64(let value):
+                        results.append(.uint(value))
+                    case .float32(let value):
+                        results.append(.double(Double(value)))
+                    case .float64(let value):
+                        results.append(.double(value))
+                    case .decimal(let value):
+                        results.append(.decimal(value))
+                    case .string(let value):
+                        results.append(.string(value))
+                    case .bytes(let value):
+                        results.append(.binary(value))
+                    case .date(let value):
+                        results.append(.date(value))
+                    case .timestamp(let value):
+                        results.append(.timestamp(value))
+                    case .uuid(let value):
+                        results.append(.uuid(value))
+                    case .array(let values):
+                        steps.append(.assembleArray(values.count))
+                        for value in values.reversed() {
+                            steps.append(.value(value))
+                        }
+                    case .rdfTerm(let value):
+                        results.append(.rdfTerm(value))
+                    case .time,
+                         .dateTime,
+                         .timeSpan,
+                         .calendarPeriod,
+                         .geographicPoint,
+                         .geographicPosition,
+                         .vector,
+                         .object,
+                         .reference:
+                        throw .unsupportedFieldValue
+                    }
+                case .assembleArray(let count):
+                    guard results.count >= count else {
+                        throw .unsupportedFieldValue
+                    }
+                    let start = results.count - count
+                    let values = Array(results[start...])
+                    results.removeLast(count)
+                    results.append(.array(values))
                 }
-                return .array(literals)
-            case .rdfTerm(let value):
-                return .rdfTerm(value)
-            case .time,
-                 .dateTime,
-                 .timeSpan,
-                 .calendarPeriod,
-                 .geographicPoint,
-                 .geographicPosition,
-                 .vector,
-                 .object,
-                 .reference:
+            }
+
+            guard results.count == 1, let result = results.last else {
                 throw .unsupportedFieldValue
             }
+            return result
         }
     }
+}
+
+private enum FieldValueLiteralConversionStep {
+    case value(FieldValue)
+    case assembleArray(Int)
 }

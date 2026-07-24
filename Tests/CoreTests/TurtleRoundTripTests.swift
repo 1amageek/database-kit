@@ -188,7 +188,7 @@ struct TurtleRoundTripTests {
         let turtle = TurtleEncoder().encode(original)
         let decoded = try TurtleDecoder().decode(from: turtle)
 
-        let literals = decoded.axioms.compactMap { axiom -> OWLLiteral? in
+        let literals = decoded.axioms.compactMap { axiom -> RDFLiteral? in
             if case .dataPropertyAssertion(_, _, let value) = axiom { return value }
             return nil
         }

@@ -1,7 +1,7 @@
 import DatabaseTypes
 import DatabaseValue
 
-public struct DatabaseValidationReport: DatabaseWireValue, Hashable {
+public struct ValidationReport: DatabaseWireValue, Hashable {
     public enum Severity: UInt8, Sendable, Hashable {
         case information = 1
         case warning = 2

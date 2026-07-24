@@ -143,8 +143,8 @@ private final class TurtleTokenizer {
             case ".":
                 // Check for decimal literal
                 let next = peek(offset: 1)
-                if let n = next, n.isNumber {
-                    tokens.append(readNumericLiteral())
+                if let next, isASCIIDigit(next) {
+                    tokens.append(try readNumericLiteral())
                 } else {
                     advance()
                     tokens.append(.dot)
@@ -196,8 +196,8 @@ private final class TurtleTokenizer {
                     tokens.append(classifyWord(word))
                 }
             default:
-                if ch == "+" || ch == "-" || ch.isNumber {
-                    tokens.append(readNumericLiteral())
+                if ch == "+" || ch == "-" || isASCIIDigit(ch) {
+                    tokens.append(try readNumericLiteral())
                 } else if ch.isLetter || ch == ":" {
                     let word = readPrefixedNameOrWord()
                     tokens.append(word)
@@ -360,10 +360,11 @@ private final class TurtleTokenizer {
         throw TurtleDecodingError.unterminatedString(line: line)
     }
 
-    private func readNumericLiteral() -> TurtleToken {
+    private func readNumericLiteral() throws -> TurtleToken {
         var result = ""
-        var hasDecimal = false
+        var hasDecimalPoint = false
         var hasExponent = false
+        var mantissaDigitCount = 0
 
         // Sign
         if index < input.endIndex && (input[index] == "+" || input[index] == "-") {
@@ -372,23 +373,36 @@ private final class TurtleTokenizer {
         }
 
         // Digits
-        while index < input.endIndex && input[index].isNumber {
+        while index < input.endIndex && isASCIIDigit(input[index]) {
             result.append(input[index])
             advance()
+            mantissaDigitCount += 1
         }
 
         // Decimal point
         if index < input.endIndex && input[index] == "." {
             let next = peek(offset: 1)
-            if next != nil && next!.isNumber {
-                hasDecimal = true
+            let beginsFraction = next.map(isASCIIDigit) == true
+            let beginsExponent = mantissaDigitCount > 0
+                && (next == "e" || next == "E")
+            if beginsFraction || beginsExponent {
+                hasDecimalPoint = true
                 result.append(input[index])
                 advance()
-                while index < input.endIndex && input[index].isNumber {
+                while index < input.endIndex && isASCIIDigit(input[index]) {
                     result.append(input[index])
                     advance()
+                    mantissaDigitCount += 1
                 }
             }
+        }
+
+        guard mantissaDigitCount > 0 else {
+            throw TurtleDecodingError.unexpectedToken(
+                expected: "numeric literal",
+                found: result.isEmpty ? currentTokenDescription : result,
+                line: line
+            )
         }
 
         // Exponent
@@ -400,19 +414,36 @@ private final class TurtleTokenizer {
                 result.append(input[index])
                 advance()
             }
-            while index < input.endIndex && input[index].isNumber {
+            var exponentDigitCount = 0
+            while index < input.endIndex && isASCIIDigit(input[index]) {
                 result.append(input[index])
                 advance()
+                exponentDigitCount += 1
+            }
+            guard exponentDigitCount > 0 else {
+                throw TurtleDecodingError.unexpectedToken(
+                    expected: "exponent digits",
+                    found: currentTokenDescription,
+                    line: line
+                )
             }
         }
 
         if hasExponent {
             return .doubleLiteral(result)
-        } else if hasDecimal {
+        } else if hasDecimalPoint {
             return .decimalLiteral(result)
         } else {
             return .integerLiteral(result)
         }
+    }
+
+    private func isASCIIDigit(_ character: Character) -> Bool {
+        character >= "0" && character <= "9"
+    }
+
+    private var currentTokenDescription: String {
+        index < input.endIndex ? String(input[index]) : "end of input"
     }
 
     private func readWord() -> String {
@@ -723,16 +754,36 @@ private final class TurtleParser {
             return try parseLiteralRest(lexicalForm: value)
         case .integerLiteral(let value):
             advance()
-            return .literal(OWLLiteral.integer(Int(value) ?? 0))
+            return .literal(
+                RDFLiteral(
+                    lexicalForm: value,
+                    datatype: XSDDatatype.integer.typedLiteralDatatype
+                )
+            )
         case .decimalLiteral(let value):
             advance()
-            return .literal(OWLLiteral.decimal(Double(value) ?? 0))
+            return .literal(
+                RDFLiteral(
+                    lexicalForm: value,
+                    datatype: XSDDatatype.decimal.typedLiteralDatatype
+                )
+            )
         case .doubleLiteral(let value):
             advance()
-            return .literal(OWLLiteral.double(Double(value) ?? 0))
+            return .literal(
+                RDFLiteral(
+                    lexicalForm: value,
+                    datatype: XSDDatatype.double.typedLiteralDatatype
+                )
+            )
         case .booleanLiteral(let value):
             advance()
-            return .literal(OWLLiteral.boolean(value == "true"))
+            return .literal(
+                RDFLiteral(
+                    lexicalForm: value,
+                    datatype: XSDDatatype.boolean.typedLiteralDatatype
+                )
+            )
         case .a:
             advance()
             return .iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
@@ -763,12 +814,12 @@ private final class TurtleParser {
                     line: currentLine
                 )
             }
-            return .literal(try OWLLiteral.typed(lexicalForm, datatype: datatypeIRI))
+            return .literal(try RDFLiteral.typed(lexicalForm, datatype: datatypeIRI))
         } else if case .langTag(let lang) = current {
             advance()
-            return .literal(try OWLLiteral.langString(lexicalForm, language: lang))
+            return .literal(try RDFLiteral.langString(lexicalForm, language: lang))
         } else {
-            return .literal(OWLLiteral.string(lexicalForm))
+            return .literal(RDFLiteral.string(lexicalForm))
         }
     }
 
@@ -936,7 +987,7 @@ private struct ParsedRDFTriple {
 
 private enum RDFNode: Hashable {
     case iri(String)
-    case literal(OWLLiteral)
+    case literal(RDFLiteral)
     case blankNode(String)
 
     init(_ term: RDFTerm) throws {
@@ -957,7 +1008,7 @@ private enum RDFNode: Hashable {
         return nil
     }
 
-    var literalValue: OWLLiteral? {
+    var literalValue: RDFLiteral? {
         if case .literal(let v) = self { return v }
         return nil
     }

@@ -209,7 +209,7 @@ private struct NQuadsLineParser {
         return id
     }
 
-    private mutating func parseLiteral() throws -> OWLLiteral {
+    private mutating func parseLiteral() throws -> RDFLiteral {
         advance()
         var value = ""
         var escaped = false
@@ -234,7 +234,7 @@ private struct NQuadsLineParser {
         throw RDFSyntaxError.unterminatedString(line: line)
     }
 
-    private mutating func parseLiteralSuffix(lexicalForm: String) throws -> OWLLiteral {
+    private mutating func parseLiteralSuffix(lexicalForm: String) throws -> RDFLiteral {
         if input[index...].hasPrefix("@") {
             advance()
             let language = readBareToken()

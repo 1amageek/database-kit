@@ -3,7 +3,7 @@ import DatabaseValue
 
 public enum SchemaDescribeOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.schemaDescribe
-    public typealias Request = DatabaseEmpty
+    public typealias Request = EmptyOperationPayload
 
     public enum ValueType: UInt8, Sendable, Hashable {
         case bool = 1

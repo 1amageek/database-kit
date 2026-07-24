@@ -73,14 +73,14 @@ public enum QueryExecuteOperation: DatabaseOperation {
         public let parameters: [QueryParameter]
         public let graphPartitions: FieldObject
         public let page: Page
-        public let budget: DatabaseExecutionBudget
+        public let budget: ExecutionBudget
 
         public init(
             input: Input,
             parameters: [QueryParameter] = [],
             graphPartitions: FieldObject = FieldObject(),
             page: Page = Page(),
-            budget: DatabaseExecutionBudget = DatabaseExecutionBudget()
+            budget: ExecutionBudget = ExecutionBudget()
         ) {
             self.input = input
             self.parameters = parameters
@@ -111,7 +111,7 @@ public enum QueryExecuteOperation: DatabaseOperation {
                 parameters: parameters,
                 graphPartitions: try FieldObject(from: &reader),
                 page: try Page(from: &reader),
-                budget: try DatabaseExecutionBudget(from: &reader)
+                budget: try ExecutionBudget(from: &reader)
             )
         }
     }

@@ -1,5 +1,5 @@
 import DatabaseTypes
-public struct DatabaseEmpty: DatabaseWireValue, Hashable {
+public struct EmptyOperationPayload: DatabaseWireValue, Hashable {
     public init() {}
 
     public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {}

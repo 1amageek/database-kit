@@ -1,7 +1,4 @@
-// OWLLiteral.swift
-// Graph - OWL DL literal values
-//
-// Provides typed literal values for OWL data properties.
+// RDF literal conveniences for OWL declarations.
 //
 // Reference: W3C OWL 2 Web Ontology Language
 // https://www.w3.org/TR/owl2-syntax/#Literals
@@ -9,61 +6,58 @@
 import DatabaseValue
 import DatabaseTypes
 
-/// The canonical RDF literal used by OWL declarations and RDF datasets.
-public typealias OWLLiteral = DatabaseTypes.RDFLiteral
-
 extension RDFLiteral {
     /// Create a string literal
-    public static func string(_ value: String) -> OWLLiteral {
-        OWLLiteral(
+    public static func string(_ value: String) -> RDFLiteral {
+        RDFLiteral(
             lexicalForm: value,
             datatype: XSDDatatype.string.typedLiteralDatatype
         )
     }
 
     /// Create an integer literal
-    public static func integer(_ value: Int) -> OWLLiteral {
-        OWLLiteral(
+    public static func integer(_ value: Int) -> RDFLiteral {
+        RDFLiteral(
             lexicalForm: String(value),
             datatype: XSDDatatype.integer.typedLiteralDatatype
         )
     }
 
     /// Create a decimal literal
-    public static func decimal(_ value: Double) -> OWLLiteral {
-        OWLLiteral(
+    public static func decimal(_ value: Double) -> RDFLiteral {
+        RDFLiteral(
             lexicalForm: String(value),
             datatype: XSDDatatype.decimal.typedLiteralDatatype
         )
     }
 
     /// Create a float literal
-    public static func float(_ value: Float) -> OWLLiteral {
-        OWLLiteral(
+    public static func float(_ value: Float) -> RDFLiteral {
+        RDFLiteral(
             lexicalForm: String(value),
             datatype: XSDDatatype.float.typedLiteralDatatype
         )
     }
 
     /// Create a double literal
-    public static func double(_ value: Double) -> OWLLiteral {
-        OWLLiteral(
+    public static func double(_ value: Double) -> RDFLiteral {
+        RDFLiteral(
             lexicalForm: String(value),
             datatype: XSDDatatype.double.typedLiteralDatatype
         )
     }
 
     /// Create a boolean literal
-    public static func boolean(_ value: Bool) -> OWLLiteral {
-        OWLLiteral(
+    public static func boolean(_ value: Bool) -> RDFLiteral {
+        RDFLiteral(
             lexicalForm: value ? "true" : "false",
             datatype: XSDDatatype.boolean.typedLiteralDatatype
         )
     }
 
     /// Create a canonical XSD date literal.
-    public static func date(_ value: CivilDate) -> OWLLiteral {
-        OWLLiteral(
+    public static func date(_ value: CivilDate) -> RDFLiteral {
+        RDFLiteral(
             lexicalForm: XSDDateTimeCodec.format(date: value),
             datatype: XSDDatatype.date.typedLiteralDatatype
         )
@@ -72,8 +66,8 @@ extension RDFLiteral {
     /// Create a canonical UTC XSD dateTime literal.
     public static func dateTime(
         _ value: Timestamp
-    ) throws -> OWLLiteral {
-        OWLLiteral(
+    ) throws -> RDFLiteral {
+        RDFLiteral(
             lexicalForm: try XSDDateTimeCodec.format(timestamp: value),
             datatype: XSDDatatype.dateTime.typedLiteralDatatype
         )
@@ -83,8 +77,8 @@ extension RDFLiteral {
     public static func langString(
         _ value: String,
         language: RDFLanguageTag
-    ) -> OWLLiteral {
-        OWLLiteral(
+    ) -> RDFLiteral {
+        RDFLiteral(
             lexicalForm: value,
             language: language
         )
@@ -93,8 +87,8 @@ extension RDFLiteral {
     public static func langString(
         _ value: String,
         language: String
-    ) throws -> OWLLiteral {
-        OWLLiteral(
+    ) throws -> RDFLiteral {
+        RDFLiteral(
             lexicalForm: value,
             language: try RDFLanguageTag(language)
         )
@@ -104,15 +98,15 @@ extension RDFLiteral {
     public static func typed(
         _ value: String,
         datatype: RDFTypedLiteralDatatype
-    ) -> OWLLiteral {
-        OWLLiteral(lexicalForm: value, datatype: datatype)
+    ) -> RDFLiteral {
+        RDFLiteral(lexicalForm: value, datatype: datatype)
     }
 
     public static func typed(
         _ value: String,
         datatype: String
-    ) throws -> OWLLiteral {
-        OWLLiteral(
+    ) throws -> RDFLiteral {
+        RDFLiteral(
             lexicalForm: value,
             datatype: try RDFTypedLiteralDatatype(datatype)
         )
@@ -121,7 +115,7 @@ extension RDFLiteral {
 
 // MARK: - Value Extraction
 
-extension OWLLiteral {
+extension RDFLiteral {
     /// Try to extract as Int
     public var intValue: Int? {
         Int(lexicalForm)
@@ -182,9 +176,9 @@ public enum XSDFacet: String, Sendable, Codable, CaseIterable {
 /// Facet restriction for datatype definitions
 public struct FacetRestriction: Sendable, Codable, Hashable {
     public let facet: XSDFacet
-    public let value: OWLLiteral
+    public let value: RDFLiteral
 
-    public init(facet: XSDFacet, value: OWLLiteral) {
+    public init(facet: XSDFacet, value: RDFLiteral) {
         self.facet = facet
         self.value = value
     }

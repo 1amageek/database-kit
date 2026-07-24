@@ -266,12 +266,12 @@ public enum SHACLExecuteOperation: DatabaseOperation {
     public struct Request: DatabaseWireValue, Hashable {
         public let invocation: Invocation
         public let page: QueryExecuteOperation.Page
-        public let budget: DatabaseExecutionBudget
+        public let budget: ExecutionBudget
 
         public init(
             invocation: Invocation,
             page: QueryExecuteOperation.Page = QueryExecuteOperation.Page(),
-            budget: DatabaseExecutionBudget = DatabaseExecutionBudget()
+            budget: ExecutionBudget = ExecutionBudget()
         ) {
             self.invocation = invocation
             self.page = page
@@ -292,7 +292,7 @@ public enum SHACLExecuteOperation: DatabaseOperation {
             self.init(
                 invocation: try Invocation(from: &reader),
                 page: try QueryExecuteOperation.Page(from: &reader),
-                budget: try DatabaseExecutionBudget(from: &reader)
+                budget: try ExecutionBudget(from: &reader)
             )
         }
     }
@@ -347,8 +347,8 @@ public enum SHACLExecuteOperation: DatabaseOperation {
 
     public enum Response: DatabaseWireValue, Hashable {
         case shapes(ShapesPage)
-        case mutation(DatabaseRevisionMutationResult)
-        case validation(DatabaseValidationReport)
+        case mutation(RevisionMutationResult)
+        case validation(ValidationReport)
 
         public func encode(
             into writer: inout DatabaseWireWriter
@@ -371,8 +371,8 @@ public enum SHACLExecuteOperation: DatabaseOperation {
         ) throws(DatabaseWireError) {
             switch try reader.readUInt8() {
             case 1: self = .shapes(try ShapesPage(from: &reader))
-            case 2: self = .mutation(try DatabaseRevisionMutationResult(from: &reader))
-            case 3: self = .validation(try DatabaseValidationReport(from: &reader))
+            case 2: self = .mutation(try RevisionMutationResult(from: &reader))
+            case 3: self = .validation(try ValidationReport(from: &reader))
             case let tag: throw .invalidResultPayload(tag)
             }
         }

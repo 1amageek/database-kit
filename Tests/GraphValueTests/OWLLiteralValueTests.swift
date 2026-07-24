@@ -7,7 +7,7 @@ import Testing
 struct OWLLiteralValueTests {
     @Test func dateLiteralUsesCanonicalFoundationIndependentValue() throws {
         let date = try CivilDate(year: 2026, month: 7, day: 20)
-        let literal = try OWLLiteral.date(date)
+        let literal = try RDFLiteral.date(date)
 
         #expect(literal.lexicalForm == "2026-07-20")
         #expect(literal.datatypeIRI == XSDDatatype.date.iri)
@@ -20,7 +20,7 @@ struct OWLLiteralValueTests {
             secondsSinceUnixEpoch: 1_752_995_696,
             nanoseconds: 123_456_789
         )
-        let literal = try OWLLiteral.dateTime(timestamp)
+        let literal = try RDFLiteral.dateTime(timestamp)
 
         #expect(literal.lexicalForm == "2025-07-20T07:14:56.123456789Z")
         #expect(literal.datatypeIRI == XSDDatatype.dateTime.iri)
@@ -29,10 +29,10 @@ struct OWLLiteralValueTests {
     }
 
     @Test func booleanLexicalExtractionIsCaseSensitive() {
-        #expect(OWLLiteral.boolean(true).boolValue == true)
-        #expect(OWLLiteral.boolean(false).boolValue == false)
+        #expect(RDFLiteral.boolean(true).boolValue == true)
+        #expect(RDFLiteral.boolean(false).boolValue == false)
         #expect(
-            OWLLiteral(
+            RDFLiteral(
                 lexicalForm: "TRUE",
                 datatype: XSDDatatype.boolean.typedLiteralDatatype
             ).boolValue == nil

@@ -52,7 +52,7 @@ public struct OntologyIndex: Sendable {
     public let objectPropertyAssertionsByObject: [String: [(property: String, subject: String)]]
 
     /// Data property assertions indexed by subject IRI
-    public let dataPropertyAssertionsBySubject: [String: [(property: String, value: OWLLiteral)]]
+    public let dataPropertyAssertionsBySubject: [String: [(property: String, value: RDFLiteral)]]
 
     /// SameIndividual assertions indexed by each individual
     public let sameIndividualsByIndividual: [String: [[String]]]
@@ -64,7 +64,7 @@ public struct OntologyIndex: Sendable {
     public let negativeObjectPropertyAssertionsBySubject: [String: [(property: String, object: String)]]
 
     /// Negative data property assertions indexed by subject IRI
-    public let negativeDataPropertyAssertionsBySubject: [String: [(property: String, value: OWLLiteral)]]
+    public let negativeDataPropertyAssertionsBySubject: [String: [(property: String, value: RDFLiteral)]]
 
     // MARK: - RBox Indices
 
@@ -126,11 +126,11 @@ public struct OntologyIndex: Sendable {
         var classAssertions: [String: [OWLClassExpression]] = [:]
         var objPropBySubject: [String: [(property: String, object: String)]] = [:]
         var objPropByObject: [String: [(property: String, subject: String)]] = [:]
-        var dataPropBySubject: [String: [(property: String, value: OWLLiteral)]] = [:]
+        var dataPropBySubject: [String: [(property: String, value: RDFLiteral)]] = [:]
         var sameIndividuals: [String: [[String]]] = [:]
         var diffIndividuals: [String: [[String]]] = [:]
         var negObjPropBySubject: [String: [(property: String, object: String)]] = [:]
-        var negDataPropBySubject: [String: [(property: String, value: OWLLiteral)]] = [:]
+        var negDataPropBySubject: [String: [(property: String, value: RDFLiteral)]] = [:]
 
         var subPropBySub: [String: [String]] = [:]
         var subPropBySup: [String: [String]] = [:]

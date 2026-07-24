@@ -1,7 +1,7 @@
 import DatabaseTypes
 public enum CapabilitiesDescribeOperation: DatabaseOperation {
     public static let identifier = DatabaseOperationIdentifier.capabilitiesDescribe
-    public typealias Request = DatabaseEmpty
+    public typealias Request = EmptyOperationPayload
 
     public struct Feature: Sendable, Hashable {
         public let identifier: String

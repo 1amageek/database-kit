@@ -100,12 +100,12 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
     public struct Request: DatabaseWireValue, Hashable {
         public let invocation: Invocation
         public let continuation: ByteString?
-        public let budget: DatabaseExecutionBudget
+        public let budget: ExecutionBudget
 
         public init(
             invocation: Invocation,
             continuation: ByteString? = nil,
-            budget: DatabaseExecutionBudget = DatabaseExecutionBudget()
+            budget: ExecutionBudget = ExecutionBudget()
         ) {
             self.invocation = invocation
             self.continuation = continuation
@@ -126,7 +126,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperation {
             self.init(
                 invocation: try Invocation(from: &reader),
                 continuation: try reader.readOptionalBytes(),
-                budget: try DatabaseExecutionBudget(from: &reader)
+                budget: try ExecutionBudget(from: &reader)
             )
         }
     }

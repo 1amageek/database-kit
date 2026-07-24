@@ -164,12 +164,12 @@ public enum OWLAxiom: Sendable, Codable, Hashable {
     /// Data property assertion: T(a, v)
     ///
     /// States that `subject` has data value `value` for property `property`.
-    case dataPropertyAssertion(subject: String, property: String, value: OWLLiteral)
+    case dataPropertyAssertion(subject: String, property: String, value: RDFLiteral)
 
     /// Negative data property assertion: ¬T(a, v)
     ///
     /// States that `subject` does NOT have data value `value` for property `property`.
-    case negativeDataPropertyAssertion(subject: String, property: String, value: OWLLiteral)
+    case negativeDataPropertyAssertion(subject: String, property: String, value: RDFLiteral)
 
     /// Same individual assertion: a = b = ...
     ///

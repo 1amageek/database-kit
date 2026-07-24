@@ -2,11 +2,11 @@ import DatabaseTypes
 public struct DatabaseTypedCommandRequest<Command: DatabaseCommandDescriptor>:
     DatabaseWireValue {
     public let input: Command.Input
-    public let budget: DatabaseExecutionBudget
+    public let budget: ExecutionBudget
 
     public init(
         input: Command.Input,
-        budget: DatabaseExecutionBudget = DatabaseExecutionBudget()
+        budget: ExecutionBudget = ExecutionBudget()
     ) {
         self.input = input
         self.budget = budget
@@ -39,7 +39,7 @@ public struct DatabaseTypedCommandRequest<Command: DatabaseCommandDescriptor>:
         }
         self.init(
             input: input,
-            budget: try DatabaseExecutionBudget(from: &reader)
+            budget: try ExecutionBudget(from: &reader)
         )
     }
 }

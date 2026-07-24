@@ -1091,7 +1091,7 @@ private extension QueryStructuralValidator {
         }
 
         private mutating func appendParameters(
-            _ parameters: [String: QueryParameterValue],
+            _ parameters: [String: FieldValue],
             depth: UInt64,
             to validationSteps: inout [ValidationStep]
         ) throws(QueryStructuralValidationError) {

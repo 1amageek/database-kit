@@ -4,12 +4,12 @@ import DatabaseValue
 public struct DatabaseCommandRequest: DatabaseWireValue, Hashable {
     public let command: String
     public let input: ByteString
-    public let budget: DatabaseExecutionBudget
+    public let budget: ExecutionBudget
 
     public init(
         command: String,
         input: ByteString = [],
-        budget: DatabaseExecutionBudget = DatabaseExecutionBudget()
+        budget: ExecutionBudget = ExecutionBudget()
     ) {
         self.command = command
         self.input = input
@@ -30,7 +30,7 @@ public struct DatabaseCommandRequest: DatabaseWireValue, Hashable {
         self.init(
             command: try reader.readString(),
             input: try reader.readBytes(),
-            budget: try DatabaseExecutionBudget(from: &reader)
+            budget: try ExecutionBudget(from: &reader)
         )
     }
 }

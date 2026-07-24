@@ -393,7 +393,7 @@ struct TypedOperationWireTests {
     func typedCommandFramesMatchCanonicalFrames() throws {
         let input = ActivateImportCommandInput(runID: "run-1", expectedRevision: 7)
         let output = ActivateImportCommandOutput(activated: true, importedCount: 128)
-        let budget = DatabaseExecutionBudget(
+        let budget = ExecutionBudget(
             maximumRows: 512,
             maximumWorkUnits: 4_096,
             maximumIntermediateRows: 256,
@@ -997,7 +997,7 @@ struct TypedOperationWireTests {
         )
     }
 
-    private func validationReport() throws -> DatabaseValidationReport {
+    private func validationReport() throws -> ValidationReport {
         .init(
             conforms: false,
             issues: [

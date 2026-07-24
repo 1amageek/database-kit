@@ -141,7 +141,7 @@ public indirect enum OWLClassExpression: Sendable, Codable, Hashable {
     case dataAllValuesFrom(property: String, range: OWLDataRange)
 
     /// Data has value restriction (∃T.{v})
-    case dataHasValue(property: String, literal: OWLLiteral)
+    case dataHasValue(property: String, literal: RDFLiteral)
 
     /// Data minimum cardinality (≥n T.D)
     case dataMinCardinality(property: String, n: Int, range: OWLDataRange?)

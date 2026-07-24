@@ -86,11 +86,6 @@ private extension QueryParameterBindingTraversal {
         case updateOperation(Bound<SPARQLUpdateOperation>)
     }
 
-    enum LiteralBindingStep {
-        case value(FieldValue)
-        case assembleArray(Int)
-    }
-
     mutating func apply(
         _ bindingStep: BindingStep
     ) throws {
@@ -1933,76 +1928,11 @@ private extension QueryParameterBindingTraversal {
             value = resolved
         }
 
-        var literalBindingSteps: [LiteralBindingStep] = [.value(value)]
-        var literalResults: [Literal] = []
-        while let bindingStep = literalBindingSteps.popLast() {
-            switch bindingStep {
-            case .value(let current):
-                switch current {
-                case .null:
-                    literalResults.append(.null)
-                case .bool(let scalar):
-                    literalResults.append(.bool(scalar))
-                case .int8(let scalar):
-                    literalResults.append(.int(Int64(scalar)))
-                case .int16(let scalar):
-                    literalResults.append(.int(Int64(scalar)))
-                case .int32(let scalar):
-                    literalResults.append(.int(Int64(scalar)))
-                case .int64(let scalar):
-                    literalResults.append(.int(scalar))
-                case .uint8(let scalar):
-                    literalResults.append(.uint(UInt64(scalar)))
-                case .uint16(let scalar):
-                    literalResults.append(.uint(UInt64(scalar)))
-                case .uint32(let scalar):
-                    literalResults.append(.uint(UInt64(scalar)))
-                case .uint64(let scalar):
-                    literalResults.append(.uint(scalar))
-                case .float32(let scalar):
-                    literalResults.append(.double(Double(scalar)))
-                case .float64(let scalar):
-                    literalResults.append(.double(scalar))
-                case .string(let scalar):
-                    literalResults.append(.string(scalar))
-                case .bytes(let bytes):
-                    literalResults.append(.binary(bytes))
-                case .date(let date):
-                    literalResults.append(.date(date))
-                case .timestamp(let timestamp):
-                    literalResults.append(.timestamp(timestamp))
-                case .uuid(let uuid):
-                    literalResults.append(.uuid(uuid))
-                case .array(let values):
-                    literalBindingSteps.append(.assembleArray(values.count))
-                    for child in values.reversed() {
-                        literalBindingSteps.append(.value(child))
-                    }
-                case .rdfTerm(let term):
-                    literalResults.append(.rdfTerm(term))
-                case .decimal(let value):
-                    literalResults.append(.decimal(value))
-                case .time, .dateTime, .timeSpan, .calendarPeriod,
-                     .geographicPoint, .geographicPosition, .vector,
-                     .object, .reference:
-                    throw .unsupportedValue(reference)
-                }
-            case .assembleArray(let count):
-                var values = Array(repeating: Literal.null, count: count)
-                for index in values.indices.reversed() {
-                    guard let value = literalResults.popLast() else {
-                        throw .unsupportedValue(reference)
-                    }
-                    values[index] = value
-                }
-                literalResults.append(.array(values))
-            }
-        }
-
-        guard literalResults.count == 1, let result = literalResults.popLast() else {
+        do {
+            return try value.queryLiteral
+        } catch {
             throw .unsupportedValue(reference)
         }
-        return result
     }
 }
 

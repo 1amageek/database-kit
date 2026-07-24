@@ -67,7 +67,7 @@ enum RDFSyntaxFormatter {
     }
 
     static func formatLiteral(
-        _ literal: OWLLiteral,
+        _ literal: RDFLiteral,
         usePrefixes: Bool,
         prefixes: [String: String]
     ) -> String {

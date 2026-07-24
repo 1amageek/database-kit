@@ -258,8 +258,8 @@ extension OWLOntology {
     }
 
     /// Get all data property assertions for a subject
-    public func dataPropertyAssertions(forSubject subjectIRI: String) -> [(property: String, value: OWLLiteral)] {
-        axioms.compactMap { axiom -> (property: String, value: OWLLiteral)? in
+    public func dataPropertyAssertions(forSubject subjectIRI: String) -> [(property: String, value: RDFLiteral)] {
+        axioms.compactMap { axiom -> (property: String, value: RDFLiteral)? in
             if case .dataPropertyAssertion(let subj, let prop, let value) = axiom {
                 if subj == subjectIRI {
                     return (property: prop, value: value)

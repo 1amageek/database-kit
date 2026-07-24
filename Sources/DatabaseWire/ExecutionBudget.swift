@@ -1,5 +1,5 @@
 import DatabaseTypes
-public struct DatabaseExecutionBudget: DatabaseWireValue, Hashable {
+public struct ExecutionBudget: DatabaseWireValue, Hashable {
     public let maximumRows: UInt32
     public let maximumWorkUnits: UInt64
     public let maximumIntermediateRows: UInt32

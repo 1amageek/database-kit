@@ -153,7 +153,7 @@ extension QueryIRWireCodec {
     }
 
     private static func encodeParameters(
-        _ parameters: [String: QueryParameterValue],
+        _ parameters: [String: FieldValue],
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         // Canonical ordering requires one sorted entry view because Dictionary
@@ -168,9 +168,9 @@ extension QueryIRWireCodec {
 
     private static func decodeParameters(
         from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> [String: QueryParameterValue] {
+    ) throws(DatabaseWireError) -> [String: FieldValue] {
         let count = try reader.readCount()
-        var parameters: [String: QueryParameterValue] = [:]
+        var parameters: [String: FieldValue] = [:]
         parameters.reserveCapacity(count)
         var previousKey: String?
         for _ in 0..<count {
@@ -178,7 +178,7 @@ extension QueryIRWireCodec {
             if let previousKey, key <= previousKey {
                 throw .nonCanonicalQueryParameterMap
             }
-            parameters[key] = try QueryParameterValue(from: &reader)
+            parameters[key] = try FieldValue(from: &reader)
             previousKey = key
         }
         return parameters

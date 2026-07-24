@@ -1,4 +1,6 @@
 
+import DatabaseTypes
+
 /// Feature-specific access path layered on top of a logical row source.
 ///
 /// `DataSource` stays relational/graph-oriented. Optional index- or
@@ -15,12 +17,12 @@ public enum AccessPath: Sendable, Equatable, Hashable {
 public struct IndexScanSource: Sendable, Equatable, Hashable {
     public let indexName: String
     public let kindIdentifier: String
-    public let parameters: [String: QueryParameterValue]
+    public let parameters: [String: FieldValue]
 
     public init(
         indexName: String,
         kindIdentifier: String,
-        parameters: [String: QueryParameterValue] = [:]
+        parameters: [String: FieldValue] = [:]
     ) {
         self.indexName = indexName
         self.kindIdentifier = kindIdentifier
@@ -32,13 +34,13 @@ public struct IndexScanSource: Sendable, Equatable, Hashable {
 public struct FusionSource: Sendable, Equatable, Hashable {
     public let inputs: [IndexScanSource]
     public let strategyIdentifier: String
-    public let parameters: [String: QueryParameterValue]
+    public let parameters: [String: FieldValue]
     public let identityField: String
 
     public init(
         inputs: [IndexScanSource],
         strategyIdentifier: String,
-        parameters: [String: QueryParameterValue] = [:],
+        parameters: [String: FieldValue] = [:],
         identityField: String = "id"
     ) {
         self.inputs = inputs

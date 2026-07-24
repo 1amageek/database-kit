@@ -137,13 +137,13 @@ public enum MutationExecuteOperation: DatabaseOperation {
         public let input: Input
         public let preconditions: [Precondition]
         public let graphPartitions: FieldObject
-        public let budget: DatabaseExecutionBudget
+        public let budget: ExecutionBudget
 
         public init(
             input: Input,
             preconditions: [Precondition] = [],
             graphPartitions: FieldObject = FieldObject(),
-            budget: DatabaseExecutionBudget = DatabaseExecutionBudget()
+            budget: ExecutionBudget = ExecutionBudget()
         ) {
             self.input = input
             self.preconditions = preconditions
@@ -169,7 +169,7 @@ public enum MutationExecuteOperation: DatabaseOperation {
                 input: input,
                 preconditions: preconditions,
                 graphPartitions: try FieldObject(from: &reader),
-                budget: try DatabaseExecutionBudget(from: &reader)
+                budget: try ExecutionBudget(from: &reader)
             )
         }
     }

@@ -620,7 +620,7 @@ private struct TurtleWriter {
 
     // MARK: - Literal Formatting
 
-    private func formatLiteral(_ literal: OWLLiteral) -> String {
+    private func formatLiteral(_ literal: RDFLiteral) -> String {
         if let language = literal.languageTag {
             var result =
                 "\"\(escapeTurtleString(literal.lexicalForm))\""

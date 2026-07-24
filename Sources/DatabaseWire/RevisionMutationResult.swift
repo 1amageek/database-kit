@@ -1,5 +1,5 @@
 import DatabaseTypes
-public struct DatabaseRevisionMutationResult: DatabaseWireValue, Hashable {
+public struct RevisionMutationResult: DatabaseWireValue, Hashable {
     public let commitVersion: UInt64
     public let revision: UInt64
 

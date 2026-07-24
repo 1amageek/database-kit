@@ -88,9 +88,16 @@ struct PackageBoundaryTests {
         )
         let forbiddenDeclarations: Set<String> = [
             "DatabaseObjectField",
+            "DatabaseEmpty",
+            "DatabaseExecutionBudget",
+            "DatabaseGraphTerm",
+            "DatabaseRevisionMutationResult",
+            "DatabaseValidationReport",
             "IndexMetadataValue",
+            "OWLLiteral",
             "ProtobufDecoder",
             "ProtobufEncoder",
+            "QueryParameterValue",
             "ServiceEnvelope",
         ]
 
@@ -217,7 +224,7 @@ struct PackageBoundaryTests {
             .split(separator: " ")
         guard let declarationIndex = tokens.firstIndex(where: {
             $0 == "struct" || $0 == "enum" || $0 == "class"
-                || $0 == "actor" || $0 == "protocol"
+                || $0 == "actor" || $0 == "protocol" || $0 == "typealias"
         }),
         declarationIndex + 1 < tokens.count else {
             return nil

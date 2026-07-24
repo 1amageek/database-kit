@@ -48,7 +48,7 @@ public indirect enum OWLDataRange: Sendable, Codable, Hashable {
     case dataComplementOf(OWLDataRange)
 
     /// Enumeration of literal values ({v₁, v₂, ...})
-    case dataOneOf([OWLLiteral])
+    case dataOneOf([RDFLiteral])
 
     /// Datatype with facet restrictions
     case datatypeRestriction(datatype: String, facets: [FacetRestriction])
@@ -168,7 +168,7 @@ extension OWLDataRange {
 
     /// Check if a literal could potentially belong to this range
     /// (Does not validate facet constraints)
-    public func couldContain(_ literal: OWLLiteral) -> Bool {
+    public func couldContain(_ literal: RDFLiteral) -> Bool {
         switch self {
         case .datatype(let dt):
             return literal.datatypeIRI.rawValue == dt

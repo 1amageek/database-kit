@@ -7,7 +7,7 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
     public enum GraphSelector: Sendable, Hashable {
         case all
         case defaultGraph
-        case named(DatabaseGraphTerm)
+        case named(Term)
 
         fileprivate func encode(
             into writer: inout DatabaseWireWriter
@@ -32,7 +32,7 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
             case 2:
                 self = .defaultGraph
             case 3:
-                self = .named(try DatabaseGraphTerm(from: &reader))
+                self = .named(try Term(from: &reader))
             case let tag:
                 throw .invalidValueTag(tag)
             }
@@ -43,13 +43,13 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
         public let index: String
         public let partitions: FieldObject
         public let graph: GraphSelector
-        public let edgeLabel: DatabaseGraphTerm?
+        public let edgeLabel: Term?
 
         public init(
             index: String,
             partitions: FieldObject = FieldObject(),
             graph: GraphSelector = .all,
-            edgeLabel: DatabaseGraphTerm? = nil
+            edgeLabel: Term? = nil
         ) {
             self.index = index
             self.partitions = partitions
@@ -76,7 +76,7 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
                 partitions: try FieldObject(from: &reader),
                 graph: try GraphSelector(from: &reader),
                 edgeLabel: try reader.readBool()
-                    ? try DatabaseGraphTerm(from: &reader)
+                    ? try Term(from: &reader)
                     : nil
             )
         }
@@ -173,15 +173,15 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
 
     public enum Invocation: Sendable, Hashable {
         case shortestPath(
-            source: DatabaseGraphTerm,
-            target: DatabaseGraphTerm,
+            source: Term,
+            target: Term,
             maximumDepth: UInt32,
             bidirectional: Bool,
             maximumNodes: UInt64
         )
         case weightedShortestPath(
-            source: DatabaseGraphTerm,
-            target: DatabaseGraphTerm,
+            source: Term,
+            target: Term,
             weightProperty: String,
             maximumWeight: Double,
             maximumNodes: UInt64
@@ -190,7 +190,7 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
             dampingFactor: Double,
             maximumIterations: UInt32,
             convergenceThreshold: Double,
-            personalizedSource: DatabaseGraphTerm?
+            personalizedSource: Term?
         )
         case community(
             maximumIterations: UInt32,
@@ -284,16 +284,16 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
             switch try reader.readUInt8() {
             case 1:
                 self = .shortestPath(
-                    source: try DatabaseGraphTerm(from: &reader),
-                    target: try DatabaseGraphTerm(from: &reader),
+                    source: try Term(from: &reader),
+                    target: try Term(from: &reader),
                     maximumDepth: try reader.readUInt32(),
                     bidirectional: try reader.readBool(),
                     maximumNodes: try reader.readUInt64()
                 )
             case 2:
                 self = .weightedShortestPath(
-                    source: try DatabaseGraphTerm(from: &reader),
-                    target: try DatabaseGraphTerm(from: &reader),
+                    source: try Term(from: &reader),
+                    target: try Term(from: &reader),
                     weightProperty: try reader.readString(),
                     maximumWeight: try reader.readDouble(),
                     maximumNodes: try reader.readUInt64()
@@ -304,7 +304,7 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
                     maximumIterations: try reader.readUInt32(),
                     convergenceThreshold: try reader.readDouble(),
                     personalizedSource: try reader.readBool()
-                        ? try DatabaseGraphTerm(from: &reader)
+                        ? try Term(from: &reader)
                         : nil
                 )
             case 4:
@@ -366,13 +366,13 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
         public let source: Source
         public let invocation: Invocation
         public let page: Page
-        public let budget: DatabaseExecutionBudget
+        public let budget: ExecutionBudget
 
         public init(
             source: Source,
             invocation: Invocation,
             page: Page = Page(),
-            budget: DatabaseExecutionBudget = DatabaseExecutionBudget()
+            budget: ExecutionBudget = ExecutionBudget()
         ) {
             self.source = source
             self.invocation = invocation
@@ -396,15 +396,15 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
                 source: try Source(from: &reader),
                 invocation: try Invocation(from: &reader),
                 page: try Page(from: &reader),
-                budget: try DatabaseExecutionBudget(from: &reader)
+                budget: try ExecutionBudget(from: &reader)
             )
         }
     }
 
     public struct PathResult: DatabaseWireValue, Hashable {
         public let found: Bool
-        public let nodes: [DatabaseGraphTerm]
-        public let edgeLabels: [DatabaseGraphTerm]
+        public let nodes: [Term]
+        public let edgeLabels: [Term]
         public let weights: [Double]
         public let totalWeight: Double?
         public let nodesExplored: UInt64
@@ -413,8 +413,8 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
 
         public init(
             found: Bool,
-            nodes: [DatabaseGraphTerm],
-            edgeLabels: [DatabaseGraphTerm] = [],
+            nodes: [Term],
+            edgeLabels: [Term] = [],
             weights: [Double] = [],
             totalWeight: Double? = nil,
             nodesExplored: UInt64,
@@ -490,10 +490,10 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
     }
 
     public struct Score: DatabaseWireValue, Hashable {
-        public let vertex: DatabaseGraphTerm
+        public let vertex: Term
         public let score: Double
 
-        public init(vertex: DatabaseGraphTerm, score: Double) {
+        public init(vertex: Term, score: Double) {
             self.vertex = vertex
             self.score = score
         }
@@ -509,7 +509,7 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
-                vertex: try DatabaseGraphTerm(from: &reader),
+                vertex: try Term(from: &reader),
                 score: try reader.readDouble()
             )
         }
@@ -560,10 +560,10 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
     }
 
     public struct CommunityAssignment: DatabaseWireValue, Hashable {
-        public let vertex: DatabaseGraphTerm
-        public let community: DatabaseGraphTerm
+        public let vertex: Term
+        public let community: Term
 
-        public init(vertex: DatabaseGraphTerm, community: DatabaseGraphTerm) {
+        public init(vertex: Term, community: Term) {
             self.vertex = vertex
             self.community = community
         }
@@ -579,8 +579,8 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
-                vertex: try DatabaseGraphTerm(from: &reader),
-                community: try DatabaseGraphTerm(from: &reader)
+                vertex: try Term(from: &reader),
+                community: try Term(from: &reader)
             )
         }
     }
@@ -635,10 +635,10 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
     }
 
     public struct DirectedEdge: DatabaseWireValue, Hashable {
-        public let source: DatabaseGraphTerm
-        public let target: DatabaseGraphTerm
+        public let source: Term
+        public let target: Term
 
-        public init(source: DatabaseGraphTerm, target: DatabaseGraphTerm) {
+        public init(source: Term, target: Term) {
             self.source = source
             self.target = target
         }
@@ -654,20 +654,20 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
-                source: try DatabaseGraphTerm(from: &reader),
-                target: try DatabaseGraphTerm(from: &reader)
+                source: try Term(from: &reader),
+                target: try Term(from: &reader)
             )
         }
     }
 
     public struct CyclePage: DatabaseWireValue, Hashable {
-        public let cycles: [[DatabaseGraphTerm]]
+        public let cycles: [[Term]]
         public let backEdges: [DirectedEdge]
         public let nodesExplored: UInt64
         public let progress: Progress
 
         public init(
-            cycles: [[DatabaseGraphTerm]],
+            cycles: [[Term]],
             backEdges: [DirectedEdge],
             nodesExplored: UInt64,
             progress: Progress
@@ -693,7 +693,7 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let cycleCount = try reader.readCount()
-            var cycles: [[DatabaseGraphTerm]] = []
+            var cycles: [[Term]] = []
             cycles.reserveCapacity(cycleCount)
             for _ in 0..<cycleCount {
                 cycles.append(try PathResult.decodeTerms(from: &reader))
@@ -714,12 +714,12 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
     }
 
     public struct ComponentPage: DatabaseWireValue, Hashable {
-        public let components: [[DatabaseGraphTerm]]
+        public let components: [[Term]]
         public let nodesExplored: UInt64
         public let progress: Progress
 
         public init(
-            components: [[DatabaseGraphTerm]],
+            components: [[Term]],
             nodesExplored: UInt64,
             progress: Progress
         ) {
@@ -743,7 +743,7 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let count = try reader.readCount()
-            var components: [[DatabaseGraphTerm]] = []
+            var components: [[Term]] = []
             components.reserveCapacity(count)
             for _ in 0..<count {
                 components.append(try PathResult.decodeTerms(from: &reader))
@@ -757,14 +757,14 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
     }
 
     public struct TopologicalResult: DatabaseWireValue, Hashable {
-        public let order: [DatabaseGraphTerm]?
-        public let cyclicNodes: [DatabaseGraphTerm]
+        public let order: [Term]?
+        public let cyclicNodes: [Term]
         public let totalNodes: UInt64
         public let progress: Progress
 
         public init(
-            order: [DatabaseGraphTerm]?,
-            cyclicNodes: [DatabaseGraphTerm],
+            order: [Term]?,
+            cyclicNodes: [Term],
             totalNodes: UInt64,
             progress: Progress
         ) {
@@ -850,7 +850,7 @@ public enum GraphAlgorithmOperation: DatabaseOperation {
 
 private extension GraphAlgorithmOperation.PathResult {
     static func encodeTerms(
-        _ values: [DatabaseGraphTerm],
+        _ values: [GraphAlgorithmOperation.Term],
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         try writer.writeCount(values.count)
@@ -859,12 +859,12 @@ private extension GraphAlgorithmOperation.PathResult {
 
     static func decodeTerms(
         from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> [DatabaseGraphTerm] {
+    ) throws(DatabaseWireError) -> [GraphAlgorithmOperation.Term] {
         let count = try reader.readCount()
-        var values: [DatabaseGraphTerm] = []
+        var values: [GraphAlgorithmOperation.Term] = []
         values.reserveCapacity(count)
         for _ in 0..<count {
-            values.append(try DatabaseGraphTerm(from: &reader))
+            values.append(try GraphAlgorithmOperation.Term(from: &reader))
         }
         return values
     }
