@@ -7,7 +7,6 @@ import DatabaseTypes
 
 public enum SchemaCompatibilityIssue: Error, Sendable, Equatable, CustomStringConvertible {
     case removedEntity(entityName: String)
-    case duplicateFieldNumber(entityName: String, fieldNumber: Int, fieldNames: [String])
     case removedField(entityName: String, fieldName: String, fieldNumber: Int)
     case renumberedField(entityName: String, fieldName: String, expected: Int, actual: Int)
     case changedFieldEncoding(entityName: String, fieldName: String, from: FieldSchema, to: FieldSchema)
@@ -17,10 +16,6 @@ public enum SchemaCompatibilityIssue: Error, Sendable, Equatable, CustomStringCo
         switch self {
         case .removedEntity(let entityName):
             return "Entity '\(entityName)' was removed and requires a custom migration."
-
-        case .duplicateFieldNumber(let entityName, let fieldNumber, let fieldNames):
-            let names = fieldNames.sorted().joined(separator: ", ")
-            return "Entity '\(entityName)' reuses field number \(fieldNumber) for [\(names)]."
 
         case .removedField(let entityName, let fieldName, let fieldNumber):
             return "Entity '\(entityName)' removed field '\(fieldName)' (#\(fieldNumber))."
@@ -92,8 +87,6 @@ public struct SchemaCompatibilityReport: Sendable, Equatable {
 extension Schema.Entity {
     public func compatibilityReport(from previous: Schema.Entity) -> EntitySchemaCompatibilityReport {
         var issues: [SchemaCompatibilityIssue] = []
-        issues.append(contentsOf: duplicateFieldNumberIssues(for: previous))
-        issues.append(contentsOf: duplicateFieldNumberIssues(for: self))
 
         let previousByName = Dictionary(uniqueKeysWithValues: previous.fields.map { ($0.name, $0) })
         let currentByName = Dictionary(uniqueKeysWithValues: fields.map { ($0.name, $0) })
@@ -156,20 +149,6 @@ extension Schema.Entity {
         )
     }
 
-    private func duplicateFieldNumberIssues(for entity: Schema.Entity) -> [SchemaCompatibilityIssue] {
-        let grouped = Dictionary(grouping: entity.fields, by: \.fieldNumber)
-        return grouped
-            .compactMap { fieldNumber, fields in
-                guard fields.count > 1 else { return nil }
-                return SchemaCompatibilityIssue.duplicateFieldNumber(
-                    entityName: entity.name,
-                    fieldNumber: fieldNumber,
-                    fieldNames: fields.map(\.name).sorted()
-                )
-            }
-            .sorted(by: issueSort)
-    }
-
     private func fieldSort(lhs: FieldSchema, rhs: FieldSchema) -> Bool {
         if lhs.fieldNumber != rhs.fieldNumber {
             return lhs.fieldNumber < rhs.fieldNumber
@@ -177,9 +156,6 @@ extension Schema.Entity {
         return lhs.name < rhs.name
     }
 
-    private func issueSort(lhs: SchemaCompatibilityIssue, rhs: SchemaCompatibilityIssue) -> Bool {
-        lhs.description < rhs.description
-    }
 }
 
 extension Schema {
