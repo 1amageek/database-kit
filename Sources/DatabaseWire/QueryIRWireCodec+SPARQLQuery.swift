@@ -51,8 +51,8 @@ extension QueryIRWireCodec {
             into: &writer,
             encode: encodeSortKey
         )
-        try writeOptionalInt(modifiers.limit, into: &writer)
-        try writeOptionalInt(modifiers.offset, into: &writer)
+        writeOptionalUInt64(modifiers.limit, into: &writer)
+        writeOptionalUInt64(modifiers.offset, into: &writer)
     }
 
     static func decodeSPARQLSolutionModifiers(
@@ -62,8 +62,8 @@ extension QueryIRWireCodec {
             groupBy: try readArray(from: &reader, decode: decodeExpression),
             having: try readArray(from: &reader, decode: decodeExpression),
             orderBy: try readArray(from: &reader, decode: decodeSortKey),
-            limit: try readOptionalInt(from: &reader),
-            offset: try readOptionalInt(from: &reader)
+            limit: try readOptionalUInt64(from: &reader),
+            offset: try readOptionalUInt64(from: &reader)
         )
     }
 

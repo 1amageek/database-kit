@@ -61,6 +61,7 @@ private extension QueryIRExpressionWireEncoder {
         case bool(Bool)
         case byte(UInt8)
         case optionalInt(Int?)
+        case optionalUInt64(UInt64?)
         case optionalAccessPath(AccessPath?)
         case projection(Projection)
         case projectionItemCursor([ProjectionItem], index: Int)
@@ -149,6 +150,9 @@ private extension QueryIRExpressionWireEncoder {
 
         case .optionalInt(let value):
             try QueryIRWireCodec.writeOptionalInt(value, into: &writer)
+
+        case .optionalUInt64(let value):
+            QueryIRWireCodec.writeOptionalUInt64(value, into: &writer)
 
         case .optionalAccessPath(let value):
             guard let value else {
@@ -655,8 +659,8 @@ private extension QueryIRExpressionWireEncoder {
         encodingSteps.append(.bool(query.reduced))
         encodingSteps.append(.optionalNamedSubqueryArray(query.subqueries))
         encodingSteps.append(.bool(query.distinct))
-        encodingSteps.append(.optionalInt(query.offset))
-        encodingSteps.append(.optionalInt(query.limit))
+        encodingSteps.append(.optionalUInt64(query.offset))
+        encodingSteps.append(.optionalUInt64(query.limit))
         encodingSteps.append(.optionalSortKeyArray(query.orderBy))
         encodingSteps.append(.optionalExpression(query.having))
         encodingSteps.append(.optionalExpressionArray(query.groupBy))

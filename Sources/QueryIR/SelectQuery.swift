@@ -31,10 +31,10 @@ public struct SelectQuery: Sendable, Equatable, Hashable {
     public let orderBy: [SortKey]?
 
     /// Result limit (LIMIT)
-    public let limit: Int?
+    public let limit: UInt64?
 
     /// Result offset (OFFSET)
-    public let offset: Int?
+    public let offset: UInt64?
 
     /// DISTINCT flag
     public let distinct: Bool
@@ -56,8 +56,8 @@ public struct SelectQuery: Sendable, Equatable, Hashable {
         groupBy: [Expression]? = nil,
         having: Expression? = nil,
         orderBy: [SortKey]? = nil,
-        limit: Int? = nil,
-        offset: Int? = nil,
+        limit: UInt64? = nil,
+        offset: UInt64? = nil,
         distinct: Bool = false,
         subqueries: [NamedSubquery]? = nil,
         reduced: Bool = false,
@@ -172,7 +172,7 @@ extension SelectQuery {
         )
     }
 
-    public func replacing(limit: Int?) -> SelectQuery {
+    public func replacing(limit: UInt64?) -> SelectQuery {
         SelectQuery(
             projection: projection,
             source: source,
@@ -190,7 +190,7 @@ extension SelectQuery {
         )
     }
 
-    public func replacing(offset: Int?) -> SelectQuery {
+    public func replacing(offset: UInt64?) -> SelectQuery {
         SelectQuery(
             projection: projection,
             source: source,
@@ -248,8 +248,8 @@ extension SelectQuery {
         projection: Projection? = nil,
         filter: Expression? = nil,
         orderBy: [SortKey]? = nil,
-        limit: Int? = nil,
-        offset: Int? = nil,
+        limit: UInt64? = nil,
+        offset: UInt64? = nil,
         distinct: Bool? = nil,
         reduced: Bool? = nil
     ) -> SelectQuery {

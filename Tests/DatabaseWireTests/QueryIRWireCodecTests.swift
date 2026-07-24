@@ -258,6 +258,38 @@ struct QueryIRWireCodecTests {
         }
     }
 
+    @Test("pagination preserves the complete unsigned wire domain")
+    func paginationPreservesUnsignedWireDomain() throws {
+        let select = QueryStatement.select(
+            SelectQuery(
+                projection: .all,
+                source: .table(TableRef("Event")),
+                limit: UInt64.max,
+                offset: UInt64.max - 1
+            )
+        )
+        let ask = QueryStatement.ask(
+            AskQuery(
+                pattern: .basic([]),
+                modifiers: SPARQLSolutionModifiers(
+                    limit: UInt64.max,
+                    offset: UInt64.max - 1
+                )
+            )
+        )
+
+        #expect(
+            try QueryIRWireCodec.decode(
+                QueryIRWireCodec.encode(select)
+            ) == select
+        )
+        #expect(
+            try QueryIRWireCodec.decode(
+                QueryIRWireCodec.encode(ask)
+            ) == ask
+        )
+    }
+
     @Test("graph transfer has a stable compact golden vector")
     func graphTransferGoldenVector() throws {
         let statement = QueryStatement.sparqlUpdate(

@@ -3,15 +3,15 @@ public struct SPARQLSolutionModifiers: Sendable, Equatable, Hashable {
     public let groupBy: [Expression]
     public let having: [Expression]
     public let orderBy: [SortKey]
-    public let limit: Int?
-    public let offset: Int?
+    public let limit: UInt64?
+    public let offset: UInt64?
 
     public init(
         groupBy: [Expression] = [],
         having: [Expression] = [],
         orderBy: [SortKey] = [],
-        limit: Int? = nil,
-        offset: Int? = nil
+        limit: UInt64? = nil,
+        offset: UInt64? = nil
     ) {
         self.groupBy = groupBy
         self.having = having

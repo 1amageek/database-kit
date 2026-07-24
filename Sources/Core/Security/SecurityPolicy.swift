@@ -91,8 +91,8 @@ public protocol SecurityPolicy: Persistable {
     /// Defined as a protocol requirement to allow calling from `any SecurityPolicy.Type`.
     /// Normally you only need to implement `allowList` - this method delegates to it.
     static func _evaluateList(
-        limit: Int?,
-        offset: Int?,
+        limit: UInt64?,
+        offset: UInt64?,
         orderBy: [String]?,
         auth: (any AuthContext)?
     ) -> Bool
@@ -149,8 +149,8 @@ public extension SecurityPolicy {
     ///
     /// Builds SecurityQuery internally and delegates to allowList.
     static func _evaluateList(
-        limit: Int?,
-        offset: Int?,
+        limit: UInt64?,
+        offset: UInt64?,
         orderBy: [String]?,
         auth: (any AuthContext)?
     ) -> Bool {

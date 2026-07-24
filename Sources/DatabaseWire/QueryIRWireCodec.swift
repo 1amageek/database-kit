@@ -186,4 +186,23 @@ public enum QueryIRWireCodec {
         guard try reader.readBool() else { return nil }
         return try readInt(from: &reader)
     }
+
+    static func writeOptionalUInt64(
+        _ value: UInt64?,
+        into writer: inout DatabaseWireWriter
+    ) {
+        guard let value else {
+            writer.writeBool(false)
+            return
+        }
+        writer.writeBool(true)
+        writer.writeUInt64(value)
+    }
+
+    static func readOptionalUInt64(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> UInt64? {
+        guard try reader.readBool() else { return nil }
+        return try reader.readUInt64()
+    }
 }

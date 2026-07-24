@@ -20,15 +20,19 @@ import DatabaseTypes
 /// ```
 public struct SecurityQuery<T: Persistable>: Sendable {
     /// Maximum number of items to retrieve
-    public let limit: Int?
+    public let limit: UInt64?
 
     /// Offset for pagination
-    public let offset: Int?
+    public let offset: UInt64?
 
     /// Sort order fields
     public let orderBy: [String]?
 
-    public init(limit: Int? = nil, offset: Int? = nil, orderBy: [String]? = nil) {
+    public init(
+        limit: UInt64? = nil,
+        offset: UInt64? = nil,
+        orderBy: [String]? = nil
+    ) {
         self.limit = limit
         self.offset = offset
         self.orderBy = orderBy

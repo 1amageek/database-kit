@@ -197,7 +197,7 @@ private extension QueryIRExpressionWireDecoder {
         case selectStoreExpression(SelectDecodingState, SelectExpressionField, nextStage: Int)
         case selectStoreExpressionList(SelectDecodingState, SelectExpressionListField, nextStage: Int)
         case selectStoreSortKeys(SelectDecodingState, nextStage: Int)
-        case selectFinish(SelectDecodingState, limit: Int?, offset: Int?, distinct: Bool, hasSubqueries: Bool)
+        case selectFinish(SelectDecodingState, limit: UInt64?, offset: UInt64?, distinct: Bool, hasSubqueries: Bool)
         case projection
         case projectionItemCursor(CollectionCursor<ProjectionItem>)
         case projectionItemCursorAppend(CollectionCursor<ProjectionItem>)
@@ -1260,8 +1260,8 @@ private extension QueryIRExpressionWireDecoder {
                 )
                 decodingSteps.append(.sortKeyCursor(CollectionCursor(count: count)))
             case 4:
-                let limit = try QueryIRWireCodec.readOptionalInt(from: &reader)
-                let offset = try QueryIRWireCodec.readOptionalInt(from: &reader)
+                let limit = try QueryIRWireCodec.readOptionalUInt64(from: &reader)
+                let offset = try QueryIRWireCodec.readOptionalUInt64(from: &reader)
                 let distinct = try reader.readBool()
                 let hasSubqueries = try reader.readBool()
                 decodingSteps.append(
