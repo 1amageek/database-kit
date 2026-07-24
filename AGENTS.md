@@ -12,6 +12,29 @@
   semantics remain here unless the declaration passes the workspace primitive
   admission gate.
 - DatabaseWire is deterministic and bounded. Every decoder must reject truncated, oversized, invalid, unknown, or trailing input explicitly.
+- `DatabaseKitFoundation` is the optional native-only integration between
+  Foundation scalar values and `DatabaseKit` model adaptation. It must never
+  enter the `DatabaseKit`, `DatabaseWire`, or Embedded dependency graph.
+
+## Architectural Priorities
+
+- Correct database semantics and explicit ownership are prerequisites.
+- Zero-copy data flow and Embedded suitability are primary design inputs, not
+  later optimizations.
+- Performance-sensitive paths use one final owned `ByteString` plus bounded
+  views. Independently owned network, JavaScript, or native API boundaries may
+  copy once when ownership cannot be shared.
+- The Embedded path does not use Foundation, Codable-based persistence,
+  reflection, existential storage, JavaScriptKit, or mutable runtime
+  registration.
+- Model adaptation is generated statically. Do not add `Mirror`,
+  `any Persistable`, `[any Descriptor]`, or `[any Persistable.Type]` to a
+  production path.
+- Bulk Wire results retain their frame and materialize rows or values on
+  demand. Do not eagerly decode an entire result page merely for API
+  convenience.
+- `ByteString` is the only canonical byte value. Do not introduce a
+  package-specific byte alias.
 
 ## Naming
 

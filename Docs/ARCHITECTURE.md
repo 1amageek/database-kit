@@ -3,6 +3,8 @@
 The normative package and module-boundary contract is defined in
 [database-kit Responsibility Specification](DATABASE_KIT_SPECIFICATION.md).
 This document describes behavioral invariants within that ownership model.
+The performance-sensitive ownership path is defined in
+[Zero-Copy and Embedded Architecture](ZERO_COPY_EMBEDDED_DESIGN.md).
 
 ## Responsibility
 
@@ -31,6 +33,7 @@ The arrows point from a consumer to a dependency.
 |---|---|---|
 | `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, and SHACL declarations | Primitive values, Codable-based canonical persistence, execution, transport |
 | `DatabaseWire` | Version 1 envelopes, typed operations, bounded binary encoding and decoding, and internal canonical digest support | Semantic meaning, network transport, or operation execution |
+| `DatabaseKitFoundation` | Native Foundation scalar participation in `Persistable` field adaptation | Primitive conversion rules, Wire, transport, or Embedded behavior |
 | Compiler plugin | Static generation for `DatabaseKit` contracts | Runtime behavior or a public library product |
 
 ## Primitive Boundary
@@ -49,6 +52,31 @@ inside that module rather than products.
 
 Primitive Foundation conversions remain in `DatabaseTypesFoundation`.
 `DatabaseKit` and `DatabaseWire` do not depend on that product.
+`DatabaseKitFoundation` depends on those conversions and exposes their
+participation in `Persistable` field adaptation to native applications.
+
+## Performance Foundation
+
+Zero-copy and Embedded suitability shape the APIs rather than being retrofitted
+onto them:
+
+```text
+static model traversal
+      │
+      ├── measure exact frame
+      └── write one final ByteString
+                         │
+                         ▼
+               bounded borrowing decode
+                         │
+                         ▼
+                 lazy bulk-result view
+```
+
+The target core path contains no reflection, existential storage, Foundation,
+JavaScriptKit, or intermediate byte arrays. Independently owned native,
+JavaScript, and network boundaries may copy once when ownership cannot be
+shared; internal stages do not repeat that copy.
 
 ## Schema Catalog Boundary
 

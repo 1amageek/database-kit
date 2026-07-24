@@ -6,6 +6,10 @@ protocol for the database ecosystem.
 The normative ownership and product contract is documented in
 [database-kit Responsibility Specification](Docs/DATABASE_KIT_SPECIFICATION.md).
 
+The version 1 architecture migration is in progress. Product declarations or
+Native tests alone are not evidence that the Embedded and zero-copy acceptance
+gates have passed.
+
 ## Overview
 
 database-kit is the semantic contract consumed by both
@@ -26,6 +30,7 @@ It provides:
 - canonical binary `DatabaseWire` operations, envelopes, limits, and errors
 - one Foundation-independent semantic module
 - one canonical bounded binary protocol module
+- one optional native Foundation model-integration module
 
 ```
 database-client ────────┐
@@ -52,13 +57,16 @@ dependencies: [
 | Module | Description |
 |--------|-------------|
 | `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, and SHACL declarations |
-| `DatabaseWire` | Canonical binary envelopes, typed operations, bounded codecs, results, errors, and internal digest support |
+| `DatabaseWire` | Canonical binary envelopes, typed operations, bounded encoding and decoding, results, errors, and internal digest support |
+| `DatabaseKitFoundation` | Native-only participation of Foundation scalar types in `Persistable` field adaptation |
 
 Relationship, vector, full-text, geographic, rank, permutation, graph,
 ontology, and SHACL are source classifications within `DatabaseKit`, not
 separate products.
 
-`DatabaseKit` and `DatabaseWire` build with the Swift Embedded WASM SDK.
+`DatabaseKit` and `DatabaseWire` are required to build with the matching Swift
+Embedded WASM SDK before the version 1 implementation is complete.
+`DatabaseKitFoundation` is excluded from that dependency graph.
 
 There is no umbrella value module in database-kit. `FieldValue` and every
 primitive alternative are defined only by `DatabaseTypes`; the database-kit
@@ -72,6 +80,10 @@ mutable-array writer path.
 
 See [Architecture and ownership](Docs/ARCHITECTURE.md) for the package boundary
 and dependency rules.
+See
+[Zero-Copy and Embedded Architecture](Docs/ZERO_COPY_EMBEDDED_DESIGN.md) for
+the copy budget, static model-adaptation design, lazy result pages, and WASM
+host transport contract.
 
 ## Verification
 
@@ -444,7 +456,7 @@ Bare names (without `:`, `#`, or `/`) default to the namespace extracted from th
 |---------|------|----------|
 | **[database-types](https://github.com/1amageek/database-types)** | Primitive field-value algebra and immutable byte ownership | Embedded, Apple, Linux |
 | **[database-framework](https://github.com/1amageek/database-framework)** | Database execution, transactions, indexes, graph, ontology, and validation | WASI, macOS, Linux |
-| **[database-client](https://github.com/1amageek/database-client)** | Typed invocation and JavaScript, HTTP, and WebSocket transports | Embedded, Apple, Linux |
+| **[database-client](https://github.com/1amageek/database-client)** | Typed invocation and WASM host, HTTP, and WebSocket transports | Embedded, Apple, Linux |
 | **[storage-kit](https://github.com/1amageek/storage-kit)** | Storage transactions and backend adapters | WASI, macOS, Linux |
 
 ## License

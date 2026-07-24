@@ -16,7 +16,8 @@ part of the design.
 ## Package Responsibility
 
 `database-kit` owns the Foundation-independent database semantic contract above
-the primitive values provided by `database-types`.
+the primitive values provided by `database-types`, plus an optional native
+product that integrates Foundation scalars with that semantic contract.
 
 It defines:
 
@@ -43,9 +44,31 @@ The package does not own:
 - application-specific schemas;
 - Foundation scalar representation or implicit platform conversion policy.
 
+## Architectural Foundation
+
+Correct database semantics and explicit ownership come first. Within that
+correctness boundary, zero-copy data flow and Embedded suitability are primary
+architecture inputs rather than optional optimizations.
+
+| Priority | Requirement |
+|---:|---|
+| 1 | Correct database meaning, typed failure, and explicit ownership |
+| 2 | Zero-copy processing on performance-sensitive byte and result paths |
+| 3 | A small Foundation-independent Embedded dependency graph |
+| 4 | Convenience that preserves the first three requirements |
+
+The detailed ownership, copy budget, static model-adaptation shape, lazy result
+design, and WASM host boundary are defined in
+[Zero-Copy and Embedded Architecture](ZERO_COPY_EMBEDDED_DESIGN.md).
+
+Zero-copy means one final owned buffer plus bounded views inside the Swift data
+path. It does not claim that independently owned network or JavaScript heaps
+can share memory. An unavoidable boundary copy is explicit, occurs at most once
+per direction, and is measured.
+
 ## Responsibility Decomposition
 
-The package contains two public responsibilities. They are separate products
+The package contains three public responsibilities. They are separate products
 because semantic declarations and their transfer representation have different
 reasons to change.
 
@@ -53,6 +76,10 @@ reasons to change.
 |---|---|---|
 | `DatabaseKit` | Persisted model and document meaning, identity, schema, query, mutation, relationship, index, graph, ontology, and SHACL declarations | Database semantics or their static declaration contracts change |
 | `DatabaseWire` | The canonical version 1 binary representation of database operations | The version 1 frame, operation, bound, or protocol-error contract changes |
+| `DatabaseKitFoundation` | Native Foundation scalar participation in `DatabaseKit` model adaptation | Foundation APIs or the explicit canonical scalar-conversion boundary changes |
+
+`DatabaseKitFoundation` is an optional platform integration product. It is not
+part of the Foundation-independent or Embedded graph.
 
 The package name is not a semantic namespace. A declaration belongs here only
 when its represented concept belongs to one of the responsibilities above.
@@ -70,6 +97,10 @@ database-client ───────▶ DatabaseWire ───────▶ D
                                ▲                    ▲
                                │                    │
 database-framework ────────────┴────────────────────┘
+
+native application ────▶ DatabaseKitFoundation ────▶ DatabaseKit
+                                  │
+                                  └───────────────▶ DatabaseTypesFoundation
 ```
 
 Arrows point from a consumer to the contract it depends on.
@@ -240,18 +271,19 @@ execution behavior.
 
 ## Public Product Surface
 
-`database-kit` publishes two library products:
+`database-kit` publishes three library products:
 
 | Product | Responsibility |
 |---|---|
 | `DatabaseKit` | Foundation-independent database semantic declarations |
 | `DatabaseWire` | Canonical bounded binary operation representation |
+| `DatabaseKitFoundation` | Native-only integration of Foundation scalar values with `DatabaseKit` field adaptation |
 
 The compiler-plugin target is an implementation dependency of `DatabaseKit`
 and is not a public library product.
 
-No primitive, feature, Codable-only, digest, Foundation, compatibility, or
-re-export product is published. In particular:
+No primitive, feature, Codable-only, digest, compatibility, or re-export
+product is published. In particular:
 
 - there is no `DatabaseValue`; the canonical type is
   `DatabaseTypes.FieldValue`;
@@ -287,10 +319,10 @@ Sources/
 │   │   ├── Rank/
 │   │   └── Permuted/
 │   ├── Graph/
-│       ├── RDF/
-│       ├── SPARQL/
-│       ├── Ontology/
-│       └── SHACL/
+│   │   ├── RDF/
+│   │   ├── SPARQL/
+│   │   ├── Ontology/
+│   │   └── SHACL/
 │   └── Support/
 │       └── package-internal platform-neutral utilities
 ├── DatabaseWire/
@@ -298,6 +330,8 @@ Sources/
 │   ├── Encoding/
 │   ├── Decoding/
 │   └── Digest/
+├── DatabaseKitFoundation/
+│   └── explicit Foundation scalar participation in model adaptation
 └── DatabaseKitMacros/
 ```
 
@@ -305,7 +339,9 @@ Sources/
 
 `DatabaseKit` and `DatabaseWire` must not import Foundation,
 FoundationEssentials, `DatabaseTypesFoundation`, URLSession, JavaScriptKit, or
-platform runtime APIs.
+platform runtime APIs. `DatabaseKitFoundation` imports `DatabaseKit`,
+`DatabaseTypesFoundation`, and Foundation but is never a dependency of either
+canonical product.
 
 Foundation scalar conversion is owned by the
 `DatabaseTypesFoundation` product in `database-types`:
@@ -318,18 +354,21 @@ Foundation scalar conversion is owned by the
 | Foundation `Decimal` | `ExactDecimal` |
 | `DateComponents` representing a date amount | `CalendarPeriod` |
 
-`DatabaseTypesFoundation` is not a database model adapter and does not know
-about `Persistable`, schemas, fields, or DatabaseWire. It only defines explicit
-scalar conversion in both directions.
+`DatabaseTypesFoundation` is not a database model integration layer and does
+not know about `Persistable`, schemas, fields, or DatabaseWire. It only defines
+explicit scalar conversion in both directions.
 
-There is no object named `FoundationAdapter` and no `database-kit` Foundation
-product. A native application that declares Foundation property types imports
-`DatabaseTypesFoundation`. `@Persistable`-generated concrete adaptation invokes
-those visible scalar conversions at the application compilation boundary:
+There is no object named `FoundationAdapter`.
+`DatabaseKitFoundation` owns only the conformances and field-adaptation
+integration that make Foundation scalar properties participate in
+`Persistable`. A native application that declares Foundation property types
+imports `DatabaseKitFoundation`. That product delegates scalar conversion to
+`DatabaseTypesFoundation`:
 
 ```text
 native application target
   ├── Foundation property type
+  ├── DatabaseKitFoundation model integration
   ├── DatabaseTypesFoundation scalar conversion
   └── generated Persistable field adaptation
               │
@@ -546,7 +585,8 @@ Neither execution nor transport behavior is implemented in this package.
 
 The responsibility migration is complete only when all of the following hold:
 
-1. `Package.swift` publishes only `DatabaseKit` and `DatabaseWire`.
+1. `Package.swift` publishes only `DatabaseKit`, `DatabaseWire`, and the
+   native-only `DatabaseKitFoundation` integration product.
 2. No source or test imports a removed feature module.
 3. `DatabaseKit` and `DatabaseWire` contain no Foundation, Codable-based
    canonical adaptation, transport, runtime, or storage dependency.
