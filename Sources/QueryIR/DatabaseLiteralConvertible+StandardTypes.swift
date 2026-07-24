@@ -62,11 +62,25 @@ extension FieldValue: DatabaseLiteralConvertible {
                 return .null
             case .bool(let value):
                 return .bool(value)
+            case .int8(let value):
+                return .int(Int64(value))
+            case .int16(let value):
+                return .int(Int64(value))
+            case .int32(let value):
+                return .int(Int64(value))
             case .int64(let value):
                 return .int(value)
+            case .uint8(let value):
+                return .uint(UInt64(value))
+            case .uint16(let value):
+                return .uint(UInt64(value))
+            case .uint32(let value):
+                return .uint(UInt64(value))
             case .uint64(let value):
                 return .uint(value)
-            case .double(let value):
+            case .float32(let value):
+                return .double(Double(value))
+            case .float64(let value):
                 return .double(value)
             case .decimal(let coefficient, let scale):
                 return .decimal(coefficient: coefficient, scale: scale)

@@ -14,15 +14,15 @@ extension Int: FieldValueConvertible {
 }
 
 extension Int8: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+    public func toFieldValue() -> FieldValue { .int8(self) }
 }
 
 extension Int16: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+    public func toFieldValue() -> FieldValue { .int16(self) }
 }
 
 extension Int32: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .int64(Int64(self)) }
+    public func toFieldValue() -> FieldValue { .int32(self) }
 }
 
 extension Int64: FieldValueConvertible {
@@ -34,15 +34,15 @@ extension UInt: FieldValueConvertible {
 }
 
 extension UInt8: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .uint64(UInt64(self)) }
+    public func toFieldValue() -> FieldValue { .uint8(self) }
 }
 
 extension UInt16: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .uint64(UInt64(self)) }
+    public func toFieldValue() -> FieldValue { .uint16(self) }
 }
 
 extension UInt32: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .uint64(UInt64(self)) }
+    public func toFieldValue() -> FieldValue { .uint32(self) }
 }
 
 extension UInt64: FieldValueConvertible {
@@ -50,11 +50,11 @@ extension UInt64: FieldValueConvertible {
 }
 
 extension Float: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .double(Double(self)) }
+    public func toFieldValue() -> FieldValue { .float32(self) }
 }
 
 extension Double: FieldValueConvertible {
-    public func toFieldValue() -> FieldValue { .double(self) }
+    public func toFieldValue() -> FieldValue { .float64(self) }
 }
 
 extension String: FieldValueConvertible {

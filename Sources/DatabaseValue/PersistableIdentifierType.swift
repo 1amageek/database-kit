@@ -5,7 +5,13 @@
 /// numbers, are not valid identifiers.
 public indirect enum PersistableIdentifierType: Sendable, Hashable {
     case bool
+    case int8
+    case int16
+    case int32
     case int64
+    case uint8
+    case uint16
+    case uint32
     case uint64
     case string
     case bytes

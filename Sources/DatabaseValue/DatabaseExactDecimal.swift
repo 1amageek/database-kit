@@ -20,8 +20,20 @@ public struct DatabaseExactDecimal: Sendable, Hashable {
 
     public init?(_ value: FieldValue) {
         switch value {
+        case .int8(let coefficient):
+            self.init(coefficient: Int64(coefficient), scale: 0)
+        case .int16(let coefficient):
+            self.init(coefficient: Int64(coefficient), scale: 0)
+        case .int32(let coefficient):
+            self.init(coefficient: Int64(coefficient), scale: 0)
         case .int64(let coefficient):
             self.init(coefficient: coefficient, scale: 0)
+        case .uint8(let coefficient):
+            self.init(coefficient: Int64(coefficient), scale: 0)
+        case .uint16(let coefficient):
+            self.init(coefficient: Int64(coefficient), scale: 0)
+        case .uint32(let coefficient):
+            self.init(coefficient: Int64(coefficient), scale: 0)
         case .uint64(let coefficient):
             guard let signed = Int64(exactly: coefficient) else { return nil }
             self.init(coefficient: signed, scale: 0)

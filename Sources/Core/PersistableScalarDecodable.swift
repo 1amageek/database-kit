@@ -42,10 +42,10 @@ extension Int8: PersistableScalarDecodable {
         _ value: FieldValue,
         field: String
     ) throws -> Int8 {
-        guard case .int64(let scalar) = value, let result = Int8(exactly: scalar) else {
+        guard case .int8(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an Int8")
         }
-        return result
+        return scalar
     }
 }
 
@@ -54,10 +54,10 @@ extension Int16: PersistableScalarDecodable {
         _ value: FieldValue,
         field: String
     ) throws -> Int16 {
-        guard case .int64(let scalar) = value, let result = Int16(exactly: scalar) else {
+        guard case .int16(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an Int16")
         }
-        return result
+        return scalar
     }
 }
 
@@ -66,10 +66,10 @@ extension Int32: PersistableScalarDecodable {
         _ value: FieldValue,
         field: String
     ) throws -> Int32 {
-        guard case .int64(let scalar) = value, let result = Int32(exactly: scalar) else {
+        guard case .int32(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an Int32")
         }
-        return result
+        return scalar
     }
 }
 
@@ -102,10 +102,10 @@ extension UInt8: PersistableScalarDecodable {
         _ value: FieldValue,
         field: String
     ) throws -> UInt8 {
-        guard case .uint64(let scalar) = value, let result = UInt8(exactly: scalar) else {
+        guard case .uint8(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a UInt8")
         }
-        return result
+        return scalar
     }
 }
 
@@ -114,10 +114,10 @@ extension UInt16: PersistableScalarDecodable {
         _ value: FieldValue,
         field: String
     ) throws -> UInt16 {
-        guard case .uint64(let scalar) = value, let result = UInt16(exactly: scalar) else {
+        guard case .uint16(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a UInt16")
         }
-        return result
+        return scalar
     }
 }
 
@@ -126,10 +126,10 @@ extension UInt32: PersistableScalarDecodable {
         _ value: FieldValue,
         field: String
     ) throws -> UInt32 {
-        guard case .uint64(let scalar) = value, let result = UInt32(exactly: scalar) else {
+        guard case .uint32(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a UInt32")
         }
-        return result
+        return scalar
     }
 }
 
@@ -150,10 +150,10 @@ extension Float: PersistableScalarDecodable {
         _ value: FieldValue,
         field: String
     ) throws -> Float {
-        guard case .double(let scalar) = value, let result = Float(exactly: scalar) else {
+        guard case .float32(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a Float")
         }
-        return result
+        return scalar
     }
 }
 
@@ -162,7 +162,7 @@ extension Double: PersistableScalarDecodable {
         _ value: FieldValue,
         field: String
     ) throws -> Double {
-        guard case .double(let scalar) = value else {
+        guard case .float64(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a Double")
         }
         return scalar

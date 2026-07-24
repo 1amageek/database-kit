@@ -58,7 +58,7 @@ struct IndexMacroE2ETests {
             )
             #expect(metadata.groupByFieldNames == ["category"])
             #expect(metadata.valueFieldName == "amount")
-            #expect(metadata.valueType == .double)
+            #expect(metadata.valueType == .float64)
         }
 
         let version = try Self.descriptor(named: "e2e_version_id").kind

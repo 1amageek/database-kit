@@ -26,7 +26,7 @@ struct PersistableFieldEncoderTests {
             low: 0x8899_AABB_CCDD_EEFF
         )))
         #expect(byName["note"] == .null)
-        #expect(byName["values"] == .array([.uint64(1), .uint64(4), .uint64(9)]))
+        #expect(byName["values"] == .array([.uint32(1), .uint32(4), .uint32(9)]))
 
         let decoded = try PersistableFieldEncoderTestDocument.decodePersistedFields(fields)
         #expect(decoded.id == document.id)

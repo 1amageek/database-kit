@@ -13,8 +13,20 @@ extension FieldValue {
 
     public var int64Value: Int64? {
         switch self {
+        case .int8(let value):
+            return Int64(value)
+        case .int16(let value):
+            return Int64(value)
+        case .int32(let value):
+            return Int64(value)
         case .int64(let value):
             return value
+        case .uint8(let value):
+            return Int64(value)
+        case .uint16(let value):
+            return Int64(value)
+        case .uint32(let value):
+            return Int64(value)
         case .uint64(let value) where value <= UInt64(Int64.max):
             return Int64(value)
         default:
@@ -24,8 +36,20 @@ extension FieldValue {
 
     public var uint64Value: UInt64? {
         switch self {
+        case .uint8(let value):
+            return UInt64(value)
+        case .uint16(let value):
+            return UInt64(value)
+        case .uint32(let value):
+            return UInt64(value)
         case .uint64(let value):
             return value
+        case .int8(let value) where value >= 0:
+            return UInt64(value)
+        case .int16(let value) where value >= 0:
+            return UInt64(value)
+        case .int32(let value) where value >= 0:
+            return UInt64(value)
         case .int64(let value) where value >= 0:
             return UInt64(value)
         default:
@@ -35,9 +59,23 @@ extension FieldValue {
 
     public var doubleValue: Double? {
         switch self {
-        case .double(let value):
+        case .float32(let value):
+            return Double(value)
+        case .float64(let value):
             return value
+        case .int8(let value):
+            return Double(value)
+        case .int16(let value):
+            return Double(value)
+        case .int32(let value):
+            return Double(value)
         case .int64(let value):
+            return Double(value)
+        case .uint8(let value):
+            return Double(value)
+        case .uint16(let value):
+            return Double(value)
+        case .uint32(let value):
             return Double(value)
         case .uint64(let value):
             return Double(value)
@@ -53,11 +91,25 @@ extension FieldValue {
     /// involved, so the result is deterministic across supported runtimes.
     public var numericDoubleValue: Double? {
         switch self {
+        case .int8(let value):
+            return Double(value)
+        case .int16(let value):
+            return Double(value)
+        case .int32(let value):
+            return Double(value)
         case .int64(let value):
+            return Double(value)
+        case .uint8(let value):
+            return Double(value)
+        case .uint16(let value):
+            return Double(value)
+        case .uint32(let value):
             return Double(value)
         case .uint64(let value):
             return Double(value)
-        case .double(let value):
+        case .float32(let value):
+            return Double(value)
+        case .float64(let value):
             return value
         case .decimal(let coefficient, let scale):
             let magnitude = Self.powerOfTen(

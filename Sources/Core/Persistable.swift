@@ -181,13 +181,13 @@ public protocol Persistable: Sendable, Codable {
     /// @Persistable
     /// struct User {
     ///     var email: String
-    ///     var age: Int = 0
+    ///     var age: Int32 = 0
     /// }
     ///
     /// User.fieldSchemas
     /// // [FieldSchema(name: "id", fieldNumber: 1, type: .string, ...),
     /// //  FieldSchema(name: "email", fieldNumber: 2, type: .string, ...),
-    /// //  FieldSchema(name: "age", fieldNumber: 3, type: .int, ...)]
+    /// //  FieldSchema(name: "age", fieldNumber: 3, type: .int32, ...)]
     /// ```
     static var fieldSchemas: [FieldSchema] { get }
 

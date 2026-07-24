@@ -813,7 +813,10 @@ private extension QueryStructuralValidator {
                         }
                     case .rdfTerm(let term):
                         validationSteps.append(.rdfTerm(term, depth: childDepth))
-                    case .null, .bool, .int64, .uint64, .double, .decimal,
+                    case .null, .bool,
+                         .int8, .int16, .int32, .int64,
+                         .uint8, .uint16, .uint32, .uint64,
+                         .float32, .float64, .decimal,
                          .string, .bytes, .date, .timestamp, .uuid,
                          .object, .reference:
                         break
@@ -846,7 +849,10 @@ private extension QueryStructuralValidator {
                         )
                     case .rdfTerm(let term):
                         validationSteps.append(.rdfTerm(term, depth: childDepth))
-                    case .null, .bool, .int64, .uint64, .double, .decimal,
+                    case .null, .bool,
+                         .int8, .int16, .int32, .int64,
+                         .uint8, .uint16, .uint32, .uint64,
+                         .float32, .float64, .decimal,
                          .string, .bytes, .date, .timestamp, .uuid:
                         break
                     }

@@ -835,6 +835,17 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             if !fieldInfo.isTransient {
                 schemaFieldIndex += 1
                 let rawType = fieldInfo.type
+                if isPlatformIntegerPersistedType(rawType) {
+                    throw DiagnosticsError(diagnostics: [
+                        Diagnostic(
+                            node: Syntax(node),
+                            message: MacroExpansionErrorMessage(
+                                "@Persistable field '\(fieldInfo.name)' uses \(persistedElementType(rawType)). " +
+                                "Persisted integer fields require an explicit fixed-width type."
+                            )
+                        )
+                    ])
+                }
                 var (schemaType, isOptional, isArray) = mapToFieldSchemaType(rawType)
                 let relationship = relationships.first {
                     $0.propertyName == fieldInfo.name
@@ -1408,6 +1419,37 @@ private func generateIndexName(typeName: String, indexKindName: String, fieldNam
 /// Maps a Swift type string to (FieldSchemaType name, isOptional, isArray)
 ///
 /// Handles Optional<T>, T?, [T], Array<T>, and bare types.
+private func persistedElementType(_ rawType: String) -> String {
+    var type = rawType.trimmingCharacters(in: .whitespaces)
+
+    var changed = true
+    while changed {
+        changed = false
+        if type.hasSuffix("?") {
+            type = String(type.dropLast()).trimmingCharacters(in: .whitespaces)
+            changed = true
+        } else if type.hasPrefix("Optional<"), type.hasSuffix(">") {
+            type = String(type.dropFirst("Optional<".count).dropLast())
+                .trimmingCharacters(in: .whitespaces)
+            changed = true
+        } else if type.hasPrefix("["), type.hasSuffix("]") {
+            type = String(type.dropFirst().dropLast())
+                .trimmingCharacters(in: .whitespaces)
+            changed = true
+        } else if type.hasPrefix("Array<"), type.hasSuffix(">") {
+            type = String(type.dropFirst("Array<".count).dropLast())
+                .trimmingCharacters(in: .whitespaces)
+            changed = true
+        }
+    }
+    return type
+}
+
+private func isPlatformIntegerPersistedType(_ rawType: String) -> Bool {
+    let type = persistedElementType(rawType)
+    return type == "Int" || type == "UInt"
+}
+
 private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isOptional: Bool, isArray: Bool) {
     var type = rawType.trimmingCharacters(in: .whitespaces)
 
@@ -1440,8 +1482,6 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
     switch type {
     case "String":
         schemaType = "string"
-    case "Int":
-        schemaType = "int"
     case "Int8":
         schemaType = "int8"
     case "Int16":
@@ -1450,8 +1490,6 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
         schemaType = "int32"
     case "Int64":
         schemaType = "int64"
-    case "UInt":
-        schemaType = "uint"
     case "UInt8":
         schemaType = "uint8"
     case "UInt16":
@@ -1461,9 +1499,9 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
     case "UInt64":
         schemaType = "uint64"
     case "Double":
-        schemaType = "double"
+        schemaType = "float64"
     case "Float":
-        schemaType = "float"
+        schemaType = "float32"
     case "Bool":
         schemaType = "bool"
     case "Date":

@@ -68,7 +68,7 @@ struct HyperLogLogTests {
         var hll = HyperLogLog()
 
         try hll.add(.int64(42))
-        try hll.add(.double(3.14))
+        try hll.add(.float64(3.14))
         try hll.add(.string("hello"))
         try hll.add(.bool(true))
         try hll.add(.bytes([1, 2, 3]))

@@ -86,7 +86,7 @@ public macro Persistable(type: String) = #externalMacro(module: "CoreMacros", ty
 ///
 ///     var email: String
 ///     var category: String
-///     var price: Int
+///     var price: Int64
 /// }
 /// ```
 ///

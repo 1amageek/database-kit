@@ -1,10 +1,41 @@
 import Testing
 import Foundation
+import SwiftSyntaxMacrosTestSupport
+import CoreMacros
 @testable import Core
 
 /// Tests for @Persistable macro validation and edge cases
 @Suite("@Persistable Macro Validation Tests")
 struct ModelMacroValidationTests {
+    @Test("@Persistable rejects platform-dependent integer storage")
+    func rejectsPlatformDependentIntegerStorage() {
+        assertMacroExpansion(
+            """
+            @Persistable
+            struct PlatformIntegerDocument {
+                var count: Int
+            }
+            """,
+            expandedSource: """
+            struct PlatformIntegerDocument {
+                var count: Int
+            }
+
+            extension PlatformIntegerDocument: Persistable, Codable, Sendable {
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "@Persistable field 'count' uses Int. Persisted integer fields require an explicit fixed-width type.",
+                    line: 1,
+                    column: 1
+                )
+            ],
+            macros: [
+                "Persistable": PersistableMacro.self
+            ]
+        )
+    }
 
     /// Test that indexDescriptors are correctly ordered
     @Test("Index descriptors maintain definition order")

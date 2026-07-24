@@ -79,7 +79,17 @@ struct CanonicalDatabaseWireTests {
     func fieldValueRoundTrips() throws {
         let identity = PersistableIdentity(
             entity: "Event",
-            id: .composite([.string("event-1"), .uint64(7)]),
+            id: .composite([
+                .int8(-1),
+                .int16(-2),
+                .int32(-3),
+                .int64(-4),
+                .uint8(1),
+                .uint16(2),
+                .uint32(3),
+                .uint64(4),
+                .string("event-1"),
+            ]),
             partitions: [
                 DatabaseObjectField(number: 1, name: "snapshot", value: .string("snapshot-a")),
             ]
@@ -89,7 +99,7 @@ struct CanonicalDatabaseWireTests {
             DatabaseObjectField(number: 2, name: "bool", value: .bool(true)),
             DatabaseObjectField(number: 3, name: "signed", value: .int64(-42)),
             DatabaseObjectField(number: 4, name: "unsigned", value: .uint64(42)),
-            DatabaseObjectField(number: 5, name: "double", value: .double(4.25)),
+            DatabaseObjectField(number: 5, name: "float64", value: .float64(4.25)),
             DatabaseObjectField(number: 6, name: "decimal", value: .decimal(coefficient: 12345, scale: 2)),
             DatabaseObjectField(number: 7, name: "string", value: .string("calendar")),
             DatabaseObjectField(number: 8, name: "bytes", value: .bytes([0, 1, 2])),
@@ -122,6 +132,22 @@ struct CanonicalDatabaseWireTests {
                         low: 0x8899_AABB_CCDD_EEFF
                     )
                 )
+            ),
+            DatabaseObjectField(
+                number: 15,
+                name: "fixedWidthNumbers",
+                value: .array([
+                    .int8(-8),
+                    .int16(-16),
+                    .int32(-32),
+                    .int64(-64),
+                    .uint8(8),
+                    .uint16(16),
+                    .uint32(32),
+                    .uint64(64),
+                    .float32(3.25),
+                    .float64(6.5),
+                ])
             ),
         ])
         var writer = DatabaseWireWriter()

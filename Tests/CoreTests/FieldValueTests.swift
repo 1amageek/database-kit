@@ -8,10 +8,31 @@ struct FieldValueTests {
     @Test("Unsigned Swift scalars preserve their exact values")
     func unsignedIntegerInitializersPreserveExactValues() {
         #expect(UInt.max.toFieldValue() == .uint64(UInt64(UInt.max)))
-        #expect(UInt8.max.toFieldValue() == .uint64(UInt64(UInt8.max)))
-        #expect(UInt16.max.toFieldValue() == .uint64(UInt64(UInt16.max)))
-        #expect(UInt32.max.toFieldValue() == .uint64(UInt64(UInt32.max)))
+        #expect(UInt8.max.toFieldValue() == .uint8(UInt8.max))
+        #expect(UInt16.max.toFieldValue() == .uint16(UInt16.max))
+        #expect(UInt32.max.toFieldValue() == .uint32(UInt32.max))
         #expect(UInt64.max.toFieldValue() == .uint64(UInt64.max))
+    }
+
+    @Test("Every fixed-width numeric type retains a distinct storage identity")
+    func fixedWidthNumericTypesRetainDistinctIdentity() throws {
+        let values: [FieldValue] = [
+            .int8(1),
+            .int16(1),
+            .int32(1),
+            .int64(1),
+            .uint8(1),
+            .uint16(1),
+            .uint32(1),
+            .uint64(1),
+            .float32(1),
+            .float64(1),
+        ]
+
+        #expect(Set(values).count == values.count)
+        #expect(try Set(values.map { try $0.stableHash() }).count == values.count)
+        #expect(FieldValue.float32(-0.0) != .float32(0.0))
+        #expect(FieldValue.float64(-0.0) != .float64(0.0))
     }
 
     @Test("UInt64 survives FieldValue and Codable round trips")
@@ -30,7 +51,7 @@ struct FieldValueTests {
 
     @Test("Stored numeric types preserve distinct identity and hashes")
     func storedNumericIdentityIsExact() throws {
-        let zero: [FieldValue] = [.int64(0), .uint64(0), .double(-0.0)]
+        let zero: [FieldValue] = [.int64(0), .uint64(0), .float64(-0.0)]
         #expect(Set(zero).count == 3)
         #expect(try Set(zero.map { try $0.stableHash() }).count == 3)
 
@@ -46,7 +67,7 @@ struct FieldValueTests {
         let unsignedDoubleBoundary = UInt64(1) << 63
         let unsignedAndDouble: [FieldValue] = [
             .uint64(unsignedDoubleBoundary),
-            .double(Double(unsignedDoubleBoundary)),
+            .float64(Double(unsignedDoubleBoundary)),
         ]
         #expect(Set(unsignedAndDouble).count == 2)
         #expect(
@@ -56,7 +77,7 @@ struct FieldValueTests {
         #expect(FieldValue.int64(0).compare(to: .uint64(0)) == .orderedSame)
         #expect(
             FieldValue.uint64(unsignedDoubleBoundary).compare(
-                to: .double(Double(unsignedDoubleBoundary))
+                to: .float64(Double(unsignedDoubleBoundary))
             ) == .orderedSame
         )
     }
@@ -68,16 +89,16 @@ struct FieldValueTests {
         let rounded = Double(adjacent)
 
         #expect(rounded == Double(exactDoubleBoundary))
-        #expect(FieldValue.uint64(adjacent) != .double(rounded))
-        #expect(FieldValue.uint64(exactDoubleBoundary) != .double(rounded))
+        #expect(FieldValue.uint64(adjacent) != .float64(rounded))
+        #expect(FieldValue.uint64(exactDoubleBoundary) != .float64(rounded))
         #expect(FieldValue.uint64(exactDoubleBoundary) < .uint64(adjacent))
-        #expect(FieldValue.uint64(adjacent) < .double(rounded))
+        #expect(FieldValue.uint64(adjacent) < .float64(rounded))
         #expect(
-            FieldValue.uint64(exactDoubleBoundary).compare(to: .double(rounded))
+            FieldValue.uint64(exactDoubleBoundary).compare(to: .float64(rounded))
                 == .orderedSame
         )
         #expect(
-            FieldValue.uint64(adjacent).compare(to: .double(rounded))
+            FieldValue.uint64(adjacent).compare(to: .float64(rounded))
                 == .orderedDescending
         )
 
@@ -97,7 +118,7 @@ struct FieldValueTests {
     func uint64UpperBoundaryOrderingIsExact() throws {
         let penultimate = FieldValue.uint64(UInt64.max - 1)
         let maximum = FieldValue.uint64(UInt64.max)
-        let roundedBeyondMaximum = FieldValue.double(Double(UInt64.max))
+        let roundedBeyondMaximum = FieldValue.float64(Double(UInt64.max))
 
         #expect(FieldValue.int64(-1) < .uint64(0))
         #expect(FieldValue.int64(Int64.max) < .uint64(UInt64(Int64.max) + 1))
@@ -121,7 +142,7 @@ struct FieldValueTests {
 
     @Test("Init from Double")
     func testInitDouble() {
-        let value = FieldValue.double(3.14)
+        let value = FieldValue.float64(3.14)
         #expect(value.doubleValue == 3.14)
         #expect(value.isNumeric == true)
         #expect(value.isNull == false)
@@ -203,7 +224,7 @@ struct FieldValueTests {
 
     @Test("numericDoubleValue for double")
     func testNumericDoubleValueDouble() {
-        let value = FieldValue.double(3.14)
+        let value = FieldValue.float64(3.14)
         #expect(value.numericDoubleValue == 3.14)
     }
 
@@ -227,8 +248,8 @@ struct FieldValueTests {
 
     @Test("Double comparison")
     func testDoubleComparison() {
-        let a = FieldValue.double(1.5)
-        let b = FieldValue.double(2.5)
+        let a = FieldValue.float64(1.5)
+        let b = FieldValue.float64(2.5)
 
         #expect(a < b)
         #expect(!(b < a))
@@ -297,7 +318,7 @@ struct FieldValueTests {
     @Test("Cross-type numeric comparison")
     func testCrossTypeNumericComparison() {
         let intVal = FieldValue.int64(10)
-        let doubleVal = FieldValue.double(10.5)
+        let doubleVal = FieldValue.float64(10.5)
 
         #expect(intVal < doubleVal)
         #expect(!(doubleVal < intVal))
@@ -352,7 +373,7 @@ struct FieldValueTests {
     func testCodableAllTypes() throws {
         let values: [FieldValue] = [
             .int64(42),
-            .double(3.14),
+            .float64(3.14),
             .string("hello"),
             .bool(true),
             .bytes([1, 2, 3]),
@@ -418,7 +439,7 @@ struct FieldValueTests {
     func testStableHashAllTypes() throws {
         let values: [FieldValue] = [
             .int64(42),
-            .double(3.14),
+            .float64(3.14),
             .string("hello"),
             .bool(true),
             .bytes([1, 2, 3]),
@@ -449,9 +470,9 @@ struct FieldValueTests {
     @Test("query numeric comparison does not alter stored identity")
     func queryNumericComparisonPreservesStoredIdentity() throws {
         let exactInteger = FieldValue.int64(42)
-        let exactDouble = FieldValue.double(42)
+        let exactDouble = FieldValue.float64(42)
         let roundedInteger = FieldValue.int64(9_007_199_254_740_993)
-        let roundedDouble = FieldValue.double(9_007_199_254_740_992)
+        let roundedDouble = FieldValue.float64(9_007_199_254_740_992)
 
         #expect(exactInteger != exactDouble)
         #expect(try exactInteger.stableHash() != exactDouble.stableHash())

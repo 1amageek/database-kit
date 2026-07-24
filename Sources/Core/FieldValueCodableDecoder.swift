@@ -321,44 +321,71 @@ private struct DatabaseValueSingleValueDecodingContainer: SingleValueDecodingCon
     }
 
     func decode(_ type: Double.Type) throws -> Double {
-        guard case .double(let scalar) = value else { throw mismatch(type) }
+        guard case .float64(let scalar) = value else { throw mismatch(type) }
         return scalar
     }
 
     func decode(_ type: Float.Type) throws -> Float {
-        guard case .double(let scalar) = value, let result = Float(exactly: scalar) else {
+        guard case .float32(let scalar) = value else { throw mismatch(type) }
+        return scalar
+    }
+
+    func decode(_ type: Int.Type) throws -> Int {
+        guard case .int64(let scalar) = value, let result = Int(exactly: scalar) else {
             throw mismatch(type)
         }
         return result
     }
 
-    func decode(_ type: Int.Type) throws -> Int { try signed(type) }
-    func decode(_ type: Int8.Type) throws -> Int8 { try signed(type) }
-    func decode(_ type: Int16.Type) throws -> Int16 { try signed(type) }
-    func decode(_ type: Int32.Type) throws -> Int32 { try signed(type) }
-    func decode(_ type: Int64.Type) throws -> Int64 { try signed(type) }
-    func decode(_ type: UInt.Type) throws -> UInt { try unsigned(type) }
-    func decode(_ type: UInt8.Type) throws -> UInt8 { try unsigned(type) }
-    func decode(_ type: UInt16.Type) throws -> UInt16 { try unsigned(type) }
-    func decode(_ type: UInt32.Type) throws -> UInt32 { try unsigned(type) }
-    func decode(_ type: UInt64.Type) throws -> UInt64 { try unsigned(type) }
+    func decode(_ type: Int8.Type) throws -> Int8 {
+        guard case .int8(let scalar) = value else { throw mismatch(type) }
+        return scalar
+    }
+
+    func decode(_ type: Int16.Type) throws -> Int16 {
+        guard case .int16(let scalar) = value else { throw mismatch(type) }
+        return scalar
+    }
+
+    func decode(_ type: Int32.Type) throws -> Int32 {
+        guard case .int32(let scalar) = value else { throw mismatch(type) }
+        return scalar
+    }
+
+    func decode(_ type: Int64.Type) throws -> Int64 {
+        guard case .int64(let scalar) = value else { throw mismatch(type) }
+        return scalar
+    }
+
+    func decode(_ type: UInt.Type) throws -> UInt {
+        guard case .uint64(let scalar) = value, let result = UInt(exactly: scalar) else {
+            throw mismatch(type)
+        }
+        return result
+    }
+
+    func decode(_ type: UInt8.Type) throws -> UInt8 {
+        guard case .uint8(let scalar) = value else { throw mismatch(type) }
+        return scalar
+    }
+
+    func decode(_ type: UInt16.Type) throws -> UInt16 {
+        guard case .uint16(let scalar) = value else { throw mismatch(type) }
+        return scalar
+    }
+
+    func decode(_ type: UInt32.Type) throws -> UInt32 {
+        guard case .uint32(let scalar) = value else { throw mismatch(type) }
+        return scalar
+    }
+
+    func decode(_ type: UInt64.Type) throws -> UInt64 {
+        guard case .uint64(let scalar) = value else { throw mismatch(type) }
+        return scalar
+    }
 
     func decode<T: Decodable>(_ type: T.Type) throws -> T {
         try DatabaseValueDecoding.decode(type, from: value, codingPath: codingPath)
-    }
-
-    private func signed<T: FixedWidthInteger>(_ type: T.Type) throws -> T {
-        guard case .int64(let scalar) = value, let result = T(exactly: scalar) else {
-            throw mismatch(type)
-        }
-        return result
-    }
-
-    private func unsigned<T: FixedWidthInteger>(_ type: T.Type) throws -> T {
-        guard case .uint64(let scalar) = value, let result = T(exactly: scalar) else {
-            throw mismatch(type)
-        }
-        return result
     }
 
     private func mismatch<T>(_ type: T.Type) -> DecodingError {

@@ -16,7 +16,7 @@ struct OntEmployee {
     var name: String
 
     @OWLDataProperty("https://example.org/onto#age")
-    var age: Int
+    var age: Int32
 }
 
 // --- Contract 2: ObjectProperty (to:) ---
@@ -99,7 +99,7 @@ struct OntFullEmployee {
     var name: String
 
     @OWLDataProperty("http://example.org/onto#age")
-    var age: Int
+    var age: Int32
 
     @OWLDataProperty("http://example.org/onto#worksFor", to: \OntFullDepartment.id)
     var departmentID: String?

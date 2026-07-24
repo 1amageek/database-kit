@@ -8,7 +8,9 @@ import DatabaseValue
 extension FieldValue {
     public var isNumeric: Bool {
         switch self {
-        case .int64, .uint64, .double, .decimal:
+        case .int8, .int16, .int32, .int64,
+             .uint8, .uint16, .uint32, .uint64,
+             .float32, .float64, .decimal:
             return true
         default:
             return false
@@ -75,12 +77,14 @@ extension FieldValue {
     }
 
     private func compareNumeric(to other: FieldValue) -> ComparisonResult? {
-        switch (self, other) {
+        let leftValue = widenedNumericValue
+        let rightValue = other.widenedNumericValue
+        switch (leftValue, rightValue) {
         case (.int64(let left), .int64(let right)):
             return order(left, right)
         case (.uint64(let left), .uint64(let right)):
             return order(left, right)
-        case (.double(let left), .double(let right)):
+        case (.float64(let left), .float64(let right)):
             guard !left.isNaN, !right.isNaN else { return nil }
             return order(left, right)
         case (.int64(let left), .uint64(let right)):
@@ -89,13 +93,13 @@ extension FieldValue {
         case (.uint64(let left), .int64(let right)):
             if right < 0 { return .orderedDescending }
             return order(left, UInt64(right))
-        case (.int64(let left), .double(let right)):
+        case (.int64(let left), .float64(let right)):
             return Self.compare(left, to: right)
-        case (.double(let left), .int64(let right)):
+        case (.float64(let left), .int64(let right)):
             return Self.compare(right, to: left)?.reversed
-        case (.uint64(let left), .double(let right)):
+        case (.uint64(let left), .float64(let right)):
             return Self.compare(left, to: right)
-        case (.double(let left), .uint64(let right)):
+        case (.float64(let left), .uint64(let right)):
             return Self.compare(right, to: left)?.reversed
         case (
             .decimal(let leftCoefficient, let leftScale),
@@ -119,10 +123,31 @@ extension FieldValue {
                 return Self.compareFiniteNumericFallback(self, other)
             }
             return comparisonResult(left.compare(to: right))
-        case (.decimal, .double), (.double, .decimal):
-            return Self.compareFiniteNumericFallback(self, other)
+        case (.decimal, .float64), (.float64, .decimal):
+            return Self.compareFiniteNumericFallback(leftValue, rightValue)
         default:
             return nil
+        }
+    }
+
+    private var widenedNumericValue: FieldValue {
+        switch self {
+        case .int8(let value):
+            return .int64(Int64(value))
+        case .int16(let value):
+            return .int64(Int64(value))
+        case .int32(let value):
+            return .int64(Int64(value))
+        case .uint8(let value):
+            return .uint64(UInt64(value))
+        case .uint16(let value):
+            return .uint64(UInt64(value))
+        case .uint32(let value):
+            return .uint64(UInt64(value))
+        case .float32(let value):
+            return .float64(Double(value))
+        default:
+            return self
         }
     }
 
@@ -230,7 +255,7 @@ extension FieldValue: ExpressibleByIntegerLiteral {
 
 extension FieldValue: ExpressibleByFloatLiteral {
     public init(floatLiteral value: Double) {
-        self = .double(value)
+        self = .float64(value)
     }
 }
 

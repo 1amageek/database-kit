@@ -11,7 +11,7 @@ struct SchemaEvolutionUserV1 {
 struct SchemaEvolutionUserV2AppendOnly {
     var name: String
     var email: String
-    var age: Int = 0
+    var age: Int32 = 0
 }
 
 @Persistable(type: "SchemaEvolutionUser")

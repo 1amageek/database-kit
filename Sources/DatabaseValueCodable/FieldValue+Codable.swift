@@ -4,9 +4,16 @@ extension FieldValue: Codable {
     private enum CodingKeys: String, CodingKey {
         case kind
         case bool
+        case int8
+        case int16
+        case int32
         case int64
+        case uint8
+        case uint16
+        case uint32
         case uint64
-        case double
+        case float32
+        case float64
         case coefficient
         case scale
         case string
@@ -27,9 +34,16 @@ extension FieldValue: Codable {
     private enum EncodedValueKind: String, Codable {
         case null
         case bool
+        case int8
+        case int16
+        case int32
         case int64
+        case uint8
+        case uint16
+        case uint32
         case uint64
-        case double
+        case float32
+        case float64
         case decimal
         case string
         case bytes
@@ -49,12 +63,26 @@ extension FieldValue: Codable {
             self = .null
         case .bool:
             self = .bool(try container.decode(Bool.self, forKey: .bool))
+        case .int8:
+            self = .int8(try container.decode(Int8.self, forKey: .int8))
+        case .int16:
+            self = .int16(try container.decode(Int16.self, forKey: .int16))
+        case .int32:
+            self = .int32(try container.decode(Int32.self, forKey: .int32))
         case .int64:
             self = .int64(try container.decode(Int64.self, forKey: .int64))
+        case .uint8:
+            self = .uint8(try container.decode(UInt8.self, forKey: .uint8))
+        case .uint16:
+            self = .uint16(try container.decode(UInt16.self, forKey: .uint16))
+        case .uint32:
+            self = .uint32(try container.decode(UInt32.self, forKey: .uint32))
         case .uint64:
             self = .uint64(try container.decode(UInt64.self, forKey: .uint64))
-        case .double:
-            self = .double(try container.decode(Double.self, forKey: .double))
+        case .float32:
+            self = .float32(try container.decode(Float.self, forKey: .float32))
+        case .float64:
+            self = .float64(try container.decode(Double.self, forKey: .float64))
         case .decimal:
             self = .decimal(
                 coefficient: try container.decode(Int64.self, forKey: .coefficient),
@@ -109,15 +137,36 @@ extension FieldValue: Codable {
         case .bool(let value):
             try container.encode(EncodedValueKind.bool, forKey: .kind)
             try container.encode(value, forKey: .bool)
+        case .int8(let value):
+            try container.encode(EncodedValueKind.int8, forKey: .kind)
+            try container.encode(value, forKey: .int8)
+        case .int16(let value):
+            try container.encode(EncodedValueKind.int16, forKey: .kind)
+            try container.encode(value, forKey: .int16)
+        case .int32(let value):
+            try container.encode(EncodedValueKind.int32, forKey: .kind)
+            try container.encode(value, forKey: .int32)
         case .int64(let value):
             try container.encode(EncodedValueKind.int64, forKey: .kind)
             try container.encode(value, forKey: .int64)
+        case .uint8(let value):
+            try container.encode(EncodedValueKind.uint8, forKey: .kind)
+            try container.encode(value, forKey: .uint8)
+        case .uint16(let value):
+            try container.encode(EncodedValueKind.uint16, forKey: .kind)
+            try container.encode(value, forKey: .uint16)
+        case .uint32(let value):
+            try container.encode(EncodedValueKind.uint32, forKey: .kind)
+            try container.encode(value, forKey: .uint32)
         case .uint64(let value):
             try container.encode(EncodedValueKind.uint64, forKey: .kind)
             try container.encode(value, forKey: .uint64)
-        case .double(let value):
-            try container.encode(EncodedValueKind.double, forKey: .kind)
-            try container.encode(value, forKey: .double)
+        case .float32(let value):
+            try container.encode(EncodedValueKind.float32, forKey: .kind)
+            try container.encode(value, forKey: .float32)
+        case .float64(let value):
+            try container.encode(EncodedValueKind.float64, forKey: .kind)
+            try container.encode(value, forKey: .float64)
         case .decimal(let coefficient, let scale):
             try container.encode(EncodedValueKind.decimal, forKey: .kind)
             try container.encode(coefficient, forKey: .coefficient)

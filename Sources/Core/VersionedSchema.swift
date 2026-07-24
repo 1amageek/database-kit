@@ -35,7 +35,7 @@
 ///         var id: String = ULID().ulidString
 ///         var name: String
 ///         var email: String
-///         var age: Int = 0  // New field
+///         var age: Int32 = 0  // New field
 ///
 ///         #Index<User>([\.email], unique: true)
 ///         #Index<User>([\.age])  // New index

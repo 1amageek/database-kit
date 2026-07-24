@@ -1942,11 +1942,25 @@ private extension QueryParameterBindingTraversal {
                     literalResults.append(.null)
                 case .bool(let scalar):
                     literalResults.append(.bool(scalar))
+                case .int8(let scalar):
+                    literalResults.append(.int(Int64(scalar)))
+                case .int16(let scalar):
+                    literalResults.append(.int(Int64(scalar)))
+                case .int32(let scalar):
+                    literalResults.append(.int(Int64(scalar)))
                 case .int64(let scalar):
                     literalResults.append(.int(scalar))
+                case .uint8(let scalar):
+                    literalResults.append(.uint(UInt64(scalar)))
+                case .uint16(let scalar):
+                    literalResults.append(.uint(UInt64(scalar)))
+                case .uint32(let scalar):
+                    literalResults.append(.uint(UInt64(scalar)))
                 case .uint64(let scalar):
                     literalResults.append(.uint(scalar))
-                case .double(let scalar):
+                case .float32(let scalar):
+                    literalResults.append(.double(Double(scalar)))
+                case .float64(let scalar):
                     literalResults.append(.double(scalar))
                 case .string(let scalar):
                     literalResults.append(.string(scalar))

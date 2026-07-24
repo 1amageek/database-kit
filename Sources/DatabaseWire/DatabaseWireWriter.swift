@@ -304,6 +304,10 @@ public struct DatabaseWireWriter {
         writeUInt8(value ? 1 : 0)
     }
 
+    public mutating func writeInt8(_ value: Int8) {
+        writeUInt8(UInt8(bitPattern: value))
+    }
+
     public mutating func writeUInt32(_ value: UInt32) {
         if isMeasuring {
             recordMeasuredBytes(4)
@@ -324,6 +328,10 @@ public struct DatabaseWireWriter {
         Swift.withUnsafeBytes(of: &littleEndian) { source in
             appendBytes(source)
         }
+    }
+
+    public mutating func writeInt16(_ value: Int16) {
+        writeUInt16(UInt16(bitPattern: value))
     }
 
     public mutating func writeInt32(_ value: Int32) {
@@ -347,6 +355,10 @@ public struct DatabaseWireWriter {
 
     public mutating func writeDouble(_ value: Double) {
         writeUInt64(value.bitPattern)
+    }
+
+    public mutating func writeFloat(_ value: Float) {
+        writeUInt32(value.bitPattern)
     }
 
     public mutating func writeBytes(_ value: [UInt8]) throws(DatabaseWireError) {

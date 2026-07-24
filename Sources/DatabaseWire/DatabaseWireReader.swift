@@ -57,6 +57,10 @@ public struct DatabaseWireReader: Sendable {
         }
     }
 
+    public mutating func readInt8() throws(DatabaseWireError) -> Int8 {
+        Int8(bitPattern: try readUInt8())
+    }
+
     public mutating func readUInt32() throws(DatabaseWireError) -> UInt32 {
         try validateFrameSize()
         guard offset + 4 <= bytes.count else {
@@ -82,6 +86,10 @@ public struct DatabaseWireReader: Sendable {
         }
         offset += 2
         return value
+    }
+
+    public mutating func readInt16() throws(DatabaseWireError) -> Int16 {
+        Int16(bitPattern: try readUInt16())
     }
 
     public mutating func readInt32() throws(DatabaseWireError) -> Int32 {
@@ -113,6 +121,10 @@ public struct DatabaseWireReader: Sendable {
 
     public mutating func readDouble() throws(DatabaseWireError) -> Double {
         Double(bitPattern: try readUInt64())
+    }
+
+    public mutating func readFloat() throws(DatabaseWireError) -> Float {
+        Float(bitPattern: try readUInt32())
     }
 
     public mutating func readBytes() throws(DatabaseWireError) -> DatabaseBytes {

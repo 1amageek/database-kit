@@ -15,10 +15,6 @@ public protocol IndexNumericValue: IndexScalarValue, Numeric, Comparable {}
 /// Comparable scalar values supported by minimum and maximum indexes.
 public protocol IndexComparableValue: IndexScalarValue, Comparable {}
 
-extension Int: IndexNumericValue, IndexComparableValue {
-    public static var indexScalarType: IndexScalarType { .int }
-}
-
 extension Int8: IndexNumericValue, IndexComparableValue {
     public static var indexScalarType: IndexScalarType { .int8 }
 }
@@ -33,10 +29,6 @@ extension Int32: IndexNumericValue, IndexComparableValue {
 
 extension Int64: IndexNumericValue, IndexComparableValue {
     public static var indexScalarType: IndexScalarType { .int64 }
-}
-
-extension UInt: IndexNumericValue, IndexComparableValue {
-    public static var indexScalarType: IndexScalarType { .uint }
 }
 
 extension UInt8: IndexNumericValue, IndexComparableValue {
@@ -56,11 +48,11 @@ extension UInt64: IndexNumericValue, IndexComparableValue {
 }
 
 extension Float: IndexNumericValue, IndexComparableValue {
-    public static var indexScalarType: IndexScalarType { .float }
+    public static var indexScalarType: IndexScalarType { .float32 }
 }
 
 extension Double: IndexNumericValue, IndexComparableValue {
-    public static var indexScalarType: IndexScalarType { .double }
+    public static var indexScalarType: IndexScalarType { .float64 }
 }
 
 extension String: IndexComparableValue {

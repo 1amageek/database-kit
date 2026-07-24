@@ -16,7 +16,7 @@ import DatabaseValue
 /// struct Product {
 ///     #Index(ScalarIndexKind<Product>(fields: [\.category, \.price]))
 ///     var category: String
-///     var price: Int
+///     var price: Int64
 /// }
 /// ```
 ///

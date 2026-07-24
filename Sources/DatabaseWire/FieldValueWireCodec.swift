@@ -114,55 +114,76 @@ private extension FieldValueWireCodec {
                     case .bool(let value):
                         writer.writeUInt8(1)
                         writer.writeBool(value)
-                    case .int64(let value):
+                    case .int8(let value):
                         writer.writeUInt8(2)
-                        writer.writeInt64(value)
-                    case .uint64(let value):
+                        writer.writeInt8(value)
+                    case .int16(let value):
                         writer.writeUInt8(3)
-                        writer.writeUInt64(value)
-                    case .double(let value):
+                        writer.writeInt16(value)
+                    case .int32(let value):
                         writer.writeUInt8(4)
+                        writer.writeInt32(value)
+                    case .int64(let value):
+                        writer.writeUInt8(5)
+                        writer.writeInt64(value)
+                    case .uint8(let value):
+                        writer.writeUInt8(6)
+                        writer.writeUInt8(value)
+                    case .uint16(let value):
+                        writer.writeUInt8(7)
+                        writer.writeUInt16(value)
+                    case .uint32(let value):
+                        writer.writeUInt8(8)
+                        writer.writeUInt32(value)
+                    case .uint64(let value):
+                        writer.writeUInt8(9)
+                        writer.writeUInt64(value)
+                    case .float32(let value):
+                        writer.writeUInt8(10)
+                        writer.writeFloat(value)
+                    case .float64(let value):
+                        writer.writeUInt8(11)
                         writer.writeDouble(value)
                     case .decimal(let coefficient, let scale):
-                        writer.writeUInt8(5)
+                        writer.writeUInt8(12)
                         writer.writeInt64(coefficient)
                         writer.writeInt32(scale)
                     case .string(let value):
-                        writer.writeUInt8(6)
+                        writer.writeUInt8(13)
                         try writer.writeString(value)
                     case .bytes(let value):
-                        writer.writeUInt8(7)
+                        writer.writeUInt8(14)
                         try writer.writeBytes(value)
                     case .date(let value):
-                        writer.writeUInt8(8)
+                        writer.writeUInt8(15)
                         writer.writeInt32(value.year)
                         writer.writeUInt8(value.month)
                         writer.writeUInt8(value.day)
                     case .timestamp(let value):
-                        writer.writeUInt8(9)
+                        writer.writeUInt8(16)
                         writer.writeInt64(value.secondsSinceUnixEpoch)
                         writer.writeUInt32(value.nanoseconds)
+                    case .uuid(let value):
+                        writer.writeUInt8(17)
+                        writer.writeUInt64(value.high)
+                        writer.writeUInt64(value.low)
                     case .array(let values):
-                        writer.writeUInt8(10)
+                        writer.writeUInt8(18)
                         try writer.writeCount(values.count)
                         frames.append(.array(values, nextIndex: 0))
                         continue
                     case .object(let fields):
-                        writer.writeUInt8(11)
+                        writer.writeUInt8(19)
                         try writer.writeCount(fields.count)
                         frames.append(.object(fields, nextIndex: 0))
                         continue
                     case .reference(let identity):
-                        writer.writeUInt8(12)
+                        writer.writeUInt8(20)
                         nextNode = .identity(identity, closesValue: true)
                         continue
                     case .rdfTerm(let term):
-                        writer.writeUInt8(13)
+                        writer.writeUInt8(21)
                         try writer.writeCanonicalRDFTerm(term)
-                    case .uuid(let value):
-                        writer.writeUInt8(14)
-                        writer.writeUInt64(value.high)
-                        writer.writeUInt64(value.low)
                     }
 
                     writer.endNestedValue()
@@ -181,27 +202,45 @@ private extension FieldValueWireCodec {
                     case .bool(let value):
                         writer.writeUInt8(0)
                         writer.writeBool(value)
-                    case .int64(let value):
+                    case .int8(let value):
                         writer.writeUInt8(1)
-                        writer.writeInt64(value)
-                    case .uint64(let value):
+                        writer.writeInt8(value)
+                    case .int16(let value):
                         writer.writeUInt8(2)
+                        writer.writeInt16(value)
+                    case .int32(let value):
+                        writer.writeUInt8(3)
+                        writer.writeInt32(value)
+                    case .int64(let value):
+                        writer.writeUInt8(4)
+                        writer.writeInt64(value)
+                    case .uint8(let value):
+                        writer.writeUInt8(5)
+                        writer.writeUInt8(value)
+                    case .uint16(let value):
+                        writer.writeUInt8(6)
+                        writer.writeUInt16(value)
+                    case .uint32(let value):
+                        writer.writeUInt8(7)
+                        writer.writeUInt32(value)
+                    case .uint64(let value):
+                        writer.writeUInt8(8)
                         writer.writeUInt64(value)
                     case .string(let value):
-                        writer.writeUInt8(3)
+                        writer.writeUInt8(9)
                         try writer.writeString(value)
                     case .bytes(let value):
-                        writer.writeUInt8(4)
+                        writer.writeUInt8(10)
                         try writer.writeBytes(value)
                     case .uuid(let value):
-                        writer.writeUInt8(5)
+                        writer.writeUInt8(11)
                         writer.writeUInt64(value.high)
                         writer.writeUInt64(value.low)
                     case .composite(let components):
                         guard !components.isEmpty else {
                             throw .emptyPersistableIdentifierComposite
                         }
-                        writer.writeUInt8(6)
+                        writer.writeUInt8(12)
                         try writer.writeCount(components.count)
                         frames.append(
                             .identifierComposite(
@@ -374,23 +413,37 @@ private extension FieldValueWireCodec {
                     case 1:
                         completed = .value(.bool(try reader.readBool()))
                     case 2:
-                        completed = .value(.int64(try reader.readInt64()))
+                        completed = .value(.int8(try reader.readInt8()))
                     case 3:
-                        completed = .value(.uint64(try reader.readUInt64()))
+                        completed = .value(.int16(try reader.readInt16()))
                     case 4:
-                        completed = .value(.double(try reader.readDouble()))
+                        completed = .value(.int32(try reader.readInt32()))
                     case 5:
+                        completed = .value(.int64(try reader.readInt64()))
+                    case 6:
+                        completed = .value(.uint8(try reader.readUInt8()))
+                    case 7:
+                        completed = .value(.uint16(try reader.readUInt16()))
+                    case 8:
+                        completed = .value(.uint32(try reader.readUInt32()))
+                    case 9:
+                        completed = .value(.uint64(try reader.readUInt64()))
+                    case 10:
+                        completed = .value(.float32(try reader.readFloat()))
+                    case 11:
+                        completed = .value(.float64(try reader.readDouble()))
+                    case 12:
                         completed = .value(
                             .decimal(
                                 coefficient: try reader.readInt64(),
                                 scale: try reader.readInt32()
                             )
                         )
-                    case 6:
+                    case 13:
                         completed = .value(.string(try reader.readString()))
-                    case 7:
+                    case 14:
                         completed = .value(.bytes(try reader.readBytes()))
-                    case 8:
+                    case 15:
                         completed = .value(
                             .date(
                                 DatabaseDate(
@@ -400,7 +453,7 @@ private extension FieldValueWireCodec {
                                 )
                             )
                         )
-                    case 9:
+                    case 16:
                         completed = .value(
                             .timestamp(
                                 DatabaseTimestamp(
@@ -409,7 +462,16 @@ private extension FieldValueWireCodec {
                                 )
                             )
                         )
-                    case 10:
+                    case 17:
+                        completed = .value(
+                            .uuid(
+                                DatabaseUUID(
+                                    high: try reader.readUInt64(),
+                                    low: try reader.readUInt64()
+                                )
+                            )
+                        )
+                    case 18:
                         let count = try reader.readCount()
                         guard count > 0 else {
                             completed = .value(.array([]))
@@ -424,7 +486,7 @@ private extension FieldValueWireCodec {
                         )
                         nextRequest = .value
                         continue
-                    case 11:
+                    case 19:
                         let count = try reader.readCount()
                         guard count > 0 else {
                             completed = .value(.object([]))
@@ -439,23 +501,14 @@ private extension FieldValueWireCodec {
                         )
                         nextRequest = .field
                         continue
-                    case 12:
+                    case 20:
                         frames.append(.reference)
                         nextRequest = .identity
                         continue
-                    case 13:
+                    case 21:
                         completed = .value(
                             .rdfTerm(
                                 try reader.readCanonicalRDFTerm(role: .term)
-                            )
-                        )
-                    case 14:
-                        completed = .value(
-                            .uuid(
-                                DatabaseUUID(
-                                    high: try reader.readUInt64(),
-                                    low: try reader.readUInt64()
-                                )
                             )
                         )
                     case let tag:
@@ -480,14 +533,26 @@ private extension FieldValueWireCodec {
                     case 0:
                         completed = .identifier(.bool(try reader.readBool()))
                     case 1:
-                        completed = .identifier(.int64(try reader.readInt64()))
+                        completed = .identifier(.int8(try reader.readInt8()))
                     case 2:
-                        completed = .identifier(.uint64(try reader.readUInt64()))
+                        completed = .identifier(.int16(try reader.readInt16()))
                     case 3:
-                        completed = .identifier(.string(try reader.readString()))
+                        completed = .identifier(.int32(try reader.readInt32()))
                     case 4:
-                        completed = .identifier(.bytes(try reader.readBytes()))
+                        completed = .identifier(.int64(try reader.readInt64()))
                     case 5:
+                        completed = .identifier(.uint8(try reader.readUInt8()))
+                    case 6:
+                        completed = .identifier(.uint16(try reader.readUInt16()))
+                    case 7:
+                        completed = .identifier(.uint32(try reader.readUInt32()))
+                    case 8:
+                        completed = .identifier(.uint64(try reader.readUInt64()))
+                    case 9:
+                        completed = .identifier(.string(try reader.readString()))
+                    case 10:
+                        completed = .identifier(.bytes(try reader.readBytes()))
+                    case 11:
                         completed = .identifier(
                             .uuid(
                                 DatabaseUUID(
@@ -496,7 +561,7 @@ private extension FieldValueWireCodec {
                                 )
                             )
                         )
-                    case 6:
+                    case 12:
                         let count = try reader.readCount()
                         guard count > 0 else {
                             throw .emptyPersistableIdentifierComposite

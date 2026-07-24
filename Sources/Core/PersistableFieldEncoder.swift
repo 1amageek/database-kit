@@ -93,18 +93,26 @@ public enum PersistableFieldEncoder {
         switch type {
         case .bool:
             value = (raw as? Bool).map(FieldValue.bool)
-        case .int, .int8, .int16, .int32, .int64:
-            value = signedInteger(raw).map(FieldValue.int64)
-        case .uint, .uint8, .uint16, .uint32, .uint64:
-            value = unsignedInteger(raw).map(FieldValue.uint64)
-        case .double, .float:
-            if let scalar = raw as? Double {
-                value = .double(scalar)
-            } else if let scalar = raw as? Float {
-                value = .double(Double(scalar))
-            } else {
-                value = nil
-            }
+        case .int8:
+            value = (raw as? Int8).map(FieldValue.int8)
+        case .int16:
+            value = (raw as? Int16).map(FieldValue.int16)
+        case .int32:
+            value = (raw as? Int32).map(FieldValue.int32)
+        case .int64:
+            value = (raw as? Int64).map(FieldValue.int64)
+        case .uint8:
+            value = (raw as? UInt8).map(FieldValue.uint8)
+        case .uint16:
+            value = (raw as? UInt16).map(FieldValue.uint16)
+        case .uint32:
+            value = (raw as? UInt32).map(FieldValue.uint32)
+        case .uint64:
+            value = (raw as? UInt64).map(FieldValue.uint64)
+        case .float32:
+            value = (raw as? Float).map(FieldValue.float32)
+        case .float64:
+            value = (raw as? Double).map(FieldValue.float64)
         case .string:
             value = (raw as? String).map(FieldValue.string)
         case .uuid:

@@ -20,18 +20,38 @@ public enum CanonicalFieldValueHash {
         case .bool(let value):
             stream.update(byte: 0x01)
             stream.update(byte: value ? 1 : 0)
-        case .int64(let value):
+        case .int8(let value):
             stream.update(byte: 0x02)
-            stream.updateLittleEndian(value)
-        case .uint64(let value):
+            stream.update(byte: UInt8(bitPattern: value))
+        case .int16(let value):
             stream.update(byte: 0x03)
             stream.updateLittleEndian(value)
-        case .double(let value):
+        case .int32(let value):
             stream.update(byte: 0x04)
-            let bits = value == 0 ? UInt64(0) : value.bitPattern
-            stream.updateLittleEndian(bits)
-        case .decimal(let coefficient, let scale):
+            stream.updateLittleEndian(value)
+        case .int64(let value):
             stream.update(byte: 0x05)
+            stream.updateLittleEndian(value)
+        case .uint8(let value):
+            stream.update(byte: 0x06)
+            stream.update(byte: value)
+        case .uint16(let value):
+            stream.update(byte: 0x07)
+            stream.updateLittleEndian(value)
+        case .uint32(let value):
+            stream.update(byte: 0x08)
+            stream.updateLittleEndian(value)
+        case .uint64(let value):
+            stream.update(byte: 0x09)
+            stream.updateLittleEndian(value)
+        case .float32(let value):
+            stream.update(byte: 0x0A)
+            stream.updateLittleEndian(value.bitPattern)
+        case .float64(let value):
+            stream.update(byte: 0x0B)
+            stream.updateLittleEndian(value.bitPattern)
+        case .decimal(let coefficient, let scale):
+            stream.update(byte: 0x0C)
             let value = DatabaseExactDecimal(
                 coefficient: coefficient,
                 scale: scale
@@ -39,10 +59,10 @@ public enum CanonicalFieldValueHash {
             stream.updateLittleEndian(value.coefficient)
             stream.updateLittleEndian(value.scale)
         case .string(let value):
-            stream.update(byte: 0x06)
+            stream.update(byte: 0x0D)
             append(value, to: &stream)
         case .bytes(let value):
-            stream.update(byte: 0x07)
+            stream.update(byte: 0x0E)
             stream.updateLittleEndian(UInt64(value.count))
             value.withUnsafeBytes { bytes in
                 for byte in bytes {
@@ -50,26 +70,26 @@ public enum CanonicalFieldValueHash {
                 }
             }
         case .date(let value):
-            stream.update(byte: 0x08)
+            stream.update(byte: 0x0F)
             stream.updateLittleEndian(value.year)
             stream.update(byte: value.month)
             stream.update(byte: value.day)
         case .timestamp(let value):
-            stream.update(byte: 0x09)
+            stream.update(byte: 0x10)
             stream.updateLittleEndian(value.secondsSinceUnixEpoch)
             stream.updateLittleEndian(value.nanoseconds)
         case .uuid(let value):
-            stream.update(byte: 0x0A)
+            stream.update(byte: 0x11)
             stream.updateLittleEndian(value.high)
             stream.updateLittleEndian(value.low)
         case .array(let values):
-            stream.update(byte: 0x0B)
+            stream.update(byte: 0x12)
             stream.updateLittleEndian(UInt64(values.count))
             for value in values {
                 try append(value, to: &stream)
             }
         case .object(let fields):
-            stream.update(byte: 0x0C)
+            stream.update(byte: 0x13)
             stream.updateLittleEndian(UInt64(fields.count))
             for field in fields {
                 stream.updateLittleEndian(field.number)
@@ -77,7 +97,7 @@ public enum CanonicalFieldValueHash {
                 try append(field.value, to: &stream)
             }
         case .reference(let identity):
-            stream.update(byte: 0x0D)
+            stream.update(byte: 0x14)
             append(identity.entity, to: &stream)
             append(identity.id, to: &stream)
             stream.updateLittleEndian(UInt64(identity.partitions.count))
@@ -87,7 +107,7 @@ public enum CanonicalFieldValueHash {
                 try append(partition.value, to: &stream)
             }
         case .rdfTerm(let term):
-            stream.update(byte: 0x0E)
+            stream.update(byte: 0x15)
             let plan = try DatabaseRDFTermCodec.encodingPlan(term)
             stream.updateLittleEndian(UInt64(plan.byteCount))
             var sink = RDFSink(stream: stream)
@@ -112,17 +132,35 @@ public enum CanonicalFieldValueHash {
         case .bool(let value):
             stream.update(byte: 0x00)
             stream.update(byte: value ? 1 : 0)
-        case .int64(let value):
+        case .int8(let value):
             stream.update(byte: 0x01)
             stream.updateLittleEndian(value)
-        case .uint64(let value):
+        case .int16(let value):
             stream.update(byte: 0x02)
             stream.updateLittleEndian(value)
-        case .string(let value):
+        case .int32(let value):
             stream.update(byte: 0x03)
+            stream.updateLittleEndian(value)
+        case .int64(let value):
+            stream.update(byte: 0x04)
+            stream.updateLittleEndian(value)
+        case .uint8(let value):
+            stream.update(byte: 0x05)
+            stream.updateLittleEndian(value)
+        case .uint16(let value):
+            stream.update(byte: 0x06)
+            stream.updateLittleEndian(value)
+        case .uint32(let value):
+            stream.update(byte: 0x07)
+            stream.updateLittleEndian(value)
+        case .uint64(let value):
+            stream.update(byte: 0x08)
+            stream.updateLittleEndian(value)
+        case .string(let value):
+            stream.update(byte: 0x09)
             append(value, to: &stream)
         case .bytes(let value):
-            stream.update(byte: 0x04)
+            stream.update(byte: 0x0a)
             stream.updateLittleEndian(UInt64(value.count))
             value.withUnsafeBytes { bytes in
                 for byte in bytes {
@@ -130,11 +168,11 @@ public enum CanonicalFieldValueHash {
                 }
             }
         case .uuid(let value):
-            stream.update(byte: 0x05)
+            stream.update(byte: 0x0b)
             stream.updateLittleEndian(value.high)
             stream.updateLittleEndian(value.low)
         case .composite(let values):
-            stream.update(byte: 0x06)
+            stream.update(byte: 0x0c)
             stream.updateLittleEndian(UInt64(values.count))
             for value in values {
                 append(value, to: &stream)

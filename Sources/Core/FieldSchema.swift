@@ -49,18 +49,16 @@ public struct FieldSchema: Sendable, Codable, Equatable, Hashable {
 /// Used by dynamic Protobuf codecs to interpret raw bytes without compiled types.
 public enum FieldSchemaType: String, Sendable, Codable, Equatable {
     case string
-    case int
     case int8
     case int16
     case int32
     case int64
-    case uint
     case uint8
     case uint16
     case uint32
     case uint64
-    case double
-    case float
+    case float32
+    case float64
     case bool
     case date
     case uuid

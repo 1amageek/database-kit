@@ -6,19 +6,26 @@ public enum SchemaDescribeOperation: DatabaseOperation {
 
     public enum ValueType: UInt8, Sendable, Hashable {
         case bool = 1
-        case int64 = 2
-        case uint64 = 3
-        case double = 4
-        case decimal = 5
-        case string = 6
-        case bytes = 7
-        case date = 8
-        case timestamp = 9
-        case array = 10
-        case object = 11
-        case reference = 12
-        case rdfTerm = 13
-        case uuid = 14
+        case int8 = 2
+        case int16 = 3
+        case int32 = 4
+        case int64 = 5
+        case uint8 = 6
+        case uint16 = 7
+        case uint32 = 8
+        case uint64 = 9
+        case float32 = 10
+        case float64 = 11
+        case decimal = 12
+        case string = 13
+        case bytes = 14
+        case date = 15
+        case timestamp = 16
+        case uuid = 17
+        case array = 18
+        case object = 19
+        case reference = 20
+        case rdfTerm = 21
     }
 
     public enum ReferenceCardinality: UInt8, Sendable, Hashable {
