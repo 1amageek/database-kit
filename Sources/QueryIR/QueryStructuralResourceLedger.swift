@@ -32,8 +32,11 @@ public struct QueryStructuralResourceLedger: Sendable {
         nestingDepth = next
     }
 
-    public mutating func leaveNesting() {
-        precondition(nestingDepth > 0)
+    public mutating func leaveNesting(
+    ) throws(QueryStructuralValidationError) {
+        guard nestingDepth > 0 else {
+            throw .unbalancedNesting
+        }
         nestingDepth -= 1
     }
 
@@ -55,7 +58,7 @@ public struct QueryStructuralResourceLedger: Sendable {
     ) throws(QueryStructuralValidationError) {
         switch resource {
         case .nestingDepth:
-            preconditionFailure("Nesting depth must use enterNesting or validateNestingDepth")
+            throw .invalidResourceClaim(.nestingDepth)
         case .inputTokens:
             inputTokens = try checkedTotal(
                 current: inputTokens,

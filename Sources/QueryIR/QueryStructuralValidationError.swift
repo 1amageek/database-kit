@@ -20,6 +20,8 @@ public enum QueryStructuralValidationError: Error, Sendable, Equatable {
         actual: UInt64,
         maximum: UInt64
     )
+    case invalidResourceClaim(Resource)
+    case unbalancedNesting
     case invalidReferenceIdentifier(ReferenceIdentifierValidationError)
 }
 
@@ -28,6 +30,10 @@ extension QueryStructuralValidationError: CustomStringConvertible {
         switch self {
         case .resourceLimitExceeded(let resource, let actual, let maximum):
             return "Query \(resource.rawValue) limit exceeded: \(actual) > \(maximum)"
+        case .invalidResourceClaim(let resource):
+            return "Query \(resource.rawValue) must use its dedicated admission operation"
+        case .unbalancedNesting:
+            return "Query nesting admission is unbalanced"
         case .invalidReferenceIdentifier(let error):
             return "Query contains an invalid reference identifier: \(error)"
         }
