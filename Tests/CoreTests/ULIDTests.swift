@@ -34,11 +34,23 @@ struct ULIDTests {
         for _ in 0..<100 {
             let original = ULID()
             let bytes = original.bytes
-            let decoded = ULID(bytes: bytes)
+            let decoded = try ULID(bytes: bytes)
 
             #expect(decoded.rawValue.0 == original.rawValue.0)
             #expect(decoded.rawValue.1 == original.rawValue.1)
             #expect(decoded == original)
+        }
+    }
+
+    @Test(
+        "ULID rejects every non-canonical byte count",
+        arguments: [0, 15, 17]
+    )
+    func rejectsInvalidByteCount(_ byteCount: Int) {
+        #expect(
+            throws: ULIDError.invalidByteCount(actual: byteCount)
+        ) {
+            try ULID(bytes: [UInt8](repeating: 0, count: byteCount))
         }
     }
 
@@ -70,7 +82,7 @@ struct ULIDTests {
         let high = (maxTimestamp << 16) | randomHigh
         let low = randomLow
 
-        let original = ULID(rawValue: (high, low))
+        let original = try ULID(rawValue: (high, low))
         let string = original.ulidString
         guard let decoded = ULID(ulidString: string) else {
             Issue.record("Failed to decode ULID with max timestamp")
@@ -89,7 +101,7 @@ struct ULIDTests {
         let maxValidHigh: UInt64 = UInt64.max >> 1  // Clear the top bit to ensure valid encoding
         let maxValidLow: UInt64 = UInt64.max
 
-        let original = ULID(rawValue: (maxValidHigh, maxValidLow))
+        let original = try ULID(rawValue: (maxValidHigh, maxValidLow))
         let string = original.ulidString
         guard let decoded = ULID(ulidString: string) else {
             Issue.record("Failed to decode ULID with max valid bits")
@@ -102,7 +114,7 @@ struct ULIDTests {
 
     @Test("ULID with minimum bits set round-trips correctly")
     func testMinBitsSetRoundTrip() throws {
-        let original = ULID(rawValue: (0, 0))
+        let original = try ULID(rawValue: (0, 0))
         let string = original.ulidString
         guard let decoded = ULID(ulidString: string) else {
             Issue.record("Failed to decode ULID with zero bits")
@@ -153,7 +165,7 @@ struct ULIDTests {
         // Bit 64 is the boundary between high and low
 
         // Test with only bit 64 set (lowest bit of high)
-        let bit64Set = ULID(rawValue: (1, 0))
+        let bit64Set = try ULID(rawValue: (1, 0))
         let string64 = bit64Set.ulidString
         guard let decoded64 = ULID(ulidString: string64) else {
             Issue.record("Failed to decode bit 64 set ULID")
@@ -163,7 +175,7 @@ struct ULIDTests {
         #expect(decoded64.rawValue.1 == 0, "Low bits should be zero")
 
         // Test with only bit 63 set (highest bit of low)
-        let bit63Set = ULID(rawValue: (0, 1 << 63))
+        let bit63Set = try ULID(rawValue: (0, 1 << 63))
         let string63 = bit63Set.ulidString
         guard let decoded63 = ULID(ulidString: string63) else {
             Issue.record("Failed to decode bit 63 set ULID")
@@ -193,7 +205,7 @@ struct ULIDTests {
                 continue
             }
 
-            let original = ULID(rawValue: (high, low))
+            let original = try ULID(rawValue: (high, low))
             let string = original.ulidString
             guard let decoded = ULID(ulidString: string) else {
                 Issue.record("Failed to decode ULID with bit \(bitPosition) set")
@@ -260,8 +272,8 @@ struct ULIDTests {
 
 // Extension to create ULID from raw value for testing
 extension ULID {
-    init(rawValue: (UInt64, UInt64)) {
-        self.init(bytes: Self.rawValueToBytes(rawValue))
+    init(rawValue: (UInt64, UInt64)) throws {
+        try self.init(bytes: Self.rawValueToBytes(rawValue))
     }
 
     private static func rawValueToBytes(_ rawValue: (UInt64, UInt64)) -> [UInt8] {

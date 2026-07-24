@@ -123,14 +123,27 @@ public struct ULID: Sendable, Hashable, Codable, CustomStringConvertible {
         self.rawValue = (high, low)
     }
 
-    /// Creates a ULID from raw bytes
+    /// Creates a ULID from raw bytes.
     ///
     /// - Parameter bytes: 16 bytes representing the ULID
-    public init(bytes: [UInt8]) {
-        precondition(bytes.count == 16, "ULID requires exactly 16 bytes")
+    public init<Bytes: Collection>(
+        bytes: Bytes
+    ) throws(ULIDError) where Bytes.Element == UInt8 {
+        guard bytes.count == 16 else {
+            throw .invalidByteCount(actual: bytes.count)
+        }
 
-        let high = bytes[0..<8].reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
-        let low = bytes[8..<16].reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
+        var high: UInt64 = 0
+        var low: UInt64 = 0
+        var offset = 0
+        for byte in bytes {
+            if offset < 8 {
+                high = (high << 8) | UInt64(byte)
+            } else {
+                low = (low << 8) | UInt64(byte)
+            }
+            offset += 1
+        }
 
         self.rawValue = (high, low)
     }
