@@ -60,7 +60,7 @@ public enum RDFTermCodec {
         }
         let result: Result<BodyResult, RDFTermCodecError>
             = bytes.withUnsafeBytes { buffer in
-                do {
+                do throws(RDFTermCodecError) {
                     let metrics = try validate(
                         buffer,
                         role: role,
@@ -73,12 +73,8 @@ public enum RDFTermCodec {
                         maximumDepth: metrics.maximumDepth
                     )
                     return .success(body(buffer, validation))
-                } catch let error as RDFTermCodecError {
+                } catch let error {
                     return .failure(error)
-                } catch {
-                    preconditionFailure(
-                        "Unexpected RDF term encoding validation error"
-                    )
                 }
             }
         switch result {
@@ -96,14 +92,9 @@ public enum RDFTermCodec {
     ) throws(RDFTermCodecError) -> ByteString {
         let plan = try encodingPlan(term, role: role, limits: limits)
 
-        do {
-            return try ByteString.copying(count: plan.byteCount) { output in
-                try encode(plan, into: output)
-            }
-        } catch let error as RDFTermCodecError {
-            throw error
-        } catch {
-            preconditionFailure("Unexpected RDF term encoding error")
+        return try ByteString.copying(count: plan.byteCount) {
+            (output: UnsafeMutableRawBufferPointer) throws(RDFTermCodecError) in
+            try encode(plan, into: output)
         }
     }
 
@@ -203,7 +194,7 @@ public enum RDFTermCodec {
         }
         let result: Result<RDFTermDecodingResult, RDFTermCodecError>
             = bytes.withUnsafeBytes { buffer in
-                do {
+                do throws(RDFTermCodecError) {
                     var reader = TermReader(bytes: buffer, limits: limits)
                     let term = try reader.readTerm(depth: 0)
                     guard reader.isAtEnd else {
@@ -215,12 +206,8 @@ public enum RDFTermCodec {
                         objectCount: reader.objectCount,
                         maximumDepth: reader.maximumDepth
                     ))
-                } catch let error as RDFTermCodecError {
+                } catch let error {
                     return .failure(error)
-                } catch {
-                    preconditionFailure(
-                        "Unexpected RDF term decoding error"
-                    )
                 }
             }
         switch result {

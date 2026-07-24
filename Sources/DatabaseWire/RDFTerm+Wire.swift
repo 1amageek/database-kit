@@ -38,21 +38,18 @@ extension DatabaseWireReader {
             maximumDepth: remainingDepth,
             maximumObjectCount: remainingObjectCount
         )
+        let result: RDFTermDecodingResult
         do {
-            let result = try RDFTermCodec.decodeWithMetrics(
+            result = try RDFTermCodec.decodeWithMetrics(
                 bytes,
                 role: role,
                 limits: codecLimits
             )
-            try registerObjects(result.objectCount)
-            return result.term
-        } catch let error as RDFTermCodecError {
+        } catch let error {
             throw mapCanonicalRDFTermError(error)
-        } catch let error as DatabaseWireError {
-            throw error
-        } catch {
-            preconditionFailure("Unexpected RDF term wire decoding error")
         }
+        try registerObjects(result.objectCount)
+        return result.term
     }
 
     private func mapCanonicalRDFTermError(

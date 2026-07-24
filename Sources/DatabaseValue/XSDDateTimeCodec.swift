@@ -32,9 +32,7 @@ public enum XSDDateTimeCodec {
                 day: UInt8(civil.day)
             )
         } catch {
-            preconditionFailure(
-                "Unix timestamp conversion produced an invalid civil date"
-            )
+            throw .timestampOutOfSupportedYearRange
         }
         let hour = UInt8(secondOfDay / 3_600)
         let minute = UInt8((secondOfDay % 3_600) / 60)
