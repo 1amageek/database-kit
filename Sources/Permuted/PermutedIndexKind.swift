@@ -203,20 +203,35 @@ public struct PermutedIndexKind<Root: Persistable>: IndexKind {
         self.permutation = permutation
     }
 
+    public func validateConfiguration() throws(IndexTypeValidationError) {
+        guard permutation.size == fieldNames.count else {
+            throw .invalidConfiguration(
+                index: Self.identifier,
+                reason: "Permutation size must match the indexed field count"
+            )
+        }
+    }
+
     /// Type validation
     ///
     /// Permuted indexes require at least 2 fields (single field doesn't need reordering)
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count >= 2 else {
-            throw PermutedIndexError.invalidConfiguration(
-                "Permuted index requires at least 2 fields (single field doesn't need reordering)"
+            throw .invalidTypeCount(
+                index: identifier,
+                expected: 2,
+                actual: types.count
             )
         }
         // All fields must be Comparable for index ordering
         for type in types {
             guard TypeValidation.isComparable(type) else {
-                throw PermutedIndexError.invalidConfiguration(
-                    "Permuted index requires Comparable types, got: \(type)"
+                throw .unsupportedType(
+                    index: identifier,
+                    type: type,
+                    reason: "Permuted index requires Comparable types"
                 )
             }
         }

@@ -211,12 +211,21 @@ public final class Schema: Sendable {
         /// Initialize from Persistable type
         public init(from type: any Persistable.Type) throws(SchemaEntityError) {
             let objPropInfo = Self.extractObjectPropertyInfo(from: type)
+            let indexDescriptors = type.indexDescriptors
+            if let invalid = indexDescriptors.first(
+                where: { $0.declarationError != nil }
+            ), let error = invalid.declarationError {
+                throw .invalidIndexDeclaration(
+                    indexName: invalid.name,
+                    error: error
+                )
+            }
             try self.init(
                 name: type.persistableType,
                 fields: type.fieldSchemas,
                 directoryComponents: Self.extractDirectoryComponents(from: type),
                 directoryLayer: type.directoryLayer,
-                indexes: type.indexDescriptors.map { IndexDescriptorMetadata($0) },
+                indexes: indexDescriptors.map { IndexDescriptorMetadata($0) },
                 enumMetadata: Self.extractEnumMetadata(from: type),
                 ontologyClassIRI: Self.extractOntologyClassIRI(from: type),
                 objectPropertyIRI: objPropInfo?.iri,
@@ -224,7 +233,7 @@ public final class Schema: Sendable {
                 objectPropertyToField: objPropInfo?.toField,
                 dataPropertyIRIs: Self.extractDataPropertyIRIs(from: type),
                 persistableType: type,
-                indexDescriptors: type.indexDescriptors
+                indexDescriptors: indexDescriptors
             )
         }
 
@@ -677,6 +686,12 @@ public final class Schema: Sendable {
         self.indexDescriptors = allIndexDescriptors
         var indexDescriptorsByName: [String: IndexDescriptor] = [:]
         for descriptor in allIndexDescriptors {
+            if let error = descriptor.declarationError {
+                throw .invalidIndexDeclaration(
+                    indexName: descriptor.name,
+                    error: error
+                )
+            }
             if let existing = indexDescriptorsByName[descriptor.name] {
                 throw .duplicateIndexName(
                     indexName: descriptor.name,
@@ -733,6 +748,12 @@ public final class Schema: Sendable {
         self.indexDescriptors = allIndexDescriptors
         var indexDescriptorsByName: [String: IndexDescriptor] = [:]
         for descriptor in allIndexDescriptors {
+            if let error = descriptor.declarationError {
+                throw .invalidIndexDeclaration(
+                    indexName: descriptor.name,
+                    error: error
+                )
+            }
             if let existing = indexDescriptorsByName[descriptor.name] {
                 throw .duplicateIndexName(
                     indexName: descriptor.name,
@@ -885,6 +906,12 @@ public final class Schema: Sendable {
 
                 var seenNamesForMember: Set<String> = []
                 for descriptor in descriptors {
+                    if let error = descriptor.declarationError {
+                        throw .invalidIndexDeclaration(
+                            indexName: descriptor.name,
+                            error: error
+                        )
+                    }
                     guard seenNamesForMember.insert(descriptor.name).inserted else {
                         throw .duplicatePolymorphicIndex(
                             group: identifier,
@@ -1024,6 +1051,12 @@ public enum SchemaError: Error, CustomStringConvertible, Sendable, Equatable {
     /// This error provides details about both the existing and duplicate index.
     case duplicateIndexName(indexName: String, existingFields: [String], duplicateFields: [String])
 
+    /// An index declaration failed its concrete type or configuration contract.
+    case invalidIndexDeclaration(
+        indexName: String,
+        error: IndexTypeValidationError
+    )
+
     /// Concrete members disagree on the directory path of a polymorphic group.
     case inconsistentPolymorphicDirectory(group: String)
 
@@ -1064,6 +1097,8 @@ public enum SchemaError: Error, CustomStringConvertible, Sendable, Equatable {
                    "Existing index fields: [\(existingDesc)], " +
                    "duplicate index fields: [\(duplicateDesc)]. " +
                    "Index names must be unique across all entities in the schema."
+        case .invalidIndexDeclaration(let indexName, let error):
+            return "Index '\(indexName)' is invalid: \(error.description)"
         case .inconsistentPolymorphicDirectory(let group):
             return "Polymorphic group '\(group)' has inconsistent directory components across member types."
         case .inconsistentPolymorphicDirectoryLayer(let group):

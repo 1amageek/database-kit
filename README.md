@@ -257,7 +257,7 @@ public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
     public let fieldNames: [String]
     public let resolution: TimeResolution
 
-    public enum TimeResolution: String, Codable, Sendable {
+    public enum TimeResolution: String, Codable, Sendable, Hashable {
         case second, minute, hour, day
     }
 
@@ -268,13 +268,27 @@ public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = fields.map { Root.fieldName(for: $0) }
         self.resolution = resolution
     }
+
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
+        guard types.count == 1 else {
+            throw .invalidTypeCount(
+                index: identifier,
+                expected: 1,
+                actual: types.count
+            )
+        }
+    }
 }
 ```
 
 Server-side maintenance is implemented and registered by
 [database-framework](https://github.com/1amageek/database-framework). Custom
 declarations expose only canonical `IndexKindMetadata`; runtime behavior remains
-outside this package.
+outside this package. Concrete KeyPath types and declaration configuration are
+validated when the descriptor is captured, and `Schema` rejects any invalid
+declaration before exposing the catalog.
 
 ## PersistableEnum
 
@@ -407,6 +421,7 @@ Bare names (without `:`, `#`, or `/`) default to the namespace extracted from th
 | visionOS | 26.0+ |
 | Linux | Swift 6.4+ |
 | WASI Embedded | Swift 6.4+ for `DatabaseValue`, `DatabaseDigest`, `QueryIR`, and `DatabaseWire` |
+| WASI (standard runtime) | Swift 6.4+ for the full `DatabaseKit` declaration product |
 
 ## Related Packages
 

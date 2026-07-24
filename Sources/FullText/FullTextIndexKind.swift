@@ -134,10 +134,40 @@ public struct FullTextIndexKind<Root: Persistable>: IndexKind {
         self.minTermLength = minTermLength
     }
 
+    public func validateConfiguration() throws(IndexTypeValidationError) {
+        guard ngramSize > 0 else {
+            throw .invalidConfiguration(
+                index: Self.identifier,
+                reason: "N-gram size must be positive"
+            )
+        }
+        guard minTermLength > 0 else {
+            throw .invalidConfiguration(
+                index: Self.identifier,
+                reason: "Minimum term length must be positive"
+            )
+        }
+    }
+
     /// Type validation
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard !types.isEmpty else {
-            throw FullTextIndexError.invalidConfiguration("Full-text index requires at least 1 field")
+            throw .invalidTypeCount(
+                index: identifier,
+                expected: 1,
+                actual: types.count
+            )
+        }
+        for type in types {
+            guard TypeValidation.unwrapped(type) == String.self else {
+                throw .unsupportedType(
+                    index: identifier,
+                    type: type,
+                    reason: "Full-text index fields must be String"
+                )
+            }
         }
     }
 }
@@ -169,25 +199,5 @@ extension FullTextIndexKind {
             lhs.storePositions == rhs.storePositions &&
             lhs.ngramSize == rhs.ngramSize &&
             lhs.minTermLength == rhs.minTermLength
-    }
-}
-
-// MARK: - Full-Text Index Errors
-
-/// Errors specific to full-text index operations
-public enum FullTextIndexError: Error, CustomStringConvertible, Sendable {
-    case invalidConfiguration(String)
-    case invalidQuery(String)
-    case tokenizationFailed(String)
-
-    public var description: String {
-        switch self {
-        case .invalidConfiguration(let message):
-            return "Invalid full-text index configuration: \(message)"
-        case .invalidQuery(let message):
-            return "Invalid search query: \(message)"
-        case .tokenizationFailed(let message):
-            return "Tokenization failed: \(message)"
-        }
     }
 }

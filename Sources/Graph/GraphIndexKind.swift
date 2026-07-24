@@ -123,7 +123,9 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     }
 
     /// Validate that every property-graph identity field is a String.
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count >= 2 else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
@@ -144,11 +146,7 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     }
 
     private static func isPropertyGraphString(_ type: Any.Type) -> Bool {
-        if type == String.self { return true }
-        guard let optionalType = type as? any GraphOptionalType.Type else {
-            return false
-        }
-        return optionalType.wrappedType == String.self
+        TypeValidation.unwrapped(type) == String.self
     }
 
     // MARK: - Initialization
@@ -265,14 +263,6 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     public var hasGraphField: Bool {
         graphField != nil
     }
-}
-
-private protocol GraphOptionalType {
-    static var wrappedType: Any.Type { get }
-}
-
-extension Optional: GraphOptionalType {
-    fileprivate static var wrappedType: Any.Type { Wrapped.self }
 }
 
 // MARK: - Codable

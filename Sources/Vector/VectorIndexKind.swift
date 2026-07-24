@@ -98,7 +98,6 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
     ///   - dimensions: Vector dimensions (must be positive)
     ///   - metric: Distance metric (default: cosine)
     public init(embedding: PartialKeyPath<Root>, dimensions: Int, metric: VectorMetric = .cosine) {
-        precondition(dimensions > 0, "Vector dimensions must be positive")
         self.fieldNames = [Root.fieldName(for: embedding)]
         self.dimensions = dimensions
         self.metric = metric
@@ -106,14 +105,24 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
 
     /// Initialize with field name strings (for Codable reconstruction)
     public init(fieldNames: [String], dimensions: Int, metric: VectorMetric = .cosine) {
-        precondition(dimensions > 0, "Vector dimensions must be positive")
         self.fieldNames = fieldNames
         self.dimensions = dimensions
         self.metric = metric
     }
 
+    public func validateConfiguration() throws(IndexTypeValidationError) {
+        guard dimensions > 0 else {
+            throw .invalidConfiguration(
+                index: Self.identifier,
+                reason: "Vector dimensions must be positive"
+            )
+        }
+    }
+
     /// Type validation
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count == 1 else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
@@ -121,7 +130,19 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
                 actual: types.count
             )
         }
-        // Vector field should be array type - validated at runtime when extracting
+        guard let type = types.first else { return }
+        let valueType = TypeValidation.unwrapped(type)
+        if valueType == DatabaseTypes.Vector.self {
+            return
+        }
+        guard let elementType = TypeValidation.arrayElementType(valueType),
+              TypeValidation.isNumeric(elementType) else {
+            throw .unsupportedType(
+                index: identifier,
+                type: type,
+                reason: "Vector fields must be Vector or arrays of numeric values"
+            )
+        }
     }
 }
 

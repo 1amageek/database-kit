@@ -66,7 +66,9 @@ public struct RDFQuadIndexKind<Root: Persistable>: IndexKind {
         self.graphField = Root.fieldName(for: graph)
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count == 3 || types.count == 4 else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,

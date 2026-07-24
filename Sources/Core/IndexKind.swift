@@ -116,11 +116,22 @@ public protocol IndexKind: Sendable, Codable, Hashable {
     /// - types: Types of indexed fields (array order corresponds to fieldNames)
     ///
     /// **Throws**: IndexTypeValidationError if type not supported
-    static func validateTypes(_ types: [Any.Type]) throws
+    static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError)
+
+    /// Validate configuration values that are independent of field types.
+    ///
+    /// `IndexDescriptor` evaluates this contract when it captures a concrete
+    /// index declaration. `Schema` then rejects any captured failure before
+    /// exposing the catalog to a runtime.
+    func validateConfiguration() throws(IndexTypeValidationError)
 }
 
 extension IndexKind {
     public var metadata: [String: FieldValue] { [:] }
+
+    public func validateConfiguration() throws(IndexTypeValidationError) {}
 }
 
 /// Index type validation error
@@ -133,7 +144,12 @@ extension IndexKind {
 ///     reason: "Vector index requires array types"
 /// )
 /// ```
-public enum IndexTypeValidationError: Error, CustomStringConvertible {
+public enum IndexTypeValidationError:
+    Error,
+    Sendable,
+    Equatable,
+    CustomStringConvertible
+{
     /// Unsupported type
     ///
     /// - Parameters:
@@ -155,7 +171,7 @@ public enum IndexTypeValidationError: Error, CustomStringConvertible {
     /// - Parameters:
     ///   - index: Index kind identifier
     ///   - reason: Failure reason (user-facing message)
-    case customValidationFailed(index: String, reason: String)
+    case invalidConfiguration(index: String, reason: String)
 
     public var description: String {
         switch self {
@@ -165,8 +181,37 @@ public enum IndexTypeValidationError: Error, CustomStringConvertible {
         case let .invalidTypeCount(index, expected, actual):
             return "Index '\(index)' expects \(expected) field(s), but got \(actual)"
 
-        case let .customValidationFailed(index, reason):
-            return "Index '\(index)' validation failed: \(reason)"
+        case let .invalidConfiguration(index, reason):
+            return "Index '\(index)' has invalid configuration: \(reason)"
+        }
+    }
+
+    public static func == (
+        lhs: IndexTypeValidationError,
+        rhs: IndexTypeValidationError
+    ) -> Bool {
+        switch (lhs, rhs) {
+        case let (
+            .unsupportedType(lhsIndex, lhsType, lhsReason),
+            .unsupportedType(rhsIndex, rhsType, rhsReason)
+        ):
+            return lhsIndex == rhsIndex
+                && ObjectIdentifier(lhsType) == ObjectIdentifier(rhsType)
+                && lhsReason == rhsReason
+        case let (
+            .invalidTypeCount(lhsIndex, lhsExpected, lhsActual),
+            .invalidTypeCount(rhsIndex, rhsExpected, rhsActual)
+        ):
+            return lhsIndex == rhsIndex
+                && lhsExpected == rhsExpected
+                && lhsActual == rhsActual
+        case let (
+            .invalidConfiguration(lhsIndex, lhsReason),
+            .invalidConfiguration(rhsIndex, rhsReason)
+        ):
+            return lhsIndex == rhsIndex && lhsReason == rhsReason
+        default:
+            return false
         }
     }
 }

@@ -88,6 +88,10 @@ public struct IndexDescriptor: Descriptor, Sendable {
     /// **Example**: `["name", "price"]`
     public let storedFieldNames: [String]
 
+    /// The declaration failure captured while concrete field types and
+    /// configuration are still available.
+    package let declarationError: IndexTypeValidationError?
+
     /// Standard initializer with typed KeyPaths
     ///
     /// **Example**:
@@ -113,26 +117,27 @@ public struct IndexDescriptor: Descriptor, Sendable {
         storedFieldNames: [String] = []
     ) {
         self.name = name
-        self.fieldNames = keyPaths.map { Root.fieldName(for: $0) }
+        let fieldNames = keyPaths.map { Root.fieldName(for: $0) }
+        self.fieldNames = fieldNames
         self.kind = IndexKindMetadata(kind)
         self.commonOptions = commonOptions
         self.storedFieldNames = storedFieldNames
-    }
-
-    /// Creates a descriptor from canonical index metadata while preserving
-    /// compile-time validation of the indexed key paths.
-    public init<Root: Persistable>(
-        name: String,
-        keyPaths: [PartialKeyPath<Root>],
-        kind: IndexKindMetadata,
-        commonOptions: CommonIndexOptions = .init(),
-        storedFieldNames: [String] = []
-    ) {
-        self.name = name
-        self.fieldNames = keyPaths.map { Root.fieldName(for: $0) }
-        self.kind = kind
-        self.commonOptions = commonOptions
-        self.storedFieldNames = storedFieldNames
+        guard kind.fieldNames == fieldNames else {
+            self.declarationError = .invalidConfiguration(
+                index: Kind.identifier,
+                reason: "Descriptor key paths must match the index kind fields"
+            )
+            return
+        }
+        do {
+            try Kind.validateTypes(
+                keyPaths.map { type(of: $0).valueType }
+            )
+            try kind.validateConfiguration()
+            self.declarationError = nil
+        } catch {
+            self.declarationError = error
+        }
     }
 
 }

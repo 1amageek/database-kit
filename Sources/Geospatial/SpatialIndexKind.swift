@@ -99,10 +99,45 @@ public struct SpatialIndexKind<Root: Persistable>: IndexKind {
         self.level = level
     }
 
+    public func validateConfiguration() throws(IndexTypeValidationError) {
+        let maximumLevel = encoding == .morton && fieldNames.count == 3
+            ? 20
+            : 30
+        guard (0...maximumLevel).contains(level) else {
+            throw .invalidConfiguration(
+                index: Self.identifier,
+                reason: "Level must be in 0...\(maximumLevel)"
+            )
+        }
+        guard encoding != .s2 || fieldNames.count == 2 else {
+            throw .invalidConfiguration(
+                index: Self.identifier,
+                reason: "S2 indexes require latitude and longitude fields"
+            )
+        }
+    }
+
     /// Type validation
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count >= 2 && types.count <= 3 else {
-            throw SpatialIndexError.invalidConfiguration("Spatial index requires 2-3 fields (lat/lon or x/y/z)")
+            throw .invalidTypeCount(
+                index: identifier,
+                expected: 2,
+                actual: types.count
+            )
+        }
+        for type in types {
+            guard TypeValidation.isNumeric(
+                TypeValidation.unwrapped(type)
+            ) else {
+                throw .unsupportedType(
+                    index: identifier,
+                    type: type,
+                    reason: "Spatial coordinates must be numeric"
+                )
+            }
         }
     }
 }
@@ -126,22 +161,5 @@ extension SpatialIndexKind {
 
     public static func == (lhs: SpatialIndexKind, rhs: SpatialIndexKind) -> Bool {
         return lhs.fieldNames == rhs.fieldNames && lhs.encoding == rhs.encoding && lhs.level == rhs.level
-    }
-}
-
-// MARK: - Spatial Index Errors
-
-/// Errors specific to spatial index operations
-public enum SpatialIndexError: Error, CustomStringConvertible, Sendable {
-    case invalidConfiguration(String)
-    case invalidCoordinates(String)
-
-    public var description: String {
-        switch self {
-        case .invalidConfiguration(let message):
-            return "Invalid spatial index configuration: \(message)"
-        case .invalidCoordinates(let message):
-            return "Invalid coordinates: \(message)"
-        }
     }
 }

@@ -42,8 +42,9 @@ UUID, geographic values, vectors, entity references, and RDF terms are owned by
 wrapping, or aliasing them.
 
 Application model conversion is owned by `Core` because it depends on persisted
-model and schema meaning. Optional Foundation conversion is isolated in adapter
-targets and does not enter the Embedded dependency graph.
+model and schema meaning. `Core` uses FoundationEssentials where the standard
+Swift runtime is available. Primitive Foundation conversions remain in
+`DatabaseTypesFoundation`; neither dependency enters the Embedded client graph.
 
 ## Schema Catalog Boundary
 
@@ -53,6 +54,14 @@ boundary before reaching persistence codecs or runtime registration. Field-name
 and field-number maps are derived once from that validated catalog; downstream
 code neither resolves duplicate metadata by precedence nor traps while building
 a dictionary.
+
+An `IndexDescriptor` captures concrete KeyPath value types while they are still
+available and evaluates both `IndexKind.validateTypes` and
+`validateConfiguration`. It also requires the descriptor KeyPaths to match the
+fields declared by the concrete kind. `Schema` rejects a captured
+`IndexTypeValidationError` before publishing its index catalog. Runtime
+maintainers may therefore rely on a schema containing only type-compatible,
+configuration-valid declarations.
 
 ## Embedded Boundary
 
@@ -69,6 +78,11 @@ DatabaseTypes
 `DatabaseValue`, `DatabaseDigest`, `QueryIR`, and `DatabaseWire` must compile
 with the Swift 6.4 Embedded WASM SDK. They must not import Foundation, Codable,
 URLSession, JavaScriptKit, or database runtime implementations.
+
+The full declaration product (`DatabaseKit`) separately compiles as a standard
+WASI target with FoundationEssentials. That build is the declaration dependency
+of the full database-framework reactor and is not part of the Embedded client
+dependency graph.
 
 `DatabaseWireReader` applies frame, string, byte-string, collection, nesting,
 and object budgets before allocating or constructing decoded values.

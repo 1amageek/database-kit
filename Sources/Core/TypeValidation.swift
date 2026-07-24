@@ -5,6 +5,22 @@ import DatabaseTypes
 // Helper functions for use in IndexKind.validateTypes() implementations.
 // Provides type checking using actual type metatypes.
 
+package protocol OptionalTypeMetadata {
+    static var wrappedType: Any.Type { get }
+}
+
+extension Optional: OptionalTypeMetadata {
+    package static var wrappedType: Any.Type { Wrapped.self }
+}
+
+package protocol ArrayTypeMetadata {
+    static var elementType: Any.Type { get }
+}
+
+extension Array: ArrayTypeMetadata {
+    package static var elementType: Any.Type { Element.self }
+}
+
 /// Helper functions for type validation
 ///
 /// **Purpose**: Used in IndexKindProtocol.validateTypes() implementations
@@ -130,7 +146,11 @@ public enum TypeValidation {
     /// - Parameter type: Type to check
     /// - Returns: true if Comparable-conforming type
     public static func isComparable(_ type: Any.Type) -> Bool {
-        return (type as? any Comparable.Type) != nil
+        return (unwrapped(type) as? any Comparable.Type) != nil
+    }
+
+    public static func isHashable(_ type: Any.Type) -> Bool {
+        (unwrapped(type) as? any Hashable.Type) != nil
     }
 
     /// Check if type is array
@@ -144,14 +164,18 @@ public enum TypeValidation {
     /// TypeValidation.isArrayType(String.self)     // false
     /// ```
     ///
-    /// **Note**: This implementation uses string-based detection.
-    /// For more strict detection, perform additional validation in execution layer.
-    ///
     /// - Parameter type: Type to check
     /// - Returns: true if array type
     public static func isArrayType(_ type: Any.Type) -> Bool {
-        // Check type's string representation
-        let typeString = String(describing: type)
-        return typeString.hasPrefix("Array<")
+        arrayElementType(type) != nil
+    }
+
+    package static func arrayElementType(_ type: Any.Type) -> Any.Type? {
+        let valueType = unwrapped(type)
+        return (valueType as? any ArrayTypeMetadata.Type)?.elementType
+    }
+
+    package static func unwrapped(_ type: Any.Type) -> Any.Type {
+        (type as? any OptionalTypeMetadata.Type)?.wrappedType ?? type
     }
 }

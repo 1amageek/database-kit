@@ -102,14 +102,35 @@ public struct RankIndexKind<Root: Persistable, Score: IndexNumericValue>: IndexK
         self.bucketSize = bucketSize
     }
 
+    public func validateConfiguration() throws(IndexTypeValidationError) {
+        guard bucketSize > 0 else {
+            throw .invalidConfiguration(
+                index: Self.identifier,
+                reason: "Bucket size must be positive"
+            )
+        }
+    }
+
     /// Type validation
-    public static func validateTypes(_ types: [Any.Type]) throws {
-        guard types.count >= 1 else {
-            throw RankIndexError.invalidConfiguration("Rank index requires at least 1 field (score)")
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
+        guard types.count == 1 else {
+            throw .invalidTypeCount(
+                index: identifier,
+                expected: 1,
+                actual: types.count
+            )
         }
         for type in types {
-            guard TypeValidation.isComparable(type) else {
-                throw RankIndexError.invalidConfiguration("Rank index requires Comparable types")
+            guard TypeValidation.isNumeric(
+                TypeValidation.unwrapped(type)
+            ) else {
+                throw .unsupportedType(
+                    index: identifier,
+                    type: type,
+                    reason: "Rank score fields must be numeric"
+                )
             }
         }
     }
@@ -136,22 +157,5 @@ extension RankIndexKind {
         return lhs.fieldNames == rhs.fieldNames
             && lhs.scoreType == rhs.scoreType
             && lhs.bucketSize == rhs.bucketSize
-    }
-}
-
-// MARK: - Rank Index Errors
-
-/// Errors specific to rank index operations
-public enum RankIndexError: Error, CustomStringConvertible, Sendable {
-    case invalidConfiguration(String)
-    case invalidScore(String)
-
-    public var description: String {
-        switch self {
-        case .invalidConfiguration(let message):
-            return "Invalid rank index configuration: \(message)"
-        case .invalidScore(let message):
-            return "Invalid score: \(message)"
-        }
     }
 }

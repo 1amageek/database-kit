@@ -62,7 +62,9 @@ public struct ScalarIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = fieldNames
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard !types.isEmpty else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
@@ -132,7 +134,9 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = fieldNames
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         for type in types {
             guard TypeValidation.isComparable(type) else {
                 throw IndexTypeValidationError.unsupportedType(
@@ -233,7 +237,9 @@ public struct SumIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKi
         self.valueType = valueType
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count >= 1 else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
@@ -338,7 +344,9 @@ public struct MinIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
         self.valueType = valueType
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count >= 1 else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
@@ -434,7 +442,9 @@ public struct MaxIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
         self.valueType = valueType
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count >= 1 else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
@@ -540,7 +550,9 @@ public struct AverageIndexKind<Root: Persistable, Value: IndexNumericValue>: Ind
         self.valueType = valueType
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count >= 1 else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
@@ -642,8 +654,37 @@ public struct VersionIndexKind<Root: Persistable>: IndexKind {
         self.strategy = strategy
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
-        // Version index accepts any types
+    public func validateConfiguration() throws(IndexTypeValidationError) {
+        switch strategy {
+        case .keepAll:
+            return
+        case .keepLast(let count):
+            guard count > 0 else {
+                throw .invalidConfiguration(
+                    index: Self.identifier,
+                    reason: "Retained version count must be positive"
+                )
+            }
+        case .keepForDuration(let duration):
+            guard duration.isFinite, duration > 0 else {
+                throw .invalidConfiguration(
+                    index: Self.identifier,
+                    reason: "Retention duration must be finite and positive"
+                )
+            }
+        }
+    }
+
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
+        guard types.count == 1 else {
+            throw .invalidTypeCount(
+                index: identifier,
+                expected: 1,
+                actual: types.count
+            )
+        }
     }
 }
 
@@ -696,12 +737,14 @@ public struct CountUpdatesIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = fieldNames
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
-        guard !types.isEmpty else {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
+        guard types.count == 1 else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
                 expected: 1,
-                actual: 0
+                actual: types.count
             )
         }
     }
@@ -776,7 +819,9 @@ public struct CountNotNullIndexKind<Root: Persistable>: IndexKind {
         self.valueFieldName = valueFieldName
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count >= 1 else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
@@ -863,7 +908,9 @@ public struct BitmapIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = fieldNames
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard !types.isEmpty else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
@@ -998,7 +1045,25 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
         self.windowCount = windowCount
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public func validateConfiguration() throws(IndexTypeValidationError) {
+        guard windowCount > 0 else {
+            throw .invalidConfiguration(
+                index: Self.identifier,
+                reason: "Window count must be positive"
+            )
+        }
+        guard window.durationSeconds.isFinite,
+              window.durationSeconds > 0 else {
+            throw .invalidConfiguration(
+                index: Self.identifier,
+                reason: "Window duration must be finite and positive"
+            )
+        }
+    }
+
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard !types.isEmpty else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
@@ -1006,13 +1071,21 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
                 actual: 0
             )
         }
-        // Score field must be comparable
+        for type in types.dropLast() {
+            guard TypeValidation.isComparable(type) else {
+                throw .unsupportedType(
+                    index: identifier,
+                    type: type,
+                    reason: "Leaderboard grouping fields must be Comparable"
+                )
+            }
+        }
         guard let scoreType = types.last else { return }
-        guard TypeValidation.isComparable(scoreType) else {
+        guard TypeValidation.unwrapped(scoreType) == Int64.self else {
             throw IndexTypeValidationError.unsupportedType(
                 index: identifier,
                 type: scoreType,
-                reason: "Leaderboard score field must be Comparable"
+                reason: "Leaderboard score field must be Int64"
             )
         }
     }
@@ -1140,7 +1213,18 @@ public struct DistinctIndexKind<Root: Persistable>: IndexKind {
         self.precision = precision
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public func validateConfiguration() throws(IndexTypeValidationError) {
+        guard (4...17).contains(precision) else {
+            throw .invalidConfiguration(
+                index: Self.identifier,
+                reason: "Precision must be in 4...17"
+            )
+        }
+    }
+
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count >= 1 else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,
@@ -1148,8 +1232,6 @@ public struct DistinctIndexKind<Root: Persistable>: IndexKind {
                 actual: 0
             )
         }
-        // Value field can be any Hashable type (will be hashed for HLL)
-        // Grouping fields must be Comparable (for key construction)
         let groupingTypes = types.dropLast()
         for type in groupingTypes {
             guard TypeValidation.isComparable(type) else {
@@ -1159,6 +1241,14 @@ public struct DistinctIndexKind<Root: Persistable>: IndexKind {
                     reason: "Distinct index grouping fields must be Comparable"
                 )
             }
+        }
+        guard let valueType = types.last,
+              TypeValidation.isHashable(valueType) else {
+            throw .unsupportedType(
+                index: identifier,
+                type: types.last ?? Any.self,
+                reason: "Distinct index values must be Hashable"
+            )
         }
     }
 }
@@ -1260,7 +1350,19 @@ public struct PercentileIndexKind<Root: Persistable, Value: IndexNumericValue>: 
         self.compression = compression
     }
 
-    public static func validateTypes(_ types: [Any.Type]) throws {
+    public func validateConfiguration() throws(IndexTypeValidationError) {
+        guard compression.isFinite,
+              (1.0...1_000.0).contains(compression) else {
+            throw .invalidConfiguration(
+                index: Self.identifier,
+                reason: "Compression must be finite and in 1...1000"
+            )
+        }
+    }
+
+    public static func validateTypes(
+        _ types: [Any.Type]
+    ) throws(IndexTypeValidationError) {
         guard types.count >= 1 else {
             throw IndexTypeValidationError.invalidTypeCount(
                 index: identifier,

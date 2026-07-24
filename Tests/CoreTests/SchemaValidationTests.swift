@@ -3,11 +3,45 @@ import DatabaseValue
 import Foundation
 import Testing
 @testable import Core
+import Vector
 
 @Persistable
 private struct SchemaValidationEntity {
     var first: String
     var second: String
+}
+
+@Persistable
+private struct InvalidScalarIndexEntity {
+    #Index(
+        ScalarIndexKind<InvalidScalarIndexEntity>(fields: [\.tags]),
+        name: "invalid_scalar"
+    )
+
+    var tags: [String]
+}
+
+@Persistable
+private struct InvalidVectorConfigurationEntity {
+    #Index(
+        VectorIndexKind<InvalidVectorConfigurationEntity>(
+            embedding: \.embedding,
+            dimensions: 0
+        ),
+        name: "invalid_vector"
+    )
+
+    var embedding: [Float]
+}
+
+@Persistable
+private struct OptionalScalarIndexEntity {
+    #Index(
+        ScalarIndexKind<OptionalScalarIndexEntity>(fields: [\.value]),
+        name: "optional_scalar"
+    )
+
+    var value: String?
 }
 
 @Suite("Schema Validation")
@@ -142,5 +176,73 @@ struct SchemaValidationTests {
         #expect(schema.entity(for: SchemaValidationEntity.self) != nil)
         #expect(schema.indexDescriptors.isEmpty)
         #expect(schema.allIndexNames.isEmpty)
+    }
+
+    @Test("Concrete index field types are enforced by schema construction")
+    func concreteIndexFieldTypesAreEnforced() {
+        #expect(
+            throws: SchemaError.invalidEntity(
+                .invalidIndexDeclaration(
+                    indexName: "invalid_scalar",
+                    error: .unsupportedType(
+                        index: "scalar",
+                        type: [String].self,
+                        reason: "Scalar index requires Comparable types"
+                    )
+                )
+            )
+        ) {
+            try Schema([InvalidScalarIndexEntity.self])
+        }
+    }
+
+    @Test("Index configuration failures reach the schema boundary without trapping")
+    func indexConfigurationFailuresReachSchemaBoundary() {
+        #expect(
+            throws: SchemaError.invalidEntity(
+                .invalidIndexDeclaration(
+                    indexName: "invalid_vector",
+                    error: .invalidConfiguration(
+                        index: "vector",
+                        reason: "Vector dimensions must be positive"
+                    )
+                )
+            )
+        ) {
+            try Schema([InvalidVectorConfigurationEntity.self])
+        }
+    }
+
+    @Test("Optional comparable fields retain their scalar index contract")
+    func optionalComparableFieldsAreAccepted() throws {
+        let schema = try Schema([OptionalScalarIndexEntity.self])
+
+        #expect(schema.allIndexNames == ["optional_scalar"])
+    }
+
+    @Test("Descriptor key paths must match the concrete index kind")
+    func descriptorKeyPathsMustMatchKind() {
+        let descriptor = IndexDescriptor(
+            name: "mismatched_descriptor",
+            keyPaths: [\SchemaValidationEntity.second],
+            kind: ScalarIndexKind<SchemaValidationEntity>(
+                fields: [\SchemaValidationEntity.first]
+            )
+        )
+
+        #expect(
+            throws: SchemaError.invalidIndexDeclaration(
+                indexName: "mismatched_descriptor",
+                error: .invalidConfiguration(
+                    index: "scalar",
+                    reason: "Descriptor key paths must match the index kind fields"
+                )
+            )
+        ) {
+            try Schema(
+                [SchemaValidationEntity.self],
+                indexDescriptors: [descriptor]
+            )
+        }
     }
 }
