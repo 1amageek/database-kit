@@ -158,66 +158,54 @@ public struct DatabaseWireWriter {
         }
     }
 
-    /// Performs exact-size two-pass encoding for codecs with domain-specific errors.
-    public static func encodeThrowing(
-        limits: DatabaseWireLimits = .default,
-        _ encode: (inout DatabaseWireWriter) throws -> Void
-    ) throws -> ByteString {
-        var measuringWriter = DatabaseWireWriter(measuring: limits)
-        try encode(&measuringWriter)
-        try measuringWriter.ensureNoDeferredError()
-        let byteCount = measuringWriter.writtenByteCount
-        guard byteCount <= limits.maximumFrameBytes else {
-            throw DatabaseWireError.frameTooLarge(
-                actual: byteCount,
-                maximum: limits.maximumFrameBytes
-            )
-        }
-
-        return try ByteString.copying(count: byteCount) { output in
-            var writer = DatabaseWireWriter(
-                fixedOutput: output,
-                limits: limits
-            )
-            try encode(&writer)
-            try writer.ensureNoDeferredError()
-            guard writer.writtenByteCount == byteCount else {
-                throw DatabaseWireError.byteCountOverflow
-            }
-        }
-    }
-
     /// Measures first, calls `prepare` before any output, and then lends each
     /// encoded span directly to a synchronous consumer.
     ///
     /// The buffer passed to `consume` is valid only until that call returns.
     /// The consumer must not retain the pointer. This internal primitive is
     /// intentionally limited to canonical codecs that never back-patch output.
-    public static func emit(
+    public static func emit<DestinationFailure: Error>(
         limits: DatabaseWireLimits,
-        prepare: (Int) throws -> Void,
+        prepare: (Int) throws(DestinationFailure) -> Void,
         consume: (UnsafeRawBufferPointer) -> Void,
         _ encode: (
             inout DatabaseWireWriter
         ) throws(DatabaseWireError) -> Void
-    ) throws {
-        let byteCount = try Self.encodedByteCount(
-            limits: limits,
-            encode
-        )
-
-        try prepare(byteCount)
-
-        try withoutActuallyEscaping(consume) { escapingConsume in
-            var writer = DatabaseWireWriter(
-                borrowedSink: escapingConsume,
-                limits: limits
+    ) throws(DatabaseWireEmissionError<DestinationFailure>) {
+        let byteCount: Int
+        do {
+            byteCount = try Self.encodedByteCount(
+                limits: limits,
+                encode
             )
-            try encode(&writer)
-            try writer.ensureNoDeferredError()
-            guard writer.writtenByteCount == byteCount else {
-                throw DatabaseWireError.byteCountOverflow
+        } catch {
+            throw .encoding(error)
+        }
+
+        do {
+            try prepare(byteCount)
+        } catch {
+            throw .destination(error)
+        }
+
+        let result: Result<Void, DatabaseWireError> = withoutActuallyEscaping(
+            consume
+        ) { escapingConsume in
+            Self.result {
+                () throws(DatabaseWireError) -> Void in
+                var writer = DatabaseWireWriter(
+                    borrowedSink: escapingConsume,
+                    limits: limits
+                )
+                try encode(&writer)
+                try writer.ensureNoDeferredError()
+                guard writer.writtenByteCount == byteCount else {
+                    throw DatabaseWireError.byteCountOverflow
+                }
             }
+        }
+        if case .failure(let error) = result {
+            throw .encoding(error)
         }
     }
 

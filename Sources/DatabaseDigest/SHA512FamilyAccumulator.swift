@@ -102,10 +102,10 @@ struct SHA512FamilyAccumulator: Sendable {
     /// Lends the finalized digest for exactly one synchronous callback.
     ///
     /// The pointer must not escape `body`.
-    consuming func withUnsafeDigestBytes<Result>(
+    consuming func withUnsafeDigestBytes<Result, Failure: Error>(
         digestByteCount: Int,
-        _ body: (UnsafeRawBufferPointer) throws -> Result
-    ) rethrows -> Result {
+        _ body: (UnsafeRawBufferPointer) throws(Failure) -> Result
+    ) throws(Failure) -> Result {
         precondition(
             digestByteCount == SHA384Accumulator.digestByteCount
                 || digestByteCount == SHA512Accumulator.digestByteCount
@@ -130,7 +130,7 @@ struct SHA512FamilyAccumulator: Sendable {
         Self.writeBigEndian(bitCount.low, at: 120, to: &pending)
         processPendingBlock()
 
-        return try withUnsafeTemporaryAllocation(
+        let result: Swift.Result<Result, Failure> = withUnsafeTemporaryAllocation(
             byteCount: digestByteCount,
             alignment: MemoryLayout<UInt64>.alignment
         ) { output in
@@ -144,8 +144,13 @@ struct SHA512FamilyAccumulator: Sendable {
                 Self.writeBigEndian(state.value6, at: 48, to: output)
                 Self.writeBigEndian(state.value7, at: 56, to: output)
             }
-            return try body(UnsafeRawBufferPointer(output))
+            do throws(Failure) {
+                return .success(try body(UnsafeRawBufferPointer(output)))
+            } catch {
+                return .failure(error)
+            }
         }
+        return try result.get()
     }
 
     private mutating func processPendingBlock() {

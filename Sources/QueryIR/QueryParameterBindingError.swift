@@ -6,6 +6,8 @@ public enum QueryParameterBindingError: Error, Sendable, Equatable, CustomString
     case missingPosition(UInt32)
     case missingName(String)
     case unsupportedValue(QueryParameterReference)
+    case invalidStructure(QueryStructuralValidationError)
+    case invalidTraversalState
 
     public var description: String {
         switch self {
@@ -23,6 +25,10 @@ public enum QueryParameterBindingError: Error, Sendable, Equatable, CustomString
             return "Parameter name '\(name)' is not bound"
         case .unsupportedValue(let reference):
             return "Parameter \(reference) cannot be represented by this QueryIR expression"
+        case .invalidStructure(let error):
+            return "Query parameter binding rejected the query structure: \(error)"
+        case .invalidTraversalState:
+            return "Query parameter binding reached an invalid traversal state"
         }
     }
 }

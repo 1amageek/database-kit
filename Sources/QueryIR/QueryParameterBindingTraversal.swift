@@ -22,22 +22,18 @@ struct QueryParameterBindingTraversal {
 
     mutating func bind(
         _ statement: QueryStatement
-    ) throws -> QueryStatement {
+    ) throws(QueryParameterBindingError) -> QueryStatement {
         bindingSteps.append(.statement(statement))
         while let bindingStep = bindingSteps.popLast() {
             try apply(bindingStep)
         }
 
         guard results.count == 1 else {
-            throw QueryParameterBindingTraversalError.invalidResultStack(
-                expected: 1,
-                actual: results.count
-            )
+            throw .invalidTraversalState
         }
         return try popStatement().value
     }
 }
-
 private extension QueryParameterBindingTraversal {
     struct Bound<Value> {
         let value: Value
@@ -88,7 +84,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func apply(
         _ bindingStep: BindingStep
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         switch bindingStep {
         case .statement(let statement):
             enqueueBindings(statement)
@@ -379,7 +375,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func enqueueBindings(
         _ expression: Expression
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         switch expression {
         case .literal, .column, .variable, .bound:
             results.append(.expression(Bound(value: expression, changed: false)))
@@ -595,7 +591,7 @@ private extension QueryParameterBindingTraversal {
 private extension QueryParameterBindingTraversal {
     mutating func assemble(
         _ statement: QueryStatement
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         let bound: Bound<QueryStatement>
         switch statement {
         case .select:
@@ -667,9 +663,7 @@ private extension QueryParameterBindingTraversal {
                 changed: changed
             )
         case .createGraph, .dropGraph:
-            throw QueryParameterBindingTraversalError.unexpectedAssembly(
-                "leaf statement"
-            )
+            throw .invalidTraversalState
         }
         results.append(.statement(bound))
     }
@@ -677,7 +671,7 @@ private extension QueryParameterBindingTraversal {
     mutating func assembleInsert(
         _ query: InsertQuery,
         original: QueryStatement
-    ) throws -> Bound<QueryStatement> {
+    ) throws(QueryParameterBindingError) -> Bound<QueryStatement> {
         let returning = try popOptionalProjectionItems(query.returning)
         let conflict = try popConflictAction(query.onConflict)
         let source = try popInsertSource(query.source)
@@ -702,7 +696,7 @@ private extension QueryParameterBindingTraversal {
     mutating func assembleUpdate(
         _ query: UpdateQuery,
         original: QueryStatement
-    ) throws -> Bound<QueryStatement> {
+    ) throws(QueryParameterBindingError) -> Bound<QueryStatement> {
         let returning = try popOptionalProjectionItems(query.returning)
         let filter = try popOptionalExpression(query.filter)
         let source = try popOptionalSource(query.from)
@@ -729,7 +723,7 @@ private extension QueryParameterBindingTraversal {
     mutating func assembleDelete(
         _ query: DeleteQuery,
         original: QueryStatement
-    ) throws -> Bound<QueryStatement> {
+    ) throws(QueryParameterBindingError) -> Bound<QueryStatement> {
         let returning = try popOptionalProjectionItems(query.returning)
         let filter = try popOptionalExpression(query.filter)
         let source = try popOptionalSource(query.using)
@@ -752,7 +746,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func assemble(
         _ query: SelectQuery
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         let subqueries = try popOptionalNamedSubqueries(query.subqueries)
         let orderBy = try popOptionalSortKeys(query.orderBy)
         let having = try popOptionalExpression(query.having)
@@ -794,7 +788,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func assemble(
         _ source: DataSource
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         let bound: Bound<DataSource>
         switch source {
         case .subquery(_, let alias):
@@ -893,16 +887,14 @@ private extension QueryParameterBindingTraversal {
                 changed: changed
             )
         case .table, .logical, .values:
-            throw QueryParameterBindingTraversalError.unexpectedAssembly(
-                "leaf data source"
-            )
+            throw .invalidTraversalState
         }
         results.append(.source(bound))
     }
 
     mutating func assemble(
         _ pattern: MatchPattern
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         let predicate = try popOptionalExpression(pattern.where)
         let paths = try popPathPatterns(pattern.paths)
         let changed = predicate.changed || paths.changed
@@ -920,7 +912,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func assemble(
         _ pattern: PathPattern
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         let elements = try popPathElements(pattern.elements)
         results.append(
             .pathPattern(
@@ -940,7 +932,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func assemble(
         _ element: PathElement
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         let bound: Bound<PathElement>
         switch element {
         case .node(let node):
@@ -992,7 +984,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func assemble(
         _ pattern: GraphPattern
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         let bound: Bound<GraphPattern>
         switch pattern {
         case .join:
@@ -1072,16 +1064,14 @@ private extension QueryParameterBindingTraversal {
                 changed: changed
             )
         case .basic, .values:
-            throw QueryParameterBindingTraversalError.unexpectedAssembly(
-                "leaf graph pattern"
-            )
+            throw .invalidTraversalState
         }
         results.append(.graphPattern(bound))
     }
 
     mutating func assemble(
         _ expression: Expression
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         let bound: Bound<Expression>
         switch expression {
         case .add:
@@ -1252,16 +1242,14 @@ private extension QueryParameterBindingTraversal {
                 changed: query.changed
             )
         case .literal, .column, .variable, .parameter, .bound:
-            throw QueryParameterBindingTraversalError.unexpectedAssembly(
-                "leaf expression"
-            )
+            throw .invalidTraversalState
         }
         results.append(.expression(bound))
     }
 
     mutating func assemble(
         _ aggregate: AggregateFunction
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         let bound: Bound<AggregateFunction>
         switch aggregate {
         case .count(.some, let distinct):
@@ -1305,16 +1293,14 @@ private extension QueryParameterBindingTraversal {
                 changed: changed
             )
         case .count(.none, _):
-            throw QueryParameterBindingTraversalError.unexpectedAssembly(
-                "argument-free aggregate"
-            )
+            throw .invalidTraversalState
         }
         results.append(.aggregate(bound))
     }
 
     mutating func assemble(
         _ modifiers: SPARQLSolutionModifiers
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         let orderBy = try popSortKeys(modifiers.orderBy)
         let having = try popExpressions(modifiers.having)
         let groupBy = try popExpressions(modifiers.groupBy)
@@ -1339,7 +1325,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func assemble(
         _ request: SPARQLUpdateRequest
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         var additional = request.additionalOperations
         var changed = false
         for index in additional.indices.reversed() {
@@ -1368,11 +1354,9 @@ private extension QueryParameterBindingTraversal {
 
     mutating func assemble(
         _ operation: SPARQLUpdateOperation
-    ) throws {
+    ) throws(QueryParameterBindingError) {
         guard case .modify(let query) = operation else {
-            throw QueryParameterBindingTraversalError.unexpectedAssembly(
-                "non-modify SPARQL update"
-            )
+            throw .invalidTraversalState
         }
         let pattern = try popGraphPattern()
         results.append(
@@ -1398,93 +1382,93 @@ private extension QueryParameterBindingTraversal {
 // MARK: - Typed Result Stack
 
 private extension QueryParameterBindingTraversal {
-    mutating func popStatement() throws -> Bound<QueryStatement> {
+    mutating func popStatement() throws(QueryParameterBindingError) -> Bound<QueryStatement> {
         guard case .statement(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("statement")
+            throw .invalidTraversalState
         }
         return value
     }
 
-    mutating func popSelect() throws -> Bound<SelectQuery> {
+    mutating func popSelect() throws(QueryParameterBindingError) -> Bound<SelectQuery> {
         guard case .select(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("select query")
+            throw .invalidTraversalState
         }
         return value
     }
 
-    mutating func popSource() throws -> Bound<DataSource> {
+    mutating func popSource() throws(QueryParameterBindingError) -> Bound<DataSource> {
         guard case .source(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("data source")
+            throw .invalidTraversalState
         }
         return value
     }
 
-    mutating func popMatchPattern() throws -> Bound<MatchPattern> {
+    mutating func popMatchPattern() throws(QueryParameterBindingError) -> Bound<MatchPattern> {
         guard case .matchPattern(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("match pattern")
+            throw .invalidTraversalState
         }
         return value
     }
 
-    mutating func popPathPattern() throws -> Bound<PathPattern> {
+    mutating func popPathPattern() throws(QueryParameterBindingError) -> Bound<PathPattern> {
         guard case .pathPattern(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("path pattern")
+            throw .invalidTraversalState
         }
         return value
     }
 
-    mutating func popPathElement() throws -> Bound<PathElement> {
+    mutating func popPathElement() throws(QueryParameterBindingError) -> Bound<PathElement> {
         guard case .pathElement(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("path element")
+            throw .invalidTraversalState
         }
         return value
     }
 
-    mutating func popGraphPattern() throws -> Bound<GraphPattern> {
+    mutating func popGraphPattern() throws(QueryParameterBindingError) -> Bound<GraphPattern> {
         guard case .graphPattern(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("graph pattern")
+            throw .invalidTraversalState
         }
         return value
     }
 
-    mutating func popExpression() throws -> Bound<Expression> {
+    mutating func popExpression() throws(QueryParameterBindingError) -> Bound<Expression> {
         guard case .expression(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("expression")
+            throw .invalidTraversalState
         }
         return value
     }
 
-    mutating func popAggregate() throws -> Bound<AggregateFunction> {
+    mutating func popAggregate() throws(QueryParameterBindingError) -> Bound<AggregateFunction> {
         guard case .aggregate(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("aggregate")
+            throw .invalidTraversalState
         }
         return value
     }
 
-    mutating func popModifiers() throws -> Bound<SPARQLSolutionModifiers> {
+    mutating func popModifiers() throws(QueryParameterBindingError) -> Bound<SPARQLSolutionModifiers> {
         guard case .modifiers(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("solution modifiers")
+            throw .invalidTraversalState
         }
         return value
     }
 
-    mutating func popUpdateRequest() throws -> Bound<SPARQLUpdateRequest> {
+    mutating func popUpdateRequest() throws(QueryParameterBindingError) -> Bound<SPARQLUpdateRequest> {
         guard case .updateRequest(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("SPARQL update request")
+            throw .invalidTraversalState
         }
         return value
     }
 
-    mutating func popUpdateOperation() throws -> Bound<SPARQLUpdateOperation> {
+    mutating func popUpdateOperation() throws(QueryParameterBindingError) -> Bound<SPARQLUpdateOperation> {
         guard case .updateOperation(let value) = results.popLast() else {
-            throw QueryParameterBindingTraversalError.expected("SPARQL update operation")
+            throw .invalidTraversalState
         }
         return value
     }
 
     mutating func popOptionalExpression(
         _ original: Expression?
-    ) throws -> Bound<Expression?> {
+    ) throws(QueryParameterBindingError) -> Bound<Expression?> {
         guard original != nil else {
             return Bound(value: nil, changed: false)
         }
@@ -1494,7 +1478,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popOptionalSource(
         _ original: DataSource?
-    ) throws -> Bound<DataSource?> {
+    ) throws(QueryParameterBindingError) -> Bound<DataSource?> {
         guard original != nil else {
             return Bound(value: nil, changed: false)
         }
@@ -1504,7 +1488,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popOptionalGraphPattern(
         _ original: GraphPattern?
-    ) throws -> Bound<GraphPattern?> {
+    ) throws(QueryParameterBindingError) -> Bound<GraphPattern?> {
         guard original != nil else {
             return Bound(value: nil, changed: false)
         }
@@ -1514,7 +1498,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popExpressions(
         _ originals: [Expression]
-    ) throws -> Bound<[Expression]> {
+    ) throws(QueryParameterBindingError) -> Bound<[Expression]> {
         var values = originals
         var changed = false
         for index in values.indices.reversed() {
@@ -1529,7 +1513,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popOptionalExpressions(
         _ originals: [Expression]?
-    ) throws -> Bound<[Expression]?> {
+    ) throws(QueryParameterBindingError) -> Bound<[Expression]?> {
         guard let originals else {
             return Bound(value: nil, changed: false)
         }
@@ -1539,7 +1523,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popExpressionRows(
         _ originals: [[Expression]]
-    ) throws -> Bound<[[Expression]]> {
+    ) throws(QueryParameterBindingError) -> Bound<[[Expression]]> {
         var rows = originals
         var changed = false
         for rowIndex in rows.indices.reversed() {
@@ -1554,7 +1538,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popProjection(
         _ projection: Projection
-    ) throws -> Bound<Projection> {
+    ) throws(QueryParameterBindingError) -> Bound<Projection> {
         switch projection {
         case .all, .allFrom:
             return Bound(value: projection, changed: false)
@@ -1575,7 +1559,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popProjectionItems(
         _ originals: [ProjectionItem]
-    ) throws -> Bound<[ProjectionItem]> {
+    ) throws(QueryParameterBindingError) -> Bound<[ProjectionItem]> {
         var values = originals
         var changed = false
         for index in values.indices.reversed() {
@@ -1593,7 +1577,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popOptionalProjectionItems(
         _ originals: [ProjectionItem]?
-    ) throws -> Bound<[ProjectionItem]?> {
+    ) throws(QueryParameterBindingError) -> Bound<[ProjectionItem]?> {
         guard let originals else {
             return Bound(value: nil, changed: false)
         }
@@ -1603,7 +1587,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popAssignments(
         _ originals: [Assignment]
-    ) throws -> Bound<[Assignment]> {
+    ) throws(QueryParameterBindingError) -> Bound<[Assignment]> {
         var values = originals
         var changed = false
         for index in values.indices.reversed() {
@@ -1621,7 +1605,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popPropertyBindings(
         _ originals: [PropertyBinding]
-    ) throws -> Bound<[PropertyBinding]> {
+    ) throws(QueryParameterBindingError) -> Bound<[PropertyBinding]> {
         var values = originals
         var changed = false
         for index in values.indices.reversed() {
@@ -1639,7 +1623,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popOptionalPropertyBindings(
         _ originals: [PropertyBinding]?
-    ) throws -> Bound<[PropertyBinding]?> {
+    ) throws(QueryParameterBindingError) -> Bound<[PropertyBinding]?> {
         guard let originals else {
             return Bound(value: nil, changed: false)
         }
@@ -1649,7 +1633,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popSortKeys(
         _ originals: [SortKey]
-    ) throws -> Bound<[SortKey]> {
+    ) throws(QueryParameterBindingError) -> Bound<[SortKey]> {
         var values = originals
         var changed = false
         for index in values.indices.reversed() {
@@ -1668,7 +1652,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popOptionalSortKeys(
         _ originals: [SortKey]?
-    ) throws -> Bound<[SortKey]?> {
+    ) throws(QueryParameterBindingError) -> Bound<[SortKey]?> {
         guard let originals else {
             return Bound(value: nil, changed: false)
         }
@@ -1678,7 +1662,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popOptionalNamedSubqueries(
         _ originals: [NamedSubquery]?
-    ) throws -> Bound<[NamedSubquery]?> {
+    ) throws(QueryParameterBindingError) -> Bound<[NamedSubquery]?> {
         guard let originals else {
             return Bound(value: nil, changed: false)
         }
@@ -1701,7 +1685,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popJoinCondition(
         _ condition: JoinCondition?
-    ) throws -> Bound<JoinCondition?> {
+    ) throws(QueryParameterBindingError) -> Bound<JoinCondition?> {
         guard case .on = condition else {
             return Bound(value: condition, changed: false)
         }
@@ -1714,7 +1698,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popOptionalGraphTableColumns(
         _ originals: [GraphTableColumn]?
-    ) throws -> Bound<[GraphTableColumn]?> {
+    ) throws(QueryParameterBindingError) -> Bound<[GraphTableColumn]?> {
         guard let originals else {
             return Bound(value: nil, changed: false)
         }
@@ -1735,7 +1719,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popSources(
         _ originals: [DataSource]
-    ) throws -> Bound<[DataSource]> {
+    ) throws(QueryParameterBindingError) -> Bound<[DataSource]> {
         var values = originals
         var changed = false
         for index in values.indices.reversed() {
@@ -1750,7 +1734,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popPathPatterns(
         _ originals: [PathPattern]
-    ) throws -> Bound<[PathPattern]> {
+    ) throws(QueryParameterBindingError) -> Bound<[PathPattern]> {
         var values = originals
         var changed = false
         for index in values.indices.reversed() {
@@ -1765,7 +1749,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popPathElements(
         _ originals: [PathElement]
-    ) throws -> Bound<[PathElement]> {
+    ) throws(QueryParameterBindingError) -> Bound<[PathElement]> {
         var values = originals
         var changed = false
         for index in values.indices.reversed() {
@@ -1780,7 +1764,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popAggregateBindings(
         _ originals: [AggregateBinding]
-    ) throws -> Bound<[AggregateBinding]> {
+    ) throws(QueryParameterBindingError) -> Bound<[AggregateBinding]> {
         var values = originals
         var changed = false
         for index in values.indices.reversed() {
@@ -1798,7 +1782,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popCaseWhenPairs(
         _ originals: [CaseWhenPair]
-    ) throws -> Bound<[CaseWhenPair]> {
+    ) throws(QueryParameterBindingError) -> Bound<[CaseWhenPair]> {
         var values = originals
         var changed = false
         for index in values.indices.reversed() {
@@ -1817,7 +1801,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popInsertSource(
         _ source: InsertSource
-    ) throws -> Bound<InsertSource> {
+    ) throws(QueryParameterBindingError) -> Bound<InsertSource> {
         switch source {
         case .values(let rows):
             let values = try popExpressionRows(rows)
@@ -1838,7 +1822,7 @@ private extension QueryParameterBindingTraversal {
 
     mutating func popConflictAction(
         _ action: OnConflictAction?
-    ) throws -> Bound<OnConflictAction?> {
+    ) throws(QueryParameterBindingError) -> Bound<OnConflictAction?> {
         guard case .doUpdate(let assignments, let predicate) = action else {
             return Bound(value: action, changed: false)
         }
@@ -1859,7 +1843,7 @@ private extension QueryParameterBindingTraversal {
     mutating func popBinaryExpression(
         original: Expression,
         build: (Expression, Expression) -> Expression
-    ) throws -> Bound<Expression> {
+    ) throws(QueryParameterBindingError) -> Bound<Expression> {
         let right = try popExpression()
         let left = try popExpression()
         let changed = left.changed || right.changed
@@ -1872,7 +1856,7 @@ private extension QueryParameterBindingTraversal {
     mutating func popUnaryExpression(
         original: Expression,
         build: (Expression) -> Expression
-    ) throws -> Bound<Expression> {
+    ) throws(QueryParameterBindingError) -> Bound<Expression> {
         let value = try popExpression()
         return Bound(
             value: value.changed ? build(value.value) : original,
@@ -1883,7 +1867,7 @@ private extension QueryParameterBindingTraversal {
     mutating func popUnaryAggregate(
         original: AggregateFunction,
         build: (Expression) -> AggregateFunction
-    ) throws -> Bound<AggregateFunction> {
+    ) throws(QueryParameterBindingError) -> Bound<AggregateFunction> {
         let value = try popExpression()
         return Bound(
             value: value.changed ? build(value.value) : original,
@@ -1894,7 +1878,7 @@ private extension QueryParameterBindingTraversal {
     mutating func popBinaryGraphPattern(
         original: GraphPattern,
         build: (GraphPattern, GraphPattern) -> GraphPattern
-    ) throws -> Bound<GraphPattern> {
+    ) throws(QueryParameterBindingError) -> Bound<GraphPattern> {
         let right = try popGraphPattern()
         let left = try popGraphPattern()
         let changed = left.changed || right.changed
@@ -1934,10 +1918,4 @@ private extension QueryParameterBindingTraversal {
             throw .unsupportedValue(reference)
         }
     }
-}
-
-private enum QueryParameterBindingTraversalError: Error, Sendable {
-    case expected(String)
-    case unexpectedAssembly(String)
-    case invalidResultStack(expected: Int, actual: Int)
 }

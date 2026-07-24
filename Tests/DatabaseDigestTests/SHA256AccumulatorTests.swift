@@ -86,6 +86,18 @@ struct SHA256AccumulatorTests {
         #expect(scopedDigest == ownedAccumulator.finalize())
     }
 
+    @Test func scopedFinalizationPreservesConsumerFailureType() {
+        var accumulator = SHA256Accumulator()
+        accumulator.update(0x5a)
+
+        #expect(throws: DigestConsumerFailure.rejected) {
+            try accumulator.withUnsafeDigestBytes {
+                (_: UnsafeRawBufferPointer) throws(DigestConsumerFailure) -> Void in
+                throw .rejected
+            }
+        }
+    }
+
     private func hexadecimalString(of bytes: ByteString) -> String {
         let digits: [UInt8] = Array("0123456789abcdef".utf8)
         return bytes.withUnsafeBytes { source in
@@ -100,6 +112,10 @@ struct SHA256AccumulatorTests {
             }, as: UTF8.self)
         }
     }
+}
+
+private enum DigestConsumerFailure: Error, Equatable {
+    case rejected
 }
 
 private final class BorrowCountingByteOwner: ByteStringOwner {

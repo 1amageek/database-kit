@@ -35,9 +35,9 @@ public struct SHA384Accumulator: Sendable {
     /// Lends the finalized digest for exactly one synchronous callback.
     ///
     /// The pointer must not escape `body`.
-    public consuming func withUnsafeDigestBytes<Result>(
-        _ body: (UnsafeRawBufferPointer) throws -> Result
-    ) rethrows -> Result {
+    public consuming func withUnsafeDigestBytes<Result, Failure: Error>(
+        _ body: (UnsafeRawBufferPointer) throws(Failure) -> Result
+    ) throws(Failure) -> Result {
         try state.withUnsafeDigestBytes(
             digestByteCount: Self.digestByteCount,
             body

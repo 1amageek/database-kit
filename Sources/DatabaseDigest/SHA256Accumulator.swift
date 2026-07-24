@@ -104,9 +104,9 @@ public struct SHA256Accumulator: Sendable {
     /// Lends the finalized digest for exactly one synchronous callback.
     ///
     /// The pointer must not escape `body`.
-    public consuming func withUnsafeDigestBytes<Result>(
-        _ body: (UnsafeRawBufferPointer) throws -> Result
-    ) rethrows -> Result {
+    public consuming func withUnsafeDigestBytes<Result, Failure: Error>(
+        _ body: (UnsafeRawBufferPointer) throws(Failure) -> Result
+    ) throws(Failure) -> Result {
         let bitCount = messageLength.bitCount
 
         pending[pendingCount] = 0x80
@@ -130,7 +130,7 @@ public struct SHA256Accumulator: Sendable {
         }
         processPendingBlock()
 
-        return try withUnsafeTemporaryAllocation(
+        let result: Swift.Result<Result, Failure> = withUnsafeTemporaryAllocation(
             byteCount: Self.digestByteCount,
             alignment: MemoryLayout<UInt32>.alignment
         ) { output in
@@ -142,8 +142,13 @@ public struct SHA256Accumulator: Sendable {
             Self.write(state.value5, at: 20, to: output)
             Self.write(state.value6, at: 24, to: output)
             Self.write(state.value7, at: 28, to: output)
-            return try body(UnsafeRawBufferPointer(output))
+            do throws(Failure) {
+                return .success(try body(UnsafeRawBufferPointer(output)))
+            } catch {
+                return .failure(error)
+            }
         }
+        return try result.get()
     }
 
     private mutating func processPendingBlock() {

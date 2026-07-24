@@ -21,12 +21,12 @@ public enum QueryIRWireCodec {
     /// passed to `consume` is valid only until that call returns and must not be
     /// retained. This API avoids materializing a complete QueryIR payload when
     /// the destination can consume byte spans incrementally.
-    public static func emitCanonicalEncoding(
+    public static func emitCanonicalEncoding<DestinationFailure: Error>(
         _ statement: QueryStatement,
         limits: DatabaseWireLimits = .default,
-        prepare: (Int) throws -> Void,
+        prepare: (Int) throws(DestinationFailure) -> Void,
         consume: (UnsafeRawBufferPointer) -> Void
-    ) throws {
+    ) throws(DatabaseWireEmissionError<DestinationFailure>) {
         try DatabaseWireWriter.emit(
             limits: limits,
             prepare: prepare,

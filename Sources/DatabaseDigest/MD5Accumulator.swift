@@ -102,9 +102,9 @@ public struct MD5Accumulator: Sendable {
     /// Lends the finalized digest for exactly one synchronous callback.
     ///
     /// The pointer must not escape `body`.
-    public consuming func withUnsafeDigestBytes<Result>(
-        _ body: (UnsafeRawBufferPointer) throws -> Result
-    ) rethrows -> Result {
+    public consuming func withUnsafeDigestBytes<Result, Failure: Error>(
+        _ body: (UnsafeRawBufferPointer) throws(Failure) -> Result
+    ) throws(Failure) -> Result {
         let bitCount = messageLength.bitCount
 
         pending[pendingCount] = 0x80
@@ -128,7 +128,7 @@ public struct MD5Accumulator: Sendable {
         }
         processPendingBlock()
 
-        return try withUnsafeTemporaryAllocation(
+        let result: Swift.Result<Result, Failure> = withUnsafeTemporaryAllocation(
             byteCount: Self.digestByteCount,
             alignment: MemoryLayout<UInt32>.alignment
         ) { output in
@@ -136,8 +136,13 @@ public struct MD5Accumulator: Sendable {
             Self.writeLittleEndian(state.value1, at: 4, to: output)
             Self.writeLittleEndian(state.value2, at: 8, to: output)
             Self.writeLittleEndian(state.value3, at: 12, to: output)
-            return try body(UnsafeRawBufferPointer(output))
+            do throws(Failure) {
+                return .success(try body(UnsafeRawBufferPointer(output)))
+            } catch {
+                return .failure(error)
+            }
         }
+        return try result.get()
     }
 
     private mutating func processPendingBlock() {

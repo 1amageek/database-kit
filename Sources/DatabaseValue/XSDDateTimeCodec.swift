@@ -16,7 +16,7 @@ public enum XSDDateTimeCodec {
 
     public static func format(
         timestamp: Timestamp
-    ) throws -> String {
+    ) throws(XSDDateTimeError) -> String {
         let (days, secondOfDay) = splitUnixSeconds(
             timestamp.secondsSinceUnixEpoch
         )

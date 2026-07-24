@@ -10,11 +10,15 @@ public struct QueryParameterBinder: Sendable {
     public init(
         parameters: [QueryParameter],
         structuralLimits: QueryStructuralLimits = .default
-    ) throws {
-        try QueryStructuralValidator.validate(
-            parameters: parameters,
-            limits: structuralLimits
-        )
+    ) throws(QueryParameterBindingError) {
+        do {
+            try QueryStructuralValidator.validate(
+                parameters: parameters,
+                limits: structuralLimits
+            )
+        } catch {
+            throw .invalidStructure(error)
+        }
         var positions: [UInt32: FieldValue] = [:]
         var names: [String: FieldValue] = [:]
 
@@ -51,13 +55,17 @@ public struct QueryParameterBinder: Sendable {
 
     public func bind(
         _ statement: QueryStatement
-    ) throws -> QueryStatement {
-        try QueryStructuralValidator.validateBoundStructure(
-            statement,
-            positionalParameters: positions,
-            namedParameters: names,
-            limits: structuralLimits
-        )
+    ) throws(QueryParameterBindingError) -> QueryStatement {
+        do {
+            try QueryStructuralValidator.validateBoundStructure(
+                statement,
+                positionalParameters: positions,
+                namedParameters: names,
+                limits: structuralLimits
+            )
+        } catch {
+            throw .invalidStructure(error)
+        }
         var traversal = QueryParameterBindingTraversal(
             positions: positions,
             names: names

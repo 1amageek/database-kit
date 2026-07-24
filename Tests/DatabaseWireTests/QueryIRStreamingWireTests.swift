@@ -35,10 +35,14 @@ struct QueryIRStreamingWireTests {
         var preparedByteCount: Int?
         var emittedByteCount = 0
 
-        #expect(throws: DatabaseWireError.byteCountOverflow) {
+        #expect(
+            throws: DatabaseWireEmissionError<DatabaseWireError>.destination(
+                .byteCountOverflow
+            )
+        ) {
             try QueryIRWireCodec.emitCanonicalEncoding(
                 statement,
-                prepare: { byteCount in
+                prepare: { (byteCount: Int) throws(DatabaseWireError) in
                     preparedByteCount = byteCount
                     throw DatabaseWireError.byteCountOverflow
                 },
@@ -77,9 +81,8 @@ struct QueryIRStreamingWireTests {
                 }
             )
         } throws: { error in
-            guard case DatabaseWireError.frameTooLarge(
-                let actual,
-                let maximum
+            guard case DatabaseWireEmissionError<Never>.encoding(
+                .frameTooLarge(let actual, let maximum)
             ) = error else {
                 return false
             }

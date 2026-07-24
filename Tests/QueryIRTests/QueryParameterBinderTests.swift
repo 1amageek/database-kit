@@ -158,10 +158,12 @@ struct QueryParameterBinderTests {
         )
 
         #expect(
-            throws: QueryStructuralValidationError.resourceLimitExceeded(
-                resource: .collectionElements,
-                actual: 8,
-                maximum: 7
+            throws: QueryParameterBindingError.invalidStructure(
+                .resourceLimitExceeded(
+                    resource: .collectionElements,
+                    actual: 8,
+                    maximum: 7
+                )
             )
         ) {
             _ = try binder.bind(statement)

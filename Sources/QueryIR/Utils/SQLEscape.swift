@@ -92,7 +92,7 @@ public enum SPARQLEscape {
     /// NameChar ::= NameStartChar | "-" | "." | [0-9] | ...
     ///
     /// Simplified pattern for common use cases
-    public static func ncName(_ name: String) throws -> String {
+    public static func ncName(_ name: String) throws(SPARQLEscapeError) -> String {
         guard !name.isEmpty else {
             throw SPARQLEscapeError.emptyNCName
         }
@@ -162,7 +162,10 @@ public enum SPARQLEscape {
 
     /// Validate and format a prefixed name
     /// Returns "prefix:local" with validated components
-    public static func prefixedName(prefix: String, local: String) throws -> String {
+    public static func prefixedName(
+        prefix: String,
+        local: String
+    ) throws(SPARQLEscapeError) -> String {
         let validatedPrefix = try ncName(prefix)
         // Local part can be empty or valid NCName characters
         if !local.isEmpty {
