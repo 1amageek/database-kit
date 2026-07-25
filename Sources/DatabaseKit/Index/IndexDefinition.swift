@@ -6,7 +6,7 @@ import DatabaseTypes
 /// macro receives Swift key paths separately and emits model-scoped
 /// `IndexField` values. Runtime descriptors therefore retain only canonical
 /// field identities.
-public enum IndexDefinition: Sendable {
+public enum IndexDefinition: Sendable, Hashable {
     case scalar
     case count
     case sum

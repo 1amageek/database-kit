@@ -87,6 +87,24 @@ and field-number maps are derived once from that validated catalog; downstream
 code neither resolves duplicate metadata by precedence nor traps while building
 a dictionary.
 
+Each concrete model compiles itself through `Model.schemaEntity`. The resulting
+value contains the identifier shape, fields, directory declaration, indexes,
+relationships, ontology binding, and polymorphic membership. `Schema` accepts
+only these values:
+
+```swift
+let schema = try Schema(
+    entities: [
+        try User.schemaEntity,
+        try Order.schemaEntity,
+    ]
+)
+```
+
+Neither `Schema.Entity` nor `VersionedSchema` retains `Persistable` metatypes.
+Application-specific execution registries are composed separately by
+`database-framework`.
+
 Swift 6.4 KeyPath syntax is consumed by schema macros while the concrete root
 and value types are available. The macro resolves each selected property to a
 generated `Field<Model, Value>` containing stable identity and

@@ -10,6 +10,7 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
     case duplicateFieldName(String)
     case duplicateFieldNumber(fieldNumber: Int, fieldNames: [String])
     case invalidReferenceTarget(fieldName: String)
+    case missingReferenceTarget(fieldName: String)
     case referenceTargetOnNonReferenceField(fieldName: String)
     case emptyDirectoryPathComponent(position: Int)
     case unknownDirectoryField(String)
@@ -25,11 +26,33 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
     case enumMetadataOnNonEnumField(String)
     case emptyEnumCase(fieldName: String)
     case duplicateEnumCase(fieldName: String, caseName: String)
-    case incompleteObjectProperty
+    case invalidRelationshipOwner(
+        relationship: String,
+        expected: String,
+        actual: String
+    )
+    case duplicateRelationshipName(String)
+    case emptyRelationshipTarget(String)
+    case invalidRelationshipField(
+        relationship: String,
+        fieldName: String,
+        fieldNumber: UInt32
+    )
+    case relationshipOnNonReferenceField(
+        relationship: String,
+        fieldName: String
+    )
+    case relationshipTargetMismatch(
+        relationship: String,
+        fieldTarget: String,
+        relationshipTarget: String
+    )
     case unknownObjectPropertyField(String)
     case emptyOntologyIRI
     case emptyDataPropertyIRI
     case duplicateDataPropertyIRI(String)
+    case emptyPolymorphicGroupIdentifier
+    case invalidPolymorphicDirectoryComponent(position: Int)
 
     public var description: String {
         switch self {
@@ -45,6 +68,8 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Field number \(fieldNumber) is shared by fields [\(fieldNames.joined(separator: ", "))]."
         case .invalidReferenceTarget(let fieldName):
             return "Reference field '\(fieldName)' has an empty target entity."
+        case .missingReferenceTarget(let fieldName):
+            return "Reference field '\(fieldName)' must declare its target entity."
         case .referenceTargetOnNonReferenceField(let fieldName):
             return "Non-reference field '\(fieldName)' declares a reference target entity."
         case .emptyDirectoryPathComponent(let position):
@@ -75,8 +100,18 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Enum field '\(fieldName)' contains an empty case name."
         case .duplicateEnumCase(let fieldName, let caseName):
             return "Enum field '\(fieldName)' declares case '\(caseName)' more than once."
-        case .incompleteObjectProperty:
-            return "Object property metadata requires an IRI, source field, and target field together."
+        case .invalidRelationshipOwner(let relationship, let expected, let actual):
+            return "Relationship '\(relationship)' belongs to '\(actual)', expected '\(expected)'."
+        case .duplicateRelationshipName(let relationship):
+            return "Relationship '\(relationship)' is declared more than once."
+        case .emptyRelationshipTarget(let relationship):
+            return "Relationship '\(relationship)' has an empty target entity."
+        case .invalidRelationshipField(let relationship, let fieldName, let fieldNumber):
+            return "Relationship '\(relationship)' references missing field '\(fieldName)' (#\(fieldNumber))."
+        case .relationshipOnNonReferenceField(let relationship, let fieldName):
+            return "Relationship '\(relationship)' is attached to non-reference field '\(fieldName)'."
+        case .relationshipTargetMismatch(let relationship, let fieldTarget, let relationshipTarget):
+            return "Relationship '\(relationship)' targets '\(relationshipTarget)', but its field targets '\(fieldTarget)'."
         case .unknownObjectPropertyField(let fieldName):
             return "Object property metadata references unknown field '\(fieldName)'."
         case .emptyOntologyIRI:
@@ -85,6 +120,10 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Data-property IRIs must not be empty."
         case .duplicateDataPropertyIRI(let iri):
             return "Data-property IRI '\(iri)' is declared more than once."
+        case .emptyPolymorphicGroupIdentifier:
+            return "A polymorphic group identifier must not be empty."
+        case .invalidPolymorphicDirectoryComponent(let position):
+            return "Polymorphic directory component #\(position) must be a non-empty static path."
         }
     }
 }

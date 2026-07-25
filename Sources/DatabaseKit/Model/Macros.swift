@@ -227,11 +227,8 @@ public enum DirectoryLayer: String, Sendable, Hashable {
 /// ```
 ///
 /// **Important**: The protocol must explicitly inherit from `Polymorphable`.
-/// Swift 6.3 does not allow an attached macro on a protocol to add protocol
+/// Swift does not allow an attached macro on a protocol to add protocol
 /// inheritance by generating `extension Document: Polymorphable`.
-/// Swift 6.3 also has a frontend limitation around freestanding macros in
-/// protocol bodies; until that is fixed, generated metadata may need to be
-/// spelled manually in a protocol extension.
 /// The macro generates default implementations for the protocol requirements
 /// and should validate that the declaration is a valid polymorphic group.
 ///
@@ -243,14 +240,12 @@ public enum DirectoryLayer: String, Sendable, Hashable {
 ///
 /// **Server-side Usage**:
 /// ```swift
-/// // Schema includes all conforming types
-/// let schema = try Schema([Article.self, Report.self, ...])
-///
-/// // Polymorphic fetch - retrieves all types conforming to the protocol
-/// // NOTE: Use a concrete conforming type (not the protocol type itself)
-/// // due to Swift's type system limitation with existential metatypes
-/// let docs = try await context.fetchPolymorphic(Article.self)
-/// // Returns [any Persistable] containing both Article and Report instances
+/// let schema = try Schema(
+///     entities: [
+///         try Article.schemaEntity,
+///         try Report.schemaEntity
+///     ]
+/// )
 /// ```
 ///
 /// **Dual-Write Behavior**:

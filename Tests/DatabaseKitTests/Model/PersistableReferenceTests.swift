@@ -81,4 +81,27 @@ struct PersistableReferenceTests {
         #expect(many.deleteRule == .cascade)
         #expect(try ReferenceOwnerModel.indexDescriptors.isEmpty)
     }
+
+    @Test("Schema retains typed references and relationships without model metatypes")
+    func schemaRetainsReferenceMetadata() throws {
+        let schema = try Schema(
+            entities: [
+                try ReferenceOwnerModel.schemaEntity,
+                try ReferenceTargetModel.schemaEntity,
+            ]
+        )
+        let owner = try #require(
+            schema.entity(named: ReferenceOwnerModel.persistableType)
+        )
+
+        #expect(owner.relationships == ReferenceOwnerModel.relationshipDescriptors)
+        #expect(
+            owner.fields
+                .filter { $0.type == .reference }
+                .allSatisfy {
+                    $0.referenceTargetEntity
+                        == ReferenceTargetModel.persistableType
+                }
+        )
+    }
 }

@@ -8,7 +8,11 @@ import DatabaseTypes
 /// ```swift
 /// enum AppSchemaV1: VersionedSchema {
 ///     static let versionIdentifier = Schema.Version(1, 0, 0)
-///     static let models: [any Persistable.Type] = [User.self, Order.self]
+///     static var entities: [Schema.Entity] {
+///         get throws {
+///             [try User.schemaEntity, try Order.schemaEntity]
+///         }
+///     }
 ///
 ///     @Persistable
 ///     struct User {
@@ -29,7 +33,11 @@ import DatabaseTypes
 ///
 /// enum AppSchemaV2: VersionedSchema {
 ///     static let versionIdentifier = Schema.Version(2, 0, 0)
-///     static let models: [any Persistable.Type] = [User.self, Order.self]
+///     static var entities: [Schema.Entity] {
+///         get throws {
+///             [try User.schemaEntity, try Order.schemaEntity]
+///         }
+///     }
 ///
 ///     @Persistable
 ///     struct User {
@@ -56,12 +64,14 @@ public protocol VersionedSchema: Sendable {
     /// Uniquely identifies this schema version using semantic versioning.
     static var versionIdentifier: Schema.Version { get }
 
-    /// Persistable types included in this schema version
+    /// Static entity declarations included in this schema version.
     ///
-    /// List all model types that exist in this schema version.
+    /// List all model schemas that exist in this schema version.
     /// Order doesn't matter for functionality, but consistent ordering
     /// helps with debugging and migration comparisons.
-    static var models: [any Persistable.Type] { get }
+    static var entities: [Schema.Entity] {
+        get throws(SchemaEntityError)
+    }
 }
 
 // MARK: - VersionedSchema Extensions
@@ -74,7 +84,16 @@ extension VersionedSchema {
     ///
     /// - Returns: Schema instance with version and models
     public static func makeSchema() throws(SchemaError) -> Schema {
-        try Schema(models, version: versionIdentifier)
+        let compiledEntities: [Schema.Entity]
+        do {
+            compiledEntities = try entities
+        } catch let error {
+            throw .invalidEntity(error)
+        }
+        return try Schema(
+            entities: compiledEntities,
+            version: versionIdentifier
+        )
     }
 
     /// Get all concrete index descriptors from models in this schema version.
@@ -108,8 +127,8 @@ extension VersionedSchema {
     ///
     /// - Parameter other: Another VersionedSchema type
     /// - Returns: Tuple of (added indexes, removed indexes)
-    public static func indexChanges(
-        from other: any VersionedSchema.Type
+    public static func indexChanges<Previous: VersionedSchema>(
+        from other: Previous.Type
     ) throws(SchemaError) -> (added: Set<String>, removed: Set<String>) {
         let currentIndexes = try Self.indexNames
         let otherIndexes = try other.indexNames
@@ -127,8 +146,8 @@ extension VersionedSchema {
     ///
     /// - Parameter other: Previous schema version
     /// - Returns: true if lightweight migration is possible
-    public static func canLightweightMigrate(
-        from other: any VersionedSchema.Type
+    public static func canLightweightMigrate<Previous: VersionedSchema>(
+        from other: Previous.Type
     ) throws(SchemaError) -> Bool {
         let report = try makeSchema().compatibilityReport(from: other.makeSchema())
         return report.isLightweightCompatible

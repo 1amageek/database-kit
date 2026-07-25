@@ -51,6 +51,7 @@ struct SchemaValidationTests {
     func duplicateEntityNamesFailConstruction() throws {
         let entity = try Schema.Entity(
             name: "DuplicateEntity",
+            identifierType: .string,
             fields: []
         )
 
@@ -66,6 +67,7 @@ struct SchemaValidationTests {
         ) {
             try Schema.Entity(
                 name: "DuplicateFieldName",
+                identifierType: .string,
                 fields: [
                     FieldSchema(name: "value", fieldNumber: 1, type: .string),
                     FieldSchema(name: "value", fieldNumber: 2, type: .string),
@@ -84,6 +86,7 @@ struct SchemaValidationTests {
         ) {
             try Schema.Entity(
                 name: "DuplicateFieldNumber",
+                identifierType: .string,
                 fields: [
                     FieldSchema(name: "first", fieldNumber: 1, type: .string),
                     FieldSchema(name: "second", fieldNumber: 1, type: .string),
@@ -98,11 +101,74 @@ struct SchemaValidationTests {
         let second = FieldSchema(name: "second", fieldNumber: 2, type: .int64)
         let entity = try Schema.Entity(
             name: "MappedEntity",
+            identifierType: .string,
             fields: [first, second]
         )
 
         #expect(entity.fieldMapByName == ["first": first, "second": second])
         #expect(entity.fieldMapByNumber == [1: first, 2: second])
+    }
+
+    @Test("Reference targets must exist in the complete schema")
+    func referenceTargetsMustExist() throws {
+        let entity = try Schema.Entity(
+            name: "ReferenceOwner",
+            identifierType: .string,
+            fields: [
+                FieldSchema(
+                    name: "target",
+                    fieldNumber: 1,
+                    type: .reference,
+                    referenceTargetEntity: "MissingTarget"
+                )
+            ]
+        )
+
+        #expect(
+            throws: SchemaError.unknownReferenceTarget(
+                entity: "ReferenceOwner",
+                field: "target",
+                target: "MissingTarget"
+            )
+        ) {
+            try Schema(entities: [entity])
+        }
+    }
+
+    @Test("Schema equality compares complete entity metadata")
+    func schemaEqualityComparesMetadata() throws {
+        let first = try Schema(
+            entities: [
+                Schema.Entity(
+                    name: "ComparableEntity",
+                    identifierType: .string,
+                    fields: [
+                        FieldSchema(
+                            name: "value",
+                            fieldNumber: 1,
+                            type: .string
+                        )
+                    ]
+                )
+            ]
+        )
+        let second = try Schema(
+            entities: [
+                Schema.Entity(
+                    name: "ComparableEntity",
+                    identifierType: .string,
+                    fields: [
+                        FieldSchema(
+                            name: "value",
+                            fieldNumber: 1,
+                            type: .int64
+                        )
+                    ]
+                )
+            ]
+        )
+
+        #expect(first != second)
     }
 
     @Test("Duplicate index names fail schema construction")
@@ -117,6 +183,18 @@ struct SchemaValidationTests {
             definition: .scalar,
             fields: [SchemaValidationEntity.fields.second.ascending]
         )
+        let firstEntity = try Schema.Entity(
+            name: "FirstIndexedEntity",
+            identifierType: .string,
+            fields: SchemaValidationEntity.fieldSchemas,
+            indexes: [IndexDescriptorMetadata(first)]
+        )
+        let secondEntity = try Schema.Entity(
+            name: "SecondIndexedEntity",
+            identifierType: .string,
+            fields: SchemaValidationEntity.fieldSchemas,
+            indexes: [IndexDescriptorMetadata(second)]
+        )
 
         #expect(
             throws: SchemaError.duplicateIndexName(
@@ -126,15 +204,16 @@ struct SchemaValidationTests {
             )
         ) {
             try Schema(
-                [SchemaValidationEntity.self],
-                indexDescriptors: [first, second]
+                entities: [firstEntity, secondEntity]
             )
         }
     }
 
     @Test("Valid declarations produce a complete schema catalog")
     func validDeclarationsProduceSchemaCatalog() throws {
-        let schema = try Schema([SchemaValidationEntity.self])
+        let schema = try Schema(
+            entities: [try SchemaValidationEntity.schemaEntity]
+        )
 
         #expect(schema.entities.map(\.name) == ["SchemaValidationEntity"])
         #expect(schema.entity(for: SchemaValidationEntity.self) != nil)
@@ -145,50 +224,48 @@ struct SchemaValidationTests {
     @Test("Concrete index field types are enforced by schema construction")
     func concreteIndexFieldTypesAreEnforced() {
         #expect(
-            throws: SchemaError.invalidEntity(
-                .invalidIndexDeclaration(
-                    IndexDeclarationError(
-                        indexName: "invalid_scalar",
-                        validationError: .unsupportedField(
-                            index: "scalar",
-                            field: FieldSchema(
-                                name: "tags",
-                                fieldNumber: 2,
-                                type: .string,
-                                isArray: true
-                            ),
-                            reason: "Scalar index requires fields with canonical ordering"
-                        )
+            throws: SchemaEntityError.invalidIndexDeclaration(
+                IndexDeclarationError(
+                    indexName: "invalid_scalar",
+                    validationError: .unsupportedField(
+                        index: "scalar",
+                        field: FieldSchema(
+                            name: "tags",
+                            fieldNumber: 2,
+                            type: .string,
+                            isArray: true
+                        ),
+                        reason: "Scalar index requires fields with canonical ordering"
                     )
                 )
             )
         ) {
-            try Schema([InvalidScalarIndexEntity.self])
+            _ = try InvalidScalarIndexEntity.schemaEntity
         }
     }
 
     @Test("Index configuration failures reach the schema boundary without trapping")
     func indexConfigurationFailuresReachSchemaBoundary() {
         #expect(
-            throws: SchemaError.invalidEntity(
-                .invalidIndexDeclaration(
-                    IndexDeclarationError(
-                        indexName: "invalid_vector",
-                        validationError: .invalidConfiguration(
-                            index: "vector",
-                            reason: "Vector dimensions must be positive"
-                        )
+            throws: SchemaEntityError.invalidIndexDeclaration(
+                IndexDeclarationError(
+                    indexName: "invalid_vector",
+                    validationError: .invalidConfiguration(
+                        index: "vector",
+                        reason: "Vector dimensions must be positive"
                     )
                 )
             )
         ) {
-            try Schema([InvalidVectorConfigurationEntity.self])
+            _ = try InvalidVectorConfigurationEntity.schemaEntity
         }
     }
 
     @Test("Optional comparable fields retain their scalar index contract")
     func optionalComparableFieldsAreAccepted() throws {
-        let schema = try Schema([OptionalScalarIndexEntity.self])
+        let schema = try Schema(
+            entities: [try OptionalScalarIndexEntity.schemaEntity]
+        )
 
         #expect(schema.allIndexNames == ["optional_scalar"])
     }

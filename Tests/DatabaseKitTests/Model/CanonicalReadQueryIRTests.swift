@@ -156,18 +156,26 @@ struct IndexedCanonicalReadReport: Persistable, Sendable, IndexedCanonicalReadDo
 
 enum CanonicalReadUnindexedSchema: VersionedSchema {
     static let versionIdentifier = Schema.Version(1, 0, 0)
-    static let models: [any Persistable.Type] = [
-        CanonicalReadArticle.self,
-        CanonicalReadReport.self,
-    ]
+    static var entities: [Schema.Entity] {
+        get throws(SchemaEntityError) {
+            [
+                try CanonicalReadArticle.schemaEntity,
+                try CanonicalReadReport.schemaEntity,
+            ]
+        }
+    }
 }
 
 enum CanonicalReadIndexedSchema: VersionedSchema {
     static let versionIdentifier = Schema.Version(2, 0, 0)
-    static let models: [any Persistable.Type] = [
-        IndexedCanonicalReadArticle.self,
-        IndexedCanonicalReadReport.self,
-    ]
+    static var entities: [Schema.Entity] {
+        get throws(SchemaEntityError) {
+            [
+                try IndexedCanonicalReadArticle.schemaEntity,
+                try IndexedCanonicalReadReport.schemaEntity,
+            ]
+        }
+    }
 }
 
 @Polymorphable
@@ -198,7 +206,12 @@ struct TitleFirstDocument: DifferentlyOrderedDocument {
 struct CanonicalReadQueryIRTests {
     @Test("Schema builds polymorphic group catalog")
     func schemaBuildsPolymorphicGroupCatalog() throws {
-        let schema = try Schema([CanonicalReadArticle.self, CanonicalReadReport.self])
+        let schema = try Schema(
+            entities: [
+                try CanonicalReadArticle.schemaEntity,
+                try CanonicalReadReport.schemaEntity,
+            ]
+        )
         let group = try #require(schema.polymorphicGroup(identifier: "CanonicalReadDocument"))
 
         #expect(group.identifier == "CanonicalReadDocument")
@@ -208,10 +221,12 @@ struct CanonicalReadQueryIRTests {
 
     @Test("Polymorphic logical fields allow concrete field numbers to differ")
     func polymorphicLogicalFieldsAllowConcreteFieldNumbersToDiffer() throws {
-        let schema = try Schema([
-            TitleSecondDocument.self,
-            TitleFirstDocument.self,
-        ])
+        let schema = try Schema(
+            entities: [
+                try TitleSecondDocument.schemaEntity,
+                try TitleFirstDocument.schemaEntity,
+            ]
+        )
 
         let first = try #require(
             schema.polymorphicIndexDescriptors(
@@ -237,10 +252,12 @@ struct CanonicalReadQueryIRTests {
 
     @Test("Schema materializes canonical polymorphic index descriptors")
     func schemaPreservesConcretePolymorphicIndexDescriptors() throws {
-        let schema = try Schema([
-            IndexedCanonicalReadArticle.self,
-            IndexedCanonicalReadReport.self
-        ])
+        let schema = try Schema(
+            entities: [
+                try IndexedCanonicalReadArticle.schemaEntity,
+                try IndexedCanonicalReadReport.schemaEntity,
+            ]
+        )
 
         let logicalDescriptors = schema.polymorphicIndexCatalog(
             identifier: "IndexedCanonicalReadDocument"
@@ -278,10 +295,12 @@ struct CanonicalReadQueryIRTests {
 
     @Test("Schema preserves all concrete polymorphic descriptors per member type")
     func schemaPreservesMultipleConcretePolymorphicIndexDescriptors() throws {
-        let schema = try Schema([
-            IndexedCanonicalReadArticle.self,
-            IndexedCanonicalReadReport.self
-        ])
+        let schema = try Schema(
+            entities: [
+                try IndexedCanonicalReadArticle.schemaEntity,
+                try IndexedCanonicalReadReport.schemaEntity,
+            ]
+        )
 
         let articleDescriptors = schema.polymorphicIndexDescriptors(
             identifier: "IndexedCanonicalReadDocument",

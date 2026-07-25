@@ -3,7 +3,7 @@
 /// Protocol declarations own field names because field numbers belong to each
 /// concrete persisted schema. `Schema` resolves these selections into stable
 /// `FieldIdentity` values before exposing an index catalog to the runtime.
-public struct PolymorphicIndexDefinition: Sendable {
+public struct PolymorphicIndexDefinition: Sendable, Hashable {
     public let name: String
     public let definition: IndexDefinition
     public let fields: [PolymorphicIndexField]

@@ -120,8 +120,8 @@ struct User {
 ```swift
 let schema = try Schema(
     entities: [
-        try Schema.Entity(from: User.self),
-        try Schema.Entity(from: Product.self),
+        try User.schemaEntity,
+        try Product.schemaEntity,
     ],
     version: Schema.Version(1, 0, 0)
 )
@@ -372,8 +372,12 @@ let timeSeries = try IndexDescriptor(
 )
 
 let schema = try Schema(
-    [Event.self],
-    indexDescriptors: [timeSeries]
+    entities: [
+        try Schema.Entity(
+            from: Event.self,
+            including: [timeSeries]
+        )
+    ]
 )
 ```
 

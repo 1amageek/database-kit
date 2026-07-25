@@ -64,10 +64,10 @@ public protocol Persistable: FieldValueEncodable {
     /// a default value.
     var id: ID { get }
 
-    /// Identifier type exposed through the `Persistable` existential boundary.
+    /// Canonical identifier shape exposed to schema and wire declarations.
     static var persistableIdentifierType: PersistableIdentifierType { get }
 
-    /// Identifier value exposed through the `Persistable` existential boundary.
+    /// Canonical identifier value used by references and persisted identities.
     var persistableIdentifierValue: ReferenceIdentifier { get }
 
     // MARK: - Metadata (Storage-independent)
@@ -104,6 +104,17 @@ public protocol Persistable: FieldValueEncodable {
 
     /// Typed relationship declarations for this model.
     static var relationshipDescriptors: [RelationshipDescriptor] { get }
+
+    /// Ontology role compiled for this model, when one is declared.
+    static var ontologyBinding: OntologyBinding? { get }
+
+    /// Polymorphic group membership inherited by this concrete model.
+    static var polymorphicMembership: PolymorphicMembership? { get }
+
+    /// Complete static schema declaration for this model.
+    static var schemaEntity: Schema.Entity {
+        get throws(SchemaEntityError)
+    }
 
     // MARK: - Directory Metadata
 
@@ -287,6 +298,18 @@ public extension Persistable {
 
     /// Default: no relationships.
     static var relationshipDescriptors: [RelationshipDescriptor] { [] }
+
+    /// Default: the model has no ontology role.
+    static var ontologyBinding: OntologyBinding? { nil }
+
+    /// Default: the model is not part of a polymorphic group.
+    static var polymorphicMembership: PolymorphicMembership? { nil }
+
+    static var schemaEntity: Schema.Entity {
+        get throws(SchemaEntityError) {
+            try Schema.Entity(from: Self.self)
+        }
+    }
 
     /// Default implementation uses persistableType as single path component
     ///

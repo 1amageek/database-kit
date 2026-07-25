@@ -186,7 +186,12 @@ struct ModelMacroTests {
 
     @Test("@Persistable resolves protocol-extension KeyPath field names")
     func protocolExtensionKeyPathFieldNames() throws {
-        let schema = try Schema([MacroPolymorphicArticle.self, MacroPolymorphicReport.self])
+        let schema = try Schema(
+            entities: [
+                try MacroPolymorphicArticle.schemaEntity,
+                try MacroPolymorphicReport.schemaEntity,
+            ]
+        )
         let articleDescriptor = try #require(
             schema.polymorphicIndexDescriptors(
                 identifier: MacroPolymorphicArticle.polymorphableType,
@@ -210,10 +215,12 @@ struct ModelMacroTests {
 
     @Test("@Polymorphable macro participates in schema construction")
     func polymorphableMacroParticipatesInSchemaConstruction() throws {
-        let schema = try Schema([
-            MacroGeneratedPolymorphicArticle.self,
-            MacroGeneratedPolymorphicReport.self
-        ])
+        let schema = try Schema(
+            entities: [
+                try MacroGeneratedPolymorphicArticle.schemaEntity,
+                try MacroGeneratedPolymorphicReport.schemaEntity,
+            ]
+        )
 
         #expect(MacroGeneratedPolymorphicArticle.polymorphableType == "MacroGeneratedPolymorphicDocument")
         #expect(MacroGeneratedPolymorphicReport.polymorphableType == "MacroGeneratedPolymorphicDocument")

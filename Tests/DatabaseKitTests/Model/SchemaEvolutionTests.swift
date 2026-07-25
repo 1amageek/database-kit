@@ -33,22 +33,38 @@ struct SchemaEvolutionUserV2Renamed {
 
 enum SchemaEvolutionSchemaV1: VersionedSchema {
     static let versionIdentifier = Schema.Version(1, 0, 0)
-    static let models: [any Persistable.Type] = [SchemaEvolutionUserV1.self]
+    static var entities: [Schema.Entity] {
+        get throws(SchemaEntityError) {
+            [try SchemaEvolutionUserV1.schemaEntity]
+        }
+    }
 }
 
 enum SchemaEvolutionSchemaV2AppendOnly: VersionedSchema {
     static let versionIdentifier = Schema.Version(2, 0, 0)
-    static let models: [any Persistable.Type] = [SchemaEvolutionUserV2AppendOnly.self]
+    static var entities: [Schema.Entity] {
+        get throws(SchemaEntityError) {
+            [try SchemaEvolutionUserV2AppendOnly.schemaEntity]
+        }
+    }
 }
 
 enum SchemaEvolutionSchemaV2Reordered: VersionedSchema {
     static let versionIdentifier = Schema.Version(2, 0, 0)
-    static let models: [any Persistable.Type] = [SchemaEvolutionUserV2Reordered.self]
+    static var entities: [Schema.Entity] {
+        get throws(SchemaEntityError) {
+            [try SchemaEvolutionUserV2Reordered.schemaEntity]
+        }
+    }
 }
 
 enum SchemaEvolutionSchemaV2Renamed: VersionedSchema {
     static let versionIdentifier = Schema.Version(2, 0, 0)
-    static let models: [any Persistable.Type] = [SchemaEvolutionUserV2Renamed.self]
+    static var entities: [Schema.Entity] {
+        get throws(SchemaEntityError) {
+            [try SchemaEvolutionUserV2Renamed.schemaEntity]
+        }
+    }
 }
 
 @Suite("Schema Evolution Tests")

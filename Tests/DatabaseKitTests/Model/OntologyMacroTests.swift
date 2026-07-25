@@ -470,23 +470,35 @@ struct OntologyMacroTests {
 
     @Test("Schema.Entity captures ontologyClassIRI from @OWLClass")
     func schemaEntityOntologyClassIRI() throws {
-        let entity = try Schema.Entity(from: OntEmployee.self)
-        #expect(entity.ontologyClassIRI == "https://example.org/onto#Employee")
+        let entity = try OntEmployee.schemaEntity
+        #expect(
+            entity.ontology == .owlClass(
+                iri: "https://example.org/onto#Employee",
+                dataPropertyIRIs: [
+                    "https://example.org/onto#name",
+                    "https://example.org/onto#age",
+                ]
+            )
+        )
     }
 
     @Test("Schema.Entity captures objectPropertyIRI from @OWLObjectProperty")
     func schemaEntityObjectPropertyIRI() throws {
-        let entity = try Schema.Entity(from: OntAssignment.self)
-        #expect(entity.objectPropertyIRI == "https://example.org/onto#employs")
-        #expect(entity.objectPropertyFromField == "employeeID")
-        #expect(entity.objectPropertyToField == "projectID")
+        let entity = try OntAssignment.schemaEntity
+        #expect(
+            entity.ontology == .owlObjectProperty(
+                iri: "https://example.org/onto#employs",
+                fromField: "employeeID",
+                toField: "projectID",
+                dataPropertyIRIs: ["https://example.org/onto#since"]
+            )
+        )
     }
 
     @Test("Schema.Entity without ontology has nil ontology fields")
     func schemaEntityNoOntology() throws {
-        let entity = try Schema.Entity(from: OntPlainModel.self)
-        #expect(entity.ontologyClassIRI == nil)
-        #expect(entity.objectPropertyIRI == nil)
+        let entity = try OntPlainModel.schemaEntity
+        #expect(entity.ontology == nil)
     }
 }
 

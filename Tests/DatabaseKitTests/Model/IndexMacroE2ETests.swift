@@ -20,7 +20,9 @@ struct IndexMacroE2ETests {
 
     @Test("#Index descriptors survive Schema catalog type erasure")
     func descriptorsSurviveSchemaCatalogTypeErasure() throws {
-        let schema = try Schema([IndexMacroE2ERecord.self])
+        let schema = try Schema(
+            entities: [try IndexMacroE2ERecord.schemaEntity]
+        )
         let entity = try #require(schema.entity(for: IndexMacroE2ERecord.self))
 
         #expect(entity.indexes.map(\.name) == Self.expectedSpecs.map(\.name))

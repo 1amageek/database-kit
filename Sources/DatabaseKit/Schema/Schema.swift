@@ -5,14 +5,18 @@ import DatabaseTypes
 /// Schema - Type-independent schema management
 ///
 /// **Design**: Type-independent database schema definition
-/// - Uses Entity (metadata) with field names and IndexDescriptor
-/// - Uses IndexDescriptor (metadata) instead of Index (runtime)
+/// - Uses immutable Entity values with field, index, relationship, and graph metadata
+/// - Does not retain application metatypes or runtime execution capabilities
 /// - Supports all upper layers (entity-layer, graph-layer, document-layer)
 ///
 /// **Example usage**:
 /// ```swift
 /// let schema = try Schema(
-///     [User.self, Order.self, Message.self],
+///     entities: [
+///         try User.schemaEntity,
+///         try Order.schemaEntity,
+///         try Message.schemaEntity
+///     ],
 ///     version: Schema.Version(1, 0, 0)
 /// )
 ///
@@ -36,15 +40,14 @@ public final class Schema: Sendable {
 
     /// Entity metadata (type-independent)
     ///
-    /// Represents the complete schema definition for a Persistable type.
-    /// Designed after SwiftData's `Schema.Entity` — Entity IS the metadata.
-    ///
-    /// **Usage**:
-    /// - Runtime: `Entity(from: User.self)` — full metadata + runtime type
+    /// Represents the complete schema definition for a persisted model.
     public struct Entity: Sendable, Equatable, Hashable {
 
         /// Entity name (same as Persistable.persistableType)
         public let name: String
+
+        /// Canonical identifier shape used by storage and DatabaseWire.
+        public let identifierType: PersistableIdentifierType
 
         /// Field metadata (name, type, field number, optionality, array)
         public let fields: [FieldSchema]
@@ -55,45 +58,20 @@ public final class Schema: Sendable {
         /// Directory resolution strategy compiled from `#Directory`.
         public let directoryLayer: DirectoryLayer
 
-        /// Index definitions (type-erased)
+        /// Canonical index declarations.
         public let indexes: [IndexDescriptorMetadata]
+
+        /// Typed relationship declarations owned by this entity.
+        public let relationships: [RelationshipDescriptor]
 
         /// Enum metadata: fieldName → case names
         public let enumMetadata: [String: [String]]
 
-        /// OWL class IRI (from @OWLClass macro, nil if not an ontology entity)
-        public let ontologyClassIRI: String?
+        /// Optional OWL binding compiled from model annotations.
+        public let ontology: OntologyBinding?
 
-        /// OWL ObjectProperty IRI (from @OWLObjectProperty macro, nil if not an ObjectProperty entity)
-        public let objectPropertyIRI: String?
-
-        /// ObjectProperty source field name (from @OWLObjectProperty `from:`)
-        public let objectPropertyFromField: String?
-
-        /// ObjectProperty target field name (from @OWLObjectProperty `to:`)
-        public let objectPropertyToField: String?
-
-        /// OWL DataProperty IRIs (from @OWLDataProperty macros on fields)
-        /// Persisted so that wire-format Schema.Entity can be validated
-        /// even when persistableType is nil.
-        public let dataPropertyIRIs: [String]?
-
-        // MARK: - Runtime-Only Properties
-
-        /// The Persistable type (for runtime type recovery)
-        ///
-        /// Used by database-framework to:
-        /// - Create typed IndexMaintainers during migrations
-        /// - Access directory path components at runtime
-        /// - Check Polymorphable conformance
-        ///
-        /// nil when the entity describes a type unavailable in this process.
-        public let persistableType: (any Persistable.Type)?
-
-        /// Validated index descriptors available to the runtime.
-        ///
-        /// Empty when no compiled descriptor is available.
-        public let indexDescriptors: [IndexDescriptor]
+        /// Optional membership in a protocol-oriented polymorphic group.
+        public let polymorphicMembership: PolymorphicMembership?
 
         private let fieldsByName: [String: FieldSchema]
         private let fieldsByNumber: [Int: FieldSchema]
@@ -113,6 +91,11 @@ public final class Schema: Sendable {
         /// Build field number → FieldSchema map (for decoding)
         public var fieldMapByNumber: [Int: FieldSchema] {
             fieldsByNumber
+        }
+
+        /// Validated concrete index declarations reconstructed from canonical metadata.
+        public var indexDescriptors: [IndexDescriptor] {
+            indexes.map(IndexDescriptor.init(validatedMetadata:))
         }
 
         /// Whether this type has dynamic directory components requiring partition values
@@ -152,31 +135,31 @@ public final class Schema: Sendable {
             }
         }
 
-        // MARK: - Init: from Persistable type (runtime)
+        // MARK: - Init: from a statically known model
 
-        /// Initialize from Persistable type
-        public init(from type: any Persistable.Type) throws(SchemaEntityError) {
-            let objPropInfo = Self.extractObjectPropertyInfo(from: type)
-            let indexDescriptors: [IndexDescriptor]
+        /// Compile a model declaration into a pure schema value.
+        public init<Model: Persistable>(
+            from type: Model.Type,
+            including additionalIndexes: [IndexDescriptor] = []
+        ) throws(SchemaEntityError) {
+            var indexDescriptors: [IndexDescriptor]
             do {
                 indexDescriptors = try type.indexDescriptors
             } catch let declarationError {
                 throw .invalidIndexDeclaration(declarationError)
             }
+            indexDescriptors.append(contentsOf: additionalIndexes)
             try self.init(
                 name: type.persistableType,
+                identifierType: type.persistableIdentifierType,
                 fields: type.fieldSchemas,
-                directoryComponents: Self.extractDirectoryComponents(from: type),
+                directoryComponents: type.directoryPathComponents,
                 directoryLayer: type.directoryLayer,
                 indexes: indexDescriptors.map { IndexDescriptorMetadata($0) },
+                relationships: type.relationshipDescriptors,
                 enumMetadata: Self.extractEnumMetadata(from: type),
-                ontologyClassIRI: Self.extractOntologyClassIRI(from: type),
-                objectPropertyIRI: objPropInfo?.iri,
-                objectPropertyFromField: objPropInfo?.fromField,
-                objectPropertyToField: objPropInfo?.toField,
-                dataPropertyIRIs: Self.extractDataPropertyIRIs(from: type),
-                persistableType: type,
-                indexDescriptors: indexDescriptors
+                ontology: type.ontologyBinding,
+                polymorphicMembership: type.polymorphicMembership
             )
         }
 
@@ -185,48 +168,15 @@ public final class Schema: Sendable {
         /// Manual initializer (for testing, CLI, or decoded from wire)
         public init(
             name: String,
+            identifierType: PersistableIdentifierType,
             fields: [FieldSchema],
             directoryComponents: [DirectoryPathComponent] = [],
             directoryLayer: DirectoryLayer = .default,
             indexes: [IndexDescriptorMetadata] = [],
+            relationships: [RelationshipDescriptor] = [],
             enumMetadata: [String: [String]] = [:],
-            ontologyClassIRI: String? = nil,
-            objectPropertyIRI: String? = nil,
-            objectPropertyFromField: String? = nil,
-            objectPropertyToField: String? = nil,
-            dataPropertyIRIs: [String]? = nil
-        ) throws(SchemaEntityError) {
-            try self.init(
-                name: name,
-                fields: fields,
-                directoryComponents: directoryComponents,
-                directoryLayer: directoryLayer,
-                indexes: indexes,
-                enumMetadata: enumMetadata,
-                ontologyClassIRI: ontologyClassIRI,
-                objectPropertyIRI: objectPropertyIRI,
-                objectPropertyFromField: objectPropertyFromField,
-                objectPropertyToField: objectPropertyToField,
-                dataPropertyIRIs: dataPropertyIRIs,
-                persistableType: nil,
-                indexDescriptors: []
-            )
-        }
-
-        private init(
-            name: String,
-            fields: [FieldSchema],
-            directoryComponents: [DirectoryPathComponent],
-            directoryLayer: DirectoryLayer,
-            indexes: [IndexDescriptorMetadata],
-            enumMetadata: [String: [String]],
-            ontologyClassIRI: String?,
-            objectPropertyIRI: String?,
-            objectPropertyFromField: String?,
-            objectPropertyToField: String?,
-            dataPropertyIRIs: [String]?,
-            persistableType: (any Persistable.Type)?,
-            indexDescriptors: [IndexDescriptor]
+            ontology: OntologyBinding? = nil,
+            polymorphicMembership: PolymorphicMembership? = nil
         ) throws(SchemaEntityError) {
             let fieldMaps = try Self.validate(
                 name: name,
@@ -234,26 +184,21 @@ public final class Schema: Sendable {
                 directoryComponents: directoryComponents,
                 directoryLayer: directoryLayer,
                 indexes: indexes,
+                relationships: relationships,
                 enumMetadata: enumMetadata,
-                ontologyClassIRI: ontologyClassIRI,
-                objectPropertyIRI: objectPropertyIRI,
-                objectPropertyFromField: objectPropertyFromField,
-                objectPropertyToField: objectPropertyToField,
-                dataPropertyIRIs: dataPropertyIRIs
+                ontology: ontology,
+                polymorphicMembership: polymorphicMembership
             )
             self.name = name
+            self.identifierType = identifierType
             self.fields = fields
             self.directoryComponents = directoryComponents
             self.directoryLayer = directoryLayer
             self.indexes = indexes
+            self.relationships = relationships
             self.enumMetadata = enumMetadata
-            self.ontologyClassIRI = ontologyClassIRI
-            self.objectPropertyIRI = objectPropertyIRI
-            self.objectPropertyFromField = objectPropertyFromField
-            self.objectPropertyToField = objectPropertyToField
-            self.dataPropertyIRIs = dataPropertyIRIs
-            self.persistableType = persistableType
-            self.indexDescriptors = indexDescriptors
+            self.ontology = ontology
+            self.polymorphicMembership = polymorphicMembership
             self.fieldsByName = fieldMaps.byName
             self.fieldsByNumber = fieldMaps.byNumber
         }
@@ -262,69 +207,37 @@ public final class Schema: Sendable {
 
         public static func == (lhs: Entity, rhs: Entity) -> Bool {
             lhs.name == rhs.name &&
+            lhs.identifierType == rhs.identifierType &&
             lhs.fields == rhs.fields &&
             lhs.directoryComponents == rhs.directoryComponents &&
             lhs.directoryLayer == rhs.directoryLayer &&
             lhs.indexes == rhs.indexes &&
+            lhs.relationships == rhs.relationships &&
             lhs.enumMetadata == rhs.enumMetadata &&
-            lhs.ontologyClassIRI == rhs.ontologyClassIRI &&
-            lhs.objectPropertyIRI == rhs.objectPropertyIRI &&
-            lhs.objectPropertyFromField == rhs.objectPropertyFromField &&
-            lhs.objectPropertyToField == rhs.objectPropertyToField &&
-            lhs.dataPropertyIRIs == rhs.dataPropertyIRIs
+            lhs.ontology == rhs.ontology &&
+            lhs.polymorphicMembership == rhs.polymorphicMembership
         }
 
         // MARK: - Custom Hashable (hash semantic fields)
 
         public func hash(into hasher: inout Hasher) {
             hasher.combine(name)
+            hasher.combine(identifierType)
             hasher.combine(fields)
             hasher.combine(directoryComponents)
             hasher.combine(directoryLayer)
             hasher.combine(indexes)
+            hasher.combine(relationships)
             hasher.combine(enumMetadata)
-            hasher.combine(ontologyClassIRI)
-            hasher.combine(objectPropertyIRI)
-            hasher.combine(objectPropertyFromField)
-            hasher.combine(objectPropertyToField)
-            hasher.combine(dataPropertyIRIs)
+            hasher.combine(ontology)
+            hasher.combine(polymorphicMembership)
         }
 
         // MARK: - Private Helpers
 
-        private static func extractDirectoryComponents(from type: any Persistable.Type) -> [DirectoryPathComponent] {
-            type.directoryPathComponents
-        }
-
-        /// Extract ontology class IRI from a type if it conforms to OWLClassEntity-like protocol.
-        /// Uses runtime protocol check to avoid Core → Graph dependency.
-        private static func extractOntologyClassIRI(from type: any Persistable.Type) -> String? {
-            // Check if the type has ontologyClassIRI static property
-            // This is generated by @OWLClass macro and exposed via OWLClassEntity protocol
-            if let ontologyType = type as? any _OWLClassIRIProvider.Type {
-                return ontologyType.ontologyClassIRI
-            }
-            return nil
-        }
-
-        /// Extract ObjectProperty info from a type if it conforms to OWLObjectPropertyEntity-like protocol.
-        private static func extractObjectPropertyInfo(from type: any Persistable.Type) -> (iri: String, fromField: String, toField: String)? {
-            if let objPropType = type as? any _OWLObjectPropertyIRIProvider.Type {
-                return (objPropType.objectPropertyIRI, objPropType.fromFieldName, objPropType.toFieldName)
-            }
-            return nil
-        }
-
-        /// Extract data property IRIs from a type if it conforms to _DataPropertyIRIsProvider.
-        private static func extractDataPropertyIRIs(from type: any Persistable.Type) -> [String]? {
-            if let provider = type as? any _DataPropertyIRIsProvider.Type {
-                let iris = provider.dataPropertyIRIs
-                return iris.isEmpty ? nil : iris
-            }
-            return nil
-        }
-
-        private static func extractEnumMetadata(from type: any Persistable.Type) -> [String: [String]] {
+        private static func extractEnumMetadata<Model: Persistable>(
+            from type: Model.Type
+        ) -> [String: [String]] {
             var result: [String: [String]] = [:]
             for field in type.allFields {
                 if let meta = type.enumMetadata(for: field) {
@@ -340,12 +253,10 @@ public final class Schema: Sendable {
             directoryComponents: [DirectoryPathComponent],
             directoryLayer: DirectoryLayer,
             indexes: [IndexDescriptorMetadata],
+            relationships: [RelationshipDescriptor],
             enumMetadata: [String: [String]],
-            ontologyClassIRI: String?,
-            objectPropertyIRI: String?,
-            objectPropertyFromField: String?,
-            objectPropertyToField: String?,
-            dataPropertyIRIs: [String]?
+            ontology: OntologyBinding?,
+            polymorphicMembership: PolymorphicMembership?
         ) throws(SchemaEntityError) -> (
             byName: [String: FieldSchema],
             byNumber: [Int: FieldSchema]
@@ -353,7 +264,6 @@ public final class Schema: Sendable {
             guard !name.isEmpty else {
                 throw .emptyEntityName
             }
-
             var fieldsByName: [String: FieldSchema] = [:]
             var fieldsByNumber: [Int: FieldSchema] = [:]
             for field in fields {
@@ -375,13 +285,17 @@ public final class Schema: Sendable {
                         fieldNames: [existing.name, field.name].sorted()
                     )
                 }
-                if let target = field.referenceTargetEntity {
-                    guard field.type == .reference else {
-                        throw .referenceTargetOnNonReferenceField(fieldName: field.name)
+                if field.type == .reference {
+                    guard let target = field.referenceTargetEntity else {
+                        throw .missingReferenceTarget(fieldName: field.name)
                     }
                     guard !target.isEmpty else {
                         throw .invalidReferenceTarget(fieldName: field.name)
                     }
+                } else if field.referenceTargetEntity != nil {
+                    throw .referenceTargetOnNonReferenceField(
+                        fieldName: field.name
+                    )
                 }
             }
 
@@ -432,6 +346,50 @@ public final class Schema: Sendable {
                 }
             }
 
+            var relationshipNames = Set<String>()
+            for relationship in relationships {
+                guard relationship.ownerTypeName == name else {
+                    throw .invalidRelationshipOwner(
+                        relationship: relationship.name,
+                        expected: name,
+                        actual: relationship.ownerTypeName
+                    )
+                }
+                guard relationshipNames.insert(relationship.name).inserted else {
+                    throw .duplicateRelationshipName(relationship.name)
+                }
+                guard !relationship.relatedTypeName.isEmpty else {
+                    throw .emptyRelationshipTarget(relationship.name)
+                }
+                guard
+                    let fieldNumber = Int(exactly: relationship.propertyFieldNumber),
+                    let field = fieldsByNumber[fieldNumber],
+                    field.name == relationship.propertyName
+                else {
+                    throw .invalidRelationshipField(
+                        relationship: relationship.name,
+                        fieldName: relationship.propertyName,
+                        fieldNumber: relationship.propertyFieldNumber
+                    )
+                }
+                guard field.type == .reference else {
+                    throw .relationshipOnNonReferenceField(
+                        relationship: relationship.name,
+                        fieldName: field.name
+                    )
+                }
+                guard
+                    field.referenceTargetEntity
+                        == relationship.relatedTypeName
+                else {
+                    throw .relationshipTargetMismatch(
+                        relationship: relationship.name,
+                        fieldTarget: field.referenceTargetEntity ?? "",
+                        relationshipTarget: relationship.relatedTypeName
+                    )
+                }
+            }
+
             for (fieldName, cases) in enumMetadata {
                 guard let field = fieldsByName[fieldName] else {
                     throw .unknownEnumField(fieldName)
@@ -450,23 +408,39 @@ public final class Schema: Sendable {
                 }
             }
 
-            if let ontologyClassIRI, ontologyClassIRI.isEmpty {
-                throw .emptyOntologyIRI
-            }
-            try validateObjectProperty(
-                iri: objectPropertyIRI,
-                fromField: objectPropertyFromField,
-                toField: objectPropertyToField,
-                fieldsByName: fieldsByName
-            )
-
             var seenDataPropertyIRIs = Set<String>()
-            for iri in dataPropertyIRIs ?? [] {
+            for iri in ontology?.dataPropertyIRIs ?? [] {
                 guard !iri.isEmpty else {
                     throw .emptyDataPropertyIRI
                 }
                 guard seenDataPropertyIRIs.insert(iri).inserted else {
                     throw .duplicateDataPropertyIRI(iri)
+                }
+            }
+            switch ontology {
+            case nil:
+                break
+            case .owlClass(let iri, _):
+                guard !iri.isEmpty else {
+                    throw .emptyOntologyIRI
+                }
+            case .owlObjectProperty(let iri, let fromField, let toField, _):
+                try validateObjectProperty(
+                    iri: iri,
+                    fromField: fromField,
+                    toField: toField,
+                    fieldsByName: fieldsByName
+                )
+            }
+
+            if let polymorphicMembership {
+                guard !polymorphicMembership.identifier.isEmpty else {
+                    throw .emptyPolymorphicGroupIdentifier
+                }
+                for (position, component) in polymorphicMembership.directoryComponents.enumerated() {
+                    guard case .staticPath(let value) = component, !value.isEmpty else {
+                        throw .invalidPolymorphicDirectoryComponent(position: position)
+                    }
                 }
             }
 
@@ -496,26 +470,19 @@ public final class Schema: Sendable {
         }
 
         private static func validateObjectProperty(
-            iri: String?,
-            fromField: String?,
-            toField: String?,
+            iri: String,
+            fromField: String,
+            toField: String,
             fieldsByName: [String: FieldSchema]
         ) throws(SchemaEntityError) {
-            switch (iri, fromField, toField) {
-            case (nil, nil, nil):
-                return
-            case (.some(let iri), .some(let fromField), .some(let toField)):
-                guard !iri.isEmpty else {
-                    throw .emptyOntologyIRI
-                }
-                guard fieldsByName[fromField] != nil else {
-                    throw .unknownObjectPropertyField(fromField)
-                }
-                guard fieldsByName[toField] != nil else {
-                    throw .unknownObjectPropertyField(toField)
-                }
-            default:
-                throw .incompleteObjectProperty
+            guard !iri.isEmpty else {
+                throw .emptyOntologyIRI
+            }
+            guard fieldsByName[fromField] != nil else {
+                throw .unknownObjectPropertyField(fromField)
+            }
+            guard fieldsByName[toField] != nil else {
+                throw .unknownObjectPropertyField(toField)
             }
         }
     }
@@ -543,8 +510,10 @@ public final class Schema: Sendable {
     /// Materialized index descriptors for each concrete polymorphic member.
     private let polymorphicIndexDescriptorsByIdentifierAndMemberName: [String: [String: [IndexDescriptor]]]
 
-    /// Index descriptors (metadata only)
-    public let indexDescriptors: [IndexDescriptor]
+    /// All concrete entity index descriptors in declaration order.
+    public var indexDescriptors: [IndexDescriptor] {
+        entities.flatMap(\.indexDescriptors)
+    }
 
     /// Indexes by name for quick lookup
     internal let indexDescriptorsByName: [String: IndexDescriptor]
@@ -557,99 +526,14 @@ public final class Schema: Sendable {
 
     // MARK: - Initialization
 
-    /// Create schema from array of Persistable types
-    ///
-    /// - Parameters:
-    ///   - types: Array of Persistable types
-    ///   - version: Schema version
-    ///   - indexDescriptors: Additional index descriptors (optional, merged with type-defined indexes)
-    ///
-    /// **Index Collection**:
-    /// This initializer automatically collects IndexDescriptors from types:
-    /// 1. Collects `indexDescriptors` from each Persistable type (defined by macros)
-    /// 2. Merges with manually provided indexDescriptors
-    ///
-    /// **Example usage**:
-    /// ```swift
-    /// let schema = try Schema([User.self, Order.self])  // Indexes auto-collected
-    /// ```
-    public init(
-        _ types: [any Persistable.Type],
-        version: Version = Version(1, 0, 0),
-        indexDescriptors: [IndexDescriptor] = []
-    ) throws(SchemaError) {
-        self.version = version
-        self.encodingVersion = version
-
-        // Build entities
-        var entities: [Entity] = []
-        var entitiesByName: [String: Entity] = [:]
-        var polymorphicMembers: [String: [any Persistable.Type]] = [:]
-
-        for type in types {
-            let entity: Entity
-            do {
-                entity = try Entity(from: type)
-            } catch {
-                throw .invalidEntity(error)
-            }
-            guard entitiesByName[entity.name] == nil else {
-                throw .duplicateEntityName(entity.name)
-            }
-            entities.append(entity)
-            entitiesByName[entity.name] = entity
-            if let polymorphicType = type as? any Polymorphable.Type {
-                polymorphicMembers[polymorphicType.polymorphableType, default: []].append(type)
-            }
-        }
-
-        self.entities = entities
-        self.entitiesByName = entitiesByName
-
-        let runtimePolymorphicMetadata = try Self.buildPolymorphicRuntimeMetadata(from: polymorphicMembers)
-        self.polymorphicGroups = runtimePolymorphicMetadata.groups
-        self.polymorphicGroupsByIdentifier = Dictionary(
-            uniqueKeysWithValues: runtimePolymorphicMetadata.groups.map { ($0.identifier, $0) }
-        )
-        self.polymorphicIndexDescriptorsByIdentifierAndMemberName = runtimePolymorphicMetadata.descriptorsByIdentifierAndMemberName
-
-        // Entity construction has already materialized and validated every
-        // type-defined descriptor exactly once.
-        var allIndexDescriptors = entities.flatMap { $0.indexDescriptors }
-
-        // Merge with manually provided descriptors
-        allIndexDescriptors.append(contentsOf: indexDescriptors)
-
-        // Store index descriptors with duplicate check
-        self.indexDescriptors = allIndexDescriptors
-        var indexDescriptorsByName: [String: IndexDescriptor] = [:]
-        for descriptor in allIndexDescriptors {
-            if let existing = indexDescriptorsByName[descriptor.name] {
-                throw .duplicateIndexName(
-                    indexName: descriptor.name,
-                    existingFields: existing.fieldNames,
-                    duplicateFields: descriptor.fieldNames
-                )
-            }
-            indexDescriptorsByName[descriptor.name] = descriptor
-        }
-        try Self.validatePolymorphicIndexNames(
-            runtimePolymorphicMetadata.groups,
-            against: indexDescriptorsByName
-        )
-        self.indexDescriptorsByName = indexDescriptorsByName
-    }
-
-    /// Initializer for manual Schema construction
+    /// Construct a schema from pure, statically compiled entity declarations.
     ///
     /// - Parameters:
     ///   - entities: Array of Entity objects
     ///   - version: Schema version
-    ///   - indexDescriptors: Index descriptors (optional)
     public init(
         entities: [Entity],
-        version: Version = Version(1, 0, 0),
-        indexDescriptors: [IndexDescriptor] = []
+        version: Version = Version(1, 0, 0)
     ) throws(SchemaError) {
         self.version = version
         self.encodingVersion = version
@@ -662,33 +546,44 @@ public final class Schema: Sendable {
             }
             entitiesByName[entity.name] = entity
         }
+        try Self.validateEntityReferences(
+            entities: entities,
+            entitiesByName: entitiesByName
+        )
 
         self.entities = entities
         self.entitiesByName = entitiesByName
-        self.polymorphicGroups = []
-        self.polymorphicGroupsByIdentifier = [:]
-        self.polymorphicIndexDescriptorsByIdentifierAndMemberName = [:]
 
-        // Collect index descriptors from entities + manual descriptors
-        var allIndexDescriptors: [IndexDescriptor] = []
-        for entity in entities {
-            allIndexDescriptors.append(contentsOf: entity.indexDescriptors)
-        }
-        allIndexDescriptors.append(contentsOf: indexDescriptors)
+        let polymorphicMetadata = try Self.buildPolymorphicMetadata(
+            from: entities
+        )
+        self.polymorphicGroups = polymorphicMetadata.groups
+        self.polymorphicGroupsByIdentifier = Dictionary(
+            uniqueKeysWithValues: polymorphicMetadata.groups.map {
+                ($0.identifier, $0)
+            }
+        )
+        self.polymorphicIndexDescriptorsByIdentifierAndMemberName =
+            polymorphicMetadata.descriptorsByIdentifierAndMemberName
 
         // Store index descriptors with duplicate check
-        self.indexDescriptors = allIndexDescriptors
         var indexDescriptorsByName: [String: IndexDescriptor] = [:]
-        for descriptor in allIndexDescriptors {
-            if let existing = indexDescriptorsByName[descriptor.name] {
-                throw .duplicateIndexName(
-                    indexName: descriptor.name,
-                    existingFields: existing.fieldNames,
-                    duplicateFields: descriptor.fieldNames
-                )
+        for entity in entities {
+            for descriptor in entity.indexDescriptors {
+                if let existing = indexDescriptorsByName[descriptor.name] {
+                    throw .duplicateIndexName(
+                        indexName: descriptor.name,
+                        existingFields: existing.fieldNames,
+                        duplicateFields: descriptor.fieldNames
+                    )
+                }
+                indexDescriptorsByName[descriptor.name] = descriptor
             }
-            indexDescriptorsByName[descriptor.name] = descriptor
         }
+        try Self.validatePolymorphicIndexNames(
+            polymorphicMetadata.groups,
+            against: indexDescriptorsByName
+        )
         self.indexDescriptorsByName = indexDescriptorsByName
     }
 
@@ -738,19 +633,13 @@ public final class Schema: Sendable {
     /// Polymorphic indexes share one logical index name, while field numbers are
     /// concrete-schema-specific. Runtime write maintenance uses this accessor so
     /// each member receives its resolved field identities.
-    public func polymorphicIndexDescriptors(
-        identifier: String,
-        memberType: any Persistable.Type
-    ) -> [IndexDescriptor] {
-        polymorphicIndexDescriptorsByIdentifierAndMemberName[identifier]?[memberType.persistableType] ?? []
-    }
-
-    /// Get typed index descriptors for a concrete member of a polymorphic group.
     public func polymorphicIndexDescriptors<Member: Persistable>(
         identifier: String,
         memberType: Member.Type
     ) -> [IndexDescriptor] {
-        polymorphicIndexDescriptors(identifier: identifier, memberType: memberType as any Persistable.Type)
+        polymorphicIndexDescriptorsByIdentifierAndMemberName[
+            identifier
+        ]?[Member.persistableType] ?? []
     }
 
     // MARK: - Index Access
@@ -776,77 +665,85 @@ public final class Schema: Sendable {
         return entity.indexDescriptors
     }
 
-    private struct PolymorphicRuntimeMetadata: Sendable {
+    private struct CompiledPolymorphicMetadata: Sendable {
         let groups: [PolymorphicGroup]
         let descriptorsByIdentifierAndMemberName: [String: [String: [IndexDescriptor]]]
     }
 
-    private static func buildPolymorphicRuntimeMetadata(
-        from membersByIdentifier: [String: [any Persistable.Type]]
-    ) throws(SchemaError) -> PolymorphicRuntimeMetadata {
+    private static func buildPolymorphicMetadata(
+        from entities: [Entity]
+    ) throws(SchemaError) -> CompiledPolymorphicMetadata {
+        var membersByIdentifier: [String: [Entity]] = [:]
+        for entity in entities {
+            guard let membership = entity.polymorphicMembership else {
+                continue
+            }
+            membersByIdentifier[membership.identifier, default: []].append(
+                entity
+            )
+        }
         var groups: [PolymorphicGroup] = []
         var descriptorsByIdentifierAndMemberName: [String: [String: [IndexDescriptor]]] = [:]
 
-        for (identifier, memberTypes) in membersByIdentifier.sorted(by: { $0.key < $1.key }) {
-            let sortedMemberTypes = memberTypes.sorted { $0.persistableType < $1.persistableType }
-            let polymorphicTypes = sortedMemberTypes.compactMap { memberType -> (any Persistable.Type, any Polymorphable.Type)? in
-                guard let polymorphicType = memberType as? any Polymorphable.Type else {
-                    return nil
-                }
-                return (memberType, polymorphicType)
-            }
-
-            guard let first = polymorphicTypes.first else {
+        for (identifier, members) in membersByIdentifier.sorted(
+            by: { $0.key < $1.key }
+        ) {
+            let sortedMembers = members.sorted { $0.name < $1.name }
+            guard
+                let firstEntity = sortedMembers.first,
+                let firstMembership = firstEntity.polymorphicMembership
+            else {
                 continue
             }
 
-            let directoryComponents = PolymorphicGroup.extractDirectoryComponents(
-                from: first.1.polymorphicDirectoryPathComponents
-            )
-            let directoryLayer = first.1.polymorphicDirectoryLayer
+            let directoryComponents = firstMembership.directoryComponents
+            let directoryLayer = firstMembership.directoryLayer
 
-            for (_, polymorphicType) in polymorphicTypes.dropFirst() {
-                let components = PolymorphicGroup.extractDirectoryComponents(
-                    from: polymorphicType.polymorphicDirectoryPathComponents
-                )
-                guard components == directoryComponents else {
+            for entity in sortedMembers.dropFirst() {
+                guard let membership = entity.polymorphicMembership else {
+                    continue
+                }
+                guard membership.directoryComponents == directoryComponents else {
                     throw .inconsistentPolymorphicDirectory(group: identifier)
                 }
-                guard polymorphicType.polymorphicDirectoryLayer == directoryLayer else {
+                guard membership.directoryLayer == directoryLayer else {
                     throw .inconsistentPolymorphicDirectoryLayer(group: identifier)
                 }
             }
 
-            let memberTypeNames = polymorphicTypes.map { $0.0.persistableType }.sorted()
+            let memberTypeNames = sortedMembers.map(\.name)
             let allMemberNames = Set(memberTypeNames)
             var descriptorsByMemberName: [String: [IndexDescriptor]] = [:]
             var logicalIndexByName: [String: PolymorphicIndexMetadata] = [:]
             var logicalIndexOrder: [String] = []
             var membersByIndexName: [String: Set<String>] = [:]
 
-            for (memberType, polymorphicType) in polymorphicTypes {
+            for entity in sortedMembers {
+                guard let membership = entity.polymorphicMembership else {
+                    continue
+                }
                 var descriptors: [IndexDescriptor] = []
-                descriptors.reserveCapacity(polymorphicType.polymorphicIndexes.count)
-                let definitions = polymorphicType.polymorphicIndexes
+                descriptors.reserveCapacity(membership.indexes.count)
+                let definitions = membership.indexes
                 for definition in definitions {
                     do {
                         descriptors.append(
                             try definition.descriptor(
-                                fieldSchemas: memberType.fieldSchemas
+                                fieldSchemas: entity.fields
                             )
                         )
                     } catch let declarationError {
                         throw .invalidIndexDeclaration(declarationError)
                     }
                 }
-                descriptorsByMemberName[memberType.persistableType] = descriptors
+                descriptorsByMemberName[entity.name] = descriptors
 
                 var seenNamesForMember: Set<String> = []
                 for (definition, descriptor) in zip(definitions, descriptors) {
                     guard seenNamesForMember.insert(descriptor.name).inserted else {
                         throw .duplicatePolymorphicIndex(
                             group: identifier,
-                            member: memberType.persistableType,
+                            member: entity.name,
                             indexName: descriptor.name
                         )
                     }
@@ -867,7 +764,10 @@ public final class Schema: Sendable {
                         logicalIndexOrder.append(descriptor.name)
                     }
 
-                    membersByIndexName[descriptor.name, default: []].insert(memberType.persistableType)
+                    membersByIndexName[
+                        descriptor.name,
+                        default: []
+                    ].insert(entity.name)
                 }
             }
 
@@ -894,7 +794,7 @@ public final class Schema: Sendable {
             )
         }
 
-        return PolymorphicRuntimeMetadata(
+        return CompiledPolymorphicMetadata(
             groups: groups.sorted { $0.identifier < $1.identifier },
             descriptorsByIdentifierAndMemberName: descriptorsByIdentifierAndMemberName
         )
@@ -926,6 +826,26 @@ public final class Schema: Sendable {
         }
     }
 
+    private static func validateEntityReferences(
+        entities: [Entity],
+        entitiesByName: [String: Entity]
+    ) throws(SchemaError) {
+        for entity in entities {
+            for field in entity.fields {
+                guard let target = field.referenceTargetEntity else {
+                    continue
+                }
+                guard entitiesByName[target] != nil else {
+                    throw .unknownReferenceTarget(
+                        entity: entity.name,
+                        field: field.name,
+                        target: target
+                    )
+                }
+            }
+        }
+    }
+
 }
 
 // MARK: - CustomDebugStringConvertible
@@ -940,17 +860,12 @@ extension Schema: CustomDebugStringConvertible {
 
 extension Schema: Equatable {
     public static func == (lhs: Schema, rhs: Schema) -> Bool {
-        // Compare versions
-        guard lhs.version == rhs.version else {
-            return false
-        }
-
-        // Compare entity names (Entity is not Equatable due to IndexDescriptor)
-        let lhsNames = Set(lhs.entitiesByName.keys)
-        let rhsNames = Set(rhs.entitiesByName.keys)
-        let lhsGroupNames = Set(lhs.polymorphicGroupsByIdentifier.keys)
-        let rhsGroupNames = Set(rhs.polymorphicGroupsByIdentifier.keys)
-        return lhsNames == rhsNames && lhsGroupNames == rhsGroupNames
+        lhs.version == rhs.version
+            && lhs.encodingVersion == rhs.encodingVersion
+            && lhs.entitiesByName == rhs.entitiesByName
+            && lhs.polymorphicGroupsByIdentifier
+                == rhs.polymorphicGroupsByIdentifier
+            && lhs.indexDescriptorsByName == rhs.indexDescriptorsByName
     }
 }
 
@@ -959,12 +874,18 @@ extension Schema: Equatable {
 extension Schema: Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(version)
-        // Use sorted entity names to ensure order-independent hashing
+        hasher.combine(encodingVersion)
         for name in entitiesByName.keys.sorted() {
             hasher.combine(name)
+            hasher.combine(entitiesByName[name])
         }
         for identifier in polymorphicGroupsByIdentifier.keys.sorted() {
             hasher.combine(identifier)
+            hasher.combine(polymorphicGroupsByIdentifier[identifier])
+        }
+        for name in indexDescriptorsByName.keys.sorted() {
+            hasher.combine(name)
+            hasher.combine(indexDescriptorsByName[name])
         }
     }
 }
@@ -987,6 +908,13 @@ public enum SchemaError: Error, CustomStringConvertible, Sendable, Equatable {
 
     /// An index declaration failed its concrete type or configuration contract.
     case invalidIndexDeclaration(IndexDeclarationError)
+
+    /// A reference field targets an entity absent from the schema.
+    case unknownReferenceTarget(
+        entity: String,
+        field: String,
+        target: String
+    )
 
     /// Concrete members disagree on the directory path of a polymorphic group.
     case inconsistentPolymorphicDirectory(group: String)
@@ -1030,6 +958,8 @@ public enum SchemaError: Error, CustomStringConvertible, Sendable, Equatable {
                    "Index names must be unique across all entities in the schema."
         case .invalidIndexDeclaration(let error):
             return error.description
+        case .unknownReferenceTarget(let entity, let field, let target):
+            return "Entity '\(entity)' field '\(field)' references missing entity '\(target)'."
         case .inconsistentPolymorphicDirectory(let group):
             return "Polymorphic group '\(group)' has inconsistent directory components across member types."
         case .inconsistentPolymorphicDirectoryLayer(let group):

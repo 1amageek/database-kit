@@ -80,15 +80,14 @@ import DatabaseTypes
 /// The `typeCode` is a deterministic Int64 hash of the type name,
 /// ensuring stable identification across restarts.
 ///
-/// **Swift Type System Limitation**:
-/// Protocol types cannot be passed to generic functions requiring `Polymorphable`:
+/// **Static Schema Construction**:
 /// ```swift
-/// // ❌ Compile error: 'any Document' cannot conform to 'Polymorphable'
-/// try await context.fetchPolymorphic(Document.self)
-///
-/// // ✅ Use any concrete conforming type (all share the same polymorphic directory)
-/// try await context.fetchPolymorphic(Article.self)
-/// // Returns [any Persistable] containing all conforming types
+/// let schema = try Schema(
+///     entities: [
+///         try Article.schemaEntity,
+///         try Report.schemaEntity
+///     ]
+/// )
 /// ```
 public protocol Polymorphable: Persistable {
     // MARK: - Type Metadata
@@ -154,6 +153,15 @@ public extension Polymorphable {
     /// Default implementation uses polymorphableType as directory
     static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
         [.staticPath(polymorphableType)]
+    }
+
+    static var polymorphicMembership: PolymorphicMembership? {
+        PolymorphicMembership(
+            identifier: polymorphableType,
+            directoryComponents: polymorphicDirectoryPathComponents,
+            directoryLayer: polymorphicDirectoryLayer,
+            indexes: polymorphicIndexes
+        )
     }
 }
 
