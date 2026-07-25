@@ -29,7 +29,7 @@ public protocol OWLClassEntity: Persistable, _OWLClassIRIProvider, _DataProperty
 
 extension OWLClassEntity {
     public static var dataPropertyIRIs: [String] {
-        ontologyPropertyDescriptors.map(\.iri)
+        ontologyPropertyDescriptors.map { $0.iri }
     }
 }
 

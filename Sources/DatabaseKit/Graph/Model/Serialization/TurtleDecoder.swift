@@ -1843,10 +1843,10 @@ private final class OWLBuilder {
             let triples = subjectIndex[current] ?? []
             let firstValues = triples
                 .filter { $0.predicate.iriValue == Self.rdfFirst }
-                .map(\.object)
+                .map { $0.object }
             let restValues = triples
                 .filter { $0.predicate.iriValue == Self.rdfRest }
-                .map(\.object)
+                .map { $0.object }
             guard firstValues.count == 1, restValues.count == 1 else {
                 throw .malformedRDFList(
                     "Each RDF list node must have exactly one rdf:first and one rdf:rest"

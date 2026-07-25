@@ -102,7 +102,7 @@ public final class Schema: Sendable {
 
         /// All field names
         public var allFields: [String] {
-            fields.map(\.name)
+            fields.map { $0.name }
         }
 
         /// Build field name → FieldSchema map (for encoding)
@@ -551,8 +551,8 @@ public final class Schema: Sendable {
 
     /// Names of all concrete and polymorphic indexes in this schema.
     public var allIndexNames: Set<String> {
-        Set(indexDescriptors.map(\.name))
-            .union(polymorphicGroups.flatMap { group in group.indexes.map(\.name) })
+        Set(indexDescriptors.map { $0.name })
+            .union(polymorphicGroups.flatMap { group in group.indexes.map { $0.name } })
     }
 
     // MARK: - Initialization
@@ -615,7 +615,7 @@ public final class Schema: Sendable {
 
         // Entity construction has already materialized and validated every
         // type-defined descriptor exactly once.
-        var allIndexDescriptors = entities.flatMap(\.indexDescriptors)
+        var allIndexDescriptors = entities.flatMap { $0.indexDescriptors }
 
         // Merge with manually provided descriptors
         allIndexDescriptors.append(contentsOf: indexDescriptors)

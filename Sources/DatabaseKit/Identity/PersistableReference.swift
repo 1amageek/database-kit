@@ -33,7 +33,7 @@ public struct PersistableReference<Target: Persistable>: Sendable, Hashable {
                 return fieldName
             }
         )
-        let actualPartitions = identity.partitions.fields.map(\.key)
+        let actualPartitions = identity.partitions.fields.map { $0.key }
         guard Self.haveIdenticalUTF8(
             expectedPartitions,
             actualPartitions

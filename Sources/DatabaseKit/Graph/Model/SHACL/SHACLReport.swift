@@ -68,12 +68,12 @@ extension SHACLValidationReport {
 
     /// Results grouped by focus node
     public var resultsByFocusNode: [RDFTerm: [SHACLValidationResult]] {
-        Dictionary(grouping: results, by: \.focusNode)
+        Dictionary(grouping: results) { $0.focusNode }
     }
 
     /// Results grouped by their optional canonical source-shape identifier.
     public var resultsBySourceShape: [RDFTerm?: [SHACLValidationResult]] {
-        Dictionary(grouping: results, by: \.sourceShape)
+        Dictionary(grouping: results) { $0.sourceShape }
     }
 
 }

@@ -71,7 +71,7 @@ extension PersistableEnum where RawValue == String {
     ) -> EnumMetadata? {
         EnumMetadata(
             typeName: typeName,
-            cases: allCases.map(\.rawValue)
+            cases: allCases.map { $0.rawValue }
         )
     }
 

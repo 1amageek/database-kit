@@ -38,6 +38,6 @@ extension Optional: OWLObjectPropertyValue where Wrapped: OWLIndividualIdentifie
 
 extension Array: OWLObjectPropertyValue where Element: OWLIndividualIdentifier {
     public var owlObjectPropertyIdentifierLexicalForms: [String] {
-        map(\.owlIndividualIdentifierLexicalForm)
+        map { $0.owlIndividualIdentifierLexicalForm }
     }
 }

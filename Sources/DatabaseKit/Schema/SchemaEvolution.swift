@@ -58,7 +58,7 @@ public struct SchemaCompatibilityReport: Sendable, Equatable {
     public let issues: [SchemaCompatibilityIssue]
 
     public var allIssues: [SchemaCompatibilityIssue] {
-        issues + entityReports.flatMap(\.issues)
+        issues + entityReports.flatMap { $0.issues }
     }
 
     public var isLightweightCompatible: Bool {
@@ -90,7 +90,7 @@ extension Schema.Entity {
 
         let previousByName = Dictionary(uniqueKeysWithValues: previous.fields.map { ($0.name, $0) })
         let currentByName = Dictionary(uniqueKeysWithValues: fields.map { ($0.name, $0) })
-        let maxPreviousFieldNumber = previous.fields.map(\.fieldNumber).max() ?? 0
+        let maxPreviousFieldNumber = previous.fields.map { $0.fieldNumber }.max() ?? 0
 
         for oldField in previous.fields.sorted(by: fieldSort) {
             guard let currentField = currentByName[oldField.name] else {

@@ -100,7 +100,7 @@ public struct RDFDataset: Sendable, Hashable {
     }
 
     public var triples: [RDFTriple] {
-        quads.filter { $0.graph == nil }.map(\.triple)
+        quads.filter { $0.graph == nil }.map { $0.triple }
     }
 
     public func validate() throws {

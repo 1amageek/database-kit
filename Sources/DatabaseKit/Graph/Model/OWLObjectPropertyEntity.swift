@@ -13,6 +13,6 @@ public protocol OWLObjectPropertyEntity: Persistable, _OWLObjectPropertyIRIProvi
 
 extension OWLObjectPropertyEntity {
     public static var dataPropertyIRIs: [String] {
-        ontologyPropertyDescriptors.map(\.iri)
+        ontologyPropertyDescriptors.map { $0.iri }
     }
 }
