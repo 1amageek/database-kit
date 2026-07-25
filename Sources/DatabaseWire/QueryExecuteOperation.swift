@@ -115,183 +115,10 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Column: Sendable, Hashable {
-        public let number: UInt32
-        public let name: String
-
-        public init(number: UInt32, name: String) {
-            self.number = number
-            self.name = name
-        }
-
-        fileprivate func encode(
-            into writer: inout DatabaseWireWriter
-        ) throws(DatabaseWireError) {
-            writer.writeUInt32(number)
-            try writer.writeString(name)
-        }
-
-        fileprivate init(
-            from reader: inout DatabaseWireReader
-        ) throws(DatabaseWireError) {
-            self.init(
-                number: try reader.readUInt32(),
-                name: try reader.readString()
-            )
-        }
-    }
-
-    public struct Row: Sendable, Hashable {
-        public let values: [FieldValue]
-        public let annotations: FieldObject
-        public let version: ByteString?
-
-        public init(
-            values: [FieldValue],
-            annotations: FieldObject = FieldObject(),
-            version: ByteString? = nil
-        ) {
-            self.values = values
-            self.annotations = annotations
-            self.version = version
-        }
-
-        fileprivate func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
-            try writer.writeCount(values.count)
-            for value in values { try value.encode(into: &writer) }
-            try annotations.encode(into: &writer)
-            try writer.writeOptionalBytes(version)
-        }
-
-        fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-            let valueCount = try reader.readCount()
-            var values: [FieldValue] = []
-            values.reserveCapacity(valueCount)
-            for _ in 0..<valueCount {
-                values.append(try FieldValue(from: &reader))
-            }
-            self.init(
-                values: values,
-                annotations: try FieldObject(from: &reader),
-                version: try reader.readOptionalBytes()
-            )
-        }
-    }
-
-    public struct RowPage: Sendable, Hashable {
-        public let columns: [Column]
-        public let rows: [Row]
-        public let continuation: ByteString?
-        public let snapshotVersion: UInt64?
-
-        public init(
-            columns: [Column],
-            rows: [Row],
-            continuation: ByteString? = nil,
-            snapshotVersion: UInt64? = nil
-        ) {
-            self.columns = columns
-            self.rows = rows
-            self.continuation = continuation
-            self.snapshotVersion = snapshotVersion
-        }
-
-        fileprivate func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
-            try writer.writeCount(columns.count)
-            for column in columns {
-                try column.encode(into: &writer)
-            }
-            try writer.writeCount(rows.count)
-            for row in rows {
-                guard row.values.count == columns.count else {
-                    throw .invalidRowValueCount(
-                        expected: columns.count,
-                        actual: row.values.count
-                    )
-                }
-                try row.encode(into: &writer)
-            }
-            try writer.writeOptionalBytes(continuation)
-            if let snapshotVersion {
-                writer.writeBool(true)
-                writer.writeUInt64(snapshotVersion)
-            } else {
-                writer.writeBool(false)
-            }
-        }
-
-        fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-            let columnCount = try reader.readCount()
-            var columns: [Column] = []
-            columns.reserveCapacity(columnCount)
-            for _ in 0..<columnCount {
-                columns.append(try Column(from: &reader))
-            }
-            let count = try reader.readCount()
-            var rows: [Row] = []
-            rows.reserveCapacity(count)
-            for _ in 0..<count {
-                let row = try Row(from: &reader)
-                guard row.values.count == columnCount else {
-                    throw .invalidRowValueCount(
-                        expected: columnCount,
-                        actual: row.values.count
-                    )
-                }
-                rows.append(row)
-            }
-            let continuation = try reader.readOptionalBytes()
-            let snapshotVersion = try reader.readBool() ? try reader.readUInt64() : nil
-            self.init(
-                columns: columns,
-                rows: rows,
-                continuation: continuation,
-                snapshotVersion: snapshotVersion
-            )
-        }
-    }
-
-    public struct GraphPage: Sendable, Hashable {
-        public let triples: [RDFQuad]
-        public let continuation: ByteString?
-        public let snapshotVersion: Int64?
-
-        public init(
-            triples: [RDFQuad],
-            continuation: ByteString? = nil,
-            snapshotVersion: Int64? = nil
-        ) {
-            self.triples = triples
-            self.continuation = continuation
-            self.snapshotVersion = snapshotVersion
-        }
-
-        fileprivate func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
-            try writer.writeCount(triples.count)
-            for triple in triples { try triple.encode(into: &writer) }
-            try writer.writeOptionalBytes(continuation)
-            writer.writeBool(snapshotVersion != nil)
-            if let snapshotVersion { writer.writeInt64(snapshotVersion) }
-        }
-
-        fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-            let count = try reader.readCount()
-            var triples: [RDFQuad] = []
-            triples.reserveCapacity(count)
-            for _ in 0..<count { triples.append(try RDFQuad(from: &reader)) }
-            let continuation = try reader.readOptionalBytes()
-            self.init(
-                triples: triples,
-                continuation: continuation,
-                snapshotVersion: try reader.readBool() ? try reader.readInt64() : nil
-            )
-        }
-    }
-
-    public enum Response: WireValue, Hashable {
-        case rows(RowPage)
+    public enum Response: WireValue {
+        case rows(QueryRowPage)
         case boolean(Bool)
-        case rdfGraph(GraphPage)
+        case rdfGraph(RDFGraphPage)
 
         func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             switch self {
@@ -309,9 +136,9 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
 
         init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             switch try reader.readUInt8() {
-            case 1: self = .rows(try RowPage(from: &reader))
+            case 1: self = .rows(try QueryRowPage(from: &reader))
             case 2: self = .boolean(try reader.readBool())
-            case 3: self = .rdfGraph(try GraphPage(from: &reader))
+            case 3: self = .rdfGraph(try RDFGraphPage(from: &reader))
             case let tag: throw .invalidResultPayload(tag)
             }
         }

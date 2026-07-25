@@ -63,4 +63,15 @@ extension RDFQuad: WireValue {
             graph: graph
         )
     }
+
+    static func validateWireRepresentation(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) {
+        try reader.validateCanonicalRDFTerm(role: .subject)
+        try reader.validateCanonicalRDFTerm(role: .predicate)
+        try reader.validateCanonicalRDFTerm(role: .object)
+        if try reader.readBool() {
+            try reader.validateCanonicalRDFTerm(role: .graphName)
+        }
+    }
 }

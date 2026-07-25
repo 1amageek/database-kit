@@ -35,6 +35,24 @@ struct DatabaseWireReader: Sendable {
         nestingDepth
     }
 
+    var consumedByteCount: Int {
+        offset
+    }
+
+    mutating func beginSubtreeValidation(
+        nestingDepth: Int,
+        registeredObjectCount: Int
+    ) throws(DatabaseWireError) {
+        guard nestingDepth >= 0,
+              nestingDepth <= limits.maximumNestingDepth,
+              registeredObjectCount >= 0,
+              registeredObjectCount <= limits.maximumObjectCount else {
+            throw .byteCountOverflow
+        }
+        self.nestingDepth = nestingDepth
+        self.decodedObjectCount = registeredObjectCount
+    }
+
     public mutating func readUInt8() throws(DatabaseWireError) -> UInt8 {
         try validateFrameSize()
         guard offset < bytes.count else {
@@ -193,12 +211,25 @@ struct DatabaseWireReader: Sendable {
     public mutating func readString(
         maximumUTF8Bytes: Int
     ) throws(DatabaseWireError) -> String {
-        guard maximumUTF8Bytes >= 0 else {
+        let encoded = try readValidatedUTF8Bytes(
+            maximumUTF8Bytes: maximumUTF8Bytes
+        )
+        guard let value = DatabaseWireTextDecoder.decode(encoded) else {
+            throw DatabaseWireError.invalidUTF8
+        }
+        return value
+    }
+
+    mutating func readValidatedUTF8Bytes(
+        maximumUTF8Bytes: Int? = nil
+    ) throws(DatabaseWireError) -> ByteString {
+        let requestedMaximum = maximumUTF8Bytes ?? limits.maximumStringBytes
+        guard requestedMaximum >= 0 else {
             throw .byteCountOverflow
         }
         let count = try readLength()
         let effectiveMaximum = min(
-            maximumUTF8Bytes,
+            requestedMaximum,
             limits.maximumStringBytes
         )
         guard count <= effectiveMaximum else {
@@ -213,10 +244,10 @@ struct DatabaseWireReader: Sendable {
         let lowerBound = bytes.startIndex + offset
         let encoded = bytes[lowerBound..<(lowerBound + count)]
         offset += count
-        guard let value = DatabaseWireTextDecoder.decode(encoded) else {
+        guard DatabaseWireTextDecoder.isValid(encoded) else {
             throw DatabaseWireError.invalidUTF8
         }
-        return value
+        return encoded
     }
 
     public mutating func readCount() throws(DatabaseWireError) -> Int {
@@ -233,6 +264,20 @@ struct DatabaseWireReader: Sendable {
         guard remainingCount == 0 else {
             throw DatabaseWireError.trailingBytes
         }
+    }
+
+    func bytes(
+        inConsumedRange range: Range<Int>
+    ) throws(DatabaseWireError) -> ByteString {
+        guard range.lowerBound >= 0,
+              range.upperBound >= range.lowerBound,
+              range.upperBound <= offset,
+              range.upperBound <= bytes.count else {
+            throw .byteCountOverflow
+        }
+        let lowerBound = bytes.startIndex + range.lowerBound
+        let upperBound = bytes.startIndex + range.upperBound
+        return bytes[lowerBound..<upperBound]
     }
 
     public mutating func withNestedValue<Result>(

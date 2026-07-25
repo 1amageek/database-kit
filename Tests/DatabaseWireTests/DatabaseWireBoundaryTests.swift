@@ -89,13 +89,16 @@ struct DatabaseWireBoundaryTests {
             response: response
         )
 
-        #expect(
-            try decoder.decodeResponse(
-                DatabaseOperations.queryExecute,
-                from: frame,
-                matching: 91
-            ) == .success(response)
+        let decoded = try decoder.decodeResponse(
+            DatabaseOperations.queryExecute,
+            from: frame,
+            matching: 91
         )
+        guard case .success(.boolean(let value)) = decoded else {
+            Issue.record("Expected a successful boolean response")
+            return
+        }
+        #expect(value)
         #expect(
             throws: DatabaseWireError.unexpectedRequestIdentifier(
                 expected: 92,
@@ -124,13 +127,16 @@ struct DatabaseWireBoundaryTests {
             error: error
         )
 
-        #expect(
-            try DatabaseWireDecoder().decodeResponse(
-                DatabaseOperations.queryExecute,
-                from: frame,
-                matching: 33
-            ) == .failure(error)
+        let decoded = try DatabaseWireDecoder().decodeResponse(
+            DatabaseOperations.queryExecute,
+            from: frame,
+            matching: 33
         )
+        guard case .failure(let decodedError) = decoded else {
+            Issue.record("Expected a remote operation failure")
+            return
+        }
+        #expect(decodedError == error)
     }
 
     @Test("encoded response payload borrows the final frame allocation")

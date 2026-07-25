@@ -71,6 +71,14 @@ struct DatabaseWireWriter {
         return false
     }
 
+    var registeredObjectCount: Int {
+        encodedObjectCount
+    }
+
+    var currentNestingDepth: Int {
+        nestingDepth
+    }
+
     /// Returns the canonical encoded byte count after applying all writer and
     /// frame limits, without allocating output storage.
     ///

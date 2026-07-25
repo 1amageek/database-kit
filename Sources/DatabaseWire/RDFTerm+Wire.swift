@@ -16,6 +16,43 @@ extension DatabaseWireReader {
         role: RDFTermRole
     ) throws(DatabaseWireError) -> RDFTerm {
         let bytes = try readBytes()
+        let codecLimits = try remainingRDFTermLimits()
+        let result: RDFTermDecodingResult
+        do {
+            result = try RDFTermCodec.decodeWithMetrics(
+                bytes,
+                role: role,
+                limits: codecLimits
+            )
+        } catch let error {
+            throw mapCanonicalRDFTermError(error)
+        }
+        try registerObjects(result.objectCount)
+        return result.term
+    }
+
+    mutating func validateCanonicalRDFTerm(
+        role: RDFTermRole
+    ) throws(DatabaseWireError) {
+        let bytes = try readBytes()
+        let codecLimits = try remainingRDFTermLimits()
+        let validation: RDFTermEncodingValidation
+        do {
+            validation = try RDFTermCodec.withValidatedBytes(
+                bytes,
+                role: role,
+                limits: codecLimits
+            ) { _, validation in
+                validation
+            }
+        } catch let error {
+            throw mapCanonicalRDFTermError(error)
+        }
+        try registerObjects(validation.objectCount)
+    }
+
+    private func remainingRDFTermLimits()
+        throws(DatabaseWireError) -> RDFTermCodecLimits {
         guard limits.maximumObjectCount > registeredObjectCount else {
             let (actual, overflow) = registeredObjectCount
                 .addingReportingOverflow(1)
@@ -33,23 +70,11 @@ extension DatabaseWireReader {
             )
         }
         let remainingDepth = limits.maximumNestingDepth - currentNestingDepth
-        let codecLimits = RDFTermCodecLimits(
+        return RDFTermCodecLimits(
             validatedMaximumBytes: self.limits.maximumByteStringBytes,
             maximumDepth: remainingDepth,
             maximumObjectCount: remainingObjectCount
         )
-        let result: RDFTermDecodingResult
-        do {
-            result = try RDFTermCodec.decodeWithMetrics(
-                bytes,
-                role: role,
-                limits: codecLimits
-            )
-        } catch let error {
-            throw mapCanonicalRDFTermError(error)
-        }
-        try registerObjects(result.objectCount)
-        return result.term
     }
 
     private func mapCanonicalRDFTermError(

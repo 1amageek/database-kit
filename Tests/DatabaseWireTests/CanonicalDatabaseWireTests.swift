@@ -117,12 +117,78 @@ struct CanonicalDatabaseWireTests {
                     )
                 ),
                 (
+                    key: "time",
+                    value: .time(
+                        try CivilTime(
+                            hour: 12,
+                            minute: 34,
+                            second: 56,
+                            nanoseconds: 789
+                        )
+                    )
+                ),
+                (
+                    key: "dateTime",
+                    value: .dateTime(
+                        CivilDateTime(
+                            date: CivilDate(
+                                year: 2026,
+                                month: 7,
+                                day: 16
+                            ),
+                            time: try CivilTime(
+                                hour: 12,
+                                minute: 34,
+                                second: 56,
+                                nanoseconds: 789
+                            )
+                        )
+                    )
+                ),
+                (
                     key: "timestamp",
                     value: .timestamp(
                         try Timestamp(
                             secondsSinceUnixEpoch: 1_784_131_200,
                             nanoseconds: 123
                         )
+                    )
+                ),
+                (
+                    key: "timeSpan",
+                    value: .timeSpan(
+                        try TimeSpan(seconds: -2, nanoseconds: 500_000_000)
+                    )
+                ),
+                (
+                    key: "calendarPeriod",
+                    value: .calendarPeriod(
+                        CalendarPeriod(months: 14, days: 3)
+                    )
+                ),
+                (
+                    key: "geographicPoint",
+                    value: .geographicPoint(
+                        try GeographicPoint(
+                            latitude: 35.681_236,
+                            longitude: 139.767_125
+                        )
+                    )
+                ),
+                (
+                    key: "geographicPosition",
+                    value: .geographicPosition(
+                        try GeographicPosition(
+                            latitude: 35.681_236,
+                            longitude: 139.767_125,
+                            ellipsoidalHeightInMeters: 42.5
+                        )
+                    )
+                ),
+                (
+                    key: "vector",
+                    value: .vector(
+                        try Vector(float32: [1.25, -2.5, 3.75])
                     )
                 ),
                 (
@@ -175,6 +241,10 @@ struct CanonicalDatabaseWireTests {
 
         #expect(try FieldValue(from: &reader) == value)
         try reader.ensureFullyRead()
+
+        var validationReader = DatabaseWireReader(bytes)
+        try FieldValueWireValidator.validateValue(from: &validationReader)
+        try validationReader.ensureFullyRead()
     }
 
     @Test("language-tag spelling has one canonical wire representation")
@@ -215,12 +285,12 @@ struct CanonicalDatabaseWireTests {
     func queryResultsRoundTrip() throws {
         let results: [QueryExecuteOperation.Response] = [
             .rows(
-                QueryExecuteOperation.RowPage(
+                try QueryRowPage(
                     columns: [
                         .init(number: 1, name: "title"),
                     ],
                     rows: [
-                        QueryExecuteOperation.Row(
+                        QueryRow(
                             values: [.string("Event")],
                             version: [0x01, 0x02]
                         ),
@@ -231,8 +301,8 @@ struct CanonicalDatabaseWireTests {
             ),
             .boolean(true),
             .rdfGraph(
-                QueryExecuteOperation.GraphPage(
-                    triples: [
+                RDFGraphPage(
+                    quads: [
                         RDFQuad(
                             subject: .iri(try RDFIRI("urn:event:1")),
                             predicate: RDFPredicateIRI(
@@ -254,12 +324,33 @@ struct CanonicalDatabaseWireTests {
 
         for result in results {
             let encoded = try EnvelopeWireFormat.encode(result)
-            #expect(
-                try EnvelopeWireFormat.decode(
-                    QueryExecuteOperation.Response.self,
-                    from: encoded
-                ) == result
+            let decoded = try EnvelopeWireFormat.decode(
+                QueryExecuteOperation.Response.self,
+                from: encoded
             )
+            switch (result, decoded) {
+            case (.boolean(let expected), .boolean(let actual)):
+                #expect(actual == expected)
+            case (.rows(let expected), .rows(let actual)):
+                #expect(actual.columns == expected.columns)
+                #expect(actual.rowCount == expected.rowCount)
+                #expect(actual.continuation == expected.continuation)
+                #expect(actual.snapshotVersion == expected.snapshotVersion)
+                #expect(
+                    try actual.materializedRows(maximumCount: 10)
+                        == expected.materializedRows(maximumCount: 10)
+                )
+            case (.rdfGraph(let expected), .rdfGraph(let actual)):
+                #expect(actual.quadCount == expected.quadCount)
+                #expect(actual.continuation == expected.continuation)
+                #expect(actual.snapshotVersion == expected.snapshotVersion)
+                #expect(
+                    try actual.materializedQuads(maximumCount: 10)
+                        == expected.materializedQuads(maximumCount: 10)
+                )
+            default:
+                Issue.record("Query result kind changed during round-trip")
+            }
         }
     }
 
