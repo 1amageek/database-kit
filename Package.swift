@@ -67,6 +67,14 @@ let package = Package(
                 ),
             ]
         ),
+        .target(
+            name: "DatabaseKitDeclarationContract",
+            dependencies: [
+                "DatabaseKit",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ],
+            path: "Tests/DatabaseKitDeclarationContract"
+        ),
         .testTarget(
             name: "DatabaseKitTests",
             dependencies: [

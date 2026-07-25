@@ -1,6 +1,5 @@
 import DatabaseTypes
 import DatabaseKit
-import DatabaseKit
 
 @Persistable
 struct ReferenceOwnerModel {
