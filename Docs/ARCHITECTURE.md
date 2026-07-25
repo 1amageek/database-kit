@@ -73,10 +73,12 @@ static model traversal
                  lazy bulk-result view
 ```
 
-The target core path contains no reflection, existential storage, Foundation,
-JavaScriptKit, or intermediate byte arrays. Independently owned native,
-JavaScript, and network boundaries may copy once when ownership cannot be
-shared; internal stages do not repeat that copy.
+The target core path contains no reflection, semantic existential registry,
+Foundation, JavaScriptKit, or intermediate byte arrays. `ByteString` may retain
+its explicit immutable owner abstraction so independently implemented buffers
+can share ownership across packages. Native, JavaScript, and network
+boundaries may copy once when ownership cannot be shared; internal stages do
+not repeat that copy.
 
 ## Schema Catalog Boundary
 

@@ -21,7 +21,7 @@ architecture inputs rather than later optimizations.
 |---:|---|---|
 | 1 | Correct semantics and explicit ownership | No hidden coercion, lifetime, fallback, or partial success |
 | 2 | Zero-copy on performance-sensitive paths | One final owner, bounded views, and no intermediate byte materialization |
-| 3 | Small Embedded runtime | No Foundation, reflection, existential storage, or runtime registration in the Embedded graph |
+| 3 | Small Embedded runtime | No Foundation, reflection, semantic type-erasure registry, or runtime handler registration in the Embedded graph |
 | 4 | Convenience | Added only when it preserves the first three requirements |
 
 Zero-copy does not mean zero allocation and does not claim that a network or
@@ -76,15 +76,22 @@ cause the large byte payload to be copied.
 `ByteString` is the only canonical owned byte value. `DatabaseBytes` and other
 module-specific byte aliases do not exist.
 
-The Embedded representation of `ByteString` uses concrete backing cases only.
-It must not store `any ByteStringOwner`, an escaping borrow closure, Foundation
-`Data`, or an untyped deallocator.
+`ByteString` may retain `any ByteStringOwner` on every Swift 6.4 target,
+including Embedded. This protocol is the externally selected ownership
+contract for stable, immutable, contiguous bytes. It is not semantic model,
+operation, or codec type erasure. Retaining the owner is what permits a buffer
+produced by another package to cross the package boundary without copying.
 
-Native-only retained owners may be conditionally provided outside the Embedded
-layout. If a native adapter cannot retain its source using a concrete,
-Sendable, immutable owner, it performs one documented conversion-boundary copy.
-Avoiding that native boundary copy is not justification for introducing
-existential storage into the canonical Embedded type.
+Every owner exposes one stable count and must invoke each synchronous borrow
+exactly once with the same bytes. The pointer cannot escape the borrow.
+Overlapping and nested borrows are supported. Foundation `Data`, an escaping
+borrow closure, an untyped deallocator, or mutable external storage is not part
+of the canonical backing.
+
+An adapter performs one documented conversion-boundary copy only when its
+source cannot satisfy that immutable owner contract. Dynamic dispatch for the
+owner borrow is an accepted constant ownership cost; copying the complete
+payload to avoid it is not.
 
 `ByteString` provides:
 
@@ -487,9 +494,9 @@ They accept and return `ByteString`.
 
 When URLSession requires `Data` ownership, the request adapter performs one
 documented boundary copy unless it can transfer an independently owned buffer
-safely. A response may retain native data without copying only through a
-native-only concrete owner that does not alter the Embedded `ByteString`
-representation. Otherwise it performs one exact-size boundary copy.
+safely. A response may retain native data without copying when it provides an
+immutable `ByteStringOwner` that satisfies the same Native and Embedded
+ownership contract. Otherwise it performs one exact-size boundary copy.
 
 Fragmented responses accumulate segments without repeatedly copying existing
 payload. Once the final byte count is known, the adapter creates one final
@@ -498,8 +505,9 @@ fragment-by-fragment frame reconstruction are not accepted.
 
 ## Error and lifetime contract
 
-All public failures in the Embedded graph use typed throws. No public API
-widens a failure to `any Error`.
+All public database-semantic and Wire failures in the Embedded graph use typed
+throws. Generic synchronous byte borrows preserve the caller-provided failure
+type and do not create or erase a database failure.
 
 Every borrowed pointer:
 
@@ -580,39 +588,21 @@ above:
 | Selected field access | `FieldIdentity` selection through the same generated traversal; only the selected `FieldValue` is materialized |
 | Schema | Pure validated entity values; no retained model metatypes, runtime KeyPaths, or descriptor existential arrays |
 
-The following production paths remain outside that completed boundary:
+The database-kit-owned production paths implement the completed contract:
 
-| Area | Current violation | Required replacement |
-|---|---|---|
-| Bytes | An Embedded-visible existential external owner | Concrete Embedded `ByteString` backing |
-| Wire API | Public catch-all codec entry points and arbitrary two-pass closures | Closed DatabaseWire-provided operation descriptors and internal directional encoding |
-| Bulk query results | Eager arrays for all rows and triples | Validated owner-retaining page views |
-| Client core | A package-specific byte alias and obsolete module imports | Canonical `ByteString` throughout |
-| Worker transport | JavaScriptKit and JavaScript-owned typed-array conversion | Minimal WASM host ABI with one explicit ownership copy per direction |
-| Job results | Growing `[UInt8]` assembly | Exact final allocation and direct bounded chunk writes |
+| Area | Implemented contract |
+|---|---|
+| Bytes | Canonical `ByteString` with immutable owner retention and constant-time slices |
+| Wire API | Closed DatabaseWire-provided operation descriptors and internal directional encoding |
+| Query and RDF results | Validated owner-retaining pages with on-demand element materialization |
+| Algorithm, ontology, SHACL, and maintenance results | The same owner-retaining page contract for every bulk result family |
+| Job results | Exact-size result pages, bounded chunk writes, and incremental digest |
+| Failures | Typed semantic and Wire failures; caller-supplied borrow failures preserve their generic failure type |
 
-None of these items is considered complete because a type or placeholder path
-exists. Each is complete only after the production call path and copy-count or
-Embedded gate passes.
-
-## Replacement sequence
-
-The migration is performed as architectural replacement, not as wrappers around
-the current dynamic path:
-
-1. make the `DatabaseTypes` Embedded byte representation concrete;
-2. replace reflective and existential model adaptation with macro-generated
-   generic field input and output;
-3. replace schema metatype and descriptor existential storage with validated
-   semantic values;
-4. replace public catch-all Wire codec entry points with closed
-   DatabaseWire-provided operation descriptors and internal directional
-   encoding;
-5. add lazy owner-retaining bulk result pages;
-6. move `database-client` to `ByteString` and generic transport ownership;
-7. replace JavaScriptKit in the Embedded path with the host ABI;
-8. migrate database-framework consumers only after the canonical contracts
-   pass Native and Embedded gates.
-
-No compatibility aliases, duplicate DTOs, fallback reflection, JSON route, or
-parallel byte type remains after its replacement tests pass.
+`database-client`, the WASM host transport, and database-framework are
+downstream consumers of these contracts. Their transport and execution work is
+not an implementation path inside database-kit and is not a database-kit
+completion gate. Ecosystem integration still requires those packages to
+consume the same `ByteString`, operation descriptors, and owner-retaining
+results without compatibility aliases, duplicate DTOs, fallback reflection,
+or JSON protocol routes.

@@ -6,9 +6,9 @@ protocol for the database ecosystem.
 The normative ownership and product contract is documented in
 [database-kit Responsibility Specification](Docs/DATABASE_KIT_SPECIFICATION.md).
 
-The version 1 architecture migration is in progress. Product declarations or
-Native tests alone are not evidence that the Embedded and zero-copy acceptance
-gates have passed.
+The package implements the version 1 semantic and Wire contract. Completion is
+verified through Native behavior tests, standard and Embedded WASM release
+builds, the Embedded macro-compilation fixture, and byte-owner identity tests.
 
 ## Overview
 
@@ -64,9 +64,9 @@ Relationship, vector, full-text, geographic, rank, permutation, graph,
 ontology, and SHACL are source classifications within `DatabaseKit`, not
 separate products.
 
-`DatabaseKit` and `DatabaseWire` are required to build with the matching Swift
-Embedded WASM SDK before the version 1 implementation is complete.
-`DatabaseKitFoundation` is excluded from that dependency graph.
+`DatabaseKit` and `DatabaseWire` build with the matching Swift 6.4 standard and
+Embedded WASM SDKs. `DatabaseKitFoundation` is excluded from that dependency
+graph.
 
 There is no umbrella value module in database-kit. `FieldValue` and every
 primitive alternative are defined only by `DatabaseTypes`; the database-kit
@@ -90,10 +90,23 @@ host transport contract.
 | Contract | Verification |
 |---|---|
 | Apple platform behavior | `xcodebuild test` for the package scheme |
-| Embedded client graph | Release build of `DatabaseWire` with the Swift 6.4 Embedded WASM SDK |
-| Full semantic graph | Release build of the `DatabaseKit` product with the Swift 6.4 Embedded WASM SDK |
+| Standard WASM contract | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 WASM SDK |
+| Embedded semantic and Wire graph | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 Embedded WASM SDK |
+| Embedded macro use | Embedded release build of `DatabaseKitDeclarationContract`, which expands model, field, directory, index, and relationship declarations |
 | Binary ownership | Tests assert that payload pages borrow ranges from the single final frame allocation |
 | Decoder safety | Tests cover truncation, limits, malformed values, non-canonical input, and cyclic RDF lists |
+
+The current baseline is
+`swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a` with the exactly matching
+standard and Embedded WASM SDKs:
+
+```bash
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a_wasm --product DatabaseKit -c release
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a_wasm --product DatabaseWire -c release
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a_wasm-embedded --product DatabaseKit -c release
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a_wasm-embedded --product DatabaseWire -c release
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a_wasm-embedded --target DatabaseKitDeclarationContract -c release
+```
 
 ## Quick Start
 

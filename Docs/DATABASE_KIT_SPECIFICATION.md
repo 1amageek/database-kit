@@ -452,15 +452,17 @@ The Embedded path must not contain:
 
 - Foundation or FoundationEssentials;
 - Codable-based model reconstruction;
-- protocol existential storage;
+- semantic model, operation, or codec existential storage;
 - URLSession or JavaScriptKit;
 - database execution or storage backends;
 - mutable global registration.
 
-All failures reachable on the Embedded path use typed throws. Public APIs on
-that path must not store protocol existential values. Heterogeneous semantic
-declarations use a closed, validated representation or compile-time generic
-composition; an existential array is not an acceptable registry.
+All database-semantic and Wire failures reachable on the Embedded path use
+typed throws. Heterogeneous semantic declarations use a closed, validated
+representation or compile-time generic composition; an existential array is
+not an acceptable registry. `ByteString` is the explicit exception: it may
+retain an immutable `ByteStringOwner` and its synchronous borrow forwards the
+caller's generic failure type.
 
 ## Wire Version 1
 
@@ -620,23 +622,30 @@ The responsibility migration is complete only when all of the following hold:
 5. Feature names remain only as source organization or domain declaration
    names, not public module boundaries.
 6. The compiler macros are provided by one non-library compiler-plugin target.
-7. All existing callers are migrated in the same change.
+7. All callers inside this package use the canonical products and no internal
+   compatibility route remains.
 8. Obsolete products, targets, source paths, tests, aliases, and re-export
    shims are removed.
 9. No public source declaration uses `DatabaseValue`, `DatabaseObjectField`,
    `DatabaseModel`, `DatabaseCodable`, or a catch-all `Codec` API.
-10. All public throwing APIs reachable from the Embedded graph use typed
-    throws, and the graph stores no protocol existential values.
+10. All public database-semantic and Wire failures reachable from the Embedded
+    graph use typed throws. Generic synchronous byte borrows may forward the
+    caller's failure type, and `ByteString` may retain its explicit immutable
+    `ByteStringOwner`; semantic model, operation, and codec existential storage
+    remains prohibited.
 11. Native model adaptation tests cover Foundation `Date`, `Data`, `UUID`, and
     `Decimal` through the explicit `DatabaseTypesFoundation` conversion
     boundary.
 12. macOS tests validate actual success and failure behavior.
-13. Swift 6.4 Embedded builds validate the complete client dependency graph.
-14. DatabaseWire golden vectors cover every operation family and are consumed
-    unchanged by client and runtime tests.
-15. Swift 6.4 Embedded macro tests compile KeyPath-based model, index, query,
-    and relationship declarations, while expanded runtime code contains no
-    `KeyPath`, `PartialKeyPath`, `AnyKeyPath`, or `Any.Type`.
+13. Swift 6.4 standard and Embedded WASM release builds validate both
+    `DatabaseKit` and `DatabaseWire`.
+14. DatabaseWire golden vectors and round-trip tests cover every operation
+    family. Client and runtime repositories consume those unchanged vectors as
+    their separate integration gates.
+15. The `DatabaseKitDeclarationContract` fixture target compiles
+    KeyPath-based model, index, field-selection, directory, and relationship
+    declarations with Swift 6.4 Embedded WASM, while expanded runtime metadata
+    retains field identities rather than KeyPath values.
 16. DatabaseWire exposes only its fixed operation descriptors; applications
     cannot construct a raw descriptor or conform arbitrary types to a binary
     Wire protocol.
