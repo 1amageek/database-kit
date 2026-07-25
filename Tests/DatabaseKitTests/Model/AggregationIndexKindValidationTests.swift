@@ -59,87 +59,82 @@ struct AggregationIndexKindValidationTests {
         }
     }
 
-    @Test("global and grouped field validation succeeds")
-    func validGlobalAndGroupedFieldsSucceed() throws {
-        #expect(
-            CountIndexKind<AggregationKindValidationRecord>(groupBy: []).indexName
-                == "AggregationKindValidationRecord_count"
-        )
-        try CountIndexKind<AggregationKindValidationRecord>.validateFields([])
-        try CountIndexKind<AggregationKindValidationRecord>.validateFields([
-            Self.stringField
-        ])
-
-        try SumIndexKind<AggregationKindValidationRecord, Int64>.validateFields([
-            Self.integerField
-        ])
-        try SumIndexKind<AggregationKindValidationRecord, Int64>.validateFields(
-            [Self.stringField, Self.integerField]
-        )
-
-        try AverageIndexKind<AggregationKindValidationRecord, Int64>.validateFields([
-            Self.integerField
-        ])
-        try AverageIndexKind<AggregationKindValidationRecord, Int64>.validateFields(
-            [Self.stringField, Self.integerField]
-        )
-
-        try MinIndexKind<AggregationKindValidationRecord, Int64>.validateFields([
-            Self.integerField
-        ])
-        try MinIndexKind<AggregationKindValidationRecord, Int64>.validateFields(
-            [Self.stringField, Self.integerField]
-        )
-
-        try MaxIndexKind<AggregationKindValidationRecord, Int64>.validateFields([
-            Self.integerField
-        ])
-        try MaxIndexKind<AggregationKindValidationRecord, Int64>.validateFields(
-            [Self.stringField, Self.integerField]
-        )
-    }
-
     @Test("value-bearing aggregation kinds reject zero fields with typed errors")
     func valueBearingKindsRejectZeroFields() {
         Self.expectInvalidFieldCount(index: "sum", expected: 1) {
-            try SumIndexKind<AggregationKindValidationRecord, Int64>.validateFields([])
+            _ = try IndexDescriptor(
+                name: "invalid_sum",
+                definition: .sum,
+                fields: [IndexField<AggregationKindValidationRecord>]()
+            )
         }
         Self.expectInvalidFieldCount(index: "average", expected: 1) {
-            try AverageIndexKind<AggregationKindValidationRecord, Int64>.validateFields([])
+            _ = try IndexDescriptor(
+                name: "invalid_average",
+                definition: .average,
+                fields: [IndexField<AggregationKindValidationRecord>]()
+            )
         }
         Self.expectInvalidFieldCount(index: "min", expected: 1) {
-            try MinIndexKind<AggregationKindValidationRecord, Int64>.validateFields([])
+            _ = try IndexDescriptor(
+                name: "invalid_minimum",
+                definition: .minimum,
+                fields: [IndexField<AggregationKindValidationRecord>]()
+            )
         }
         Self.expectInvalidFieldCount(index: "max", expected: 1) {
-            try MaxIndexKind<AggregationKindValidationRecord, Int64>.validateFields([])
+            _ = try IndexDescriptor(
+                name: "invalid_maximum",
+                definition: .maximum,
+                fields: [IndexField<AggregationKindValidationRecord>]()
+            )
         }
     }
 
     @Test("incompatible group and value fields fail explicitly")
     func incompatibleFieldsFailExplicitly() {
-        Self.expectUnsupportedField(index: "count", field: Self.objectField) {
-            try CountIndexKind<AggregationKindValidationRecord>.validateFields(
-                [Self.objectField]
+        Self.expectUnsupportedField(index: "count", fieldName: "unsupported") {
+            _ = try IndexDescriptor(
+                name: "invalid_count",
+                definition: .count,
+                fields: [
+                    AggregationKindValidationRecord.fields.unsupported.ascending
+                ]
             )
         }
-        Self.expectUnsupportedField(index: "sum", field: Self.stringField) {
-            try SumIndexKind<AggregationKindValidationRecord, Int64>.validateFields([
-                Self.stringField
-            ])
-        }
-        Self.expectUnsupportedField(index: "average", field: Self.objectField) {
-            try AverageIndexKind<AggregationKindValidationRecord, Int64>.validateFields(
-                [Self.objectField, Self.integerField]
+        Self.expectUnsupportedField(index: "sum", fieldName: "group") {
+            _ = try IndexDescriptor(
+                name: "invalid_sum",
+                definition: .sum,
+                fields: [AggregationKindValidationRecord.fields.group.ascending]
             )
         }
-        Self.expectUnsupportedField(index: "min", field: Self.objectField) {
-            try MinIndexKind<AggregationKindValidationRecord, Int64>.validateFields(
-                [Self.objectField]
+        Self.expectUnsupportedField(index: "average", fieldName: "unsupported") {
+            _ = try IndexDescriptor(
+                name: "invalid_average",
+                definition: .average,
+                fields: [
+                    AggregationKindValidationRecord.fields.unsupported.ascending,
+                    AggregationKindValidationRecord.fields.value.ascending,
+                ]
             )
         }
-        Self.expectUnsupportedField(index: "max", field: Self.objectField) {
-            try MaxIndexKind<AggregationKindValidationRecord, Int64>.validateFields(
-                [Self.objectField]
+        Self.expectUnsupportedField(index: "min", fieldName: "unsupported") {
+            _ = try IndexDescriptor(
+                name: "invalid_minimum",
+                definition: .minimum,
+                fields: [
+                    AggregationKindValidationRecord.fields.unsupported.ascending
+                ]
+            )
+        }
+        Self.expectUnsupportedField(index: "max", fieldName: "unsupported") {
+            _ = try IndexDescriptor(
+                name: "invalid_maximum",
+                definition: .maximum,
+                fields: [
+                    AggregationKindValidationRecord.fields.unsupported.ascending
+                ]
             )
         }
     }
@@ -160,7 +155,8 @@ struct AggregationIndexKindValidationTests {
         do {
             try operation()
             Issue.record("Expected invalidFieldCount for \(index)")
-        } catch let error as IndexValidationError {
+        } catch let declarationError as IndexDeclarationError {
+            let error = declarationError.validationError
             guard case .invalidFieldCount(
                 let actualIndex,
                 let actualExpected,
@@ -179,39 +175,25 @@ struct AggregationIndexKindValidationTests {
 
     private static func expectUnsupportedField(
         index: String,
-        field expectedField: FieldSchema,
+        fieldName expectedFieldName: String,
         operation: () throws -> Void
     ) {
         do {
             try operation()
             Issue.record("Expected unsupportedField for \(index)")
-        } catch let error as IndexValidationError {
+        } catch let declarationError as IndexDeclarationError {
+            let error = declarationError.validationError
             guard case .unsupportedField(let actualIndex, let actualField, _) = error else {
                 Issue.record("Expected unsupportedField for \(index), got \(error)")
                 return
             }
             #expect(actualIndex == index)
-            #expect(actualField == expectedField)
+            #expect(actualField.name == expectedFieldName)
         } catch {
             Issue.record("Expected IndexValidationError for \(index), got \(error)")
         }
     }
 
-    private static let stringField = FieldSchema(
-        name: "group",
-        fieldNumber: 1,
-        type: .string
-    )
-    private static let integerField = FieldSchema(
-        name: "value",
-        fieldNumber: 2,
-        type: .int64
-    )
-    private static let objectField = FieldSchema(
-        name: "unsupported",
-        fieldNumber: 3,
-        type: .object
-    )
 }
 
 @Persistable
@@ -273,4 +255,5 @@ private struct AggregationKindValidationRecord {
 
     var group: String
     var value: Int64
+    var unsupported: FieldObject
 }

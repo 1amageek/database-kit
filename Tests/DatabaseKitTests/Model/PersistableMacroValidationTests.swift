@@ -71,35 +71,6 @@ struct ModelMacroValidationTests {
         #expect(SimpleUser.allFields.first == "id")
     }
 
-    /// Test IndexKind types can be created
-    @Test("IndexKind types can be instantiated")
-    func indexKindInstantiation() throws {
-        // Verify that all built-in IndexKinds can be created with proper generic parameters
-        _ = ScalarIndexKind<SimpleUser>(
-            fields: [SimpleUser.fields.email.ascending]
-        )
-        _ = CountIndexKind<OrderedIndexProduct>(
-            groupBy: [OrderedIndexProduct.fields.category.ascending]
-        )
-        _ = SumIndexKind<OrderedIndexProduct, Double>(
-            groupBy: [OrderedIndexProduct.fields.category.ascending],
-            value: OrderedIndexProduct.fields.price.ascending
-        )
-        _ = MinIndexKind<OrderedIndexProduct, Double>(
-            groupBy: [OrderedIndexProduct.fields.category.ascending],
-            value: OrderedIndexProduct.fields.price.ascending
-        )
-        _ = MaxIndexKind<OrderedIndexProduct, Double>(
-            groupBy: [OrderedIndexProduct.fields.category.ascending],
-            value: OrderedIndexProduct.fields.price.ascending
-        )
-        _ = VersionIndexKind<SimpleUser>(
-            field: SimpleUser.fields.email.ascending
-        )
-
-        // All should succeed without throwing
-    }
-
     /// Test @Persistable with custom type parameter
     @Test("@Persistable type parameter")
     func persistableTypeParameter() {

@@ -109,15 +109,13 @@ struct SchemaValidationTests {
     func duplicateIndexNamesFailConstruction() throws {
         let first = try IndexDescriptor(
             name: "duplicate_index",
-            kind: ScalarIndexKind<SchemaValidationEntity>(
-                fields: [SchemaValidationEntity.fields.first.ascending]
-            )
+            definition: .scalar,
+            fields: [SchemaValidationEntity.fields.first.ascending]
         )
         let second = try IndexDescriptor(
             name: "duplicate_index",
-            kind: ScalarIndexKind<SchemaValidationEntity>(
-                fields: [SchemaValidationEntity.fields.second.ascending]
-            )
+            definition: .scalar,
+            fields: [SchemaValidationEntity.fields.second.ascending]
         )
 
         #expect(
@@ -208,14 +206,13 @@ struct SchemaValidationTests {
         ) {
             try IndexDescriptor(
                 name: "mismatched_descriptor",
-                kind: ScalarIndexKind<SchemaValidationEntity>(
-                    fields: [
-                        Field<SchemaValidationEntity, String>(
-                            identity: FieldIdentity(name: "first", number: 3),
-                            type: .string
-                        ).ascending
-                    ]
-                )
+                definition: .scalar,
+                fields: [
+                    Field<SchemaValidationEntity, String>(
+                        identity: FieldIdentity(name: "first", number: 3),
+                        type: .string
+                    ).ascending
+                ]
             )
         }
     }

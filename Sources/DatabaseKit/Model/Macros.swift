@@ -6,7 +6,7 @@ import DatabaseTypes
 /// **Supports all data model layers**:
 /// - Entity layer (RDB): Structured entities with indexes
 /// - DocumentLayer (DocumentDB): Flexible documents
-/// - VectorLayer (Vector search): Use #Index with VectorIndexKind
+/// - VectorLayer (Vector search): Use `#Index(.vector(...))`
 /// - GraphLayer (GraphDB): Define nodes and edges with relationships
 ///
 /// **Usage**:
@@ -107,10 +107,9 @@ public macro `field`<Root, Value>(
 ///
 /// The attached model macro validates field roles, generates stable field
 /// identities, and constructs key-path-free descriptors.
-/// - ScalarIndexKind: `{TypeName}_{field1}_{field2}`
-/// - CountIndexKind: `{TypeName}_count_{field1}_{field2}`
-/// - SumIndexKind: `{TypeName}_sum_{groupFields}__{valueField}`
-/// - etc.
+/// - Scalar definition: `{TypeName}_{field1}_{field2}`
+/// - Count definition: `{TypeName}_count_{field1}_{field2}`
+/// - Sum definition: `{TypeName}_sum_{groupFields}_{valueField}`
 ///
 /// **How it works**:
 /// 1. The declaration macro reads the source KeyPath literals.

@@ -23,7 +23,7 @@ import DatabaseTypes
 /// - Parameters that vary between deployments
 ///
 /// **When NOT to use** (use IndexKind properties instead):
-/// - Lightweight metadata (retention strategy for VersionIndexKind)
+/// - Lightweight declaration metadata such as version retention strategy
 /// - Compile-time constants
 /// - Index behavior that doesn't vary between deployments
 ///
@@ -55,8 +55,8 @@ public protocol IndexConfiguration: Sendable {
     /// Must match the `identifier` property of the IndexKind this configuration applies to.
     ///
     /// **Examples**:
-    /// - "vector" for VectorIndexKind
-    /// - "fulltext" for FullTextIndexKind
+    /// - "vector" for `.vector`
+    /// - "fulltext" for `.fullText`
     /// - "com.mycompany.custom" for custom IndexKinds
     static var kindIdentifier: String { get }
 

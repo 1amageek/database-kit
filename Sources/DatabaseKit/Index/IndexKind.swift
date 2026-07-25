@@ -25,22 +25,6 @@ import DatabaseTypes
 ///
 /// **Example**:
 /// ```swift
-/// // Built-in kind
-/// public struct ScalarIndexKind: IndexKind {
-///     public static let identifier = "scalar"
-///     public static let subspaceStructure = SubspaceStructure.flat
-///
-///     public static func validateFields(_ fields: [FieldSchema]) throws {
-///         for field in fields {
-///             guard field.supportsOrderedIndex else {
-///                 throw IndexValidationError.unsupportedField(...)
-///             }
-///         }
-///     }
-///
-///     public init() {}
-/// }
-///
 /// // Third-party kind (in third-party package)
 /// public struct BloomFilterIndexKind: IndexKind {
 ///     public static let identifier = "com.mycompany.bloom_filter"
@@ -92,10 +76,8 @@ public protocol IndexKind: Sendable, Hashable {
     /// Generated from the type name and field names.
     /// Can be overridden by specifying `name:` parameter in #Index macro.
     ///
-    /// **Examples**:
-    /// - ScalarIndexKind: "Product_category_price"
-    /// - CountIndexKind: "Order_count_status"
-    /// - VectorIndexKind: "Document_vector_embedding"
+    /// For example, a time-series extension can use
+    /// `"Event_timeseries_startsAt"`.
     var indexName: String { get }
 
     /// Model-scoped fields selected by this index.

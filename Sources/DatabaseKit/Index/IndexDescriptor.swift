@@ -47,10 +47,6 @@ public struct IndexDescriptor: Descriptor, Sendable {
     /// - Vector: HNSW similarity search
     /// - Count/Sum/Min/Max: Aggregation indexes
     ///
-    /// **Example**:
-    /// ```swift
-    /// let kind: any IndexKind = ScalarIndexKind()
-    /// ```
     public let kind: IndexKindMetadata
 
     /// Common options
@@ -85,8 +81,8 @@ public struct IndexDescriptor: Descriptor, Sendable {
     /// ```swift
     /// let descriptor = IndexDescriptor(
     ///     name: "User_email",
-    ///     kind: ScalarIndexKind<User>(
-    ///         fields: [User.fields.email.ascending]
+    ///     kind: TimeSeriesIndexKind<User>(
+    ///         field: User.fields.createdAt.ascending
     ///     ),
     ///     commonOptions: .init(unique: true)
     /// )

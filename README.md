@@ -256,72 +256,58 @@ struct Message {
 
 ## Built-in Index Kinds
 
-### Standard indexes
+Built-in indexes have one declaration surface: `IndexDefinition` through
+`#Index`. The generic `*IndexKind<Model>` duplicates are not part of version 1.
 
 ```swift
-ScalarIndexKind<Event>(
-    fields: [Event.fields.calendarID.ascending, Event.fields.startsAt.ascending]
-)
-CountIndexKind<Event>(groupBy: [Event.fields.calendarID])
-SumIndexKind<Event, Int64>(
-    groupBy: [Event.fields.calendarID],
-    value: Event.fields.attendeeCount
-)
-MinIndexKind<Event, Timestamp>(
-    groupBy: [Event.fields.calendarID],
-    value: Event.fields.startsAt
-)
-VersionIndexKind<Event>(field: Event.fields.id, strategy: .keepAll)
-BitmapIndexKind<Event>(field: Event.fields.status)
+@Persistable
+struct Event {
+    #Index(
+        .scalar,
+        fields: [\Event.calendarID, \Event.startsAt]
+    )
+    #Index(.count, groupBy: [\Event.calendarID])
+    #Index(
+        .sum,
+        groupBy: [\Event.calendarID],
+        value: \Event.attendeeCount
+    )
+    #Index(
+        .version(strategy: .keepAll),
+        field: \Event.id
+    )
+    #Index(
+        .vector(dimensions: 384, metric: .cosine),
+        embedding: \Event.embedding
+    )
+    #Index(
+        .fullText(tokenizer: .simple),
+        fields: [\Event.title, \Event.description]
+    )
+    #Index(.spatial(), location: \Event.location)
+    #Index(.rank(), field: \Event.attendeeCount)
+
+    var id: String
+    var calendarID: String
+    var startsAt: Timestamp
+    var attendeeCount: Int64
+    var embedding: Vector
+    var title: String
+    var description: String
+    var location: GeographicPoint
+}
 ```
 
-### Specialized indexes
-
-```swift
-VectorIndexKind<Event>(
-    embedding: Event.fields.embedding,
-    dimensions: 384,
-    metric: .cosine
-)
-FullTextIndexKind<Event>(
-    fields: [Event.fields.title, Event.fields.description],
-    tokenizer: .simple
-)
-SpatialIndexKind<Event>(location: Event.fields.location)
-RankIndexKind<Event, Int64>(field: Event.fields.attendeeCount)
-GraphIndexKind<Edge>(
-    from: Edge.fields.source,
-    edge: Edge.fields.label,
-    to: Edge.fields.target
-)
-RDFQuadIndexKind<Statement>(
-    subject: Statement.fields.subject,
-    predicate: Statement.fields.predicate,
-    object: Statement.fields.object
-)
-PermutedIndexKind<Pair>(
-    fields: [Pair.fields.first, Pair.fields.second],
-    permutation: .swapping(0, 1, size: 2)
-)
-```
-
-Concrete model declarations accept KeyPath syntax directly:
-
-```swift
-#Index(
-    .vector(dimensions: 256),
-    embedding: \Document.embedding
-)
-```
-
-The enclosing macro consumes `\Document.embedding` and emits the corresponding
+The enclosing macro consumes each KeyPath and emits the corresponding
 generated field identity. Protocol-level polymorphic declarations use
-`fieldNames`, which `@Polymorphable` verifies against protocol properties.
+logical property names, which `@Polymorphable` verifies against protocol
+properties.
 Neither runtime path retains a KeyPath.
 
 ## Custom Index Kinds
 
-Third parties can create custom index types by conforming to `IndexKind`:
+`IndexKind` is reserved for RDF, OWL, and third-party extension semantics that
+are not built into `IndexDefinition`:
 
 ```swift
 import DatabaseKit
@@ -330,8 +316,16 @@ public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
     public static var identifier: String { "com.mycompany.timeseries" }
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
-    public let fields: [IndexField<Root>]
+    public let indexFields: [IndexField<Root>]
     public let resolution: TimeResolution
+
+    public var indexName: String {
+        "\(Root.persistableType)_timeseries_\(fieldNames.joined(separator: "_"))"
+    }
+
+    public var metadata: [String: FieldValue] {
+        ["resolution": .string(resolution.rawValue)]
+    }
 
     public enum TimeResolution: String, Sendable, Hashable {
         case second, minute, hour, day
@@ -341,7 +335,7 @@ public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
         fields: [IndexField<Root>],
         resolution: TimeResolution = .minute
     ) {
-        self.fields = fields
+        self.indexFields = fields
         self.resolution = resolution
     }
 
@@ -366,21 +360,28 @@ public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
 }
 ```
 
-Application use passes a generated field:
+Application use passes a generated field through the custom descriptor path:
 
 ```swift
-TimeSeriesIndexKind<Event>(
-    fields: [Event.fields.startsAt.ascending],
-    resolution: .minute
+let timeSeries = try IndexDescriptor(
+    name: "Event_timeseries_startsAt",
+    kind: TimeSeriesIndexKind<Event>(
+        fields: [Event.fields.startsAt.ascending],
+        resolution: .minute
+    )
+)
+
+let schema = try Schema(
+    [Event.self],
+    indexDescriptors: [timeSeries]
 )
 ```
 
 Server-side maintenance is implemented and registered by
 [database-framework](https://github.com/1amageek/database-framework). Custom
 declarations expose only canonical `IndexKindMetadata`; runtime behavior remains
-outside this package. Concrete field types and declaration configuration are
-validated while the macro resolves the source KeyPath, and `Schema` rejects any
-invalid declaration before exposing the catalog.
+outside this package. `IndexDescriptor` validates concrete generated fields and
+configuration before `Schema` exposes the catalog.
 
 ## PersistableEnum
 
@@ -416,7 +417,7 @@ Ontology features are in the **Graph** module. Three usage levels can be combine
 |-------|-----------|----------|
 | **1. OntologyStore** | `OWLOntology`, `context.ontology` API | OWL reasoning, class hierarchy, property chain evaluation |
 | **2. Macros + OntologyStore** | Level 1 + `@OWLClass`, `@OWLObjectProperty`, `@OWLDataProperty` | Bind Persistable types to OWL concepts, IRI validation, SPARQL over tables |
-| **3. Macros + OntologyStore + Triples** | Level 2 + `GraphIndexKind` triple store | SPARQL federation across Persistable tables and RDF triples |
+| **3. Macros + OntologyStore + Triples** | Level 2 + graph and RDF index declarations | SPARQL federation across Persistable tables and RDF triples |
 
 ### Level 1: OntologyStore
 
@@ -496,7 +497,7 @@ let results = try await context.sparql()
 
 **`@OWLClass(_ iri: String)`** — Maps a Persistable type to an OWL class. Generates `OWLClassEntity` conformance, `ontologyClassIRI`, and `ontologyPropertyDescriptors`.
 
-**`@OWLObjectProperty(_ iri: String, from: String, to: String)`** — Maps a Persistable type to an OWL ObjectProperty with endpoint fields. Generates `OWLObjectPropertyEntity` conformance and a `GraphIndexKind.adjacency` index.
+**`@OWLObjectProperty(_ iri: String, from: String, to: String)`** — Maps a Persistable type to an OWL ObjectProperty with endpoint fields. Generates `OWLObjectPropertyEntity` conformance and an adjacency graph index declaration with an implicit label.
 
 **`@OWLDataProperty(_ iri: String, ...)`** — Annotates a field with an OWL datatype property IRI.
 
