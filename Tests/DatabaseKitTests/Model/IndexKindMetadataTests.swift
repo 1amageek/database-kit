@@ -84,6 +84,35 @@ struct IndexKindMetadataTests {
         }
     }
 
+    @Test("Property graph restores an implicit edge label")
+    func propertyGraphRestoresImplicitEdgeLabel() throws {
+        let metadata = IndexKindMetadata(
+            identifier: "graph",
+            subspaceStructure: .hierarchical,
+            fields: [
+                IndexFieldMetadata(
+                    identity: FieldIdentity(name: "source", number: 1)
+                ),
+                IndexFieldMetadata(
+                    identity: FieldIdentity(name: "target", number: 2)
+                ),
+            ],
+            metadata: [
+                "strategy": .string("adjacency"),
+                "hasEdgeField": .bool(false),
+                "hasGraphField": .bool(false),
+            ]
+        )
+
+        let definition = try IndexDefinition(metadata: metadata)
+        guard case .graph(let strategy, let label) = definition else {
+            Issue.record("Expected graph definition")
+            return
+        }
+        #expect(strategy == .adjacency)
+        #expect(label == .implicit)
+    }
+
     private func makeMetadata(
         _ values: [String: FieldValue]
     ) -> IndexKindMetadata {

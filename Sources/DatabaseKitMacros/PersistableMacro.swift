@@ -573,9 +573,8 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                             let reverseIndexInit = """
                                 IndexDescriptor(
                                     name: "\(reverseIndexName)",
-                                    kind: ScalarIndexKind<\(structName)>(
-                                        fields: [\(structName).fields.\(fieldName).ascending]
-                                    ),
+                                    definition: .scalar,
+                                    fields: [\(structName).fields.\(fieldName).ascending],
                                     commonOptions: .init()
                                 )
                             """
@@ -595,10 +594,14 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 let graphIndexInit = """
                     IndexDescriptor(
                         name: "\(graphIndexName)",
-                        kind: GraphIndexKind<\(structName)>.adjacency(
-                            source: \(structName).fields.\(objPropInfo.fromField).ascending,
-                            target: \(structName).fields.\(objPropInfo.toField).ascending
+                        definition: .graph(
+                            strategy: .adjacency,
+                            label: .implicit
                         ),
+                        fields: [
+                            \(structName).fields.\(objPropInfo.fromField).ascending,
+                            \(structName).fields.\(objPropInfo.toField).ascending
+                        ],
                         commonOptions: .init()
                     )
                 """
@@ -1282,11 +1285,24 @@ func selectedIndexFieldPaths(
     case "spatial":
         return [try one("location")]
     case "graph":
-        var fields = [
-            try one("from"),
-            try one("edge"),
-            try one("to"),
-        ]
+        let usesImplicitLabel =
+            definition.arguments["label"]?.contains("implicit") == true
+        var fields = [try one("from")]
+        if usesImplicitLabel {
+            guard roles["edge"]?.isEmpty != false else {
+                throw DiagnosticsError(diagnostics: [
+                    Diagnostic(
+                        node: node,
+                        message: MacroExpansionErrorMessage(
+                            ".graph(label: .implicit) does not accept an 'edge' field"
+                        )
+                    )
+                ])
+            }
+        } else {
+            fields.append(try one("edge"))
+        }
+        fields.append(try one("to"))
         if let graph = roles["graph"], !graph.isEmpty {
             guard graph.count == 1 else {
                 throw DiagnosticsError(diagnostics: [

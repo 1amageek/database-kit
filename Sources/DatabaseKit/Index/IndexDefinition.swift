@@ -39,7 +39,10 @@ public enum IndexDefinition: Sendable {
     )
     case rank(bucketSize: Int = 100)
     case permuted(permutation: Permutation)
-    case graph(strategy: GraphIndexStrategy = .adjacency)
+    case graph(
+        strategy: PropertyGraphIndexStrategy = .adjacency,
+        label: PropertyGraphLabelSource = .field
+    )
 }
 
 extension IndexDefinition {
@@ -388,12 +391,13 @@ extension IndexDefinition {
                 reason: "Permuted index requires fields with canonical ordering"
             )
 
-        case .graph:
-            try requireMinimumCount(3)
-            guard schemas.count <= 4 else {
+        case .graph(_, let label):
+            let minimumCount = label == .field ? 3 : 2
+            let maximumCount = minimumCount + 1
+            guard (minimumCount...maximumCount).contains(schemas.count) else {
                 throw .invalidFieldCount(
                     index: identifier,
-                    expected: 4,
+                    expected: minimumCount,
                     actual: schemas.count
                 )
             }
@@ -503,11 +507,13 @@ extension IndexDefinition {
                     permutation.indices.map { .int64(Int64($0)) }
                 )
             ]
-        case .graph(let strategy):
+        case .graph(let strategy, let label):
             return [
                 "strategy": .string(strategy.rawValue),
-                "hasEdgeField": .bool(true),
-                "hasGraphField": .bool(schemas.count == 4),
+                "hasEdgeField": .bool(label == .field),
+                "hasGraphField": .bool(
+                    schemas.count == (label == .field ? 4 : 3)
+                ),
             ]
         }
     }
@@ -796,28 +802,24 @@ extension IndexDefinition {
                     "hasGraphField",
                 ]
             )
-            try kind.validateFieldCount(minimum: 3, maximum: 4)
             let strategyValue = try kind.requireString("strategy")
-            guard let strategy = GraphIndexStrategy(rawValue: strategyValue) else {
+            guard let strategy = PropertyGraphIndexStrategy(
+                rawValue: strategyValue
+            ) else {
                 throw .invalidMetadata(
                     identifier: kind.identifier,
                     key: "strategy"
                 )
             }
-            guard try kind.requireBool("hasEdgeField") else {
-                throw .invalidMetadata(
-                    identifier: kind.identifier,
-                    key: "hasEdgeField"
-                )
-            }
-            guard try kind.requireBool("hasGraphField")
-                    == (kind.fields.count == 4) else {
-                throw .invalidMetadata(
-                    identifier: kind.identifier,
-                    key: "hasGraphField"
-                )
-            }
-            self = .graph(strategy: strategy)
+            let hasEdgeField = try kind.requireBool("hasEdgeField")
+            let hasGraphField = try kind.requireBool("hasGraphField")
+            let expectedFieldCount =
+                2 + (hasEdgeField ? 1 : 0) + (hasGraphField ? 1 : 0)
+            try kind.validateFieldCount(expectedFieldCount)
+            self = .graph(
+                strategy: strategy,
+                label: hasEdgeField ? .field : .implicit
+            )
 
         default:
             throw .unknownIdentifier(kind.identifier)

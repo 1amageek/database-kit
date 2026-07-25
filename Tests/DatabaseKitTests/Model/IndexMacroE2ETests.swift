@@ -155,11 +155,12 @@ struct IndexMacroE2ETests {
                 named: "e2e_graph_subject_predicate_object_graph"
             ).kind
         )
-        guard case .graph(let strategy) = graph else {
+        guard case .graph(let strategy, let label) = graph else {
             Issue.record("Expected graph definition")
             return
         }
         #expect(strategy == .hexastore)
+        #expect(label == .field)
 
     }
 
