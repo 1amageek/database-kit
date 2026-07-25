@@ -380,14 +380,6 @@ struct RDFTermEncodingValidator {
             let start = index
             let decoded = try readScalar(at: index, end: range.upperBound)
             let scalar = decoded.scalar
-            if isForbiddenBidirectionalFormattingCharacter(scalar) {
-                throw .invalidIRI(
-                    .forbiddenBidirectionalFormattingCharacter(
-                        scalar: scalar,
-                        byteOffset: start - sourceStart
-                    )
-                )
-            }
             if scalar == 0x25 {
                 guard start + 2 < range.upperBound,
                       isASCIIHex(bytes[start + 1]),
@@ -651,13 +643,6 @@ struct RDFTermEncodingValidator {
         default:
             return false
         }
-    }
-
-    private func isForbiddenBidirectionalFormattingCharacter(
-        _ scalar: UInt32
-    ) -> Bool {
-        scalar == 0x200E || scalar == 0x200F
-            || (scalar >= 0x202A && scalar <= 0x202E)
     }
 
     private enum IRIComponent {

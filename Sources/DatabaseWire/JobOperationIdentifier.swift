@@ -1,7 +1,7 @@
 import DatabaseTypes
 /// Canonical identifier for one resumable job operation.
-public struct DatabaseJobOperationIdentifier:
-    DatabaseWireValue,
+public struct JobOperationIdentifier:
+    WireValue,
     Hashable {
     public static let maximumKindUTF8Bytes = 128
 
@@ -30,7 +30,7 @@ public struct DatabaseJobOperationIdentifier:
         self.kind = kind
     }
 
-    public func encode(
+    func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         guard Self.supportsJobs(family) else {
@@ -43,7 +43,7 @@ public struct DatabaseJobOperationIdentifier:
         try writer.writeString(kind)
     }
 
-    public init(
+    init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         try self.init(
@@ -55,7 +55,7 @@ public struct DatabaseJobOperationIdentifier:
     }
 
     public func lexicographicallyPrecedes(
-        _ other: DatabaseJobOperationIdentifier
+        _ other: JobOperationIdentifier
     ) -> Bool {
         if family.rawValue != other.family.rawValue {
             return family.rawValue < other.family.rawValue

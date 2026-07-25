@@ -413,7 +413,7 @@ private extension QueryIRExpressionWireDecoder {
                     .regex(
                         value,
                         pattern: try reader.readString(),
-                        flags: try QueryIRWireCodec.readOptionalString(from: &reader)
+                        flags: try QueryIRWireFormat.readOptionalString(from: &reader)
                     )
                 )
 
@@ -478,7 +478,7 @@ private extension QueryIRExpressionWireDecoder {
                     .aggregate(
                         .groupConcat(
                             value,
-                            separator: try QueryIRWireCodec.readOptionalString(from: &reader),
+                            separator: try QueryIRWireFormat.readOptionalString(from: &reader),
                             distinct: try reader.readBool()
                         )
                     )
@@ -614,7 +614,7 @@ private extension QueryIRExpressionWireDecoder {
                 expressions.append(
                     .cast(
                         value,
-                        targetType: try QueryIRWireCodec.decodeDataType(from: &reader)
+                        targetType: try QueryIRWireFormat.decodeDataType(from: &reader)
                     )
                 )
 
@@ -638,9 +638,9 @@ private extension QueryIRExpressionWireDecoder {
 
             case .selectAfterSource(let projection):
                 let source = try popDataSource()
-                let accessPath = try QueryIRWireCodec.readOptional(
+                let accessPath = try QueryIRWireFormat.readOptional(
                     from: &reader,
-                    decode: QueryIRWireCodec.decodeAccessPath
+                    decode: QueryIRWireFormat.decodeAccessPath
                 )
                 decodingSteps.append(
                     .selectAdvance(
@@ -704,7 +704,7 @@ private extension QueryIRExpressionWireDecoder {
                         distinct: distinct,
                         subqueries: subqueries,
                         reduced: try reader.readBool(),
-                        dataset: try QueryIRWireCodec.decodeSPARQLDataset(from: &reader)
+                        dataset: try QueryIRWireFormat.decodeSPARQLDataset(from: &reader)
                     )
                 )
 
@@ -728,7 +728,7 @@ private extension QueryIRExpressionWireDecoder {
                 projectionItems.append(
                     ProjectionItem(
                         try popExpression(),
-                        alias: try QueryIRWireCodec.readOptionalString(from: &reader)
+                        alias: try QueryIRWireFormat.readOptionalString(from: &reader)
                     )
                 )
 
@@ -753,7 +753,7 @@ private extension QueryIRExpressionWireDecoder {
 
             case .namedSubquery:
                 let name = try reader.readString()
-                let columns = try QueryIRWireCodec.readOptionalStrings(from: &reader)
+                let columns = try QueryIRWireFormat.readOptionalStrings(from: &reader)
                 decodingSteps.append(.namedSubqueryTail(name: name, columns: columns))
                 decodingSteps.append(.select)
 
@@ -812,7 +812,7 @@ private extension QueryIRExpressionWireDecoder {
                                 left: left,
                                 right: right,
                                 condition: .using(
-                                    try QueryIRWireCodec.readStrings(from: &reader)
+                                    try QueryIRWireFormat.readStrings(from: &reader)
                                 )
                             )
                         )
@@ -911,7 +911,7 @@ private extension QueryIRExpressionWireDecoder {
 
             case .graphPatternBindAfterPattern:
                 let pattern = try popGraphPattern()
-                let variable = try QueryIRWireCodec.readSPARQLVariableName(
+                let variable = try QueryIRWireFormat.readSPARQLVariableName(
                     from: &reader
                 )
                 decodingSteps.append(.graphPatternBindFinish(pattern, variable))
@@ -972,7 +972,7 @@ private extension QueryIRExpressionWireDecoder {
                 decodingSteps.append(.aggregateBindingCursor(cursor))
 
             case .aggregateBinding:
-                let variable = try QueryIRWireCodec.readSPARQLVariableName(
+                let variable = try QueryIRWireFormat.readSPARQLVariableName(
                     from: &reader
                 )
                 decodingSteps.append(.aggregateBindingFinish(variable))
@@ -1043,7 +1043,7 @@ private extension QueryIRExpressionWireDecoder {
                         graphName: graphName,
                         matchPattern: matchPattern,
                         columns: columns,
-                        alias: try QueryIRWireCodec.readOptionalString(from: &reader)
+                        alias: try QueryIRWireFormat.readOptionalString(from: &reader)
                     )
                 )
 
@@ -1067,7 +1067,7 @@ private extension QueryIRExpressionWireDecoder {
                 )
 
             case .pathPattern:
-                let pathVariable = try QueryIRWireCodec.readOptionalString(
+                let pathVariable = try QueryIRWireFormat.readOptionalString(
                     from: &reader
                 )
                 let count = try reader.readCount()
@@ -1260,8 +1260,8 @@ private extension QueryIRExpressionWireDecoder {
                 )
                 decodingSteps.append(.sortKeyCursor(CollectionCursor(count: count)))
             case 4:
-                let limit = try QueryIRWireCodec.readOptionalUInt64(from: &reader)
-                let offset = try QueryIRWireCodec.readOptionalUInt64(from: &reader)
+                let limit = try QueryIRWireFormat.readOptionalUInt64(from: &reader)
+                let offset = try QueryIRWireFormat.readOptionalUInt64(from: &reader)
                 let distinct = try reader.readBool()
                 let hasSubqueries = try reader.readBool()
                 decodingSteps.append(
@@ -1321,7 +1321,7 @@ private extension QueryIRExpressionWireDecoder {
             switch try reader.readUInt8() {
             case 0:
                 dataSources.append(
-                    .table(try QueryIRWireCodec.decodeTableRef(from: &reader))
+                    .table(try QueryIRWireFormat.decodeTableRef(from: &reader))
                 )
             case 1:
                 dataSources.append(
@@ -1329,7 +1329,7 @@ private extension QueryIRExpressionWireDecoder {
                         LogicalSourceRef(
                             kindIdentifier: try reader.readString(),
                             identifier: try reader.readString(),
-                            alias: try QueryIRWireCodec.readOptionalString(from: &reader)
+                            alias: try QueryIRWireFormat.readOptionalString(from: &reader)
                         )
                     )
                 )
@@ -1341,17 +1341,17 @@ private extension QueryIRExpressionWireDecoder {
                 decodingSteps.append(.dataSourceJoinAfterLeft(type))
                 decodingSteps.append(.dataSource)
             case 4:
-                let rows = try QueryIRWireCodec.readArray(from: &reader) {
+                let rows = try QueryIRWireFormat.readArray(from: &reader) {
                     (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> [Literal] in
-                    try QueryIRWireCodec.readArray(
+                    try QueryIRWireFormat.readArray(
                         from: &reader,
-                        decode: QueryIRWireCodec.decodeLiteral
+                        decode: QueryIRWireFormat.decodeLiteral
                     )
                 }
                 dataSources.append(
                     .values(
                         rows,
-                        columnNames: try QueryIRWireCodec.readOptionalStrings(
+                        columnNames: try QueryIRWireFormat.readOptionalStrings(
                             from: &reader
                         )
                     )
@@ -1363,11 +1363,11 @@ private extension QueryIRExpressionWireDecoder {
                 decodingSteps.append(.dataSourceGraphPatternFinish)
                 decodingSteps.append(.graphPattern)
             case 7:
-                let name = try QueryIRWireCodec.readSPARQLIRI(from: &reader)
+                let name = try QueryIRWireFormat.readSPARQLIRI(from: &reader)
                 decodingSteps.append(.dataSourceNamedGraphFinish(name))
                 decodingSteps.append(.graphPattern)
             case 8:
-                let endpoint = try QueryIRWireCodec.readSPARQLIRI(from: &reader)
+                let endpoint = try QueryIRWireFormat.readSPARQLIRI(from: &reader)
                 decodingSteps.append(.dataSourceServiceFinish(endpoint))
                 decodingSteps.append(.graphPattern)
             case 9:
@@ -1415,7 +1415,7 @@ private extension QueryIRExpressionWireDecoder {
             decodingSteps.append(.endNestedValue)
             switch try reader.readUInt8() {
             case 0:
-                let elements = try QueryIRWireCodec.readArray(
+                let elements = try QueryIRWireFormat.readArray(
                     from: &reader
                 ) {
                     (
@@ -1424,18 +1424,18 @@ private extension QueryIRExpressionWireDecoder {
                     switch try reader.readUInt8() {
                     case 0:
                         return .triple(
-                            try QueryIRWireCodec.decodeTriplePattern(
+                            try QueryIRWireFormat.decodeTriplePattern(
                                 from: &reader
                             )
                         )
                     case 1:
                         return .propertyPath(
                             SPARQLPropertyPathPattern(
-                                subject: try QueryIRWireCodec
+                                subject: try QueryIRWireFormat
                                     .decodeSPARQLTerm(from: &reader),
-                                path: try QueryIRWireCodec
+                                path: try QueryIRWireFormat
                                     .decodePropertyPath(from: &reader),
-                                object: try QueryIRWireCodec
+                                object: try QueryIRWireFormat
                                     .decodeSPARQLTerm(from: &reader)
                             )
                         )
@@ -1461,28 +1461,28 @@ private extension QueryIRExpressionWireDecoder {
             case 5:
                 enqueueBinaryGraphPatternDecodingSteps(.minus, decodingSteps: &decodingSteps)
             case 6:
-                let name = try QueryIRWireCodec.decodeSPARQLTerm(from: &reader)
+                let name = try QueryIRWireFormat.decodeSPARQLTerm(from: &reader)
                 decodingSteps.append(.graphPatternGraphFinish(name))
                 decodingSteps.append(.graphPattern)
             case 7:
-                let endpoint = try QueryIRWireCodec.readSPARQLIRI(from: &reader)
+                let endpoint = try QueryIRWireFormat.readSPARQLIRI(from: &reader)
                 decodingSteps.append(.graphPatternServiceFinish(endpoint))
                 decodingSteps.append(.graphPattern)
             case 8:
                 decodingSteps.append(.graphPatternBindAfterPattern)
                 decodingSteps.append(.graphPattern)
             case 9:
-                let variables = try QueryIRWireCodec.readArray(from: &reader) {
+                let variables = try QueryIRWireFormat.readArray(from: &reader) {
                     (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> String in
-                    try QueryIRWireCodec.readSPARQLVariableName(from: &reader)
+                    try QueryIRWireFormat.readSPARQLVariableName(from: &reader)
                 }
-                let bindings = try QueryIRWireCodec.readArray(from: &reader) {
+                let bindings = try QueryIRWireFormat.readArray(from: &reader) {
                     (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> [Literal?] in
-                    try QueryIRWireCodec.readArray(from: &reader) {
+                    try QueryIRWireFormat.readArray(from: &reader) {
                         (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> Literal? in
-                        try QueryIRWireCodec.readOptional(
+                        try QueryIRWireFormat.readOptional(
                             from: &reader,
-                            decode: QueryIRWireCodec.decodeLiteral
+                            decode: QueryIRWireFormat.decodeLiteral
                         )
                     }
                 }
@@ -1540,8 +1540,8 @@ private extension QueryIRExpressionWireDecoder {
             reader: inout DatabaseWireReader,
             decodingSteps: inout [DecodingStep]
         ) throws(DatabaseWireError) {
-            let variable = try QueryIRWireCodec.readOptionalString(from: &reader)
-            let labels = try QueryIRWireCodec.readOptionalStrings(from: &reader)
+            let variable = try QueryIRWireFormat.readOptionalString(from: &reader)
+            let labels = try QueryIRWireFormat.readOptionalStrings(from: &reader)
             let hasProperties = try reader.readBool()
             decodingSteps.append(
                 .nodePatternFinish(
@@ -1564,8 +1564,8 @@ private extension QueryIRExpressionWireDecoder {
             reader: inout DatabaseWireReader,
             decodingSteps: inout [DecodingStep]
         ) throws(DatabaseWireError) {
-            let variable = try QueryIRWireCodec.readOptionalString(from: &reader)
-            let labels = try QueryIRWireCodec.readOptionalStrings(from: &reader)
+            let variable = try QueryIRWireFormat.readOptionalString(from: &reader)
+            let labels = try QueryIRWireFormat.readOptionalStrings(from: &reader)
             let hasProperties = try reader.readBool()
             decodingSteps.append(
                 .edgePatternFinish(
@@ -1593,14 +1593,14 @@ private extension QueryIRExpressionWireDecoder {
             switch tag {
             case 0:
                 expressions.append(
-                    .literal(try QueryIRWireCodec.decodeLiteral(from: &reader))
+                    .literal(try QueryIRWireFormat.decodeLiteral(from: &reader))
                 )
                 reader.endNestedValue()
             case 1:
                 expressions.append(
                     .column(
                         ColumnRef(
-                            table: try QueryIRWireCodec.readOptionalString(from: &reader),
+                            table: try QueryIRWireFormat.readOptionalString(from: &reader),
                             column: try reader.readString()
                         )
                     )
@@ -1610,7 +1610,7 @@ private extension QueryIRExpressionWireDecoder {
                 expressions.append(
                     .variable(
                         Variable(
-                            try QueryIRWireCodec.readSPARQLVariableName(from: &reader)
+                            try QueryIRWireFormat.readSPARQLVariableName(from: &reader)
                         )
                     )
                 )
@@ -1636,7 +1636,7 @@ private extension QueryIRExpressionWireDecoder {
                 expressions.append(
                     .bound(
                         Variable(
-                            try QueryIRWireCodec.readSPARQLVariableName(from: &reader)
+                            try QueryIRWireFormat.readSPARQLVariableName(from: &reader)
                         )
                     )
                 )
@@ -2031,11 +2031,11 @@ private extension QueryIRExpressionWireDecoder {
         ) throws(DatabaseWireError) -> PathQuantifier {
             switch try reader.readUInt8() {
             case 0:
-                return .exactly(try QueryIRWireCodec.readInt(from: &reader))
+                return .exactly(try QueryIRWireFormat.readInt(from: &reader))
             case 1:
                 return .range(
-                    min: try QueryIRWireCodec.readOptionalInt(from: &reader),
-                    max: try QueryIRWireCodec.readOptionalInt(from: &reader)
+                    min: try QueryIRWireFormat.readOptionalInt(from: &reader),
+                    max: try QueryIRWireFormat.readOptionalInt(from: &reader)
                 )
             case 2: return .zeroOrMore
             case 3: return .oneOrMore
@@ -2055,7 +2055,7 @@ private extension QueryIRExpressionWireDecoder {
             case 4: return .anyShortest
             case 5: return .allShortest
             case 6:
-                return .shortestK(try QueryIRWireCodec.readInt(from: &reader))
+                return .shortestK(try QueryIRWireFormat.readInt(from: &reader))
             case let tag: throw .invalidValueTag(tag)
             }
         }

@@ -1,8 +1,8 @@
 import DatabaseKit
 import DatabaseTypes
 
-extension SHACLPath: DatabaseWireValue {
-    public func encode(
+extension SHACLPath: WireValue {
+    func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         var pending: [EncodingStep] = [.path(self)]
@@ -61,7 +61,7 @@ extension SHACLPath: DatabaseWireValue {
         }
     }
 
-    public init(
+    init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         var frames: [DecodingFrame] = []

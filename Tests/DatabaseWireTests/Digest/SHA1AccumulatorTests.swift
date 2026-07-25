@@ -1,4 +1,4 @@
- import DatabaseWire
+@testable import DatabaseWire
 import Testing
 
 @Suite("SHA-1 Accumulator Tests")

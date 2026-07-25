@@ -5,7 +5,7 @@ public enum CommandExecuteOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.commandExecute
     public typealias Request = CommandRequest
 
-    public enum Response: DatabaseWireValue, Hashable {
+    public enum Response: WireValue, Hashable {
         case read(
             output: FieldValue,
             continuation: ByteString?
@@ -25,7 +25,7 @@ public enum CommandExecuteOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try access.encode(into: &writer)
@@ -40,7 +40,7 @@ public enum CommandExecuteOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             switch try CommandAccess(from: &reader) {

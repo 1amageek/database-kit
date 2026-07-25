@@ -106,14 +106,14 @@ private extension QueryIRDataTypeWireCodec {
             writer.writeUInt8(5)
         case .decimal(let precision, let scale):
             writer.writeUInt8(6)
-            try QueryIRWireCodec.writeOptionalInt(precision, into: &writer)
-            try QueryIRWireCodec.writeOptionalInt(scale, into: &writer)
+            try QueryIRWireFormat.writeOptionalInt(precision, into: &writer)
+            try QueryIRWireFormat.writeOptionalInt(scale, into: &writer)
         case .char(let length):
             writer.writeUInt8(7)
-            try QueryIRWireCodec.writeOptionalInt(length, into: &writer)
+            try QueryIRWireFormat.writeOptionalInt(length, into: &writer)
         case .varchar(let length):
             writer.writeUInt8(8)
-            try QueryIRWireCodec.writeOptionalInt(length, into: &writer)
+            try QueryIRWireFormat.writeOptionalInt(length, into: &writer)
         case .text:
             writer.writeUInt8(9)
         case .date:
@@ -128,10 +128,10 @@ private extension QueryIRDataTypeWireCodec {
             writer.writeUInt8(13)
         case .binary(let length):
             writer.writeUInt8(14)
-            try QueryIRWireCodec.writeOptionalInt(length, into: &writer)
+            try QueryIRWireFormat.writeOptionalInt(length, into: &writer)
         case .varbinary(let length):
             writer.writeUInt8(15)
-            try QueryIRWireCodec.writeOptionalInt(length, into: &writer)
+            try QueryIRWireFormat.writeOptionalInt(length, into: &writer)
         case .blob:
             writer.writeUInt8(16)
         case .json:
@@ -168,16 +168,16 @@ private extension QueryIRDataTypeWireCodec {
             return .doublePrecision
         case 6:
             return .decimal(
-                precision: try QueryIRWireCodec.readOptionalInt(from: &reader),
-                scale: try QueryIRWireCodec.readOptionalInt(from: &reader)
+                precision: try QueryIRWireFormat.readOptionalInt(from: &reader),
+                scale: try QueryIRWireFormat.readOptionalInt(from: &reader)
             )
         case 7:
             return .char(
-                length: try QueryIRWireCodec.readOptionalInt(from: &reader)
+                length: try QueryIRWireFormat.readOptionalInt(from: &reader)
             )
         case 8:
             return .varchar(
-                length: try QueryIRWireCodec.readOptionalInt(from: &reader)
+                length: try QueryIRWireFormat.readOptionalInt(from: &reader)
             )
         case 9:
             return .text
@@ -191,11 +191,11 @@ private extension QueryIRDataTypeWireCodec {
             return .interval
         case 14:
             return .binary(
-                length: try QueryIRWireCodec.readOptionalInt(from: &reader)
+                length: try QueryIRWireFormat.readOptionalInt(from: &reader)
             )
         case 15:
             return .varbinary(
-                length: try QueryIRWireCodec.readOptionalInt(from: &reader)
+                length: try QueryIRWireFormat.readOptionalInt(from: &reader)
             )
         case 16:
             return .blob

@@ -1,7 +1,7 @@
 import DatabaseTypes
 
 extension RDFLiteral {
-    public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+    func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
         try writer.writeString(lexicalForm)
         switch annotation {
         case .typed(let datatype):
@@ -17,7 +17,7 @@ extension RDFLiteral {
         }
     }
 
-    public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
         let lexicalForm = try reader.readString()
         switch try reader.readUInt8() {
         case 0:

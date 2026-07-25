@@ -1,5 +1,6 @@
+import DatabaseKit
 import DatabaseTypes
-import DatabaseWire
+@testable import DatabaseWire
 import Testing
 
 @Suite("Canonical DatabaseWire")
@@ -15,7 +16,7 @@ struct CanonicalDatabaseWireTests {
             maximumNestingDepth: 64,
             maximumObjectCount: 1_024
         )
-        let frame = try DatabaseEnvelopeCodec.encode(
+        let frame = try EnvelopeWireFormat.encode(
             request: DatabaseWireRequestEnvelope(
                 requestID: 0x0102_0304_0506_0708,
                 operation: .queryExecute,
@@ -26,18 +27,18 @@ struct CanonicalDatabaseWireTests {
             limits: limits
         )
 
-        let header = try DatabaseEnvelopeCodec.decodeRequestHeader(frame)
+        let header = try EnvelopeWireFormat.decodeRequestHeader(frame)
 
         #expect(header.requestID == 0x0102_0304_0506_0708)
         #expect(header.operation == .queryExecute)
         #expect(throws: DatabaseWireError.self) {
-            _ = try DatabaseEnvelopeCodec.decodeRequest(frame)
+            _ = try EnvelopeWireFormat.decodeRequest(frame)
         }
     }
 
     @Test("fixed response header validates message direction")
     func responseHeaderValidatesMessageDirection() throws {
-        let request = try DatabaseEnvelopeCodec.encode(
+        let request = try EnvelopeWireFormat.encode(
             request: DatabaseWireRequestEnvelope(
                 requestID: 7,
                 operation: .capabilitiesDescribe,
@@ -48,7 +49,7 @@ struct CanonicalDatabaseWireTests {
         #expect(
             throws: DatabaseWireError.invalidMessageKind(2)
         ) {
-            _ = try DatabaseEnvelopeCodec.decodeResponseHeader(request)
+            _ = try EnvelopeWireFormat.decodeResponseHeader(request)
         }
     }
 
@@ -60,7 +61,7 @@ struct CanonicalDatabaseWireTests {
             payload: []
         )
 
-        let encoded = try DatabaseEnvelopeCodec.encode(request: request)
+        let encoded = try EnvelopeWireFormat.encode(request: request)
 
         #expect(encoded == [
             0x44, 0x42, 0x57, 0x52,
@@ -72,7 +73,7 @@ struct CanonicalDatabaseWireTests {
             0x00,
             0x00, 0x00, 0x00, 0x00,
         ])
-        #expect(try DatabaseEnvelopeCodec.decodeRequest(encoded) == request)
+        #expect(try EnvelopeWireFormat.decodeRequest(encoded) == request)
     }
 
     @Test("FieldValue preserves every canonical value family")
@@ -232,7 +233,7 @@ struct CanonicalDatabaseWireTests {
             .rdfGraph(
                 QueryExecuteOperation.GraphPage(
                     triples: [
-                        RDFQuadValue(
+                        RDFQuad(
                             subject: .iri(try RDFIRI("urn:event:1")),
                             predicate: RDFPredicateIRI(
                                 try RDFIRI("urn:calendar:startsAt")
@@ -252,9 +253,9 @@ struct CanonicalDatabaseWireTests {
         ]
 
         for result in results {
-            let encoded = try DatabaseEnvelopeCodec.encode(result)
+            let encoded = try EnvelopeWireFormat.encode(result)
             #expect(
-                try DatabaseEnvelopeCodec.decode(
+                try EnvelopeWireFormat.decode(
                     QueryExecuteOperation.Response.self,
                     from: encoded
                 ) == result
@@ -306,17 +307,17 @@ struct CanonicalDatabaseWireTests {
         )
 
         for value in [recordResponse, rdfResponse] {
-            let encoded = try DatabaseEnvelopeCodec.encode(value)
+            let encoded = try EnvelopeWireFormat.encode(value)
             #expect(
-                try DatabaseEnvelopeCodec.decode(
+                try EnvelopeWireFormat.decode(
                     MutationExecuteOperation.Response.self,
                     from: encoded
                 ) == value
             )
         }
-        let encodedRequest = try DatabaseEnvelopeCodec.encode(request)
+        let encodedRequest = try EnvelopeWireFormat.encode(request)
         #expect(
-            try DatabaseEnvelopeCodec.decode(
+            try EnvelopeWireFormat.decode(
                 MutationExecuteOperation.Request.self,
                 from: encodedRequest
             ) == request
@@ -330,23 +331,23 @@ struct CanonicalDatabaseWireTests {
             operation: .capabilitiesDescribe,
             payload: []
         )
-        var unsupportedVersion = try DatabaseEnvelopeCodec.encode(
+        var unsupportedVersion = try EnvelopeWireFormat.encode(
             request: request
         ).copyBytes()
         unsupportedVersion[4] = 2
         #expect(throws: DatabaseWireError.unsupportedProtocolVersionValue(2)) {
-            _ = try DatabaseEnvelopeCodec.decodeRequest(
+            _ = try EnvelopeWireFormat.decodeRequest(
                 ByteString(unsupportedVersion)
             )
         }
 
-        var unknownOperation = try DatabaseEnvelopeCodec.encode(
+        var unknownOperation = try EnvelopeWireFormat.encode(
             request: request
         ).copyBytes()
         unknownOperation[15] = 0xFF
         unknownOperation[16] = 0xFF
         #expect(throws: DatabaseWireError.invalidOperationIdentifier(0xFFFF)) {
-            _ = try DatabaseEnvelopeCodec.decodeRequest(
+            _ = try EnvelopeWireFormat.decodeRequest(
                 ByteString(unknownOperation)
             )
         }
@@ -539,7 +540,7 @@ struct CanonicalDatabaseWireTests {
 
     @Test("typed remote failures survive the response envelope")
     func typedRemoteFailureRoundTrips() throws {
-        let failure = DatabaseRemoteError(
+        let failure = RemoteOperationError(
             category: .conflict,
             code: "precondition_failed",
             message: "The active snapshot changed",
@@ -555,8 +556,8 @@ struct CanonicalDatabaseWireTests {
         )
 
         #expect(
-            try DatabaseEnvelopeCodec.decodeResponse(
-                DatabaseEnvelopeCodec.encode(response: response)
+            try EnvelopeWireFormat.decodeResponse(
+                EnvelopeWireFormat.encode(response: response)
             ) == response
         )
     }

@@ -6,11 +6,11 @@ public struct JobOperation<
     Request: Sendable,
     Response: Sendable
 >: Sendable {
-    public let identifier: DatabaseJobOperationIdentifier
+    public let identifier: JobOperationIdentifier
     public let operation: DatabaseOperation<Request, Response>
 
     init(
-        identifier: DatabaseJobOperationIdentifier,
+        identifier: JobOperationIdentifier,
         operation: DatabaseOperation<Request, Response>
     ) {
         self.identifier = identifier
@@ -47,7 +47,7 @@ public extension DatabaseOperation {
         kind: String
     ) throws(DatabaseWireError) -> JobOperation<Request, Response> {
         JobOperation(
-            identifier: try DatabaseJobOperationIdentifier(
+            identifier: try JobOperationIdentifier(
                 family: identifier,
                 kind: kind
             ),
@@ -61,7 +61,7 @@ public enum JobOperations {
         MaintenanceExecuteOperation.Request,
         MaintenanceExecuteOperation.Response
     > = JobOperation(
-        identifier: DatabaseJobOperationIdentifier(
+        identifier: JobOperationIdentifier(
             validatedFamily: .maintenanceExecute,
             validatedKind: "database.maintenance"
         ),

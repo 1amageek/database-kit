@@ -1,5 +1,5 @@
 import DatabaseTypes
-import DatabaseWire
+@testable import DatabaseWire
 import DatabaseKit
 import Testing
 
@@ -8,11 +8,11 @@ struct QueryIRStreamingWireTests {
     @Test("streaming output exactly matches owned canonical encoding")
     func streamingMatchesOwnedEncoding() throws {
         let statement = canonicalStatement()
-        let expected = try QueryIRWireCodec.encode(statement)
+        let expected = try QueryIRWireFormat.encode(statement)
         var preparedByteCount: Int?
         var streamed: [UInt8] = []
 
-        try QueryIRWireCodec.emitCanonicalEncoding(
+        try QueryIRWireFormat.emitCanonicalEncoding(
             statement,
             prepare: { byteCount in
                 preparedByteCount = byteCount
@@ -30,7 +30,7 @@ struct QueryIRStreamingWireTests {
     @Test("prepare failure occurs before the first sink emission")
     func prepareFailurePreventsEmission() throws {
         let statement = canonicalStatement()
-        let expectedByteCount = try QueryIRWireCodec.encode(statement).count
+        let expectedByteCount = try QueryIRWireFormat.encode(statement).count
         var preparedByteCount: Int?
         var emittedByteCount = 0
 
@@ -39,7 +39,7 @@ struct QueryIRStreamingWireTests {
                 .byteCountOverflow
             )
         ) {
-            try QueryIRWireCodec.emitCanonicalEncoding(
+            try QueryIRWireFormat.emitCanonicalEncoding(
                 statement,
                 prepare: { (byteCount: Int) throws(DatabaseWireError) in
                     preparedByteCount = byteCount
@@ -69,7 +69,7 @@ struct QueryIRStreamingWireTests {
         var emittedByteCount = 0
 
         #expect {
-            try QueryIRWireCodec.emitCanonicalEncoding(
+            try QueryIRWireFormat.emitCanonicalEncoding(
                 canonicalStatement(),
                 limits: limits,
                 prepare: { _ in
@@ -111,10 +111,10 @@ struct QueryIRStreamingWireTests {
             maximumNestingDepth: 512,
             maximumObjectCount: 100_000
         )
-        let expected = try QueryIRWireCodec.encode(statement, limits: limits)
+        let expected = try QueryIRWireFormat.encode(statement, limits: limits)
         var streamed: [UInt8] = []
 
-        try QueryIRWireCodec.emitCanonicalEncoding(
+        try QueryIRWireFormat.emitCanonicalEncoding(
             statement,
             limits: limits,
             prepare: { streamed.reserveCapacity($0) },

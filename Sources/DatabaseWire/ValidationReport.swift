@@ -1,7 +1,7 @@
 import DatabaseKit
 import DatabaseTypes
 
-public struct ValidationReport: DatabaseWireValue, Hashable {
+public struct ValidationReport: WireValue, Hashable {
     public enum Severity: UInt8, Sendable, Hashable {
         case information = 1
         case warning = 2
@@ -18,7 +18,7 @@ public struct ValidationReport: DatabaseWireValue, Hashable {
         }
     }
 
-    public struct Issue: DatabaseWireValue, Hashable {
+    public struct Issue: WireValue, Hashable {
         public let severity: Severity
         public let code: String
         public let messages: [String]
@@ -51,7 +51,7 @@ public struct ValidationReport: DatabaseWireValue, Hashable {
             self.details = details
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             writer.writeUInt8(severity.rawValue)
@@ -66,7 +66,7 @@ public struct ValidationReport: DatabaseWireValue, Hashable {
             try details.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let severity = try Severity(from: &reader)
@@ -136,7 +136,7 @@ public struct ValidationReport: DatabaseWireValue, Hashable {
         self.continuation = continuation
     }
 
-    public func encode(
+    func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         writer.writeBool(conforms)
@@ -145,7 +145,7 @@ public struct ValidationReport: DatabaseWireValue, Hashable {
         try writer.writeOptionalBytes(continuation)
     }
 
-    public init(
+    init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         let conforms = try reader.readBool()

@@ -3,13 +3,13 @@ import DatabaseTypes
 public struct DatabaseWireRequestEnvelope: Sendable, Hashable {
     public let requestID: UInt64
     public let operation: DatabaseOperationIdentifier
-    public let metadata: DatabaseRequestMetadata
+    public let metadata: OperationRequestMetadata
     public let payload: ByteString
 
-    public init(
+    init(
         requestID: UInt64,
         operation: DatabaseOperationIdentifier,
-        metadata: DatabaseRequestMetadata = DatabaseRequestMetadata(),
+        metadata: OperationRequestMetadata = OperationRequestMetadata(),
         payload: ByteString
     ) {
         self.requestID = requestID

@@ -1,8 +1,8 @@
 import DatabaseTypes
 
 /// Canonical SHA-256 digest of a completed job response payload.
-public struct DatabaseJobResultDigest:
-    DatabaseWireValue,
+public struct JobResultDigest:
+    WireValue,
     Hashable {
     public static let byteCount = 32
 
@@ -26,7 +26,7 @@ public struct DatabaseJobResultDigest:
         try self.init(ByteString(bytes))
     }
 
-    public func encode(
+    func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         guard bytes.count == Self.byteCount else {
@@ -38,7 +38,7 @@ public struct DatabaseJobResultDigest:
         writer.writeUnframedBytes(bytes)
     }
 
-    public init(
+    init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         try self.init(
@@ -47,8 +47,8 @@ public struct DatabaseJobResultDigest:
     }
 
     /// Detaches the fixed-size digest from a potentially much larger frame owner.
-    public func detached() -> DatabaseJobResultDigest {
-        DatabaseJobResultDigest(validatedBytes: bytes.detached())
+    public func detached() -> JobResultDigest {
+        JobResultDigest(validatedBytes: bytes.detached())
     }
 
     fileprivate init(validatedBytes: ByteString) {
@@ -61,13 +61,13 @@ public struct DatabaseJobResultDigest:
 /// The digest input is the ASCII domain `JOPI`, the job family in big-endian
 /// order, the kind UTF-8 length and bytes, the ASCII domain `JRST`, and the
 /// response payload bytes in page order.
-public struct DatabaseJobResultDigestAccumulator: Sendable {
+public struct JobResultDigestAccumulator: Sendable {
     private static let identifierDomain: ByteString = [0x4a, 0x4f, 0x50, 0x49]
     private static let resultDomain: ByteString = [0x4a, 0x52, 0x53, 0x54]
 
     private var sha256: SHA256Accumulator
 
-    public init(operation: DatabaseJobOperationIdentifier) {
+    public init(operation: JobOperationIdentifier) {
         var sha256 = SHA256Accumulator()
         Self.identifierDomain.withUnsafeBytes { bytes in
             sha256.update(bytes)
@@ -94,7 +94,7 @@ public struct DatabaseJobResultDigestAccumulator: Sendable {
         }
     }
 
-    public consuming func finalize() -> DatabaseJobResultDigest {
-        DatabaseJobResultDigest(validatedBytes: sha256.finalize())
+    public consuming func finalize() -> JobResultDigest {
+        JobResultDigest(validatedBytes: sha256.finalize())
     }
 }

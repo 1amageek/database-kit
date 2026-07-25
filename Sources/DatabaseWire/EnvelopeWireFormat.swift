@@ -1,22 +1,22 @@
 import DatabaseTypes
 
-public struct DatabaseEncodedSuccessResponse: Sendable {
+public struct DatabaseWireEncodedResponse: Sendable {
     public let frame: ByteString
     public let payload: ByteString
 
-    public init(frame: ByteString, payload: ByteString) {
+    init(frame: ByteString, payload: ByteString) {
         self.frame = frame
         self.payload = payload
     }
 }
 
-public enum DatabaseEnvelopeCodec {
-    public static let protocolVersion: UInt16 = 1
+enum EnvelopeWireFormat {
+    static let protocolVersion: UInt16 = 1
     private static let magic: [UInt8] = [0x44, 0x42, 0x57, 0x52]
     private static let envelopeHeaderByteCount = 17
     private static let successResponseFixedByteCount = 22
 
-    public static func encode(
+    static func encode(
         request: DatabaseWireRequestEnvelope,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> ByteString {
@@ -33,7 +33,7 @@ public enum DatabaseEnvelopeCodec {
     static func encodeRequest<Request>(
         identifier: DatabaseOperationIdentifier,
         requestID: UInt64,
-        metadata: DatabaseRequestMetadata,
+        metadata: OperationRequestMetadata,
         request: Request,
         limits: DatabaseWireLimits,
         encode:
@@ -53,7 +53,7 @@ public enum DatabaseEnvelopeCodec {
         }
     }
 
-    public static func decodeRequest(
+    static func decodeRequest(
         _ bytes: ByteString,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> DatabaseWireRequestEnvelope {
@@ -62,7 +62,7 @@ public enum DatabaseEnvelopeCodec {
         let envelope = DatabaseWireRequestEnvelope(
             requestID: try reader.readUInt64(),
             operation: try DatabaseOperationIdentifier(from: &reader),
-            metadata: try DatabaseRequestMetadata(from: &reader),
+            metadata: try OperationRequestMetadata(from: &reader),
             payload: try reader.readBytes()
         )
         try reader.ensureFullyRead()
@@ -70,13 +70,13 @@ public enum DatabaseEnvelopeCodec {
     }
 
     /// Decodes only the fixed routing header without traversing metadata or payload.
-    public static func decodeRequestHeader(
+    static func decodeRequestHeader(
         _ bytes: ByteString
     ) throws(DatabaseWireError) -> DatabaseWireEnvelopeHeader {
         try decodeHeader(kind: .request, from: bytes)
     }
 
-    public static func encode(
+    static func encode(
         response: DatabaseWireResponseEnvelope,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> ByteString {
@@ -89,7 +89,7 @@ public enum DatabaseEnvelopeCodec {
         }
     }
 
-    public static func encodeSuccessResponse(
+    static func encodeSuccessResponse(
         requestID: UInt64,
         operation: DatabaseOperationIdentifier,
         limits: DatabaseWireLimits = .default,
@@ -103,12 +103,12 @@ public enum DatabaseEnvelopeCodec {
         ).frame
     }
 
-    public static func encodeSuccessResponseAndPayload(
+    static func encodeSuccessResponseAndPayload(
         requestID: UInt64,
         operation: DatabaseOperationIdentifier,
         limits: DatabaseWireLimits = .default,
         encodePayload: (inout DatabaseWireWriter) throws(DatabaseWireError) -> Void
-    ) throws(DatabaseWireError) -> DatabaseEncodedSuccessResponse {
+    ) throws(DatabaseWireError) -> DatabaseWireEncodedResponse {
         let frame = try encodeMeasured(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             writeHeader(kind: .response, into: &writer)
@@ -120,13 +120,15 @@ public enum DatabaseEnvelopeCodec {
         guard frame.count >= successResponseFixedByteCount else {
             throw .byteCountOverflow
         }
-        return DatabaseEncodedSuccessResponse(
+        return DatabaseWireEncodedResponse(
             frame: frame,
-            payload: frame[successResponseFixedByteCount..<frame.count]
+            payload: frame[
+                (frame.startIndex + successResponseFixedByteCount)..<frame.endIndex
+            ]
         )
     }
 
-    public static func encodeSuccessResponse(
+    static func encodeSuccessResponse(
         requestID: UInt64,
         operation: DatabaseOperationIdentifier,
         payload: ByteString,
@@ -148,7 +150,7 @@ public enum DatabaseEnvelopeCodec {
         }
     }
 
-    public static func validateSuccessResponsePayloadByteCount(
+    static func validateSuccessResponsePayloadByteCount(
         _ payloadByteCount: Int,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) {
@@ -174,7 +176,7 @@ public enum DatabaseEnvelopeCodec {
         }
     }
 
-    public static func decodeResponse(
+    static func decodeResponse(
         _ bytes: ByteString,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> DatabaseWireResponseEnvelope {
@@ -190,13 +192,13 @@ public enum DatabaseEnvelopeCodec {
     }
 
     /// Decodes only the fixed routing header without traversing the response payload.
-    public static func decodeResponseHeader(
+    static func decodeResponseHeader(
         _ bytes: ByteString
     ) throws(DatabaseWireError) -> DatabaseWireEnvelopeHeader {
         try decodeHeader(kind: .response, from: bytes)
     }
 
-    public static func encode<Value: DatabaseWireValue>(
+    static func encode<Value: WireValue>(
         _ value: Value,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> ByteString {
@@ -206,7 +208,7 @@ public enum DatabaseEnvelopeCodec {
         }
     }
 
-    public static func decode<Value: DatabaseWireValue>(
+    static func decode<Value: WireValue>(
         _ type: Value.Type,
         from bytes: ByteString,
         limits: DatabaseWireLimits = .default
@@ -217,7 +219,7 @@ public enum DatabaseEnvelopeCodec {
         return value
     }
 
-    public static func decodeResult<Value: DatabaseWireValue>(
+    static func decodeResult<Value: WireValue>(
         _ type: Value.Type,
         from bytes: ByteString,
         limits: DatabaseWireLimits = .default
@@ -288,7 +290,11 @@ public enum DatabaseEnvelopeCodec {
         from bytes: ByteString
     ) throws(DatabaseWireError) -> DatabaseWireEnvelopeHeader {
         let readableByteCount = min(bytes.count, envelopeHeaderByteCount)
-        var reader = DatabaseWireReader(bytes[0..<readableByteCount])
+        var reader = DatabaseWireReader(
+            bytes[
+                bytes.startIndex..<(bytes.startIndex + readableByteCount)
+            ]
+        )
         try validateHeader(kind: kind, reader: &reader)
         let header = DatabaseWireEnvelopeHeader(
             requestID: try reader.readUInt64(),

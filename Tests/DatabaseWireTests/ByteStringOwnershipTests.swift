@@ -10,7 +10,7 @@ struct ByteStringOwnershipTests {
             [UInt8](repeating: 0xa5, count: 1_048_576)
         )
 
-        let encoded = try DatabaseEnvelopeCodec
+        let encoded = try EnvelopeWireFormat
             .encodeSuccessResponseAndPayload(
                 requestID: 42,
                 operation: .queryExecute

@@ -1,5 +1,5 @@
 import DatabaseTypes
-public struct DatabaseWireResponseEnvelope: Sendable, Hashable {
+struct DatabaseWireResponseEnvelope: Sendable, Hashable {
     public let requestID: UInt64
     public let operation: DatabaseOperationIdentifier
     public let payload: DatabaseWireResponsePayload

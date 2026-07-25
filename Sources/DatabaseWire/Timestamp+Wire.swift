@@ -1,14 +1,14 @@
 import DatabaseTypes
 
-extension Timestamp: DatabaseWireValue {
-    public func encode(
+extension Timestamp: WireValue {
+    func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         writer.writeInt64(secondsSinceUnixEpoch)
         writer.writeUInt32(nanoseconds)
     }
 
-    public init(
+    init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         do {

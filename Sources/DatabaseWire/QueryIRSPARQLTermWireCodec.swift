@@ -207,16 +207,16 @@ private extension QueryIRSPARQLTermWireCodec {
         switch consume term {
         case .variable(let value):
             writer.writeUInt8(0)
-            try QueryIRWireCodec.writeSPARQLVariableName(
+            try QueryIRWireFormat.writeSPARQLVariableName(
                 value,
                 into: &writer
             )
         case .iri(let value):
             writer.writeUInt8(1)
-            try QueryIRWireCodec.writeSPARQLIRI(value, into: &writer)
+            try QueryIRWireFormat.writeSPARQLIRI(value, into: &writer)
         case .literal(let value):
             writer.writeUInt8(2)
-            try QueryIRWireCodec.encodeLiteral(value, into: &writer)
+            try QueryIRWireFormat.encodeLiteral(value, into: &writer)
         case .blankNode(let value):
             writer.writeUInt8(3)
             try writer.writeString(value)
@@ -261,15 +261,15 @@ private extension QueryIRSPARQLTermWireCodec {
         switch tag {
         case 0:
             return .variable(
-                try QueryIRWireCodec.readSPARQLVariableName(from: &reader)
+                try QueryIRWireFormat.readSPARQLVariableName(from: &reader)
             )
         case 1:
             return .iri(
-                try QueryIRWireCodec.readSPARQLIRI(from: &reader)
+                try QueryIRWireFormat.readSPARQLIRI(from: &reader)
             )
         case 2:
             return .literal(
-                try QueryIRWireCodec.decodeLiteral(from: &reader)
+                try QueryIRWireFormat.decodeLiteral(from: &reader)
             )
         case 3:
             return .blankNode(try reader.readString())

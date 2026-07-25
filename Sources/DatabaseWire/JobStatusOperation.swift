@@ -22,53 +22,53 @@ public enum JobStatusOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Request: DatabaseWireValue, Hashable {
-        public let job: DatabaseJobIdentity
+    public struct Request: WireValue, Hashable {
+        public let job: JobIdentity
 
         public var jobID: DatabaseTypes.UUID { job.jobID }
-        public var operation: DatabaseJobOperationIdentifier { job.operation }
+        public var operation: JobOperationIdentifier { job.operation }
 
-        public init(job: DatabaseJobIdentity) {
+        public init(job: JobIdentity) {
             self.job = job
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try job.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            self.init(job: try DatabaseJobIdentity(from: &reader))
+            self.init(job: try JobIdentity(from: &reader))
         }
     }
 
-    public struct Response: DatabaseWireValue, Hashable {
+    public struct Response: WireValue, Hashable {
         public let state: State
-        public let job: DatabaseJobIdentity
+        public let job: JobIdentity
         public let completedWorkUnits: UInt64
         public let totalWorkUnits: UInt64?
         public let executionCount: UInt64
         public let currentSliceAttempt: UInt32
         public let unsuccessfulOutcomeCommitAttempt: UInt64
-        public let lastUnsuccessfulOutcomeCommitError: DatabaseRemoteError?
+        public let lastUnsuccessfulOutcomeCommitError: RemoteOperationError?
         public let cancellationRequested: Bool
         public let nextAttemptAt: Timestamp?
         public let updatedAt: Timestamp
 
-        public var operation: DatabaseJobOperationIdentifier { job.operation }
+        public var operation: JobOperationIdentifier { job.operation }
 
         public init(
             state: State,
-            job: DatabaseJobIdentity,
+            job: JobIdentity,
             completedWorkUnits: UInt64,
             totalWorkUnits: UInt64? = nil,
             executionCount: UInt64,
             currentSliceAttempt: UInt32,
             unsuccessfulOutcomeCommitAttempt: UInt64 = 0,
-            lastUnsuccessfulOutcomeCommitError: DatabaseRemoteError? = nil,
+            lastUnsuccessfulOutcomeCommitError: RemoteOperationError? = nil,
             cancellationRequested: Bool = false,
             nextAttemptAt: Timestamp? = nil,
             updatedAt: Timestamp
@@ -102,7 +102,7 @@ public enum JobStatusOperation: DatabaseOperationDeclaration {
             self.updatedAt = updatedAt
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             writer.writeUInt8(state.rawValue)
@@ -125,11 +125,11 @@ public enum JobStatusOperation: DatabaseOperationDeclaration {
             try updatedAt.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let state = try State(from: &reader)
-            let job = try DatabaseJobIdentity(from: &reader)
+            let job = try JobIdentity(from: &reader)
             let completedWorkUnits = try reader.readUInt64()
             let totalWorkUnits = try reader.readBool()
                 ? try reader.readUInt64()
@@ -143,7 +143,7 @@ public enum JobStatusOperation: DatabaseOperationDeclaration {
                 currentSliceAttempt: try reader.readUInt32(),
                 unsuccessfulOutcomeCommitAttempt: try reader.readUInt64(),
                 lastUnsuccessfulOutcomeCommitError: try reader.readBool()
-                    ? try DatabaseRemoteError(from: &reader)
+                    ? try RemoteOperationError(from: &reader)
                     : nil,
                 cancellationRequested: try reader.readBool(),
                 nextAttemptAt: try reader.readBool()
@@ -160,7 +160,7 @@ public enum JobStatusOperation: DatabaseOperationDeclaration {
             executionCount: UInt64,
             currentSliceAttempt: UInt32,
             unsuccessfulOutcomeCommitAttempt: UInt64,
-            lastUnsuccessfulOutcomeCommitError: DatabaseRemoteError?,
+            lastUnsuccessfulOutcomeCommitError: RemoteOperationError?,
             cancellationRequested: Bool,
             nextAttemptAt: Timestamp?,
             updatedAt: Timestamp

@@ -139,9 +139,9 @@ struct QueryIRRecursiveWireCodecTests {
             labelExpression: deepLabelExpression(depth: 320)
         )
 
-        let encoded = try QueryIRWireCodec.encode(statement, limits: limits)
-        let decoded = try QueryIRWireCodec.decode(encoded, limits: limits)
-        let reencoded = try QueryIRWireCodec.encode(decoded, limits: limits)
+        let encoded = try QueryIRWireFormat.encode(statement, limits: limits)
+        let decoded = try QueryIRWireFormat.decode(encoded, limits: limits)
+        let reencoded = try QueryIRWireFormat.encode(decoded, limits: limits)
 
         #expect(reencoded == encoded)
     }
@@ -153,7 +153,7 @@ struct QueryIRRecursiveWireCodecTests {
         let statement = makeCreateGraphStatement(
             labelExpression: deepLabelExpression(depth: 320)
         )
-        let encoded = try QueryIRWireCodec.encode(
+        let encoded = try QueryIRWireFormat.encode(
             statement,
             limits: permissiveLimits
         )
@@ -163,13 +163,13 @@ struct QueryIRRecursiveWireCodecTests {
         )
 
         #expect(throws: expected) {
-            _ = try QueryIRWireCodec.encode(
+            _ = try QueryIRWireFormat.encode(
                 statement,
                 limits: boundedLimits
             )
         }
         #expect(throws: expected) {
-            _ = try QueryIRWireCodec.decode(
+            _ = try QueryIRWireFormat.decode(
                 encoded,
                 limits: boundedLimits
             )
@@ -253,15 +253,15 @@ struct QueryIRRecursiveWireCodecTests {
             )
         )
 
-        let encoded = try QueryIRWireCodec.encode(
+        let encoded = try QueryIRWireFormat.encode(
             statement,
             limits: permissiveLimits
         )
-        let decoded = try QueryIRWireCodec.decode(
+        let decoded = try QueryIRWireFormat.decode(
             encoded,
             limits: permissiveLimits
         )
-        let reencoded = try QueryIRWireCodec.encode(
+        let reencoded = try QueryIRWireFormat.encode(
             decoded,
             limits: permissiveLimits
         )
@@ -272,13 +272,13 @@ struct QueryIRRecursiveWireCodecTests {
             maximum: 64
         )
         #expect(throws: expected) {
-            _ = try QueryIRWireCodec.encode(
+            _ = try QueryIRWireFormat.encode(
                 statement,
                 limits: boundedLimits
             )
         }
         #expect(throws: expected) {
-            _ = try QueryIRWireCodec.decode(
+            _ = try QueryIRWireFormat.decode(
                 encoded,
                 limits: boundedLimits
             )
@@ -505,7 +505,7 @@ struct QueryIRRecursiveWireCodecTests {
     ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
-            try QueryIRWireCodec.encodeLiteral(literal, into: &writer)
+            try QueryIRWireFormat.encodeLiteral(literal, into: &writer)
         }
     }
 
@@ -514,7 +514,7 @@ struct QueryIRRecursiveWireCodecTests {
         limits: DatabaseWireLimits
     ) throws(DatabaseWireError) -> Literal {
         var reader = DatabaseWireReader(bytes, limits: limits)
-        let literal = try QueryIRWireCodec.decodeLiteral(from: &reader)
+        let literal = try QueryIRWireFormat.decodeLiteral(from: &reader)
         try reader.ensureFullyRead()
         return literal
     }
@@ -525,7 +525,7 @@ struct QueryIRRecursiveWireCodecTests {
     ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
-            try QueryIRWireCodec.encodeDataType(dataType, into: &writer)
+            try QueryIRWireFormat.encodeDataType(dataType, into: &writer)
         }
     }
 
@@ -534,7 +534,7 @@ struct QueryIRRecursiveWireCodecTests {
         limits: DatabaseWireLimits
     ) throws(DatabaseWireError) -> DataType {
         var reader = DatabaseWireReader(bytes, limits: limits)
-        let dataType = try QueryIRWireCodec.decodeDataType(from: &reader)
+        let dataType = try QueryIRWireFormat.decodeDataType(from: &reader)
         try reader.ensureFullyRead()
         return dataType
     }
@@ -598,9 +598,9 @@ struct QueryIRRecursiveWireCodecTests {
         _ statement: QueryStatement,
         limits: DatabaseWireLimits
     ) throws {
-        let encoded = try QueryIRWireCodec.encode(statement, limits: limits)
-        let decoded = try QueryIRWireCodec.decode(encoded, limits: limits)
-        let reencoded = try QueryIRWireCodec.encode(decoded, limits: limits)
+        let encoded = try QueryIRWireFormat.encode(statement, limits: limits)
+        let decoded = try QueryIRWireFormat.decode(encoded, limits: limits)
+        let reencoded = try QueryIRWireFormat.encode(decoded, limits: limits)
 
         #expect(decoded == statement)
         #expect(reencoded == encoded)

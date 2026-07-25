@@ -1,7 +1,7 @@
 import DatabaseKit
 import DatabaseTypes
 
-public struct CommandRequest: DatabaseWireValue, Hashable {
+public struct CommandRequest: WireValue, Hashable {
     public let command: CommandDeclaration
     public let input: FieldObject
     public let budget: ExecutionBudget
@@ -16,7 +16,7 @@ public struct CommandRequest: DatabaseWireValue, Hashable {
         self.budget = budget
     }
 
-    public func encode(
+    func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         try writer.writeString(command.identifier.rawValue)
@@ -25,7 +25,7 @@ public struct CommandRequest: DatabaseWireValue, Hashable {
         try budget.encode(into: &writer)
     }
 
-    public init(
+    init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         let rawIdentifier = try reader.readString(

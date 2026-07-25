@@ -1,10 +1,10 @@
-public import DatabaseTypes
+import DatabaseTypes
 
 /// Incrementally computes a canonical SHA-384 digest.
 ///
 /// Input buffers are borrowed synchronously. Finalization allocates only the
 /// 48-byte digest result and consumes the accumulator.
-public struct SHA384Accumulator: Sendable {
+struct SHA384Accumulator: Sendable {
     public static let digestByteCount = 48
 
     private var state = SHA512FamilyAccumulator(variant: .sha384)

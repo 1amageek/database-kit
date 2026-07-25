@@ -1,10 +1,10 @@
-public import DatabaseTypes
+import DatabaseTypes
 
 /// Incrementally computes an MD5 digest.
 ///
 /// Input buffers are borrowed synchronously. Finalization allocates only the
 /// 16-byte digest result and consumes the accumulator.
-public struct MD5Accumulator: Sendable {
+struct MD5Accumulator: Sendable {
     public static let digestByteCount = 16
 
     private var state = State()

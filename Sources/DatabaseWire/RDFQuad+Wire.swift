@@ -1,29 +1,8 @@
 import DatabaseKit
 import DatabaseTypes
 
-/// An RDF quad carried by database operations.
-///
-/// The positional types make invalid subjects, predicates, and graph names
-/// unrepresentable after decoding or construction.
-public struct RDFQuadValue: DatabaseWireValue, Hashable {
-    public let subject: RDFSubject
-    public let predicate: RDFPredicateIRI
-    public let object: RDFTerm
-    public let graph: RDFSubject?
-
-    public init(
-        subject: RDFSubject,
-        predicate: RDFPredicateIRI,
-        object: RDFTerm,
-        graph: RDFSubject? = nil
-    ) {
-        self.subject = subject
-        self.predicate = predicate
-        self.object = object
-        self.graph = graph
-    }
-
-    public func encode(
+extension RDFQuad: WireValue {
+    func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         try writer.writeCanonicalRDFTerm(subject.term, role: .subject)
@@ -31,19 +10,23 @@ public struct RDFQuadValue: DatabaseWireValue, Hashable {
         try writer.writeCanonicalRDFTerm(object, role: .object)
         writer.writeBool(graph != nil)
         if let graph {
-            try writer.writeCanonicalRDFTerm(graph.term, role: .graphName)
+            try writer.writeCanonicalRDFTerm(
+                graph.term,
+                role: .graphName
+            )
         }
     }
 
-    public init(
+    init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         let subjectTerm = try reader.readCanonicalRDFTerm(role: .subject)
+        let subject: RDFSubject
         switch subjectTerm {
         case .iri(let iri):
-            self.subject = .iri(iri)
+            subject = .iri(iri)
         case .blankNode(let identifier):
-            self.subject = .blankNode(identifier)
+            subject = .blankNode(identifier)
         case .literal, .tripleTerm:
             throw .invalidRDFTripleSubject
         }
@@ -52,21 +35,32 @@ public struct RDFQuadValue: DatabaseWireValue, Hashable {
         guard case .iri(let predicateIRI) = predicateTerm else {
             throw .invalidRDFTriplePredicate
         }
-        self.predicate = RDFPredicateIRI(predicateIRI)
-        self.object = try reader.readCanonicalRDFTerm(role: .object)
+        let predicate = RDFPredicateIRI(predicateIRI)
+        let object = try reader.readCanonicalRDFTerm(role: .object)
         guard try reader.readBool() else {
-            self.graph = nil
+            self.init(
+                subject: subject,
+                predicate: predicate,
+                object: object
+            )
             return
         }
 
         let graphTerm = try reader.readCanonicalRDFTerm(role: .graphName)
+        let graph: RDFGraphName
         switch graphTerm {
         case .iri(let iri):
-            self.graph = .iri(iri)
+            graph = RDFGraphName(RDFSubject.iri(iri))
         case .blankNode(let identifier):
-            self.graph = .blankNode(identifier)
+            graph = RDFGraphName(RDFSubject.blankNode(identifier))
         case .literal, .tripleTerm:
             throw .invalidRDFGraphName
         }
+        self.init(
+            subject: subject,
+            predicate: predicate,
+            object: object,
+            graph: graph
+        )
     }
 }

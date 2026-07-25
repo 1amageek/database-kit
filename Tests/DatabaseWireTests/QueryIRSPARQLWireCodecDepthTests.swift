@@ -287,7 +287,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
     ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
-            try QueryIRWireCodec.encodeSPARQLTerm(term, into: &writer)
+            try QueryIRWireFormat.encodeSPARQLTerm(term, into: &writer)
         }
     }
 
@@ -296,7 +296,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
         limits: DatabaseWireLimits
     ) throws(DatabaseWireError) -> SPARQLTerm {
         var reader = DatabaseWireReader(bytes, limits: limits)
-        let term = try QueryIRWireCodec.decodeSPARQLTerm(from: &reader)
+        let term = try QueryIRWireFormat.decodeSPARQLTerm(from: &reader)
         try reader.ensureFullyRead()
         return term
     }
@@ -307,7 +307,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
     ) throws(DatabaseWireError) -> ByteString {
         try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
-            try QueryIRWireCodec.encodePropertyPath(path, into: &writer)
+            try QueryIRWireFormat.encodePropertyPath(path, into: &writer)
         }
     }
 
@@ -316,7 +316,7 @@ struct QueryIRSPARQLWireCodecDepthTests {
         limits: DatabaseWireLimits
     ) throws(DatabaseWireError) -> PropertyPath {
         var reader = DatabaseWireReader(bytes, limits: limits)
-        let path = try QueryIRWireCodec.decodePropertyPath(from: &reader)
+        let path = try QueryIRWireFormat.decodePropertyPath(from: &reader)
         try reader.ensureFullyRead()
         return path
     }

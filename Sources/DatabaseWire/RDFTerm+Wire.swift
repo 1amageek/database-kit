@@ -2,11 +2,11 @@ import DatabaseKit
 import DatabaseTypes
 
 extension RDFTerm {
-    public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+    func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
         try writer.writeCanonicalRDFTerm(self)
     }
 
-    public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
         self = try reader.readCanonicalRDFTerm(role: .term)
     }
 }

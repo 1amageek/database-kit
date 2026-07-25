@@ -1,17 +1,17 @@
 import DatabaseTypes
 
-public struct DatabaseRemoteError: Error, Sendable, Hashable {
-    public let category: DatabaseErrorCategory
+public struct RemoteOperationError: Error, Sendable, Hashable {
+    public let category: OperationErrorCategory
     public let code: String
     public let message: String
-    public let retryability: DatabaseRetryability
+    public let retryability: OperationRetryability
     public let details: FieldObject
 
     public init(
-        category: DatabaseErrorCategory,
+        category: OperationErrorCategory,
         code: String,
         message: String,
-        retryability: DatabaseRetryability,
+        retryability: OperationRetryability,
         details: FieldObject = FieldObject()
     ) {
         self.category = category
@@ -21,7 +21,7 @@ public struct DatabaseRemoteError: Error, Sendable, Hashable {
         self.details = details
     }
 
-    public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+    func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
         category.encode(into: &writer)
         try writer.writeString(code)
         try writer.writeString(message)
@@ -29,11 +29,11 @@ public struct DatabaseRemoteError: Error, Sendable, Hashable {
         try details.encode(into: &writer)
     }
 
-    public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-        let category = try DatabaseErrorCategory(from: &reader)
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        let category = try OperationErrorCategory(from: &reader)
         let code = try reader.readString()
         let message = try reader.readString()
-        let retryability = try DatabaseRetryability(from: &reader)
+        let retryability = try OperationRetryability(from: &reader)
         self.init(
             category: category,
             code: code,

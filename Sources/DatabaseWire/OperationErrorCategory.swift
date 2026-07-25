@@ -1,5 +1,5 @@
 import DatabaseTypes
-public enum DatabaseErrorCategory: UInt8, Sendable, Hashable {
+public enum OperationErrorCategory: UInt8, Sendable, Hashable {
     case invalidRequest = 1
     case authentication = 2
     case authorization = 3
@@ -10,7 +10,7 @@ public enum DatabaseErrorCategory: UInt8, Sendable, Hashable {
     case unavailable = 8
     case internalFailure = 9
 
-    public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
         let rawValue = try reader.readUInt8()
         guard let value = Self(rawValue: rawValue) else {
             throw .invalidErrorCategory(rawValue)
@@ -18,7 +18,7 @@ public enum DatabaseErrorCategory: UInt8, Sendable, Hashable {
         self = value
     }
 
-    public func encode(into writer: inout DatabaseWireWriter) {
+    func encode(into writer: inout DatabaseWireWriter) {
         writer.writeUInt8(rawValue)
     }
 }

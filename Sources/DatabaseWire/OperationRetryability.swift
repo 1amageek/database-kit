@@ -1,10 +1,10 @@
 import DatabaseTypes
-public enum DatabaseRetryability: UInt8, Sendable, Hashable {
+public enum OperationRetryability: UInt8, Sendable, Hashable {
     case never = 1
     case immediate = 2
     case backoff = 3
 
-    public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
         let rawValue = try reader.readUInt8()
         guard let value = Self(rawValue: rawValue) else {
             throw .invalidRetryability(rawValue)
@@ -12,7 +12,7 @@ public enum DatabaseRetryability: UInt8, Sendable, Hashable {
         self = value
     }
 
-    public func encode(into writer: inout DatabaseWireWriter) {
+    func encode(into writer: inout DatabaseWireWriter) {
         writer.writeUInt8(rawValue)
     }
 }

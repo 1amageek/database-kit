@@ -1,13 +1,13 @@
 import DatabaseKit
 import DatabaseTypes
-import DatabaseWire
+@testable import DatabaseWire
 import Testing
 
 @Suite("Typed operation family wire")
 struct TypedOperationWireTests {
-    private var quad: RDFQuadValue {
+    private var quad: RDFQuad {
         get throws {
-            RDFQuadValue(
+            RDFQuad(
                 subject: .iri(try RDFIRI("urn:event:1")),
                 predicate: RDFPredicateIRI(
                     try RDFIRI("urn:calendar:startsAt")
@@ -18,7 +18,11 @@ struct TypedOperationWireTests {
                         datatype: XSDDatatype.date.typedLiteralDatatype
                     )
                 ),
-                graph: .iri(try RDFIRI("urn:calendar:active"))
+                graph: RDFGraphName(
+                    RDFSubject.iri(
+                        try RDFIRI("urn:calendar:active")
+                    )
+                )
             )
         }
     }
@@ -439,7 +443,7 @@ struct TypedOperationWireTests {
             metadata: .init(traceID: "command"),
             request: request
         )
-        let requestEnvelope = try DatabaseEnvelopeCodec.decodeRequest(
+        let requestEnvelope = try EnvelopeWireFormat.decodeRequest(
             requestFrame
         )
         #expect(
@@ -483,7 +487,7 @@ struct TypedOperationWireTests {
         #expect(
             throws: DatabaseWireError.invalidCommandAccess(2)
         ) {
-            try DatabaseEnvelopeCodec.decode(
+            try EnvelopeWireFormat.decode(
                 CommandAccess.self,
                 from: [2]
             )
@@ -512,7 +516,7 @@ struct TypedOperationWireTests {
         #expect(
             throws: DatabaseWireError.invalidCommandIdentifier(.empty)
         ) {
-            try DatabaseEnvelopeCodec.decode(
+            try EnvelopeWireFormat.decode(
                 CommandRequest.self,
                 from: emptyIdentifierRequest
             )
@@ -522,12 +526,12 @@ struct TypedOperationWireTests {
     @Test("durable job lifecycle uses canonical identifiers and outcomes")
     func jobFamilyRoundTrips() throws {
         let jobOperation = JobOperations.maintenance.identifier
-        let job = DatabaseJobIdentity(
+        let job = JobIdentity(
             jobID: jobID,
             operation: jobOperation
         )
-        let responseDigest = try DatabaseJobResultDigest(
-            [UInt8](repeating: 0xaa, count: DatabaseJobResultDigest.byteCount)
+        let responseDigest = try JobResultDigest(
+            [UInt8](repeating: 0xaa, count: JobResultDigest.byteCount)
         )
         let firstContinuation = try JobResultOperation.Continuation(
             job: job,
@@ -565,7 +569,7 @@ struct TypedOperationWireTests {
                 executionCount: 7,
                 currentSliceAttempt: 2,
                 unsuccessfulOutcomeCommitAttempt: 3,
-                lastUnsuccessfulOutcomeCommitError: DatabaseRemoteError(
+                lastUnsuccessfulOutcomeCommitError: RemoteOperationError(
                     category: .internalFailure,
                     code: "JOB_UNSUCCESSFUL_OUTCOME_COMMIT_FAILED",
                     message: "Unsuccessful outcome commit will be retried",
@@ -614,11 +618,11 @@ struct TypedOperationWireTests {
 
     @Test("job status rejects impossible state combinations")
     func jobStatusRejectsImpossibleCombinations() throws {
-        let operation = try DatabaseJobOperationIdentifier(
+        let operation = try JobOperationIdentifier(
             family: .maintenanceExecute,
             kind: "database.test.status"
         )
-        let job = DatabaseJobIdentity(jobID: jobID, operation: operation)
+        let job = JobIdentity(jobID: jobID, operation: operation)
         let now = try Timestamp(
             secondsSinceUnixEpoch: 1_784_131_200
         )
@@ -700,11 +704,11 @@ struct TypedOperationWireTests {
             updatedAt: now
         )
         var invalidBytes = [UInt8](
-            try DatabaseEnvelopeCodec.encode(pending)
+            try EnvelopeWireFormat.encode(pending)
         )
         invalidBytes[0] = JobStatusOperation.State.failed.rawValue
         #expect(throws: DatabaseWireError.invalidJobStatus) {
-            try DatabaseEnvelopeCodec.decode(
+            try EnvelopeWireFormat.decode(
                 JobStatusOperation.Response.self,
                 from: ByteString(invalidBytes)
             )
@@ -713,11 +717,11 @@ struct TypedOperationWireTests {
 
     @Test("job cancellation rejects impossible response combinations")
     func jobCancellationRejectsImpossibleCombinations() throws {
-        let operation = try DatabaseJobOperationIdentifier(
+        let operation = try JobOperationIdentifier(
             family: .maintenanceExecute,
             kind: "database.test.cancel"
         )
-        let job = DatabaseJobIdentity(jobID: jobID, operation: operation)
+        let job = JobIdentity(jobID: jobID, operation: operation)
 
         #expect(throws: DatabaseWireError.invalidJobCancellationResponse) {
             try JobCancelOperation.Response(
@@ -742,7 +746,7 @@ struct TypedOperationWireTests {
             writer.writeBool(true)
         }
         #expect(throws: DatabaseWireError.invalidJobCancellationResponse) {
-            try DatabaseEnvelopeCodec.decode(
+            try EnvelopeWireFormat.decode(
                 JobCancelOperation.Response.self,
                 from: invalidWire
             )
@@ -751,7 +755,7 @@ struct TypedOperationWireTests {
 
     @Test("capabilities advertise a canonical exact job operation set")
     func capabilitiesAdvertiseCanonicalJobOperations() throws {
-        let command = try DatabaseJobOperationIdentifier(
+        let command = try JobOperationIdentifier(
             family: .commandExecute,
             kind: "calendar.import.validate"
         )
@@ -769,7 +773,7 @@ struct TypedOperationWireTests {
             jobOperations: [maintenance, command]
         )
         #expect(throws: DatabaseWireError.nonCanonicalJobOperationSet) {
-            try DatabaseEnvelopeCodec.encode(reversed)
+            try EnvelopeWireFormat.encode(reversed)
         }
 
         let duplicate = CapabilitiesDescribeOperation.Response(
@@ -778,7 +782,7 @@ struct TypedOperationWireTests {
             jobOperations: [command, command]
         )
         #expect(throws: DatabaseWireError.nonCanonicalJobOperationSet) {
-            try DatabaseEnvelopeCodec.encode(duplicate)
+            try EnvelopeWireFormat.encode(duplicate)
         }
 
         let nonCanonicalWire = try DatabaseWireWriter.encode {
@@ -791,7 +795,7 @@ struct TypedOperationWireTests {
             try command.encode(into: &writer)
         }
         #expect(throws: DatabaseWireError.nonCanonicalJobOperationSet) {
-            try DatabaseEnvelopeCodec.decode(
+            try EnvelopeWireFormat.decode(
                 CapabilitiesDescribeOperation.Response.self,
                 from: nonCanonicalWire
             )
@@ -801,25 +805,25 @@ struct TypedOperationWireTests {
     @Test("job result enforces digest, page, and continuation limits")
     func jobResultEnforcesFieldLimits() throws {
         let jobOperation = JobOperations.maintenance.identifier
-        let job = DatabaseJobIdentity(
+        let job = JobIdentity(
             jobID: jobID,
             operation: jobOperation
         )
         #expect(
             throws: DatabaseWireError.invalidDigestLength(
-                actual: DatabaseJobResultDigest.byteCount - 1,
-                expected: DatabaseJobResultDigest.byteCount
+                actual: JobResultDigest.byteCount - 1,
+                expected: JobResultDigest.byteCount
             )
         ) {
-            try DatabaseJobResultDigest(
+            try JobResultDigest(
                 [UInt8](
                     repeating: 0,
-                    count: DatabaseJobResultDigest.byteCount - 1
+                    count: JobResultDigest.byteCount - 1
                 )
             )
         }
-        let digest = try DatabaseJobResultDigest(
-            [UInt8](repeating: 0, count: DatabaseJobResultDigest.byteCount)
+        let digest = try JobResultDigest(
+            [UInt8](repeating: 0, count: JobResultDigest.byteCount)
         )
         #expect(throws: DatabaseWireError.invalidResultPayload(0)) {
             try JobResultOperation.Continuation(
@@ -848,13 +852,13 @@ struct TypedOperationWireTests {
                 maximum: JobResultOperation.maximumResponsePageBytes
             )
         ) {
-            try DatabaseEnvelopeCodec.encode(oversized)
+            try EnvelopeWireFormat.encode(oversized)
         }
     }
 
     @Test("job result digest is canonical across page boundaries")
     func jobResultDigestIsCanonicalAcrossPageBoundaries() throws {
-        var accumulator = DatabaseJobResultDigestAccumulator(
+        var accumulator = JobResultDigestAccumulator(
             operation: JobOperations.maintenance.identifier
         )
         accumulator.update([0x01, 0x02])
@@ -875,7 +879,7 @@ struct TypedOperationWireTests {
         let payload = ByteString(
             (0..<1_000).map { UInt8(truncatingIfNeeded: $0) }
         )
-        var accumulator = DatabaseJobResultDigestAccumulator(
+        var accumulator = JobResultDigestAccumulator(
             operation: JobOperations.maintenance.identifier
         )
         accumulator.update(payload[0..<63])
@@ -894,20 +898,20 @@ struct TypedOperationWireTests {
 
     @Test("job operation identifiers enforce their canonical bounded grammar")
     func jobOperationIdentifierValidationIsStrict() throws {
-        let valid = try DatabaseJobOperationIdentifier(
+        let valid = try JobOperationIdentifier(
             family: .commandExecute,
             kind: "calendar.import.validate"
         )
         try expectRoundTrip(valid)
 
         #expect(throws: DatabaseWireError.invalidJobOperationKind) {
-            try DatabaseJobOperationIdentifier(
+            try JobOperationIdentifier(
                 family: .commandExecute,
                 kind: "Calendar.Import.Validate"
             )
         }
         #expect(throws: DatabaseWireError.invalidJobOperationKind) {
-            try DatabaseJobOperationIdentifier(
+            try JobOperationIdentifier(
                 family: .commandExecute,
                 kind: "calendar..validate"
             )
@@ -917,7 +921,7 @@ struct TypedOperationWireTests {
                 DatabaseOperationIdentifier.jobStart.rawValue
             )
         ) {
-            try DatabaseJobOperationIdentifier(
+            try JobOperationIdentifier(
                 family: .jobStart,
                 kind: "calendar.import.validate"
             )
@@ -925,7 +929,7 @@ struct TypedOperationWireTests {
 
         let oversizedKind = String(
             repeating: "a",
-            count: DatabaseJobOperationIdentifier.maximumKindUTF8Bytes + 1
+            count: JobOperationIdentifier.maximumKindUTF8Bytes + 1
         )
         let encoded = try DatabaseWireWriter.encode {
             (writer: inout DatabaseWireWriter)
@@ -936,11 +940,11 @@ struct TypedOperationWireTests {
         #expect(
             throws: DatabaseWireError.stringTooLarge(
                 actual: oversizedKind.utf8.count,
-                maximum: DatabaseJobOperationIdentifier.maximumKindUTF8Bytes
+                maximum: JobOperationIdentifier.maximumKindUTF8Bytes
             )
         ) {
-            try DatabaseEnvelopeCodec.decode(
-                DatabaseJobOperationIdentifier.self,
+            try EnvelopeWireFormat.decode(
+                JobOperationIdentifier.self,
                 from: encoded
             )
         }
@@ -949,28 +953,28 @@ struct TypedOperationWireTests {
     @Test("job result binding includes job identity and operation kind")
     func jobResultBindingIsStrict() throws {
         let maintenance = JobOperations.maintenance.identifier
-        let calendar = try DatabaseJobOperationIdentifier(
+        let calendar = try JobOperationIdentifier(
             family: .maintenanceExecute,
             kind: "calendar.import.validate"
         )
-        var maintenanceDigest = DatabaseJobResultDigestAccumulator(
+        var maintenanceDigest = JobResultDigestAccumulator(
             operation: maintenance
         )
         maintenanceDigest.update([1, 2, 3])
-        var calendarDigest = DatabaseJobResultDigestAccumulator(
+        var calendarDigest = JobResultDigestAccumulator(
             operation: calendar
         )
         calendarDigest.update([1, 2, 3])
         #expect(maintenanceDigest.finalize() != calendarDigest.finalize())
 
-        let digest = try DatabaseJobResultDigest(
-            [UInt8](repeating: 0, count: DatabaseJobResultDigest.byteCount)
+        let digest = try JobResultDigest(
+            [UInt8](repeating: 0, count: JobResultDigest.byteCount)
         )
-        let expectedJob = DatabaseJobIdentity(
+        let expectedJob = JobIdentity(
             jobID: jobID,
             operation: maintenance
         )
-        let otherJob = DatabaseJobIdentity(
+        let otherJob = JobIdentity(
             jobID: DatabaseTypes.UUID(high: jobID.high ^ 1, low: jobID.low),
             operation: maintenance
         )
@@ -980,7 +984,7 @@ struct TypedOperationWireTests {
             nextChunkIndex: 1
         )
         #expect(throws: DatabaseWireError.invalidResultPayload(2)) {
-            try DatabaseEnvelopeCodec.encode(
+            try EnvelopeWireFormat.encode(
                 JobResultOperation.Request(
                     job: expectedJob,
                     continuation: continuation
@@ -988,7 +992,7 @@ struct TypedOperationWireTests {
             )
         }
         #expect(throws: DatabaseWireError.invalidResultPayload(1)) {
-            try DatabaseEnvelopeCodec.encode(
+            try EnvelopeWireFormat.encode(
                 JobResultOperation.Response.succeeded(
                     job: expectedJob,
                     responsePayloadPage: [1],
@@ -1015,13 +1019,13 @@ struct TypedOperationWireTests {
         )
         let typedFrame = try DatabaseOperations.jobStart.encodeRequest(
             requestID: 91,
-            metadata: DatabaseRequestMetadata(traceID: "declared-job"),
+            metadata: OperationRequestMetadata(traceID: "declared-job"),
             request: start
         )
 
         let canonicalFrame = try DatabaseOperations.jobStart.encodeRequest(
             requestID: 91,
-            metadata: DatabaseRequestMetadata(traceID: "declared-job"),
+            metadata: OperationRequestMetadata(traceID: "declared-job"),
             request: JobStartOperation.Request(
                 operation: JobOperations.maintenance.identifier,
                 requestPayload: try DatabaseOperations.maintenanceExecute
@@ -1032,7 +1036,7 @@ struct TypedOperationWireTests {
         )
 
         #expect(typedFrame == canonicalFrame)
-        let envelope = try DatabaseEnvelopeCodec.decodeRequest(typedFrame)
+        let envelope = try EnvelopeWireFormat.decodeRequest(typedFrame)
         let rawRequest = try DatabaseOperations.jobStart.decodeRequest(
             envelope
         )
@@ -1099,8 +1103,8 @@ struct TypedOperationWireTests {
 
     private func expectRoundTrip<Value>(
         _ value: Value
-    ) throws where Value: DatabaseWireValue & Equatable {
-        let encoded = try DatabaseEnvelopeCodec.encode(value)
-        #expect(try DatabaseEnvelopeCodec.decode(Value.self, from: encoded) == value)
+    ) throws where Value: WireValue & Equatable {
+        let encoded = try EnvelopeWireFormat.encode(value)
+        #expect(try EnvelopeWireFormat.decode(Value.self, from: encoded) == value)
     }
 }

@@ -1,7 +1,7 @@
 import DatabaseTypes
 import DatabaseKit
 
-extension QueryIRWireCodec {
+extension QueryIRWireFormat {
     static func encodeLiteral(
         _ literal: Literal,
         into writer: inout DatabaseWireWriter

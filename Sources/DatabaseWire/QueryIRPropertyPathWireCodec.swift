@@ -37,11 +37,11 @@ enum QueryIRPropertyPathWireCodec {
                 encodingSteps.append(.path(child))
 
             case .rangeBounds(let bounds):
-                try QueryIRWireCodec.writeInt(
+                try QueryIRWireFormat.writeInt(
                     bounds.minimum,
                     into: &writer
                 )
-                try QueryIRWireCodec.writeOptionalInt(
+                try QueryIRWireFormat.writeOptionalInt(
                     bounds.maximum,
                     into: &writer
                 )
@@ -124,10 +124,10 @@ enum QueryIRPropertyPathWireCodec {
                     openNestedValueCount -= 1
 
                 case .range:
-                    let minimum = try QueryIRWireCodec.readInt(
+                    let minimum = try QueryIRWireFormat.readInt(
                         from: &reader
                     )
-                    let maximum = try QueryIRWireCodec.readOptionalInt(
+                    let maximum = try QueryIRWireFormat.readOptionalInt(
                         from: &reader
                     )
                     completed = .range(

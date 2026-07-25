@@ -1,8 +1,8 @@
 import DatabaseKit
 import DatabaseTypes
 
-extension SchemaVersion: DatabaseWireValue {
-    public func encode(
+extension SchemaVersion: WireValue {
+    func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         writer.writeUInt32(major)
@@ -10,7 +10,7 @@ extension SchemaVersion: DatabaseWireValue {
         writer.writeUInt32(patch)
     }
 
-    public init(
+    init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         self.init(

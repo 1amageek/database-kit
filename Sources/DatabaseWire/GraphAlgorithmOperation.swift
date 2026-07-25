@@ -38,7 +38,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Source: DatabaseWireValue, Hashable {
+    public struct Source: WireValue, Hashable {
         public let index: String
         public let partitions: FieldObject
         public let graph: GraphSelector
@@ -56,7 +56,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.edgeLabel = edgeLabel
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeString(index)
@@ -66,7 +66,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             if let edgeLabel { try edgeLabel.encode(into: &writer) }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let index = try reader.readString()
@@ -100,7 +100,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Progress: DatabaseWireValue, Hashable {
+    public struct Progress: WireValue, Hashable {
         public let algorithmComplete: Bool
         public let resultPageComplete: Bool
         public let limitReason: LimitReason?
@@ -123,7 +123,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             resultPageComplete: true
         )
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try validate()
@@ -136,7 +136,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             try writer.writeOptionalBytes(continuation)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let algorithmComplete = try reader.readBool()
@@ -335,7 +335,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Page: DatabaseWireValue, Hashable {
+    public struct Page: WireValue, Hashable {
         public let limit: UInt32
         public let continuation: ByteString?
 
@@ -344,14 +344,14 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.continuation = continuation
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             writer.writeUInt32(limit)
             try writer.writeOptionalBytes(continuation)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -361,7 +361,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Request: DatabaseWireValue, Hashable {
+    public struct Request: WireValue, Hashable {
         public let source: Source
         public let invocation: Invocation
         public let page: Page
@@ -379,7 +379,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.budget = budget
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try source.encode(into: &writer)
@@ -388,7 +388,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             try budget.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -400,7 +400,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct PathResult: DatabaseWireValue, Hashable {
+    public struct PathResult: WireValue, Hashable {
         public let found: Bool
         public let nodes: [Term]
         public let edgeLabels: [Term]
@@ -430,7 +430,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.progress = progress
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try validate()
@@ -446,7 +446,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             try progress.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let found = try reader.readBool()
@@ -488,7 +488,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Score: DatabaseWireValue, Hashable {
+    public struct Score: WireValue, Hashable {
         public let vertex: Term
         public let score: Double
 
@@ -497,14 +497,14 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.score = score
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try vertex.encode(into: &writer)
             writer.writeDouble(score)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -514,7 +514,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct RankingPage: DatabaseWireValue, Hashable {
+    public struct RankingPage: WireValue, Hashable {
         public let scores: [Score]
         public let iterations: UInt32
         public let convergenceDelta: Double
@@ -532,7 +532,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.progress = progress
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeCount(scores.count)
@@ -542,7 +542,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             try progress.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let count = try reader.readCount()
@@ -558,7 +558,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct CommunityAssignment: DatabaseWireValue, Hashable {
+    public struct CommunityAssignment: WireValue, Hashable {
         public let vertex: Term
         public let community: Term
 
@@ -567,14 +567,14 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.community = community
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try vertex.encode(into: &writer)
             try community.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -584,7 +584,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct CommunityPage: DatabaseWireValue, Hashable {
+    public struct CommunityPage: WireValue, Hashable {
         public let assignments: [CommunityAssignment]
         public let iterations: UInt32
         public let modularity: Double?
@@ -602,7 +602,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.progress = progress
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeCount(assignments.count)
@@ -613,7 +613,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             try progress.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let count = try reader.readCount()
@@ -633,7 +633,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct DirectedEdge: DatabaseWireValue, Hashable {
+    public struct DirectedEdge: WireValue, Hashable {
         public let source: Term
         public let target: Term
 
@@ -642,14 +642,14 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.target = target
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try source.encode(into: &writer)
             try target.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -659,7 +659,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct CyclePage: DatabaseWireValue, Hashable {
+    public struct CyclePage: WireValue, Hashable {
         public let cycles: [[Term]]
         public let backEdges: [DirectedEdge]
         public let nodesExplored: UInt64
@@ -677,7 +677,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.progress = progress
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeCount(cycles.count)
@@ -688,7 +688,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             try progress.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let cycleCount = try reader.readCount()
@@ -712,7 +712,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct ComponentPage: DatabaseWireValue, Hashable {
+    public struct ComponentPage: WireValue, Hashable {
         public let components: [[Term]]
         public let nodesExplored: UInt64
         public let progress: Progress
@@ -727,7 +727,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.progress = progress
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeCount(components.count)
@@ -738,7 +738,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             try progress.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let count = try reader.readCount()
@@ -755,7 +755,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct TopologicalResult: DatabaseWireValue, Hashable {
+    public struct TopologicalResult: WireValue, Hashable {
         public let order: [Term]?
         public let cyclicNodes: [Term]
         public let totalNodes: UInt64
@@ -773,7 +773,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             self.progress = progress
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             writer.writeBool(order != nil)
@@ -783,7 +783,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             try progress.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let order = try reader.readBool()
@@ -798,7 +798,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public enum Response: DatabaseWireValue, Hashable {
+    public enum Response: WireValue, Hashable {
         case path(PathResult)
         case ranking(RankingPage)
         case communities(CommunityPage)
@@ -806,7 +806,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         case components(ComponentPage)
         case topologicalOrder(TopologicalResult)
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             switch self {
@@ -831,7 +831,7 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             switch try reader.readUInt8() {

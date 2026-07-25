@@ -3,7 +3,7 @@ import DatabaseTypes
 public enum JobStartOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.jobStart
 
-    public struct RetryPolicy: DatabaseWireValue, Hashable {
+    public struct RetryPolicy: WireValue, Hashable {
         public let maximumAttempts: UInt32
         public let initialBackoffMilliseconds: UInt32
         public let maximumBackoffMilliseconds: UInt32
@@ -18,7 +18,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
             self.maximumBackoffMilliseconds = maximumBackoffMilliseconds
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             writer.writeUInt32(maximumAttempts)
@@ -26,7 +26,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
             writer.writeUInt32(maximumBackoffMilliseconds)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -37,14 +37,14 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Request: DatabaseWireValue, Hashable {
-        public let operation: DatabaseJobOperationIdentifier
+    public struct Request: WireValue, Hashable {
+        public let operation: JobOperationIdentifier
         public let requestPayload: ByteString
         public let maximumSliceWorkUnits: UInt64
         public let retryPolicy: RetryPolicy
 
         public init(
-            operation: DatabaseJobOperationIdentifier,
+            operation: JobOperationIdentifier,
             requestPayload: ByteString,
             maximumSliceWorkUnits: UInt64 = 100_000,
             retryPolicy: RetryPolicy = RetryPolicy()
@@ -55,7 +55,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
             self.retryPolicy = retryPolicy
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try operation.encode(into: &writer)
@@ -64,11 +64,11 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
             try retryPolicy.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
-                operation: try DatabaseJobOperationIdentifier(from: &reader),
+                operation: try JobOperationIdentifier(from: &reader),
                 requestPayload: try reader.readBytes(),
                 maximumSliceWorkUnits: try reader.readUInt64(),
                 retryPolicy: try RetryPolicy(from: &reader)
@@ -76,35 +76,35 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Response: DatabaseWireValue, Hashable {
-        public let job: DatabaseJobIdentity
+    public struct Response: WireValue, Hashable {
+        public let job: JobIdentity
 
         public var jobID: DatabaseTypes.UUID { job.jobID }
-        public var operation: DatabaseJobOperationIdentifier { job.operation }
+        public var operation: JobOperationIdentifier { job.operation }
 
-        public init(job: DatabaseJobIdentity) {
+        public init(job: JobIdentity) {
             self.job = job
         }
 
         public init(
             jobID: DatabaseTypes.UUID,
-            operation: DatabaseJobOperationIdentifier
+            operation: JobOperationIdentifier
         ) {
             self.init(
-                job: DatabaseJobIdentity(jobID: jobID, operation: operation)
+                job: JobIdentity(jobID: jobID, operation: operation)
             )
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try job.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            self.init(job: try DatabaseJobIdentity(from: &reader))
+            self.init(job: try JobIdentity(from: &reader))
         }
     }
 }

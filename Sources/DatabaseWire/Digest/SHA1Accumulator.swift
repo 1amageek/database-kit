@@ -1,10 +1,10 @@
-public import DatabaseTypes
+import DatabaseTypes
 
 /// Incrementally computes a canonical SHA-1 digest.
 ///
 /// Input buffers are borrowed synchronously. Finalization allocates only the
 /// 20-byte digest result and consumes the accumulator.
-public struct SHA1Accumulator: Sendable {
+struct SHA1Accumulator: Sendable {
     public static let digestByteCount = 20
 
     private var state = State()

@@ -14,11 +14,11 @@ public enum DatabaseOperationIdentifier: UInt16, Sendable, Hashable, CaseIterabl
     case jobResult = 0x0903
     case jobCancel = 0x0904
 
-    public func encode(into writer: inout DatabaseWireWriter) {
+    func encode(into writer: inout DatabaseWireWriter) {
         writer.writeUInt16(rawValue)
     }
 
-    public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
         let rawValue = try reader.readUInt16()
         guard let value = Self(rawValue: rawValue) else {
             throw .invalidOperationIdentifier(rawValue)

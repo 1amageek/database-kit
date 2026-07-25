@@ -132,7 +132,7 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Request: DatabaseWireValue, Hashable {
+    public struct Request: WireValue, Hashable {
         public let input: Input
         public let preconditions: [Precondition]
         public let graphPartitions: FieldObject
@@ -150,7 +150,7 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
             self.budget = budget
         }
 
-        public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+        func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             try input.encode(into: &writer)
             try writer.writeCount(preconditions.count)
             for precondition in preconditions { try precondition.encode(into: &writer) }
@@ -158,7 +158,7 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
             try budget.encode(into: &writer)
         }
 
-        public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let input = try Input(from: &reader)
             let count = try reader.readCount()
             var preconditions: [Precondition] = []
@@ -173,7 +173,7 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct EntityEffect: DatabaseWireValue, Hashable {
+    public struct EntityEffect: WireValue, Hashable {
         public let kind: Kind
         public let identity: EntityReference
         public let version: ByteString?
@@ -188,13 +188,13 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
             self.version = version
         }
 
-        public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+        func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             writer.writeUInt8(kind.rawValue)
             try identity.encode(into: &writer)
             try writer.writeOptionalBytes(version)
         }
 
-        public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             self.init(
                 kind: try Kind(from: &reader),
                 identity: try EntityReference(from: &reader),
@@ -208,7 +208,7 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
     /// Counts describe physical logical quads and explicit graph catalog
     /// entries. Duplicate INSERTs and deletes of absent quads do not increment
     /// the corresponding count.
-    public struct RDFEffect: DatabaseWireValue, Hashable {
+    public struct RDFEffect: WireValue, Hashable {
         public let insertedQuads: UInt64
         public let deletedQuads: UInt64
         public let createdGraphs: UInt64
@@ -226,7 +226,7 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
             self.droppedGraphs = droppedGraphs
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             writer.writeUInt64(insertedQuads)
@@ -235,7 +235,7 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
             writer.writeUInt64(droppedGraphs)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -247,11 +247,11 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public enum Result: DatabaseWireValue, Hashable {
+    public enum Result: WireValue, Hashable {
         case entities([EntityEffect])
         case rdf(RDFEffect)
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             switch self {
@@ -267,7 +267,7 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             switch try reader.readUInt8() {
@@ -287,7 +287,7 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Response: DatabaseWireValue, Hashable {
+    public struct Response: WireValue, Hashable {
         public let commitVersion: UInt64
         public let result: Result
 
@@ -296,12 +296,12 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
             self.result = result
         }
 
-        public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+        func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             writer.writeUInt64(commitVersion)
             try result.encode(into: &writer)
         }
 
-        public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let commitVersion = try reader.readUInt64()
             self.init(
                 commitVersion: commitVersion,

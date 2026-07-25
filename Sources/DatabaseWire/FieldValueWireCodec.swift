@@ -76,23 +76,23 @@ enum FieldValueWireCodec {
 }
 
 private extension FieldValueWireCodec {
-    typealias ObjectField = (key: String, value: FieldValue)
+    typealias FieldEntry = (key: String, value: FieldValue)
 
     enum EncodingNode {
         case value(FieldValue)
-        case objectField(ObjectField)
+        case objectField(FieldEntry)
         case identifier(ReferenceIdentifier)
         case reference(EntityReference, closesValue: Bool)
     }
 
     enum EncodingFrame {
         case array([FieldValue], nextIndex: Int)
-        case object([ObjectField], nextIndex: Int)
+        case object([FieldEntry], nextIndex: Int)
         case identifierComposite([ReferenceIdentifier], nextIndex: Int)
         case referenceIdentifier(EntityReference, closesValue: Bool)
         case referencePartitions(
             EntityReference,
-            fields: [ObjectField],
+            fields: [FieldEntry],
             nextIndex: Int,
             closesValue: Bool
         )
@@ -399,7 +399,7 @@ private extension FieldValueWireCodec {
 
     enum DecodedNode {
         case value(FieldValue)
-        case objectField(ObjectField)
+        case objectField(FieldEntry)
         case identifier(ReferenceIdentifier)
         case reference(EntityReference)
     }
@@ -407,7 +407,7 @@ private extension FieldValueWireCodec {
     enum DecodingFrame {
         case objectField(key: String)
         case array(values: [FieldValue], remaining: Int)
-        case object(fields: [ObjectField], remaining: Int)
+        case object(fields: [FieldEntry], remaining: Int)
         case valueReference
         case identifierComposite(
             values: [ReferenceIdentifier],
@@ -417,7 +417,7 @@ private extension FieldValueWireCodec {
         case referencePartitions(
             entity: String,
             id: ReferenceIdentifier,
-            fields: [ObjectField],
+            fields: [FieldEntry],
             remaining: Int
         )
     }
@@ -560,7 +560,7 @@ private extension FieldValueWireCodec {
                             openValueCount -= 1
                             continue
                         }
-                        var fields: [ObjectField] = []
+                        var fields: [FieldEntry] = []
                         fields.reserveCapacity(count)
                         frames.append(.object(fields: fields, remaining: count))
                         nextRequest = .objectField
@@ -686,7 +686,7 @@ private extension FieldValueWireCodec {
                 }
 
             case .object(var fields, let remaining):
-                fields.append(try takeObjectField(consume node))
+                fields.append(try takeFieldEntry(consume node))
                 if remaining == 1 {
                     let object = try canonicalObject(consume fields)
                     reader.endNestedValue()
@@ -742,7 +742,7 @@ private extension FieldValueWireCodec {
                     )
                     continue
                 }
-                var fields: [ObjectField] = []
+                var fields: [FieldEntry] = []
                 fields.reserveCapacity(partitionCount)
                 frames.append(
                     .referencePartitions(
@@ -760,7 +760,7 @@ private extension FieldValueWireCodec {
                 var fields,
                 let remaining
             ):
-                fields.append(try takeObjectField(consume node))
+                fields.append(try takeFieldEntry(consume node))
                 if remaining == 1 {
                     completed = .reference(
                         try makeReference(
@@ -785,7 +785,7 @@ private extension FieldValueWireCodec {
     }
 
     static func canonicalObject(
-        _ fields: consuming [ObjectField]
+        _ fields: consuming [FieldEntry]
     ) throws(DatabaseWireError) -> FieldObject {
         for index in fields.indices.dropFirst() {
             let previousKey = fields[index - 1].key
@@ -1064,9 +1064,9 @@ private extension FieldValueWireCodec {
         }
     }
 
-    static func takeObjectField(
+    static func takeFieldEntry(
         _ node: consuming DecodedNode
-    ) throws(DatabaseWireError) -> ObjectField {
+    ) throws(DatabaseWireError) -> FieldEntry {
         switch consume node {
         case .objectField(let field):
             return field

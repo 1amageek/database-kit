@@ -1,5 +1,5 @@
 import DatabaseTypes
-public struct DatabaseRequestMetadata: Sendable, Hashable {
+public struct OperationRequestMetadata: Sendable, Hashable {
     public let traceID: String?
     public let idempotencyKey: String?
 
@@ -8,12 +8,12 @@ public struct DatabaseRequestMetadata: Sendable, Hashable {
         self.idempotencyKey = idempotencyKey
     }
 
-    public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+    func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
         try writer.writeOptionalString(traceID)
         try writer.writeOptionalString(idempotencyKey)
     }
 
-    public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
         self.init(
             traceID: try reader.readOptionalString(),
             idempotencyKey: try reader.readOptionalString()

@@ -1,10 +1,10 @@
 import DatabaseTypes
-import DatabaseWire
+@testable import DatabaseWire
 import DatabaseKit
 import Testing
 
 @Suite("QueryIR wire codec")
-struct QueryIRWireCodecTests {
+struct QueryIRWireFormatTests {
     @Test("mixed basic graph patterns round-trip without splitting blank-node scope")
     func mixedBasicGraphPatternRoundTrips() throws {
         let pathPredicate = try RDFPredicateIRI("urn:calendar:related")
@@ -33,8 +33,8 @@ struct QueryIRWireCodecTests {
             )
         )
 
-        let encoded = try QueryIRWireCodec.encode(original)
-        let decoded = try QueryIRWireCodec.decode(encoded)
+        let encoded = try QueryIRWireFormat.encode(original)
+        let decoded = try QueryIRWireFormat.decode(encoded)
 
         #expect(decoded == original)
         guard case .select(let query) = decoded,
@@ -253,7 +253,7 @@ struct QueryIRWireCodecTests {
         ]
 
         for statement in statements {
-            #expect(try QueryIRWireCodec.decode(QueryIRWireCodec.encode(statement)) == statement)
+            #expect(try QueryIRWireFormat.decode(QueryIRWireFormat.encode(statement)) == statement)
         }
     }
 
@@ -278,13 +278,13 @@ struct QueryIRWireCodecTests {
         )
 
         #expect(
-            try QueryIRWireCodec.decode(
-                QueryIRWireCodec.encode(select)
+            try QueryIRWireFormat.decode(
+                QueryIRWireFormat.encode(select)
             ) == select
         )
         #expect(
-            try QueryIRWireCodec.decode(
-                QueryIRWireCodec.encode(ask)
+            try QueryIRWireFormat.decode(
+                QueryIRWireFormat.encode(ask)
             ) == ask
         )
     }
@@ -302,10 +302,10 @@ struct QueryIRWireCodecTests {
                 )
             )
         )
-        let encoded = try QueryIRWireCodec.encode(statement)
+        let encoded = try QueryIRWireFormat.encode(statement)
 
         #expect(encoded == [6, 1, 0, 0, 0, 8, 0, 0, 0, 0])
-        #expect(try QueryIRWireCodec.decode(encoded) == statement)
+        #expect(try QueryIRWireFormat.decode(encoded) == statement)
     }
 
     @Test("CLEAR and DROP share every canonical graph-store target")
@@ -332,11 +332,11 @@ struct QueryIRWireCodecTests {
                 )
             )
             #expect(
-                try QueryIRWireCodec.decode(QueryIRWireCodec.encode(clear))
+                try QueryIRWireFormat.decode(QueryIRWireFormat.encode(clear))
                     == clear
             )
             #expect(
-                try QueryIRWireCodec.decode(QueryIRWireCodec.encode(drop))
+                try QueryIRWireFormat.decode(QueryIRWireFormat.encode(drop))
                     == drop
             )
         }
@@ -354,8 +354,8 @@ struct QueryIRWireCodecTests {
             ]
         )
         let statement = QueryStatement.sparqlUpdate(request)
-        let decoded = try QueryIRWireCodec.decode(
-            QueryIRWireCodec.encode(statement)
+        let decoded = try QueryIRWireFormat.decode(
+            QueryIRWireFormat.encode(statement)
         )
 
         guard case .sparqlUpdate(let decodedRequest) = decoded else {
@@ -395,7 +395,7 @@ struct QueryIRWireCodecTests {
                 )
             )
             #expect(
-                try QueryIRWireCodec.decode(QueryIRWireCodec.encode(statement))
+                try QueryIRWireFormat.decode(QueryIRWireFormat.encode(statement))
                     == statement
             )
         }
@@ -404,7 +404,7 @@ struct QueryIRWireCodecTests {
     @Test("ASK has a stable compact golden vector")
     func askGoldenVector() throws {
         let statement = QueryStatement.ask(AskQuery(pattern: .basic([])))
-        let encoded = try QueryIRWireCodec.encode(statement)
+        let encoded = try QueryIRWireFormat.encode(statement)
 
         #expect(encoded == [
             8,
@@ -416,7 +416,7 @@ struct QueryIRWireCodecTests {
             0,
             0,
         ])
-        #expect(try QueryIRWireCodec.decode(encoded) == statement)
+        #expect(try QueryIRWireFormat.decode(encoded) == statement)
     }
 
     @Test("typed query operation embeds QueryIR without an opaque payload")
@@ -432,8 +432,8 @@ struct QueryIRWireCodecTests {
             ])
         )
 
-        let encoded = try DatabaseEnvelopeCodec.encode(request)
-        let decoded = try DatabaseEnvelopeCodec.decode(
+        let encoded = try EnvelopeWireFormat.encode(request)
+        let decoded = try EnvelopeWireFormat.decode(
             QueryExecuteOperation.Request.self,
             from: encoded
         )
@@ -453,8 +453,8 @@ struct QueryIRWireCodecTests {
             )
         )
 
-        let encoded = try QueryIRWireCodec.encode(statement)
-        #expect(try QueryIRWireCodec.decode(encoded) == statement)
+        let encoded = try QueryIRWireFormat.encode(statement)
+        #expect(try QueryIRWireFormat.decode(encoded) == statement)
     }
 
     @Test("GRAPH_TABLE aliases survive the canonical wire boundary")
@@ -480,9 +480,9 @@ struct QueryIRWireCodecTests {
             )
         )
 
-        let encoded = try QueryIRWireCodec.encode(statement)
+        let encoded = try QueryIRWireFormat.encode(statement)
 
-        #expect(try QueryIRWireCodec.decode(encoded) == statement)
+        #expect(try QueryIRWireFormat.decode(encoded) == statement)
     }
 
     @Test("invalid parameter references are rejected by the wire codec")
@@ -501,10 +501,10 @@ struct QueryIRWireCodecTests {
         )
 
         #expect(throws: DatabaseWireError.invalidParameterPosition(0)) {
-            _ = try QueryIRWireCodec.encode(invalidPosition)
+            _ = try QueryIRWireFormat.encode(invalidPosition)
         }
         #expect(throws: DatabaseWireError.emptyParameterName) {
-            _ = try QueryIRWireCodec.encode(emptyName)
+            _ = try QueryIRWireFormat.encode(emptyName)
         }
     }
 
@@ -527,7 +527,7 @@ struct QueryIRWireCodecTests {
         #expect(
             throws: DatabaseWireError.invalidSPARQLVariableName("?value")
         ) {
-            _ = try QueryIRWireCodec.encode(invalid)
+            _ = try QueryIRWireFormat.encode(invalid)
         }
 
         let valid = QueryStatement.select(
@@ -544,7 +544,7 @@ struct QueryIRWireCodecTests {
                 )
             )
         )
-        var bytes = Array(try QueryIRWireCodec.encode(valid))
+        var bytes = Array(try QueryIRWireFormat.encode(valid))
         let matchingIndices = bytes.indices.filter { bytes[$0] == 0x5A }
         guard matchingIndices.count == 1,
               let variableByteIndex = matchingIndices.first else {
@@ -556,7 +556,7 @@ struct QueryIRWireCodecTests {
         #expect(
             throws: DatabaseWireError.invalidSPARQLVariableName("?")
         ) {
-            _ = try QueryIRWireCodec.decode(ByteString(bytes))
+            _ = try QueryIRWireFormat.decode(ByteString(bytes))
         }
     }
 
@@ -630,7 +630,7 @@ struct QueryIRWireCodecTests {
 
         for statement in invalidStatements {
             #expect(throws: DatabaseWireError.invalidRDFIRI("relative")) {
-                _ = try QueryIRWireCodec.encode(statement)
+                _ = try QueryIRWireFormat.encode(statement)
             }
         }
 
@@ -646,14 +646,14 @@ struct QueryIRWireCodecTests {
         )
         let invalidBytes = try replacingUniqueASCII(
             "urn:valid",
-            in: QueryIRWireCodec.encode(valid),
+            in: QueryIRWireFormat.encode(valid),
             with: "urn_valid"
         )
 
         #expect(
             throws: DatabaseWireError.invalidRDFIRI("urn_valid")
         ) {
-            _ = try QueryIRWireCodec.decode(invalidBytes)
+            _ = try QueryIRWireFormat.decode(invalidBytes)
         }
     }
 
@@ -686,7 +686,7 @@ struct QueryIRWireCodecTests {
         for (literal, expectedError) in invalidLiterals {
             let statement = statement(projecting: literal)
             #expect(throws: expectedError) {
-                _ = try QueryIRWireCodec.encode(statement)
+                _ = try QueryIRWireFormat.encode(statement)
             }
         }
 
@@ -695,11 +695,11 @@ struct QueryIRWireCodecTests {
         )
         let invalidLanguageBytes = try replacingUniqueASCII(
             "en",
-            in: QueryIRWireCodec.encode(validLanguage),
+            in: QueryIRWireFormat.encode(validLanguage),
             with: "EN"
         )
         #expect(throws: DatabaseWireError.nonCanonicalRDFLanguageTag) {
-            _ = try QueryIRWireCodec.decode(invalidLanguageBytes)
+            _ = try QueryIRWireFormat.decode(invalidLanguageBytes)
         }
 
         let validDirection = statement(
@@ -711,23 +711,23 @@ struct QueryIRWireCodecTests {
         )
         let invalidDirectionBytes = try replacingUniqueASCII(
             "ltr",
-            in: QueryIRWireCodec.encode(validDirection),
+            in: QueryIRWireFormat.encode(validDirection),
             with: "bad"
         )
         #expect(
             throws: DatabaseWireError.invalidRDFDirectionValue("bad")
         ) {
-            _ = try QueryIRWireCodec.decode(invalidDirectionBytes)
+            _ = try QueryIRWireFormat.decode(invalidDirectionBytes)
         }
     }
 
     @Test("invalid tags and excessive nesting are rejected deterministically")
     func invalidFramesAreRejected() throws {
         #expect(throws: DatabaseWireError.invalidValueTag(255)) {
-            _ = try QueryIRWireCodec.decode([255])
+            _ = try QueryIRWireFormat.decode([255])
         }
         #expect(throws: DatabaseWireError.emptySPARQLUpdateRequest) {
-            _ = try QueryIRWireCodec.decode([6, 0, 0, 0, 0])
+            _ = try QueryIRWireFormat.decode([6, 0, 0, 0, 0])
         }
         let zeroCollectionLimit = try DatabaseWireLimits(
             maximumFrameBytes: 64,
@@ -741,31 +741,31 @@ struct QueryIRWireCodecTests {
             actual: 1,
             maximum: 0
         )) {
-            _ = try QueryIRWireCodec.decode(
+            _ = try QueryIRWireFormat.decode(
                 [6, 1, 0, 0, 0, 8, 0, 0, 0, 0],
                 limits: zeroCollectionLimit
             )
         }
         #expect(throws: DatabaseWireError.invalidValueTag(255)) {
-            _ = try QueryIRWireCodec.decode([6, 1, 0, 0, 0, 255])
+            _ = try QueryIRWireFormat.decode([6, 1, 0, 0, 0, 255])
         }
         #expect(throws: DatabaseWireError.invalidValueTag(255)) {
-            _ = try QueryIRWireCodec.decode([6, 1, 0, 0, 0, 2, 0, 255])
+            _ = try QueryIRWireFormat.decode([6, 1, 0, 0, 0, 2, 0, 255])
         }
         #expect(throws: DatabaseWireError.invalidValueTag(255)) {
-            _ = try QueryIRWireCodec.decode([6, 1, 0, 0, 0, 5, 255])
+            _ = try QueryIRWireFormat.decode([6, 1, 0, 0, 0, 5, 255])
         }
         #expect(throws: DatabaseWireError.invalidValueTag(255)) {
-            _ = try QueryIRWireCodec.decode([6, 1, 0, 0, 0, 8, 255])
+            _ = try QueryIRWireFormat.decode([6, 1, 0, 0, 0, 8, 255])
         }
         #expect(throws: DatabaseWireError.invalidValueTag(255)) {
-            _ = try QueryIRWireCodec.decode([6, 1, 0, 0, 0, 8, 0, 255])
+            _ = try QueryIRWireFormat.decode([6, 1, 0, 0, 0, 8, 0, 255])
         }
         #expect(throws: DatabaseWireError.invalidValueTag(255)) {
-            _ = try QueryIRWireCodec.decode([6, 1, 0, 0, 0, 8, 0, 0, 255])
+            _ = try QueryIRWireFormat.decode([6, 1, 0, 0, 0, 8, 0, 0, 255])
         }
         #expect(throws: DatabaseWireError.truncated) {
-            _ = try QueryIRWireCodec.decode([
+            _ = try QueryIRWireFormat.decode([
                 6, 2, 0, 0, 0,
                 8, 0, 0, 0, 0,
             ])
@@ -790,7 +790,7 @@ struct QueryIRWireCodecTests {
                 )
             )
         )
-        let encoded = try QueryIRWireCodec.encode(statement)
+        let encoded = try QueryIRWireFormat.encode(statement)
         let limits = try DatabaseWireLimits(
             maximumFrameBytes: 4_096,
             maximumStringBytes: 128,
@@ -801,7 +801,7 @@ struct QueryIRWireCodecTests {
         )
 
         #expect(throws: DatabaseWireError.self) {
-            _ = try QueryIRWireCodec.decode(encoded, limits: limits)
+            _ = try QueryIRWireFormat.decode(encoded, limits: limits)
         }
     }
 
@@ -827,16 +827,16 @@ struct QueryIRWireCodecTests {
             maximumNestingDepth: 1_024,
             maximumObjectCount: 10_000
         )
-        let bytes = try QueryIRWireCodec.encode(
+        let bytes = try QueryIRWireFormat.encode(
             statement,
             limits: permissiveLimits
         )
 
-        let decoded = try QueryIRWireCodec.decode(
+        let decoded = try QueryIRWireFormat.decode(
             bytes,
             limits: permissiveLimits
         )
-        let reencoded = try QueryIRWireCodec.encode(
+        let reencoded = try QueryIRWireFormat.encode(
             decoded,
             limits: permissiveLimits
         )
@@ -855,10 +855,10 @@ struct QueryIRWireCodecTests {
             maximum: 64
         )
         #expect(throws: expected) {
-            _ = try QueryIRWireCodec.encode(statement, limits: boundedLimits)
+            _ = try QueryIRWireFormat.encode(statement, limits: boundedLimits)
         }
         #expect(throws: expected) {
-            _ = try QueryIRWireCodec.decode(bytes, limits: boundedLimits)
+            _ = try QueryIRWireFormat.decode(bytes, limits: boundedLimits)
         }
     }
 
@@ -899,11 +899,11 @@ struct QueryIRWireCodecTests {
             path: .negatedPropertySet(second)
         )
 
-        let firstBytes = try QueryIRWireCodec.encode(firstStatement)
-        let secondBytes = try QueryIRWireCodec.encode(secondStatement)
+        let firstBytes = try QueryIRWireFormat.encode(firstStatement)
+        let secondBytes = try QueryIRWireFormat.encode(secondStatement)
 
         #expect(firstBytes == secondBytes)
-        #expect(try QueryIRWireCodec.decode(firstBytes) == firstStatement)
+        #expect(try QueryIRWireFormat.decode(firstBytes) == firstStatement)
         #expect(first.reversed.forward == first.inverse)
         #expect(first.reversed.inverse == first.forward)
     }
@@ -914,9 +914,9 @@ struct QueryIRWireCodecTests {
         let bounds = try PropertyPathRange(minimum: 2, maximum: 4)
         let original = statement(path: .range(.iri(predicate), bounds))
 
-        let bytes = try QueryIRWireCodec.encode(original)
+        let bytes = try QueryIRWireFormat.encode(original)
 
-        #expect(try QueryIRWireCodec.decode(bytes) == original)
+        #expect(try QueryIRWireFormat.decode(bytes) == original)
     }
 
     private func statement(path: PropertyPath) -> QueryStatement {

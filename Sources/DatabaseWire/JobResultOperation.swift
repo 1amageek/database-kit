@@ -5,17 +5,17 @@ public enum JobResultOperation: DatabaseOperationDeclaration {
     public static let maximumResponsePageBytes = 512 * 1_024
     public static let maximumResponseBytes = 4 * 1_024 * 1_024
 
-    public struct Continuation: DatabaseWireValue, Hashable {
-        public let job: DatabaseJobIdentity
-        public let responseDigest: DatabaseJobResultDigest
+    public struct Continuation: WireValue, Hashable {
+        public let job: JobIdentity
+        public let responseDigest: JobResultDigest
         public let nextChunkIndex: UInt32
 
         public var jobID: DatabaseTypes.UUID { job.jobID }
-        public var operation: DatabaseJobOperationIdentifier { job.operation }
+        public var operation: JobOperationIdentifier { job.operation }
 
         public init(
-            job: DatabaseJobIdentity,
-            responseDigest: DatabaseJobResultDigest,
+            job: JobIdentity,
+            responseDigest: JobResultDigest,
             nextChunkIndex: UInt32
         ) throws(DatabaseWireError) {
             guard nextChunkIndex > 0 else {
@@ -26,7 +26,7 @@ public enum JobResultOperation: DatabaseOperationDeclaration {
             self.nextChunkIndex = nextChunkIndex
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             guard nextChunkIndex > 0 else {
@@ -37,12 +37,12 @@ public enum JobResultOperation: DatabaseOperationDeclaration {
             writer.writeUInt32(nextChunkIndex)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             try self.init(
-                job: DatabaseJobIdentity(from: &reader),
-                responseDigest: DatabaseJobResultDigest(from: &reader),
+                job: JobIdentity(from: &reader),
+                responseDigest: JobResultDigest(from: &reader),
                 nextChunkIndex: reader.readUInt32()
             )
         }
@@ -57,8 +57,8 @@ public enum JobResultOperation: DatabaseOperationDeclaration {
         }
 
         private init(
-            validatedJob job: DatabaseJobIdentity,
-            responseDigest: DatabaseJobResultDigest,
+            validatedJob job: JobIdentity,
+            responseDigest: JobResultDigest,
             nextChunkIndex: UInt32
         ) {
             self.job = job
@@ -67,22 +67,22 @@ public enum JobResultOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Request: DatabaseWireValue, Hashable {
-        public let job: DatabaseJobIdentity
+    public struct Request: WireValue, Hashable {
+        public let job: JobIdentity
         public let continuation: Continuation?
 
         public var jobID: DatabaseTypes.UUID { job.jobID }
-        public var operation: DatabaseJobOperationIdentifier { job.operation }
+        public var operation: JobOperationIdentifier { job.operation }
 
         public init(
-            job: DatabaseJobIdentity,
+            job: JobIdentity,
             continuation: Continuation? = nil
         ) {
             self.job = job
             self.continuation = continuation
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             if let continuation,
@@ -96,10 +96,10 @@ public enum JobResultOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let job = try DatabaseJobIdentity(from: &reader)
+            let job = try JobIdentity(from: &reader)
             let continuation = try reader.readBool()
                 ? try Continuation(from: &reader)
                 : nil
@@ -110,18 +110,18 @@ public enum JobResultOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public enum Response: DatabaseWireValue, Hashable {
+    public enum Response: WireValue, Hashable {
         case succeeded(
-            job: DatabaseJobIdentity,
+            job: JobIdentity,
             responsePayloadPage: ByteString,
             totalResponseBytes: UInt64,
-            responseDigest: DatabaseJobResultDigest,
+            responseDigest: JobResultDigest,
             continuation: Continuation?
         )
-        case failed(job: DatabaseJobIdentity, error: DatabaseRemoteError)
-        case cancelled(job: DatabaseJobIdentity)
+        case failed(job: JobIdentity, error: RemoteOperationError)
+        case cancelled(job: JobIdentity)
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             switch self {
@@ -166,15 +166,15 @@ public enum JobResultOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             switch try reader.readUInt8() {
             case 1:
-                let job = try DatabaseJobIdentity(from: &reader)
+                let job = try JobIdentity(from: &reader)
                 let responsePayloadPage = try reader.readBytes()
                 let totalResponseBytes = try reader.readUInt64()
-                let responseDigest = try DatabaseJobResultDigest(from: &reader)
+                let responseDigest = try JobResultDigest(from: &reader)
                 let continuation = try reader.readBool()
                     ? try Continuation(from: &reader)
                     : nil
@@ -205,12 +205,12 @@ public enum JobResultOperation: DatabaseOperationDeclaration {
                 )
             case 2:
                 self = .failed(
-                    job: try DatabaseJobIdentity(from: &reader),
-                    error: try DatabaseRemoteError(from: &reader)
+                    job: try JobIdentity(from: &reader),
+                    error: try RemoteOperationError(from: &reader)
                 )
             case 3:
                 self = .cancelled(
-                    job: try DatabaseJobIdentity(from: &reader)
+                    job: try JobIdentity(from: &reader)
                 )
             case let tag:
                 throw .invalidResultPayload(tag)

@@ -1,7 +1,7 @@
 import DatabaseTypes
 import DatabaseKit
 
-extension QueryIRWireCodec {
+extension QueryIRWireFormat {
     static func writeSPARQLVariableName(
         _ value: String,
         into writer: inout DatabaseWireWriter

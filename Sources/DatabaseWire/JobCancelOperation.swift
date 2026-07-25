@@ -3,36 +3,36 @@ import DatabaseTypes
 public enum JobCancelOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.jobCancel
 
-    public struct Request: DatabaseWireValue, Hashable {
-        public let job: DatabaseJobIdentity
+    public struct Request: WireValue, Hashable {
+        public let job: JobIdentity
 
         public var jobID: DatabaseTypes.UUID { job.jobID }
-        public var operation: DatabaseJobOperationIdentifier { job.operation }
+        public var operation: JobOperationIdentifier { job.operation }
 
-        public init(job: DatabaseJobIdentity) {
+        public init(job: JobIdentity) {
             self.job = job
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try job.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            self.init(job: try DatabaseJobIdentity(from: &reader))
+            self.init(job: try JobIdentity(from: &reader))
         }
     }
 
-    public struct Response: DatabaseWireValue, Hashable {
-        public let job: DatabaseJobIdentity
+    public struct Response: WireValue, Hashable {
+        public let job: JobIdentity
         public let state: JobStatusOperation.State
         public let accepted: Bool
 
         public init(
-            job: DatabaseJobIdentity,
+            job: JobIdentity,
             state: JobStatusOperation.State,
             accepted: Bool
         ) throws(DatabaseWireError) {
@@ -56,7 +56,7 @@ public enum JobCancelOperation: DatabaseOperationDeclaration {
             self.accepted = accepted
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try job.encode(into: &writer)
@@ -64,10 +64,10 @@ public enum JobCancelOperation: DatabaseOperationDeclaration {
             writer.writeBool(accepted)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let job = try DatabaseJobIdentity(from: &reader)
+            let job = try JobIdentity(from: &reader)
             let rawValue = try reader.readUInt8()
             guard let state = JobStatusOperation.State(rawValue: rawValue) else {
                 throw .invalidValueTag(rawValue)

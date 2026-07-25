@@ -1,5 +1,5 @@
 import DatabaseTypes
-public struct ExecutionBudget: DatabaseWireValue, Hashable {
+public struct ExecutionBudget: WireValue, Hashable {
     public let maximumRows: UInt32
     public let maximumWorkUnits: UInt64
     public let maximumIntermediateRows: UInt32
@@ -20,7 +20,7 @@ public struct ExecutionBudget: DatabaseWireValue, Hashable {
         self.timeoutMilliseconds = timeoutMilliseconds
     }
 
-    public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+    func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
         writer.writeUInt32(maximumRows)
         writer.writeUInt64(maximumWorkUnits)
         writer.writeUInt32(maximumIntermediateRows)
@@ -28,7 +28,7 @@ public struct ExecutionBudget: DatabaseWireValue, Hashable {
         writer.writeUInt32(timeoutMilliseconds)
     }
 
-    public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
         self.init(
             maximumRows: try reader.readUInt32(),
             maximumWorkUnits: try reader.readUInt64(),

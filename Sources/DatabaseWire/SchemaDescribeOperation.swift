@@ -220,7 +220,7 @@ public enum SchemaDescribeOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Response: DatabaseWireValue, Hashable {
+    public struct Response: WireValue, Hashable {
         public let version: SchemaVersion
         public let entities: [Entity]
 
@@ -229,13 +229,13 @@ public enum SchemaDescribeOperation: DatabaseOperationDeclaration {
             self.entities = entities
         }
 
-        public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+        func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             try version.encode(into: &writer)
             try writer.writeCount(entities.count)
             for entity in entities { try entity.encode(into: &writer) }
         }
 
-        public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let version = try SchemaVersion(from: &reader)
             let count = try reader.readCount()
             var entities: [Entity] = []

@@ -1,3 +1,4 @@
+import DatabaseKit
 import DatabaseTypes
 
 public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
@@ -68,7 +69,7 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct DataSource: DatabaseWireValue, Hashable {
+    public struct DataSource: WireValue, Hashable {
         public let entity: String
         public let index: String
         public let partitions: FieldObject
@@ -86,7 +87,7 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
             self.graph = graph
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeString(entity)
@@ -95,7 +96,7 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
             try graph.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let entity = try reader.readString()
@@ -167,7 +168,7 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
         case describeShapes(graph: String)
         case upsertShapes(
             graph: String,
-            shapes: [RDFQuadValue],
+            shapes: [RDFQuad],
             expectedRevision: UInt64?
         )
         case deleteShapes(graph: String, expectedRevision: UInt64?)
@@ -218,10 +219,10 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
             case 2:
                 let graph = try reader.readString()
                 let count = try reader.readCount()
-                var shapes: [RDFQuadValue] = []
+                var shapes: [RDFQuad] = []
                 shapes.reserveCapacity(count)
                 for _ in 0..<count {
-                    shapes.append(try RDFQuadValue(from: &reader))
+                    shapes.append(try RDFQuad(from: &reader))
                 }
                 self = .upsertShapes(
                     graph: graph,
@@ -262,7 +263,7 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Request: DatabaseWireValue, Hashable {
+    public struct Request: WireValue, Hashable {
         public let invocation: Invocation
         public let page: QueryExecuteOperation.Page
         public let budget: ExecutionBudget
@@ -277,7 +278,7 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
             self.budget = budget
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try invocation.encode(into: &writer)
@@ -285,7 +286,7 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
             try budget.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -296,16 +297,16 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct ShapesPage: DatabaseWireValue, Hashable {
+    public struct ShapesPage: WireValue, Hashable {
         public let graph: String
         public let revision: UInt64
-        public let shapes: [RDFQuadValue]
+        public let shapes: [RDFQuad]
         public let continuation: ByteString?
 
         public init(
             graph: String,
             revision: UInt64,
-            shapes: [RDFQuadValue],
+            shapes: [RDFQuad],
             continuation: ByteString? = nil
         ) {
             self.graph = graph
@@ -314,7 +315,7 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
             self.continuation = continuation
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeString(graph)
@@ -324,16 +325,16 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
             try writer.writeOptionalBytes(continuation)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let graph = try reader.readString()
             let revision = try reader.readUInt64()
             let count = try reader.readCount()
-            var shapes: [RDFQuadValue] = []
+            var shapes: [RDFQuad] = []
             shapes.reserveCapacity(count)
             for _ in 0..<count {
-                shapes.append(try RDFQuadValue(from: &reader))
+                shapes.append(try RDFQuad(from: &reader))
             }
             self.init(
                 graph: graph,
@@ -344,12 +345,12 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public enum Response: DatabaseWireValue, Hashable {
+    public enum Response: WireValue, Hashable {
         case shapes(ShapesPage)
         case mutation(RevisionMutationResult)
         case validation(ValidationReport)
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             switch self {
@@ -365,7 +366,7 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             switch try reader.readUInt8() {

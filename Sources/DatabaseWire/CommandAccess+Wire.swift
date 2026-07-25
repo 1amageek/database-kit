@@ -1,13 +1,13 @@
 import DatabaseKit
 
-extension CommandAccess: DatabaseWireValue {
-    public func encode(
+extension CommandAccess: WireValue {
+    func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         writer.writeUInt8(rawValue)
     }
 
-    public init(
+    init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         let rawValue = try reader.readUInt8()

@@ -22,22 +22,22 @@ public enum CapabilitiesDescribeOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Response: DatabaseWireValue, Hashable {
+    public struct Response: WireValue, Hashable {
         public let runtimeVersion: String
         public let features: [Feature]
-        public let jobOperations: [DatabaseJobOperationIdentifier]
+        public let jobOperations: [JobOperationIdentifier]
 
         public init(
             runtimeVersion: String,
             features: [Feature],
-            jobOperations: [DatabaseJobOperationIdentifier]
+            jobOperations: [JobOperationIdentifier]
         ) {
             self.runtimeVersion = runtimeVersion
             self.features = features
             self.jobOperations = jobOperations
         }
 
-        public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+        func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             try Self.validateCanonicalJobOperations(jobOperations)
             try writer.writeString(runtimeVersion)
             try writer.writeCount(features.count)
@@ -50,7 +50,7 @@ public enum CapabilitiesDescribeOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let runtimeVersion = try reader.readString()
             let count = try reader.readCount()
             var features: [Feature] = []
@@ -59,11 +59,11 @@ public enum CapabilitiesDescribeOperation: DatabaseOperationDeclaration {
                 features.append(try Feature(from: &reader))
             }
             let jobOperationCount = try reader.readCount()
-            var jobOperations: [DatabaseJobOperationIdentifier] = []
+            var jobOperations: [JobOperationIdentifier] = []
             jobOperations.reserveCapacity(jobOperationCount)
             for _ in 0..<jobOperationCount {
                 jobOperations.append(
-                    try DatabaseJobOperationIdentifier(from: &reader)
+                    try JobOperationIdentifier(from: &reader)
                 )
             }
             try Self.validateCanonicalJobOperations(jobOperations)
@@ -75,7 +75,7 @@ public enum CapabilitiesDescribeOperation: DatabaseOperationDeclaration {
         }
 
         private static func validateCanonicalJobOperations(
-            _ operations: [DatabaseJobOperationIdentifier]
+            _ operations: [JobOperationIdentifier]
         ) throws(DatabaseWireError) {
             guard operations.count > 1 else {
                 return

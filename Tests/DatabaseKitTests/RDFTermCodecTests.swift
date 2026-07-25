@@ -30,6 +30,16 @@ struct RDFTermCodecTests {
         #expect(bytes.allSatisfy { $0 != 0 })
     }
 
+    @Test("IRI bidirectional formatting characters preserve exact identity")
+    func bidirectionalFormattingCharacters() throws {
+        let term = RDFTerm.iri(
+            fixtureIRI("urn:example:\u{202A}value\u{202C}")
+        )
+        let bytes = try RDFTermCodec.encode(term)
+
+        #expect(try RDFTermCodec.decode(bytes) == term)
+    }
+
     @Test("all term variants remain zero-byte-free and embedded NUL round-trips")
     func zeroByteFreeTerms() throws {
         let language = try RDFLanguageTag("en")

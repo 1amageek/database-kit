@@ -29,7 +29,7 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
                 try writer.writeString(statement)
             case .ir(let statement):
                 writer.writeUInt8(2)
-                try QueryIRWireCodec.encodeStatement(statement, into: &writer)
+                try QueryIRWireFormat.encodeStatement(statement, into: &writer)
             }
         }
 
@@ -41,14 +41,14 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
                     statement: try reader.readString()
                 )
             case 2:
-                self = .ir(try QueryIRWireCodec.decodeStatement(from: &reader))
+                self = .ir(try QueryIRWireFormat.decodeStatement(from: &reader))
             case let tag:
                 throw .invalidQueryInput(tag)
             }
         }
     }
 
-    public struct Page: DatabaseWireValue, Hashable {
+    public struct Page: WireValue, Hashable {
         public let limit: UInt32
         public let continuation: ByteString?
 
@@ -57,17 +57,17 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
             self.continuation = continuation
         }
 
-        public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+        func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             writer.writeUInt32(limit)
             try writer.writeOptionalBytes(continuation)
         }
 
-        public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             self.init(limit: try reader.readUInt32(), continuation: try reader.readOptionalBytes())
         }
     }
 
-    public struct Request: DatabaseWireValue, Hashable {
+    public struct Request: WireValue, Hashable {
         public let input: Input
         public let parameters: [QueryParameter]
         public let graphPartitions: FieldObject
@@ -88,7 +88,7 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
             self.budget = budget
         }
 
-        public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+        func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             try input.encode(into: &writer)
             try writer.writeCount(parameters.count)
             for parameter in parameters { try parameter.encode(into: &writer) }
@@ -97,7 +97,7 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
             try budget.encode(into: &writer)
         }
 
-        public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let input = try Input(from: &reader)
             let count = try reader.readCount()
             var parameters: [QueryParameter] = []
@@ -252,12 +252,12 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
     }
 
     public struct GraphPage: Sendable, Hashable {
-        public let triples: [RDFQuadValue]
+        public let triples: [RDFQuad]
         public let continuation: ByteString?
         public let snapshotVersion: Int64?
 
         public init(
-            triples: [RDFQuadValue],
+            triples: [RDFQuad],
             continuation: ByteString? = nil,
             snapshotVersion: Int64? = nil
         ) {
@@ -276,9 +276,9 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
 
         fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let count = try reader.readCount()
-            var triples: [RDFQuadValue] = []
+            var triples: [RDFQuad] = []
             triples.reserveCapacity(count)
-            for _ in 0..<count { triples.append(try RDFQuadValue(from: &reader)) }
+            for _ in 0..<count { triples.append(try RDFQuad(from: &reader)) }
             let continuation = try reader.readOptionalBytes()
             self.init(
                 triples: triples,
@@ -288,12 +288,12 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public enum Response: DatabaseWireValue, Hashable {
+    public enum Response: WireValue, Hashable {
         case rows(RowPage)
         case boolean(Bool)
         case rdfGraph(GraphPage)
 
-        public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+        func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             switch self {
             case .rows(let page):
                 writer.writeUInt8(1)
@@ -307,7 +307,7 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             switch try reader.readUInt8() {
             case 1: self = .rows(try RowPage(from: &reader))
             case 2: self = .boolean(try reader.readBool())

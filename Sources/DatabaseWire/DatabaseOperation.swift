@@ -58,57 +58,64 @@ public struct DatabaseOperation<
         self.decodeResponseBody = decodeResponse
     }
 
-    public func encodeRequestPayload(
+    func encodeRequestPayload(
         _ request: Request,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> ByteString {
-        try DatabaseEnvelopeCodec.encodeValue(
+        try EnvelopeWireFormat.encodeValue(
             request,
             limits: limits,
             encode: encodeRequestBody
         )
     }
 
-    public func decodeRequestPayload(
+    func decodeRequestPayload(
         _ payload: ByteString,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> Request {
-        try DatabaseEnvelopeCodec.decodeValue(
+        try EnvelopeWireFormat.decodeValue(
             from: payload,
             limits: limits,
             decode: decodeRequestBody
         )
     }
 
-    public func encodeResponsePayload(
+    func encodeResponsePayload(
         _ response: Response,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> ByteString {
-        try DatabaseEnvelopeCodec.encodeValue(
+        try EnvelopeWireFormat.encodeValue(
             response,
             limits: limits,
             encode: encodeResponseBody
         )
     }
 
-    public func decodeResponsePayload(
+    func encodeResponseBody(
+        _ response: Response,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        try encodeResponseBody(response, &writer)
+    }
+
+    func decodeResponsePayload(
         _ payload: ByteString,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> Response {
-        try DatabaseEnvelopeCodec.decodeValue(
+        try EnvelopeWireFormat.decodeValue(
             from: payload,
             limits: limits,
             decode: decodeResponseBody
         )
     }
 
-    public func encodeRequest(
+    func encodeRequest(
         requestID: UInt64,
-        metadata: DatabaseRequestMetadata = DatabaseRequestMetadata(),
+        metadata: OperationRequestMetadata = OperationRequestMetadata(),
         request: Request,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> ByteString {
-        try DatabaseEnvelopeCodec.encodeRequest(
+        try EnvelopeWireFormat.encodeRequest(
             identifier: identifier,
             requestID: requestID,
             metadata: metadata,
@@ -118,7 +125,7 @@ public struct DatabaseOperation<
         )
     }
 
-    public func decodeRequest(
+    func decodeRequest(
         _ envelope: DatabaseWireRequestEnvelope,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> Request {
@@ -131,12 +138,12 @@ public struct DatabaseOperation<
         return try decodeRequestPayload(envelope.payload, limits: limits)
     }
 
-    public func encodeResponse(
+    func encodeResponse(
         requestID: UInt64,
         response: Response,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> ByteString {
-        try DatabaseEnvelopeCodec.encodeSuccessResponse(
+        try EnvelopeWireFormat.encodeSuccessResponse(
             requestID: requestID,
             operation: identifier,
             limits: limits
@@ -147,12 +154,12 @@ public struct DatabaseOperation<
         }
     }
 
-    public func decodeResponse(
+    func decodeResponse(
         _ frame: ByteString,
         matching requestID: UInt64,
         limits: DatabaseWireLimits = .default
-    ) throws(DatabaseWireError) -> Result<Response, DatabaseRemoteError> {
-        let envelope = try DatabaseEnvelopeCodec.decodeResponse(
+    ) throws(DatabaseWireError) -> Result<Response, RemoteOperationError> {
+        let envelope = try EnvelopeWireFormat.decodeResponse(
             frame,
             limits: limits
         )
@@ -180,8 +187,8 @@ public struct DatabaseOperation<
 }
 
 protocol DatabaseOperationDeclaration: Sendable {
-    associatedtype Request: DatabaseWireValue
-    associatedtype Response: DatabaseWireValue
+    associatedtype Request: WireValue
+    associatedtype Response: WireValue
 
     static var identifier: DatabaseOperationIdentifier { get }
 }

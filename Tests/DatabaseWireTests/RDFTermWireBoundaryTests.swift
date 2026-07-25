@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-import DatabaseWire
+@testable import DatabaseWire
 import Testing
 
 @Suite("RDF term wire boundaries")
@@ -91,7 +91,7 @@ struct RDFTermWireBoundaryTests {
             )
         ) {
             var reader = DatabaseWireReader(invalidSubject)
-            _ = try RDFQuadValue(from: &reader)
+            _ = try RDFQuad(from: &reader)
         }
 
         let invalidPredicate = try encodeQuadTerms(
@@ -107,7 +107,7 @@ struct RDFTermWireBoundaryTests {
             )
         ) {
             var reader = DatabaseWireReader(invalidPredicate)
-            _ = try RDFQuadValue(from: &reader)
+            _ = try RDFQuad(from: &reader)
         }
     }
 

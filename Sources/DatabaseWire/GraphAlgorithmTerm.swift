@@ -2,11 +2,11 @@ import DatabaseTypes
 
 extension GraphAlgorithmOperation {
     /// A vertex or edge label in either a property graph or an RDF graph.
-    public enum Term: DatabaseWireValue, Hashable {
+    public enum Term: WireValue, Hashable {
         case identifier(String)
         case rdf(RDFTerm)
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             switch self {
@@ -19,7 +19,7 @@ extension GraphAlgorithmOperation {
             }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             switch try reader.readUInt8() {

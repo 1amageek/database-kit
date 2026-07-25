@@ -1,10 +1,10 @@
 import DatabaseTypes
 
-public enum DatabaseWireResponsePayload: Sendable, Hashable {
+enum DatabaseWireResponsePayload: Sendable, Hashable {
     case success(ByteString)
-    case failure(DatabaseRemoteError)
+    case failure(RemoteOperationError)
 
-    public func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+    func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
         switch self {
         case .success(let payload):
             writer.writeUInt8(1)
@@ -15,12 +15,12 @@ public enum DatabaseWireResponsePayload: Sendable, Hashable {
         }
     }
 
-    public init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
         switch try reader.readUInt8() {
         case 1:
             self = .success(try reader.readBytes())
         case 2:
-            self = .failure(try DatabaseRemoteError(from: &reader))
+            self = .failure(try RemoteOperationError(from: &reader))
         case let tag:
             throw .invalidResultPayload(tag)
         }

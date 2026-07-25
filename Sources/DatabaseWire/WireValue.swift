@@ -1,5 +1,5 @@
 import DatabaseTypes
-public protocol DatabaseWireValue: Sendable {
+protocol WireValue: Sendable {
     func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError)
     init(from reader: inout DatabaseWireReader) throws(DatabaseWireError)
 }

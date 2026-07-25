@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-import DatabaseWire
+@testable import DatabaseWire
 import Testing
 
 @Suite("SHACL path wire")
@@ -23,14 +23,14 @@ struct SHACLPathWireTests {
             ])
         )
 
-        let encoded = try DatabaseEnvelopeCodec.encode(path)
-        let decoded = try DatabaseEnvelopeCodec.decode(
+        let encoded = try EnvelopeWireFormat.encode(path)
+        let decoded = try EnvelopeWireFormat.decode(
             SHACLPath.self,
             from: encoded
         )
 
         #expect(decoded == path)
-        #expect(try DatabaseEnvelopeCodec.encode(decoded) == encoded)
+        #expect(try EnvelopeWireFormat.encode(decoded) == encoded)
     }
 
     @Test("sequence and alternative paths require two members")
@@ -55,7 +55,7 @@ struct SHACLPathWireTests {
                 .insufficientMembers(actual: 1)
             )
         ) {
-            _ = try DatabaseEnvelopeCodec.decode(
+            _ = try EnvelopeWireFormat.decode(
                 SHACLPath.self,
                 from: bytes
             )
@@ -67,15 +67,15 @@ struct SHACLPathWireTests {
         let limits = try wireLimits(maximumNestingDepth: 512)
         let path = try nestedPath(levels: 320)
 
-        let encoded = try DatabaseEnvelopeCodec.encode(path, limits: limits)
-        let decoded = try DatabaseEnvelopeCodec.decode(
+        let encoded = try EnvelopeWireFormat.encode(path, limits: limits)
+        let decoded = try EnvelopeWireFormat.decode(
             SHACLPath.self,
             from: encoded,
             limits: limits
         )
 
         #expect(
-            try DatabaseEnvelopeCodec.encode(decoded, limits: limits)
+            try EnvelopeWireFormat.encode(decoded, limits: limits)
                 == encoded
         )
     }
@@ -86,7 +86,7 @@ struct SHACLPathWireTests {
         let permissiveLimits = try wireLimits(maximumNestingDepth: 512)
         let exact = try nestedPath(levels: 63)
         let excessive = try nestedPath(levels: 320)
-        let excessiveBytes = try DatabaseEnvelopeCodec.encode(
+        let excessiveBytes = try EnvelopeWireFormat.encode(
             excessive,
             limits: permissiveLimits
         )
@@ -95,23 +95,23 @@ struct SHACLPathWireTests {
             maximum: 64
         )
 
-        let exactBytes = try DatabaseEnvelopeCodec.encode(
+        let exactBytes = try EnvelopeWireFormat.encode(
             exact,
             limits: boundedLimits
         )
-        _ = try DatabaseEnvelopeCodec.decode(
+        _ = try EnvelopeWireFormat.decode(
             SHACLPath.self,
             from: exactBytes,
             limits: boundedLimits
         )
         #expect(throws: expected) {
-            _ = try DatabaseEnvelopeCodec.encode(
+            _ = try EnvelopeWireFormat.encode(
                 excessive,
                 limits: boundedLimits
             )
         }
         #expect(throws: expected) {
-            _ = try DatabaseEnvelopeCodec.decode(
+            _ = try EnvelopeWireFormat.decode(
                 SHACLPath.self,
                 from: excessiveBytes,
                 limits: boundedLimits

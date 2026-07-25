@@ -1,14 +1,14 @@
 import DatabaseTypes
 
-extension DatabaseTypes.UUID: DatabaseWireValue {
-    public func encode(
+extension DatabaseTypes.UUID: WireValue {
+    func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         writer.writeUInt64(high)
         writer.writeUInt64(low)
     }
 
-    public init(
+    init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         self.init(

@@ -1,7 +1,7 @@
 import DatabaseTypes
 
 /// Little-endian reader used by database-kit wire DTOs.
-public struct DatabaseWireReader: Sendable {
+struct DatabaseWireReader: Sendable {
     private let bytes: ByteString
     private var offset: Int
     private var nestingDepth: Int
@@ -40,7 +40,7 @@ public struct DatabaseWireReader: Sendable {
         guard offset < bytes.count else {
             throw DatabaseWireError.truncated
         }
-        let value = bytes[offset]
+        let value = bytes[bytes.startIndex + offset]
         offset += 1
         return value
     }
@@ -141,7 +141,8 @@ public struct DatabaseWireReader: Sendable {
         guard intCount <= bytes.count - offset else {
             throw DatabaseWireError.truncated
         }
-        let value = bytes[offset..<(offset + intCount)]
+        let lowerBound = bytes.startIndex + offset
+        let value = bytes[lowerBound..<(lowerBound + intCount)]
         offset += intCount
         return value
     }
@@ -156,7 +157,8 @@ public struct DatabaseWireReader: Sendable {
         guard count <= bytes.count - offset else {
             throw .truncated
         }
-        let value = bytes[offset..<(offset + count)]
+        let lowerBound = bytes.startIndex + offset
+        let value = bytes[lowerBound..<(lowerBound + count)]
         offset += count
         return value
     }
@@ -208,7 +210,8 @@ public struct DatabaseWireReader: Sendable {
         guard count <= bytes.count - offset else {
             throw DatabaseWireError.truncated
         }
-        let encoded = bytes[offset..<(offset + count)]
+        let lowerBound = bytes.startIndex + offset
+        let encoded = bytes[lowerBound..<(lowerBound + count)]
         offset += count
         guard let value = DatabaseWireTextDecoder.decode(encoded) else {
             throw DatabaseWireError.invalidUTF8

@@ -159,23 +159,23 @@ private extension QueryIRLiteralWireCodec {
             encodingSteps.append(.arrayCursor(values, nextIndex: 0))
         case .iri(let value):
             writer.writeUInt8(9)
-            try QueryIRWireCodec.writeSPARQLIRI(value, into: &writer)
+            try QueryIRWireFormat.writeSPARQLIRI(value, into: &writer)
         case .blankNode(let value):
             writer.writeUInt8(10)
             try writer.writeString(value)
         case .typedLiteral(let value, let datatype):
             writer.writeUInt8(11)
             try writer.writeString(value)
-            try QueryIRWireCodec.writeRDFDatatypeIRI(datatype, into: &writer)
+            try QueryIRWireFormat.writeRDFDatatypeIRI(datatype, into: &writer)
         case .langLiteral(let value, let language):
             writer.writeUInt8(12)
             try writer.writeString(value)
-            try QueryIRWireCodec.writeRDFLanguageTag(language, into: &writer)
+            try QueryIRWireFormat.writeRDFLanguageTag(language, into: &writer)
         case .dirLangLiteral(let value, let language, let direction):
             writer.writeUInt8(13)
             try writer.writeString(value)
-            try QueryIRWireCodec.writeRDFLanguageTag(language, into: &writer)
-            try QueryIRWireCodec.writeRDFDirection(direction, into: &writer)
+            try QueryIRWireFormat.writeRDFLanguageTag(language, into: &writer)
+            try QueryIRWireFormat.writeRDFDirection(direction, into: &writer)
         case .uuid(let value):
             writer.writeUInt8(14)
             writer.writeUInt64(value.high)
@@ -237,24 +237,24 @@ private extension QueryIRLiteralWireCodec {
         case 8:
             return .array([])
         case 9:
-            return .iri(try QueryIRWireCodec.readSPARQLIRI(from: &reader))
+            return .iri(try QueryIRWireFormat.readSPARQLIRI(from: &reader))
         case 10:
             return .blankNode(try reader.readString())
         case 11:
             return .typedLiteral(
                 value: try reader.readString(),
-                datatype: try QueryIRWireCodec.readRDFDatatypeIRI(from: &reader)
+                datatype: try QueryIRWireFormat.readRDFDatatypeIRI(from: &reader)
             )
         case 12:
             return .langLiteral(
                 value: try reader.readString(),
-                language: try QueryIRWireCodec.readRDFLanguageTag(from: &reader)
+                language: try QueryIRWireFormat.readRDFLanguageTag(from: &reader)
             )
         case 13:
             return .dirLangLiteral(
                 value: try reader.readString(),
-                language: try QueryIRWireCodec.readRDFLanguageTag(from: &reader),
-                direction: try QueryIRWireCodec.readRDFDirection(from: &reader)
+                language: try QueryIRWireFormat.readRDFLanguageTag(from: &reader),
+                direction: try QueryIRWireFormat.readRDFDirection(from: &reader)
             )
         case 14:
             return .uuid(

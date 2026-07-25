@@ -1,7 +1,7 @@
 import DatabaseTypes
 import DatabaseKit
 
-extension QueryIRWireCodec {
+extension QueryIRWireFormat {
     static func encodeSPARQLDataset(
         _ dataset: SPARQLDataset,
         into writer: inout DatabaseWireWriter

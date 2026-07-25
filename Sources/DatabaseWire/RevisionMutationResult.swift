@@ -1,5 +1,5 @@
 import DatabaseTypes
-public struct RevisionMutationResult: DatabaseWireValue, Hashable {
+public struct RevisionMutationResult: WireValue, Hashable {
     public let commitVersion: UInt64
     public let revision: UInt64
 
@@ -8,14 +8,14 @@ public struct RevisionMutationResult: DatabaseWireValue, Hashable {
         self.revision = revision
     }
 
-    public func encode(
+    func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         writer.writeUInt64(commitVersion)
         writer.writeUInt64(revision)
     }
 
-    public init(
+    init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         self.init(

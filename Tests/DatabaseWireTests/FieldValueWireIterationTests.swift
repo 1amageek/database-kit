@@ -1,5 +1,5 @@
 import DatabaseTypes
-import DatabaseWire
+@testable import DatabaseWire
 import Testing
 
 @Suite("Iterative FieldValue Wire")

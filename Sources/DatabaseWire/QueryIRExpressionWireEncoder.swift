@@ -119,7 +119,7 @@ private extension QueryIRExpressionWireEncoder {
             writer.endNestedValue()
 
         case .literal(let literal):
-            try QueryIRWireCodec.encodeLiteral(literal, into: &writer)
+            try QueryIRWireFormat.encodeLiteral(literal, into: &writer)
 
         case .select(let query):
             try beginSelect(query, writer: &writer, encodingSteps: &encodingSteps)
@@ -131,16 +131,16 @@ private extension QueryIRExpressionWireEncoder {
             try beginGraphPattern(pattern, writer: &writer, encodingSteps: &encodingSteps)
 
         case .dataType(let type):
-            try QueryIRWireCodec.encodeDataType(type, into: &writer)
+            try QueryIRWireFormat.encodeDataType(type, into: &writer)
 
         case .string(let value):
             try writer.writeString(value)
 
         case .optionalString(let value):
-            try QueryIRWireCodec.writeOptionalString(value, into: &writer)
+            try QueryIRWireFormat.writeOptionalString(value, into: &writer)
 
         case .sparqlVariable(let value):
-            try QueryIRWireCodec.writeSPARQLVariableName(value, into: &writer)
+            try QueryIRWireFormat.writeSPARQLVariableName(value, into: &writer)
 
         case .bool(let value):
             writer.writeBool(value)
@@ -149,10 +149,10 @@ private extension QueryIRExpressionWireEncoder {
             writer.writeUInt8(value)
 
         case .optionalInt(let value):
-            try QueryIRWireCodec.writeOptionalInt(value, into: &writer)
+            try QueryIRWireFormat.writeOptionalInt(value, into: &writer)
 
         case .optionalUInt64(let value):
-            QueryIRWireCodec.writeOptionalUInt64(value, into: &writer)
+            QueryIRWireFormat.writeOptionalUInt64(value, into: &writer)
 
         case .optionalAccessPath(let value):
             guard let value else {
@@ -160,7 +160,7 @@ private extension QueryIRExpressionWireEncoder {
                 return
             }
             writer.writeBool(true)
-            try QueryIRWireCodec.encodeAccessPath(value, into: &writer)
+            try QueryIRWireFormat.encodeAccessPath(value, into: &writer)
 
         case .projection(let projection):
             try beginProjection(projection, writer: &writer, encodingSteps: &encodingSteps)
@@ -173,7 +173,7 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.expression(projectionItem.expression))
 
         case .projectionItemTail(let alias):
-            try QueryIRWireCodec.writeOptionalString(alias, into: &writer)
+            try QueryIRWireFormat.writeOptionalString(alias, into: &writer)
 
         case .optionalExpressionArray(let values):
             guard let values else {
@@ -208,7 +208,7 @@ private extension QueryIRExpressionWireEncoder {
 
         case .namedSubquery(let subquery):
             try writer.writeString(subquery.name)
-            try QueryIRWireCodec.writeOptionalStrings(
+            try QueryIRWireFormat.writeOptionalStrings(
                 subquery.columns,
                 into: &writer
             )
@@ -224,7 +224,7 @@ private extension QueryIRExpressionWireEncoder {
             writer.writeUInt8(materialized == .materialized ? 0 : 1)
 
         case .sparqlDataset(let dataset):
-            try QueryIRWireCodec.encodeSPARQLDataset(dataset, into: &writer)
+            try QueryIRWireFormat.encodeSPARQLDataset(dataset, into: &writer)
 
         case .dataSourceArrayCursor(let sources, let index):
             guard index < sources.count else { return }
@@ -249,7 +249,7 @@ private extension QueryIRExpressionWireEncoder {
                 encodingSteps.append(.expression(expression))
             case .using(let columns):
                 writer.writeUInt8(1)
-                try QueryIRWireCodec.writeStrings(columns, into: &writer)
+                try QueryIRWireFormat.writeStrings(columns, into: &writer)
             }
 
         case .graphTable(let source):
@@ -286,7 +286,7 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.pathPatternCursor(pattern.paths, index: 0))
 
         case .pathPattern(let pattern):
-            try QueryIRWireCodec.writeOptionalString(
+            try QueryIRWireFormat.writeOptionalString(
                 pattern.pathVariable,
                 into: &writer
             )
@@ -319,13 +319,13 @@ private extension QueryIRExpressionWireEncoder {
             try encodePathQuantifier(quantifier, writer: &writer)
 
         case .nodePattern(let node):
-            try QueryIRWireCodec.writeOptionalString(node.variable, into: &writer)
-            try QueryIRWireCodec.writeOptionalStrings(node.labels, into: &writer)
+            try QueryIRWireFormat.writeOptionalString(node.variable, into: &writer)
+            try QueryIRWireFormat.writeOptionalStrings(node.labels, into: &writer)
             encodingSteps.append(.optionalPropertyBindings(node.properties))
 
         case .edgePattern(let edge):
-            try QueryIRWireCodec.writeOptionalString(edge.variable, into: &writer)
-            try QueryIRWireCodec.writeOptionalStrings(edge.labels, into: &writer)
+            try QueryIRWireFormat.writeOptionalString(edge.variable, into: &writer)
+            try QueryIRWireFormat.writeOptionalStrings(edge.labels, into: &writer)
             encodingSteps.append(.byte(edgeDirectionTag(edge.direction)))
             encodingSteps.append(.optionalPropertyBindings(edge.properties))
 
@@ -358,7 +358,7 @@ private extension QueryIRExpressionWireEncoder {
             let binding = bindings[index]
             encodingSteps.append(.aggregateBindingCursor(bindings, index: index + 1))
             encodingSteps.append(.aggregate(binding.aggregate))
-            try QueryIRWireCodec.writeSPARQLVariableName(
+            try QueryIRWireFormat.writeSPARQLVariableName(
                 binding.variable,
                 into: &writer
             )
@@ -436,12 +436,12 @@ private extension QueryIRExpressionWireEncoder {
 
         case .column(let value):
             writer.writeUInt8(1)
-            try QueryIRWireCodec.writeOptionalString(value.table, into: &writer)
+            try QueryIRWireFormat.writeOptionalString(value.table, into: &writer)
             try writer.writeString(value.column)
 
         case .variable(let value):
             writer.writeUInt8(2)
-            try QueryIRWireCodec.writeSPARQLVariableName(value.name, into: &writer)
+            try QueryIRWireFormat.writeSPARQLVariableName(value.name, into: &writer)
 
         case .parameter(let reference):
             writer.writeUInt8(40)
@@ -497,7 +497,7 @@ private extension QueryIRExpressionWireEncoder {
 
         case .bound(let variable):
             writer.writeUInt8(20)
-            try QueryIRWireCodec.writeSPARQLVariableName(variable.name, into: &writer)
+            try QueryIRWireFormat.writeSPARQLVariableName(variable.name, into: &writer)
 
         case .like(let value, let pattern):
             writer.writeUInt8(21)
@@ -702,12 +702,12 @@ private extension QueryIRExpressionWireEncoder {
         switch source {
         case .table(let table):
             writer.writeUInt8(0)
-            try QueryIRWireCodec.encodeTableRef(table, into: &writer)
+            try QueryIRWireFormat.encodeTableRef(table, into: &writer)
         case .logical(let source):
             writer.writeUInt8(1)
             try writer.writeString(source.kindIdentifier)
             try writer.writeString(source.identifier)
-            try QueryIRWireCodec.writeOptionalString(source.alias, into: &writer)
+            try QueryIRWireFormat.writeOptionalString(source.alias, into: &writer)
         case .subquery(let query, let alias):
             writer.writeUInt8(2)
             encodingSteps.append(.string(alias))
@@ -717,15 +717,15 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.join(join))
         case .values(let rows, let columnNames):
             writer.writeUInt8(4)
-            try QueryIRWireCodec.writeArray(rows, into: &writer) {
+            try QueryIRWireFormat.writeArray(rows, into: &writer) {
                 (row: [Literal], writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
-                try QueryIRWireCodec.writeArray(
+                try QueryIRWireFormat.writeArray(
                     row,
                     into: &writer,
-                    encode: QueryIRWireCodec.encodeLiteral
+                    encode: QueryIRWireFormat.encodeLiteral
                 )
             }
-            try QueryIRWireCodec.writeOptionalStrings(columnNames, into: &writer)
+            try QueryIRWireFormat.writeOptionalStrings(columnNames, into: &writer)
         case .graphTable(let source):
             writer.writeUInt8(5)
             encodingSteps.append(.graphTable(source))
@@ -734,11 +734,11 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.graphPattern(pattern))
         case .namedGraph(let name, let pattern):
             writer.writeUInt8(7)
-            try QueryIRWireCodec.writeSPARQLIRI(name, into: &writer)
+            try QueryIRWireFormat.writeSPARQLIRI(name, into: &writer)
             encodingSteps.append(.graphPattern(pattern))
         case .service(let endpoint, let pattern, let silent):
             writer.writeUInt8(8)
-            try QueryIRWireCodec.writeSPARQLIRI(endpoint, into: &writer)
+            try QueryIRWireFormat.writeSPARQLIRI(endpoint, into: &writer)
             encodingSteps.append(.bool(silent))
             encodingSteps.append(.graphPattern(pattern))
         case .union(let sources):
@@ -798,7 +798,7 @@ private extension QueryIRExpressionWireEncoder {
         switch pattern {
         case .basic(let basicGraphPattern):
             writer.writeUInt8(0)
-            try QueryIRWireCodec.writeArray(
+            try QueryIRWireFormat.writeArray(
                 basicGraphPattern.elements,
                 into: &writer
             ) {
@@ -809,21 +809,21 @@ private extension QueryIRExpressionWireEncoder {
                 switch element {
                 case .triple(let triple):
                     writer.writeUInt8(0)
-                    try QueryIRWireCodec.encodeTriplePattern(
+                    try QueryIRWireFormat.encodeTriplePattern(
                         triple,
                         into: &writer
                     )
                 case .propertyPath(let pathPattern):
                     writer.writeUInt8(1)
-                    try QueryIRWireCodec.encodeSPARQLTerm(
+                    try QueryIRWireFormat.encodeSPARQLTerm(
                         pathPattern.subject,
                         into: &writer
                     )
-                    try QueryIRWireCodec.encodePropertyPath(
+                    try QueryIRWireFormat.encodePropertyPath(
                         pathPattern.path,
                         into: &writer
                     )
-                    try QueryIRWireCodec.encodeSPARQLTerm(
+                    try QueryIRWireFormat.encodeSPARQLTerm(
                         pathPattern.object,
                         into: &writer
                     )
@@ -843,11 +843,11 @@ private extension QueryIRExpressionWireEncoder {
             enqueueBinaryGraphPatternEncodingSteps(tag: 5, lhs: lhs, rhs: rhs, writer: &writer, encodingSteps: &encodingSteps)
         case .graph(let name, let pattern):
             writer.writeUInt8(6)
-            try QueryIRWireCodec.encodeSPARQLTerm(name, into: &writer)
+            try QueryIRWireFormat.encodeSPARQLTerm(name, into: &writer)
             encodingSteps.append(.graphPattern(pattern))
         case .service(let endpoint, let pattern, let silent):
             writer.writeUInt8(7)
-            try QueryIRWireCodec.writeSPARQLIRI(endpoint, into: &writer)
+            try QueryIRWireFormat.writeSPARQLIRI(endpoint, into: &writer)
             encodingSteps.append(.bool(silent))
             encodingSteps.append(.graphPattern(pattern))
         case .bind(let pattern, let variable, let expression):
@@ -857,18 +857,18 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.graphPattern(pattern))
         case .values(let variables, let bindings):
             writer.writeUInt8(9)
-            try QueryIRWireCodec.writeArray(variables, into: &writer) {
+            try QueryIRWireFormat.writeArray(variables, into: &writer) {
                 (variable: String, writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
-                try QueryIRWireCodec.writeSPARQLVariableName(variable, into: &writer)
+                try QueryIRWireFormat.writeSPARQLVariableName(variable, into: &writer)
             }
-            try QueryIRWireCodec.writeArray(bindings, into: &writer) {
+            try QueryIRWireFormat.writeArray(bindings, into: &writer) {
                 (row: [Literal?], writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
-                try QueryIRWireCodec.writeArray(row, into: &writer) {
+                try QueryIRWireFormat.writeArray(row, into: &writer) {
                     (value: Literal?, writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
-                    try QueryIRWireCodec.writeOptional(
+                    try QueryIRWireFormat.writeOptional(
                         value,
                         into: &writer,
-                        encode: QueryIRWireCodec.encodeLiteral
+                        encode: QueryIRWireFormat.encodeLiteral
                     )
                 }
             }
@@ -928,11 +928,11 @@ private extension QueryIRExpressionWireEncoder {
         switch quantifier {
         case .exactly(let count):
             writer.writeUInt8(0)
-            try QueryIRWireCodec.writeInt(count, into: &writer)
+            try QueryIRWireFormat.writeInt(count, into: &writer)
         case .range(let minimum, let maximum):
             writer.writeUInt8(1)
-            try QueryIRWireCodec.writeOptionalInt(minimum, into: &writer)
-            try QueryIRWireCodec.writeOptionalInt(maximum, into: &writer)
+            try QueryIRWireFormat.writeOptionalInt(minimum, into: &writer)
+            try QueryIRWireFormat.writeOptionalInt(maximum, into: &writer)
         case .zeroOrMore:
             writer.writeUInt8(2)
         case .oneOrMore:
@@ -955,7 +955,7 @@ private extension QueryIRExpressionWireEncoder {
         case .allShortest: writer.writeUInt8(5)
         case .shortestK(let count):
             writer.writeUInt8(6)
-            try QueryIRWireCodec.writeInt(count, into: &writer)
+            try QueryIRWireFormat.writeInt(count, into: &writer)
         }
     }
 }

@@ -1,3 +1,4 @@
+import DatabaseKit
 import DatabaseTypes
 
 public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
@@ -49,22 +50,22 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Document: DatabaseWireValue, Hashable {
+    public struct Document: WireValue, Hashable {
         public let ontology: String
         public let imports: [String]
-        public let axioms: [RDFQuadValue]
+        public let axioms: [RDFQuad]
 
         public init(
             ontology: String,
             imports: [String] = [],
-            axioms: [RDFQuadValue]
+            axioms: [RDFQuad]
         ) {
             self.ontology = ontology
             self.imports = imports
             self.axioms = axioms
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeString(ontology)
@@ -74,7 +75,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             for axiom in axioms { try axiom.encode(into: &writer) }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let ontology = try reader.readString()
@@ -83,10 +84,10 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             imports.reserveCapacity(importCount)
             for _ in 0..<importCount { imports.append(try reader.readString()) }
             let axiomCount = try reader.readCount()
-            var axioms: [RDFQuadValue] = []
+            var axioms: [RDFQuad] = []
             axioms.reserveCapacity(axiomCount)
             for _ in 0..<axiomCount {
-                axioms.append(try RDFQuadValue(from: &reader))
+                axioms.append(try RDFQuad(from: &reader))
             }
             self.init(ontology: ontology, imports: imports, axioms: axioms)
         }
@@ -195,7 +196,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Request: DatabaseWireValue, Hashable {
+    public struct Request: WireValue, Hashable {
         public let invocation: Invocation
         public let page: QueryExecuteOperation.Page
         public let budget: ExecutionBudget
@@ -210,7 +211,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             self.budget = budget
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try invocation.encode(into: &writer)
@@ -218,7 +219,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             try budget.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -229,18 +230,18 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct DocumentPage: DatabaseWireValue, Hashable {
+    public struct DocumentPage: WireValue, Hashable {
         public let ontology: String
         public let revision: UInt64
         public let imports: [String]
-        public let axioms: [RDFQuadValue]
+        public let axioms: [RDFQuad]
         public let continuation: ByteString?
 
         public init(
             ontology: String,
             revision: UInt64,
             imports: [String],
-            axioms: [RDFQuadValue],
+            axioms: [RDFQuad],
             continuation: ByteString? = nil
         ) {
             self.ontology = ontology
@@ -250,7 +251,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             self.continuation = continuation
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeString(ontology)
@@ -262,7 +263,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             try writer.writeOptionalBytes(continuation)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let ontology = try reader.readString()
@@ -272,10 +273,10 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             imports.reserveCapacity(importCount)
             for _ in 0..<importCount { imports.append(try reader.readString()) }
             let axiomCount = try reader.readCount()
-            var axioms: [RDFQuadValue] = []
+            var axioms: [RDFQuad] = []
             axioms.reserveCapacity(axiomCount)
             for _ in 0..<axiomCount {
-                axioms.append(try RDFQuadValue(from: &reader))
+                axioms.append(try RDFQuad(from: &reader))
             }
             self.init(
                 ontology: ontology,
@@ -287,13 +288,13 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct InferencePage: DatabaseWireValue, Hashable {
-        public let inferredAxioms: [RDFQuadValue]
+    public struct InferencePage: WireValue, Hashable {
+        public let inferredAxioms: [RDFQuad]
         public let isComplete: Bool
         public let continuation: ByteString?
 
         public init(
-            inferredAxioms: [RDFQuadValue],
+            inferredAxioms: [RDFQuad],
             isComplete: Bool,
             continuation: ByteString? = nil
         ) {
@@ -302,7 +303,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             self.continuation = continuation
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeCount(inferredAxioms.count)
@@ -311,14 +312,14 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             try writer.writeOptionalBytes(continuation)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let count = try reader.readCount()
-            var axioms: [RDFQuadValue] = []
+            var axioms: [RDFQuad] = []
             axioms.reserveCapacity(count)
             for _ in 0..<count {
-                axioms.append(try RDFQuadValue(from: &reader))
+                axioms.append(try RDFQuad(from: &reader))
             }
             self.init(
                 inferredAxioms: axioms,
@@ -328,7 +329,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct HierarchyEntry: DatabaseWireValue, Hashable {
+    public struct HierarchyEntry: WireValue, Hashable {
         public let resource: String
         public let depth: UInt32
 
@@ -337,14 +338,14 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             self.depth = depth
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeString(resource)
             writer.writeUInt32(depth)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -354,7 +355,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct HierarchyPage: DatabaseWireValue, Hashable {
+    public struct HierarchyPage: WireValue, Hashable {
         public let entries: [HierarchyEntry]
         public let continuation: ByteString?
 
@@ -363,7 +364,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             self.continuation = continuation
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeCount(entries.count)
@@ -371,7 +372,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             try writer.writeOptionalBytes(continuation)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let count = try reader.readCount()
@@ -387,14 +388,14 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public enum Response: DatabaseWireValue, Hashable {
+    public enum Response: WireValue, Hashable {
         case document(DocumentPage)
         case mutation(RevisionMutationResult)
         case inference(InferencePage)
         case hierarchy(HierarchyPage)
         case validation(ValidationReport)
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             switch self {
@@ -416,7 +417,7 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             switch try reader.readUInt8() {

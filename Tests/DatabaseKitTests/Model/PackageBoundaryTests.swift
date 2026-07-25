@@ -149,18 +149,22 @@ struct PackageBoundaryTests {
             under: root.appendingPathComponent("Sources")
         )
         let forbiddenDeclarations: Set<String> = [
+            "DatabaseEnvelopeCodec",
             "DatabaseObjectField",
             "DatabaseEmpty",
             "DatabaseExecutionBudget",
             "DatabaseGraphTerm",
             "DatabaseRevisionMutationResult",
             "DatabaseValidationReport",
+            "DatabaseWireValue",
             "FormerIndex",
             "IndexMetadataValue",
             "OWLLiteral",
             "ProtobufDecoder",
             "ProtobufEncoder",
+            "QueryIRWireCodec",
             "QueryParameterValue",
+            "RDFQuadValue",
             "ServiceEnvelope",
         ]
 

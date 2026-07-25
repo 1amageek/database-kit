@@ -1,4 +1,4 @@
- import DatabaseWire
+@testable import DatabaseWire
 import Testing
 
 @Suite("MD5 Accumulator Tests")

@@ -97,7 +97,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct Request: DatabaseWireValue, Hashable {
+    public struct Request: WireValue, Hashable {
         public let invocation: Invocation
         public let continuation: ByteString?
         public let budget: ExecutionBudget
@@ -112,7 +112,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
             self.budget = budget
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try invocation.encode(into: &writer)
@@ -120,7 +120,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
             try budget.encode(into: &writer)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -131,7 +131,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct MigrationStatus: DatabaseWireValue, Hashable {
+    public struct MigrationStatus: WireValue, Hashable {
         public let currentVersion: SchemaVersion?
         public let targetVersion: SchemaVersion
         public let pendingMigrationIdentifiers: [String]
@@ -146,7 +146,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
             self.pendingMigrationIdentifiers = pendingMigrationIdentifiers
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             writer.writeBool(currentVersion != nil)
@@ -160,7 +160,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let currentVersion = try reader.readBool()
@@ -198,7 +198,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct IndexStatus: DatabaseWireValue, Hashable {
+    public struct IndexStatus: WireValue, Hashable {
         public let entity: String
         public let index: String
         public let partitions: FieldObject
@@ -222,7 +222,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
             self.detail = detail
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeString(entity)
@@ -233,7 +233,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
             try writer.writeOptionalString(detail)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let entity = try reader.readString()
@@ -249,7 +249,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct IndexStatusPage: DatabaseWireValue, Hashable {
+    public struct IndexStatusPage: WireValue, Hashable {
         public let indexes: [IndexStatus]
         public let continuation: ByteString?
 
@@ -258,7 +258,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
             self.continuation = continuation
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             try writer.writeCount(indexes.count)
@@ -266,7 +266,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
             try writer.writeOptionalBytes(continuation)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             let count = try reader.readCount()
@@ -298,7 +298,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct ExecutionResult: DatabaseWireValue, Hashable {
+    public struct ExecutionResult: WireValue, Hashable {
         public let kind: ExecutionKind
         public let completedWorkUnits: UInt64
         public let commitVersion: UInt64?
@@ -319,7 +319,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
             self.continuation = continuation
         }
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             writer.writeUInt8(kind.rawValue)
@@ -330,7 +330,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
             try writer.writeOptionalBytes(continuation)
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
@@ -343,12 +343,12 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public enum Response: DatabaseWireValue, Hashable {
+    public enum Response: WireValue, Hashable {
         case migrationStatus(MigrationStatus)
         case indexStatus(IndexStatusPage)
         case execution(ExecutionResult)
 
-        public func encode(
+        func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
             switch self {
@@ -364,7 +364,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
             }
         }
 
-        public init(
+        init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             switch try reader.readUInt8() {
