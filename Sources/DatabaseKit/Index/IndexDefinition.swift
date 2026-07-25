@@ -38,7 +38,7 @@ public enum IndexDefinition: Sendable, Hashable {
         level: Int = 15
     )
     case rank(bucketSize: Int = 100)
-    case permuted(permutation: Permutation)
+    case permuted(PermutationPattern)
     case graph(
         strategy: PropertyGraphIndexStrategy = .adjacency,
         label: PropertyGraphLabelSource = .field
@@ -378,8 +378,9 @@ extension IndexDefinition {
                 )
             }
 
-        case .permuted(let permutation):
+        case .permuted(let pattern):
             try requireMinimumCount(2)
+            let permutation = try resolvedPermutation(from: pattern)
             guard permutation.size == schemas.count else {
                 throw .invalidConfiguration(
                     index: identifier,
@@ -501,7 +502,8 @@ extension IndexDefinition {
                 "scoreType": .string(try scalarType(for: score).rawValue),
                 "bucketSize": .int64(Int64(bucketSize)),
             ]
-        case .permuted(let permutation):
+        case .permuted(let pattern):
+            let permutation = try resolvedPermutation(from: pattern)
             return [
                 "permutation": .array(
                     permutation.indices.map { .int64(Int64($0)) }
@@ -790,7 +792,7 @@ extension IndexDefinition {
                     key: "permutation"
                 )
             }
-            self = .permuted(permutation: permutation)
+            self = .permuted(.ordering(permutation.indices))
 
         case "graph":
             try validate(
@@ -823,6 +825,19 @@ extension IndexDefinition {
 
         default:
             throw .unknownIdentifier(kind.identifier)
+        }
+    }
+
+    private func resolvedPermutation(
+        from pattern: PermutationPattern
+    ) throws(IndexValidationError) -> Permutation {
+        do {
+            return try pattern.resolve()
+        } catch let error {
+            throw .invalidConfiguration(
+                index: identifier,
+                reason: error.description
+            )
         }
     }
 

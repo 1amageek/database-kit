@@ -12,6 +12,27 @@ struct PermutationTests {
         }
     }
 
+    @Test func factoryFailuresAreTyped() {
+        #expect(throws: PermutationError.invalidSize(0)) {
+            _ = try Permutation.identity(size: 0)
+        }
+        #expect(
+            throws: PermutationError.positionOutOfBounds(
+                position: 3,
+                size: 3
+            )
+        ) {
+            _ = try Permutation.swapping(0, 3, size: 3)
+        }
+    }
+
+    @Test func factoriesConstructValidatedPermutations() throws {
+        #expect(try Permutation.identity(size: 3).indices == [0, 1, 2])
+        #expect(
+            try Permutation.swapping(0, 2, size: 3).indices == [2, 1, 0]
+        )
+    }
+
     @Test func appliesAndInvertsCanonicalOrdering() throws {
         let permutation = try Permutation(indices: [1, 2, 0])
 

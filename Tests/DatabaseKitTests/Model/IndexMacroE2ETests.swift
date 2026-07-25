@@ -146,10 +146,11 @@ struct IndexMacroE2ETests {
                 named: "e2e_permuted_category_status_title"
             ).kind
         )
-        guard case .permuted(let permutation) = permuted else {
+        guard case .permuted(let pattern) = permuted else {
             Issue.record("Expected permuted definition")
             return
         }
+        let permutation = try pattern.resolve()
         #expect(permutation.indices == [1, 0, 2])
 
         let graph = try IndexDefinition(
@@ -340,7 +341,7 @@ private struct IndexMacroE2ERecord {
         name: "e2e_rank_score"
     )
     #Index(
-        .permuted(permutation: .swapping(0, 1, size: 3)),
+        .permuted(.swapping(0, 1, size: 3)),
         fields: [
             \IndexMacroE2ERecord.category,
             \IndexMacroE2ERecord.status,

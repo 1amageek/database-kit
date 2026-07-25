@@ -25,23 +25,31 @@ public struct Permutation:
 
     /// Returns an ordering that leaves every position unchanged.
     ///
-    /// `size` must be positive.
-    public static func identity(size: Int) -> Permutation {
-        precondition(size > 0, "Permutation size must be positive")
+    public static func identity(
+        size: Int
+    ) throws(PermutationError) -> Permutation {
+        guard size > 0 else {
+            throw .invalidSize(size)
+        }
         return Permutation(validatedIndices: Array(0..<size))
     }
 
     /// Returns an identity ordering with two positions exchanged.
     ///
-    /// `size` must be positive and both positions must be in `0..<size`.
     public static func swapping(
         _ first: Int,
         _ second: Int,
         size: Int
-    ) -> Permutation {
-        precondition(size > 0, "Permutation size must be positive")
-        precondition((0..<size).contains(first), "First position is out of bounds")
-        precondition((0..<size).contains(second), "Second position is out of bounds")
+    ) throws(PermutationError) -> Permutation {
+        guard size > 0 else {
+            throw .invalidSize(size)
+        }
+        guard (0..<size).contains(first) else {
+            throw .positionOutOfBounds(position: first, size: size)
+        }
+        guard (0..<size).contains(second) else {
+            throw .positionOutOfBounds(position: second, size: size)
+        }
         var indices = Array(0..<size)
         indices.swapAt(first, second)
         return Permutation(validatedIndices: indices)
