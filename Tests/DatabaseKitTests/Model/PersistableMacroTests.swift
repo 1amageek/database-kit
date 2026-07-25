@@ -148,15 +148,25 @@ struct ModelMacroTests {
         #expect(user.id == "fixture-id")
     }
 
-    /// Test @Persistable dynamic member lookup
-    @Test("@Persistable supports dynamic member lookup")
-    func dynamicMemberLookup() {
+    @Test("@Persistable supports canonical field lookup")
+    func canonicalFieldLookup() throws {
         let user = BasicUser(email: "test@example.com", name: "Alice")
 
-        // Access fields via dynamic member lookup
-        #expect(user[dynamicMember: "email"] as? String == "test@example.com")
-        #expect(user[dynamicMember: "name"] as? String == "Alice")
-        #expect(user[dynamicMember: "nonexistent"] == nil)
+        #expect(
+            try user.persistedFieldValue(
+                for: BasicUser.fields.email.identity
+            ) == .string("test@example.com")
+        )
+        #expect(
+            try user.persistedFieldValue(
+                for: BasicUser.fields.name.identity
+            ) == .string("Alice")
+        )
+        #expect(
+            try user.persistedFieldValue(
+                for: FieldIdentity(name: "nonexistent", number: 100)
+            ) == nil
+        )
     }
 
     @Test("@Persistable only treats instance stored properties as persisted fields")
@@ -171,9 +181,21 @@ struct ModelMacroTests {
         #expect(StaticAndComputedMemberModel.fieldNumber(for: "seedData") == nil)
         #expect(StaticAndComputedMemberModel.fieldNumber(for: "supportedScopes") == nil)
 
-        #expect(model[dynamicMember: "email"] as? String == "test@example.com")
-        #expect(model[dynamicMember: "displayName"] == nil)
-        #expect(model[dynamicMember: "seedData"] == nil)
+        #expect(
+            try model.persistedFieldValue(
+                for: StaticAndComputedMemberModel.fields.email.identity
+            ) == .string("test@example.com")
+        )
+        #expect(
+            try model.persistedFieldValue(
+                for: FieldIdentity(name: "displayName", number: 100)
+            ) == nil
+        )
+        #expect(
+            try model.persistedFieldValue(
+                for: FieldIdentity(name: "seedData", number: 101)
+            ) == nil
+        )
         #expect(StaticAndComputedMemberModel.seedData.isEmpty)
 
         let fields = try PersistableFieldEncoder.encode(model)
@@ -250,19 +272,35 @@ struct ModelMacroTests {
         #expect(TransientUser.allFields.count == 3)
     }
 
-    /// Test @Transient excludes fields from subscript
-    @Test("@Transient excludes fields from subscript")
-    func transientExcludesFromSubscript() {
+    @Test("@Transient excludes fields from canonical lookup")
+    func transientExcludesFromCanonicalLookup() throws {
         let user = TransientUser(email: "test@example.com", name: "Alice")
 
-        // Persisted fields should be accessible
-        #expect(user[dynamicMember: "email"] as? String == "test@example.com")
-        #expect(user[dynamicMember: "name"] as? String == "Alice")
-
-        // Transient fields should return nil via subscript
-        #expect(user[dynamicMember: "cachedDisplayName"] == nil)
-        #expect(user[dynamicMember: "sessionToken"] == nil)
-        #expect(user[dynamicMember: "isOnline"] == nil)
+        #expect(
+            try user.persistedFieldValue(
+                for: TransientUser.fields.email.identity
+            ) == .string("test@example.com")
+        )
+        #expect(
+            try user.persistedFieldValue(
+                for: TransientUser.fields.name.identity
+            ) == .string("Alice")
+        )
+        #expect(
+            try user.persistedFieldValue(
+                for: FieldIdentity(name: "cachedDisplayName", number: 100)
+            ) == nil
+        )
+        #expect(
+            try user.persistedFieldValue(
+                for: FieldIdentity(name: "sessionToken", number: 101)
+            ) == nil
+        )
+        #expect(
+            try user.persistedFieldValue(
+                for: FieldIdentity(name: "isOnline", number: 102)
+            ) == nil
+        )
     }
 
     /// Test @Transient fields are not in init

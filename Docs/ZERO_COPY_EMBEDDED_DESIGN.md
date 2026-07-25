@@ -152,6 +152,10 @@ public protocol Persistable: Sendable {
         to output: inout Output
     ) throws(PersistableEncodingFailure<Output.Failure>)
 
+    func persistedFieldValue(
+        for field: FieldIdentity
+    ) throws(PersistableEncodingError) -> FieldValue?
+
     static func decodePersistedFields<Input: PersistedFieldInput>(
         from input: inout Input
     ) throws(PersistableDecodingFailure<Input.Failure>) -> Self
@@ -565,16 +569,21 @@ Benchmarks report frame size, operations per second, allocated bytes, allocation
 count, and peak resident or linear memory. A zero-copy claim without one of
 these observations is not accepted.
 
-## Current implementation gap
+## Implementation status
 
-This document describes the target architecture, not the current completion
-state. At the time this contract was written, the following production paths
-still violate it:
+The model and schema boundaries now implement the static contract described
+above:
+
+| Area | Implemented contract |
+|---|---|
+| Model adaptation | Macro-generated generic field output; no `Mirror`, `Any`, dynamic-member, or existential model path |
+| Selected field access | `FieldIdentity` selection through the same generated traversal; only the selected `FieldValue` is materialized |
+| Schema | Pure validated entity values; no retained model metatypes, runtime KeyPaths, or descriptor existential arrays |
+
+The following production paths remain outside that completed boundary:
 
 | Area | Current violation | Required replacement |
 |---|---|---|
-| Model adaptation | `Mirror`, `any Persistable`, and intermediate persisted-field collections | Macro-generated generic field input and output |
-| Schema | Persistable metatypes, runtime KeyPaths, and descriptor existential arrays | Macro-resolved typed fields, pure validated schema values, and concrete descriptor representation |
 | Bytes | An Embedded-visible existential external owner | Concrete Embedded `ByteString` backing |
 | Wire API | Public catch-all codec entry points and arbitrary two-pass closures | Closed DatabaseWire-provided operation descriptors and internal directional encoding |
 | Bulk query results | Eager arrays for all rows and triples | Validated owner-retaining page views |

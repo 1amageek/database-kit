@@ -160,6 +160,10 @@ runtime metatype. It writes each concrete property directly to the selected
 output. `PersistableFieldEncoder.encode(_:)` is the explicit owned
 materializer for callers that require `[PersistableField]`; Wire and storage
 outputs can consume the generated traversal without that intermediate array.
+When an execution path needs one field after typed access has been erased,
+`persistedFieldValue(for:)` selects it by `FieldIdentity` through the same
+generated traversal. It materializes only that field as `FieldValue`; the model
+contract has no `Any`, `any Sendable`, dynamic-member, or reflection fallback.
 
 ## Polymorphic Persistence
 

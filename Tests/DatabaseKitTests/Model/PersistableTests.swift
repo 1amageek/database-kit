@@ -31,13 +31,24 @@ struct PersistableProtocolTests {
         var email: String
         var name: String
 
-        subscript(dynamicMember member: String) -> (any Sendable)? {
-            switch member {
-            case "id": return id
-            case "email": return email
-            case "name": return name
-            default: return nil
-            }
+        func encodePersistedFields<Output: PersistedFieldOutput>(
+            to output: inout Output
+        ) throws(PersistableEncodingFailure<Output.Failure>) {
+            try output.write(
+                FieldIdentity(name: "id", number: 1),
+                value: id,
+                entity: Self.persistableType
+            )
+            try output.write(
+                FieldIdentity(name: "email", number: 2),
+                value: email,
+                entity: Self.persistableType
+            )
+            try output.write(
+                FieldIdentity(name: "name", number: 3),
+                value: name,
+                entity: Self.persistableType
+            )
         }
     }
 
@@ -79,13 +90,29 @@ struct PersistableProtocolTests {
         #expect(!user.id.isEmpty)
     }
 
-    @Test("Model dynamic member lookup")
-    func testDynamicMemberLookup() {
+    @Test("Model canonical field lookup")
+    func testCanonicalFieldLookup() throws {
         let user = TestUser(email: "test@example.com", name: "Alice")
 
-        #expect(user[dynamicMember: "email"] as? String == "test@example.com")
-        #expect(user[dynamicMember: "name"] as? String == "Alice")
-        #expect(user[dynamicMember: "id"] as? String == user.id)
-        #expect(user[dynamicMember: "nonexistent"] == nil)
+        #expect(
+            try user.persistedFieldValue(
+                for: FieldIdentity(name: "email", number: 2)
+            ) == .string("test@example.com")
+        )
+        #expect(
+            try user.persistedFieldValue(
+                for: FieldIdentity(name: "name", number: 3)
+            ) == .string("Alice")
+        )
+        #expect(
+            try user.persistedFieldValue(
+                for: FieldIdentity(name: "id", number: 1)
+            ) == .string(user.id)
+        )
+        #expect(
+            try user.persistedFieldValue(
+                for: FieldIdentity(name: "nonexistent", number: 100)
+            ) == nil
+        )
     }
 }

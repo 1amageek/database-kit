@@ -951,41 +951,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(enumMetadataDecl)
 
-        // Generate subscript for @dynamicMemberLookup (excludes transient fields)
-        // For Optional types, unwrap before returning to avoid boxing Optional<T> as `any Sendable`
-        var subscriptCases: [String] = []
-        for fieldInfo in fieldInfos {
-            if !fieldInfo.isTransient {
-                // Check if the type is Optional (ends with ? or is Optional<...>)
-                let isOptional = fieldInfo.type.hasSuffix("?") ||
-                                 fieldInfo.type.hasPrefix("Optional<")
-                if isOptional {
-                    // For Optional types, unwrap the value to avoid boxing Optional as `any Sendable`
-                    subscriptCases.append("""
-                    case "\(fieldInfo.name)":
-                                if let value = self.\(fieldInfo.name) { return value }
-                                return nil
-                    """)
-                } else {
-                    subscriptCases.append("case \"\(fieldInfo.name)\": return self.\(fieldInfo.name)")
-                }
-            }
-        }
-        let subscriptBody = subscriptCases.isEmpty
-            ? "return nil"
-            : """
-            switch member {
-                    \(subscriptCases.joined(separator: "\n        "))
-                    default: return nil
-                }
-            """
-        let subscriptDecl: DeclSyntax = """
-            public subscript(dynamicMember member: String) -> (any Sendable)? {
-                \(raw: subscriptBody)
-            }
-            """
-        decls.append(subscriptDecl)
-
         // Generate an initializer for all persisted fields.
         let initParams = fieldInfos
             .filter { !$0.isTransient }

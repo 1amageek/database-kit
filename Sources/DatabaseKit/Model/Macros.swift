@@ -40,7 +40,7 @@ import DatabaseTypes
 /// - `static func fieldNumber(for fieldName: String) -> Int?`
 /// - `static func enumMetadata(for fieldName: String) -> EnumMetadata?`
 /// - `init(...)`
-@attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(owlObjectPropertyDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), arbitrary)
+@attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(owlObjectPropertyDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(init), arbitrary)
 @attached(extension, conformances: Persistable, Sendable)
 public macro Persistable() = #externalMacro(module: "DatabaseKitMacros", type: "PersistableMacro")
 
@@ -55,7 +55,7 @@ public macro Persistable() = #externalMacro(module: "DatabaseKitMacros", type: "
 /// }
 /// // persistableType = "User"
 /// ```
-@attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(owlObjectPropertyDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), arbitrary)
+@attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(owlObjectPropertyDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(init), arbitrary)
 @attached(extension, conformances: Persistable, Sendable)
 public macro Persistable(type: String) = #externalMacro(module: "DatabaseKitMacros", type: "PersistableMacro")
 
@@ -299,7 +299,7 @@ public macro Polymorphable() = #externalMacro(module: "DatabaseKitMacros", type:
 /// - Field is excluded from `allFields` array
 /// - Field is excluded from canonical persistence
 /// - Field is excluded from generated initializer
-/// - Field is excluded from `subscript(dynamicMember:)`
+/// - Field is excluded from generated persistence traversal and schema metadata
 ///
 /// **Requirements**:
 /// - Field must have a default value (since it's excluded from initializer)

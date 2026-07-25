@@ -2,7 +2,6 @@ import DatabaseTypes
 import Testing
 import Foundation
 import DatabaseKit
-import DatabaseKit
 
 protocol CanonicalReadDocument: Polymorphable {
     var id: String { get }
@@ -32,13 +31,6 @@ struct CanonicalReadArticle: Persistable, Sendable, CanonicalReadDocument {
         }
     }
     static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
-    subscript(dynamicMember member: String) -> (any Sendable)? {
-        switch member {
-        case "id": return id
-        case "title": return title
-        default: return nil
-        }
-    }
 }
 
 struct CanonicalReadReport: Persistable, Sendable, CanonicalReadDocument {
@@ -57,13 +49,6 @@ struct CanonicalReadReport: Persistable, Sendable, CanonicalReadDocument {
         }
     }
     static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
-    subscript(dynamicMember member: String) -> (any Sendable)? {
-        switch member {
-        case "id": return id
-        case "title": return title
-        default: return nil
-        }
-    }
 }
 
 protocol IndexedCanonicalReadDocument: Polymorphable {
@@ -114,13 +99,6 @@ struct IndexedCanonicalReadArticle: Persistable, Sendable, IndexedCanonicalReadD
         }
     }
     static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
-    subscript(dynamicMember member: String) -> (any Sendable)? {
-        switch member {
-        case "id": return id
-        case "title": return title
-        default: return nil
-        }
-    }
 }
 
 struct IndexedCanonicalReadReport: Persistable, Sendable, IndexedCanonicalReadDocument {
@@ -145,13 +123,6 @@ struct IndexedCanonicalReadReport: Persistable, Sendable, IndexedCanonicalReadDo
         }
     }
     static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
-    subscript(dynamicMember member: String) -> (any Sendable)? {
-        switch member {
-        case "id": return id
-        case "title": return title
-        default: return nil
-        }
-    }
 }
 
 enum CanonicalReadUnindexedSchema: VersionedSchema {

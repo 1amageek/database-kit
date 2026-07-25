@@ -29,6 +29,64 @@ struct PersistableFieldEncoderTests {
         ])
     }
 
+    @Test("Schema identity lookup materializes only the selected field")
+    func schemaIdentityLookup() throws {
+        let document = PersistableFieldEncoderTestDocument(
+            title: "Selected",
+            externalID: DatabaseTypes.UUID(high: 1, low: 2),
+            occurredAt: try Timestamp(
+                secondsSinceUnixEpoch: 1_721_234_567,
+                nanoseconds: 125_000_000
+            ),
+            note: nil,
+            values: [1, 2, 3]
+        )
+
+        #expect(
+            try document.persistedFieldValue(
+                for: PersistableFieldEncoderTestDocument.fields.title.identity
+            ) == .string("Selected")
+        )
+        #expect(
+            try document.persistedFieldValue(
+                for: PersistableFieldEncoderTestDocument.fields.note.identity
+            ) == .null
+        )
+        #expect(
+            try document.persistedFieldValue(
+                for: FieldIdentity(name: "unknown", number: 100)
+            ) == nil
+        )
+    }
+
+    @Test("Schema identity lookup rejects mismatched names and numbers")
+    func schemaIdentityMismatchFails() throws {
+        let document = PersistableFieldEncoderTestDocument(
+            title: "Mismatch",
+            externalID: DatabaseTypes.UUID(high: 1, low: 2),
+            occurredAt: try Timestamp(
+                secondsSinceUnixEpoch: 1_721_234_567,
+                nanoseconds: 125_000_000
+            ),
+            values: []
+        )
+        let title = PersistableFieldEncoderTestDocument.fields.title.identity
+
+        #expect(
+            throws: PersistableEncodingError.invalidSchema(
+                entity: PersistableFieldEncoderTestDocument.persistableType,
+                reason: "field identity 'other#\(title.number)' does not match 'title#\(title.number)'"
+            )
+        ) {
+            try document.persistedFieldValue(
+                for: FieldIdentity(
+                    name: "other",
+                    number: title.number
+                )
+            )
+        }
+    }
+
     @Test("Compiled documents round-trip without JSON")
     func compiledDocumentRoundTrip() throws {
         let externalID = DatabaseTypes.UUID(
