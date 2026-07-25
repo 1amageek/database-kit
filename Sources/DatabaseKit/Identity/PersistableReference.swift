@@ -85,7 +85,7 @@ extension PersistableReference: PersistableReferenceValue {
 
     public static func decodePersistedReference(
         _ identity: EntityReference
-    ) throws -> Self {
+    ) throws(PersistableReferenceError) -> Self {
         try Self(identity: identity)
     }
 }

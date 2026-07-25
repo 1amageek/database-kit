@@ -123,6 +123,69 @@ struct PersistableFieldEncoderTests {
         #expect(decoded.values == document.values)
     }
 
+    @Test("Owned field input canonicalizes field order once")
+    func ownedInputOrder() throws {
+        let document = PersistableFieldEncoderTestDocument(
+            title: "Reordered",
+            externalID: DatabaseTypes.UUID(high: 3, low: 4),
+            occurredAt: try Timestamp(
+                secondsSinceUnixEpoch: 1_721_234_567,
+                nanoseconds: 125_000_000
+            ),
+            values: [2, 4, 8]
+        )
+        let fields = try PersistableFieldEncoder.encode(document)
+
+        let decoded =
+            try PersistableFieldEncoderTestDocument.decodePersistedFields(
+                Array(fields.reversed())
+            )
+
+        #expect(decoded.id == document.id)
+        #expect(decoded.title == document.title)
+        #expect(decoded.values == document.values)
+    }
+
+    @Test("Concrete input failures retain their static error type")
+    func concreteInputFailure() {
+        var input = FailingPersistedFieldInput()
+
+        do {
+            let _ =
+                try PersistableFieldEncoderTestDocument
+                    .decodePersistedFields(from: &input)
+            Issue.record("The concrete input failure must be propagated")
+        } catch let failure {
+            switch failure {
+            case .input(.unavailable):
+                break
+            case .adaptation(let error):
+                Issue.record("Unexpected adaptation failure: \(error)")
+            }
+        }
+    }
+
+    @Test("Canonical objects decode without rebuilding numbered fields")
+    func objectInput() throws {
+        let value = PersistableFieldNestedValue(
+            label: "current",
+            priority: 7
+        )
+        let document = PersistableFieldNestedTestDocument(
+            value: value,
+            history: [value]
+        )
+        let object = try PersistableFieldEncoder.object(from: document)
+
+        let decoded =
+            try PersistableFieldNestedTestDocument
+                .decodePersistedObject(object)
+
+        #expect(decoded.id == document.id)
+        #expect(decoded.value == document.value)
+        #expect(decoded.history == document.history)
+    }
+
     @Test("Nested values round-trip as canonical objects")
     func nestedValueRoundTrip() throws {
         let current = PersistableFieldNestedValue(label: "current", priority: 2)
@@ -306,6 +369,29 @@ private struct FieldIdentityOutput: PersistedFieldOutput {
     ) throws(PersistableEncodingFailure<Never>) {
         identities.append(identity)
     }
+}
+
+private enum PersistedFieldInputFixtureError: Error, Sendable {
+    case unavailable
+}
+
+private struct FailingPersistedFieldInput: PersistedFieldInput {
+    typealias Failure = PersistedFieldInputFixtureError
+
+    mutating func readField(
+        _ identity: FieldIdentity,
+        entity: String
+    ) throws(
+        PersistableDecodingFailure<PersistedFieldInputFixtureError>
+    ) -> FieldValue? {
+        throw .input(.unavailable)
+    }
+
+    func finish(
+        entity: String
+    ) throws(
+        PersistableDecodingFailure<PersistedFieldInputFixtureError>
+    ) {}
 }
 
 private enum PersistableTestStatus: String, PersistableEnum {

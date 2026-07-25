@@ -6,7 +6,7 @@ public protocol PersistableReferenceValue: FieldValueEncodable {
 
     static func decodePersistedReference(
         _ identity: EntityReference
-    ) throws -> Self
+    ) throws(PersistableReferenceError) -> Self
 }
 
 public extension PersistableReferenceValue {

@@ -73,14 +73,12 @@ public enum PersistableFieldEncoder {
     public static func object(
         entity: String,
         fields: consuming [PersistableField]
-    ) throws(PersistableEncodingError) -> FieldValue {
+    ) throws(PersistableEncodingError) -> FieldObject {
         do {
-            return .object(
-                try FieldObject(
-                    fields.map { field in
-                        (key: field.name, value: field.value)
-                    }
-                )
+            return try FieldObject(
+                fields.map { field in
+                    (key: field.name, value: field.value)
+                }
             )
         } catch let error {
             switch error {
@@ -95,7 +93,7 @@ public enum PersistableFieldEncoder {
 
     public static func object<Model: Persistable>(
         from model: borrowing Model
-    ) throws(PersistableEncodingError) -> FieldValue {
+    ) throws(PersistableEncodingError) -> FieldObject {
         try object(
             entity: Model.persistableType,
             fields: encode(model)

@@ -319,15 +319,15 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             if fieldInfo.hasDefault {
                 let decodedType = isOptionalType(fieldType) ? wrappedTypeName(for: fieldType) : fieldType
                 let fallback = defaultInitializationExpr(for: fieldInfo)
-                return "(try decoder.decodeIfPresent(\(decodedType).self, for: \"\(fieldInfo.name)\")) ?? \(fallback)"
+                return "(try input.decodeIfPresent(\(decodedType).self, for: Self.fields.\(fieldInfo.name).identity, entity: Self.persistableType)) ?? \(fallback)"
             }
 
             if isOptionalType(fieldType) {
                 let wrappedType = wrappedTypeName(for: fieldType)
-                return "try decoder.decodeIfPresent(\(wrappedType).self, for: \"\(fieldInfo.name)\")"
+                return "try input.decodeIfPresent(\(wrappedType).self, for: Self.fields.\(fieldInfo.name).identity, entity: Self.persistableType)"
             }
 
-            return "try decoder.decode(\(fieldType).self, for: \"\(fieldInfo.name)\")"
+            return "try input.decode(\(fieldType).self, for: Self.fields.\(fieldInfo.name).identity, entity: Self.persistableType)"
         }
 
         // Extract #Index macro calls and generate typed declarations.
@@ -849,24 +849,24 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 "self.\(fieldInfo.name) = \(persistableFieldDecodeExpr(for: fieldInfo))"
             }
             .joined(separator: "\n        ")
-        let recordDecodableInitDecl: DeclSyntax = """
-            private init(_persistableFieldDecoder decoder: DatabaseKit.PersistableFieldDecoder) throws {
+        let persistedFieldInputInitDecl: DeclSyntax = """
+            private init<Input: DatabaseKit.PersistedFieldInput>(
+                _persistedFieldInput input: inout Input
+            ) throws(DatabaseKit.PersistableDecodingFailure<Input.Failure>) {
                 \(raw: recordDecodeAssignments)
+                try input.finish(entity: Self.persistableType)
             }
             """
-        decls.append(recordDecodableInitDecl)
+        decls.append(persistedFieldInputInitDecl)
 
-        let recordDecoderDecl: DeclSyntax = """
-            public static func decodePersistedFields(_ fields: [DatabaseKit.PersistableField]) throws -> Self {
-                let decoder = try DatabaseKit.PersistableFieldDecoder(
-                    entity: persistableType,
-                    fields: fields,
-                    schemas: fieldSchemas
-                )
-                return try Self(_persistableFieldDecoder: decoder)
+        let persistedFieldInputDecl: DeclSyntax = """
+            public static func decodePersistedFields<Input: DatabaseKit.PersistedFieldInput>(
+                from input: inout Input
+            ) throws(DatabaseKit.PersistableDecodingFailure<Input.Failure>) -> Self {
+                try Self(_persistedFieldInput: &input)
             }
             """
-        decls.append(recordDecoderDecl)
+        decls.append(persistedFieldInputDecl)
 
         // Generate enum metadata through the field type's static value contract.
         let primitiveTypeNames: Set<String> = [

@@ -173,8 +173,11 @@ public protocol Persistable: FieldValueEncodable {
     /// ```
     static var fieldSchemas: [FieldSchema] { get }
 
-    /// Reconstruct a compiled persistable directly from canonical database values.
-    static func decodePersistedFields(_ fields: [PersistableField]) throws -> Self
+    /// Reconstruct a compiled persistable from one concrete canonical field
+    /// source without runtime type discovery.
+    static func decodePersistedFields<Input: PersistedFieldInput>(
+        from input: inout Input
+    ) throws(PersistableDecodingFailure<Input.Failure>) -> Self
 
     /// Traverse this compiled model into a concrete typed field destination.
     func encodePersistedFields<Output: PersistedFieldOutput>(
@@ -191,7 +194,9 @@ public protocol Persistable: FieldValueEncodable {
     ) throws(PersistableEncodingError) -> FieldValue?
 
     /// Reconstruct a nested model from a primitive object representation.
-    static func decodePersistedObject(_ object: FieldObject) throws -> Self
+    static func decodePersistedObject(
+        _ object: FieldObject
+    ) throws(PersistableDecodingError) -> Self
 
     /// Get the stable field number for a field name.
     ///
@@ -237,7 +242,7 @@ public extension Persistable {
     static var fieldSchemaType: FieldSchemaType { .nested }
 
     func encodeFieldValue() throws(PersistableEncodingError) -> FieldValue {
-        try PersistableFieldEncoder.object(from: self)
+        .object(try PersistableFieldEncoder.object(from: self))
     }
 
     static var persistableIdentifierType: PersistableIdentifierType {
@@ -297,10 +302,29 @@ public extension Persistable {
     /// Default implementation returns empty array (no field schemas)
     static var fieldSchemas: [FieldSchema] { [] }
 
-    static func decodePersistedFields(_ fields: [PersistableField]) throws -> Self {
-        throw PersistableDecodingError.missingCompiledDecoder(
-            persistableType
+    static func decodePersistedFields<Input: PersistedFieldInput>(
+        from input: inout Input
+    ) throws(PersistableDecodingFailure<Input.Failure>) -> Self {
+        throw .adaptation(
+            .missingCompiledDecoder(persistableType)
         )
+    }
+
+    /// Reconstructs a model from an explicitly owned canonical field
+    /// collection.
+    static func decodePersistedFields(
+        _ fields: consuming [PersistableField]
+    ) throws(PersistableDecodingError) -> Self {
+        var input = try PersistedFieldCollectionInput(
+            entity: persistableType,
+            fields: fields,
+            schemas: fieldSchemas
+        )
+        do {
+            return try decodePersistedFields(from: &input)
+        } catch let failure {
+            throw failure.adaptationError
+        }
     }
 
     func encodePersistedFields<Output: PersistedFieldOutput>(
@@ -318,38 +342,19 @@ public extension Persistable {
         )
     }
 
-    static func decodePersistedObject(_ object: FieldObject) throws -> Self {
-        var schemasByName: [String: FieldSchema] = [:]
-        for schema in fieldSchemas {
-            guard schemasByName.updateValue(
-                schema,
-                forKey: schema.name
-            ) == nil else {
-                throw PersistableDecodingError.duplicateSchemaFieldName(
-                    schema.name
-                )
-            }
+    static func decodePersistedObject(
+        _ object: FieldObject
+    ) throws(PersistableDecodingError) -> Self {
+        var input = try PersistedObjectInput(
+            entity: persistableType,
+            object: object,
+            schemas: fieldSchemas
+        )
+        do {
+            return try decodePersistedFields(from: &input)
+        } catch let failure {
+            throw failure.adaptationError
         }
-
-        var fields: [PersistableField] = []
-        fields.reserveCapacity(object.count)
-        for field in object.fields {
-            guard let schema = schemasByName[field.key],
-                  let number = UInt32(exactly: schema.fieldNumber) else {
-                throw PersistableDecodingError.unknownField(
-                    number: 0,
-                    name: field.key
-                )
-            }
-            fields.append(
-                try PersistableField(
-                    number: number,
-                    name: field.key,
-                    value: field.value
-                )
-            )
-        }
-        return try decodePersistedFields(fields)
     }
 
     /// Default implementation returns nil (no field numbers)
