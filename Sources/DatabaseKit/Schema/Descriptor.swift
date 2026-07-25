@@ -1,43 +1,16 @@
 import DatabaseTypes
 // Descriptor.swift
-// Core - Unified descriptor protocol for Persistable metadata
+// Core - Common identity contract for schema declarations
 //
-// All metadata descriptors (Index, Relationship, Encryption, TTL, etc.)
-// conform to this protocol, enabling modular extension of Persistable types.
+// Feature-specific declarations remain in homogeneous collections. This
+// protocol only defines their shared stable identity.
 
-/// Unified protocol for all Persistable metadata descriptors
+/// Common stable identity for a schema declaration.
 ///
-/// This protocol enables a single `descriptors` array in `Persistable` to hold
-/// all types of metadata, with type-safe access provided by extensions in each module.
-///
-/// **Design Philosophy**:
-/// - Core defines only the protocol
-/// - Each feature module defines its concrete Descriptor type
-/// - Modules provide type-safe accessors via `Persistable` extensions
-///
-/// **Built-in Descriptor Types**:
-/// - `IndexDescriptor`: Index metadata (Core)
-///
-/// **Extension Descriptor Types** (in separate modules):
-/// - `RelationshipDescriptor`: FK relationship metadata (Relationship module)
-/// - Future: `EncryptionDescriptor`, `TTLDescriptor`, `ValidationDescriptor`, etc.
-///
-/// **Usage**:
-/// ```swift
-/// // Define a custom Descriptor in your module
-/// public struct EncryptionDescriptor: Descriptor {
-///     public let name: String
-///     public let propertyName: String
-///     public let algorithm: EncryptionAlgorithm
-/// }
-///
-/// // Provide type-safe accessor
-/// extension Persistable {
-///     static var encryptionDescriptors: [EncryptionDescriptor] {
-///         descriptors.compactMap { $0 as? EncryptionDescriptor }
-///     }
-/// }
-/// ```
+/// Persistable metadata is deliberately not exposed as `[any Descriptor]`.
+/// Indexes, relationships, and ontology bindings have different invariants and
+/// consumers, so each remains in its own typed collection. That separation
+/// preserves static dispatch and Embedded compatibility.
 public protocol Descriptor: Sendable, Hashable {
     /// Unique identifier for this descriptor
     ///

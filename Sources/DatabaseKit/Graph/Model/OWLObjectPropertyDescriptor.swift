@@ -31,11 +31,6 @@ public struct OWLObjectPropertyDescriptor: Descriptor, Sendable, Hashable {
     }
 }
 
-/// Type-safe accessor for OWLObjectPropertyDescriptor
 extension Persistable {
-    public static var owlObjectPropertyDescriptors: [OWLObjectPropertyDescriptor] {
-        get throws(IndexDeclarationError) {
-            try descriptors.compactMap { $0 as? OWLObjectPropertyDescriptor }
-        }
-    }
+    public static var owlObjectPropertyDescriptors: [OWLObjectPropertyDescriptor] { [] }
 }

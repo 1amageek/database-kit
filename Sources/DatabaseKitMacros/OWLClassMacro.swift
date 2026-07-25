@@ -336,12 +336,6 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
                     try [IndexDescriptor(name: \(raw: structName).persistableType + "_owl_rdf", kind: OWLClassRDFIndexKind<\(raw: structName)>(individualIRIBase: "\(raw: individualIRIBase)", graph: Self.ontologyGraph))]
                 }
             }
-
-            public static var _owlRDFDescriptors: [any Descriptor] {
-                get throws(IndexDeclarationError) {
-                    try _owlRDFIndexDescriptors.map { $0 as any Descriptor }
-                }
-            }
             """
         decls.append(owlRDFDecl)
 

@@ -332,9 +332,10 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             return "try decoder.decode(\(fieldType).self, for: \"\(fieldInfo.name)\")"
         }
 
-        // Extract #Index macro calls and generate descriptors
-        var descriptorInits: [String] = []  // All descriptors (Index, Relationship, etc.)
+        // Extract #Index macro calls and generate typed declarations.
         var indexDescriptorInits: [String] = []
+        var relationshipDescriptorInits: [String] = []
+        var objectPropertyDescriptorInits: [String] = []
 
         for member in structDecl.memberBlock.members {
             if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
@@ -468,7 +469,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     """
                 }
 
-                descriptorInits.append(descriptorInit)
                 indexDescriptorInits.append(descriptorInit)
             }
         }
@@ -557,7 +557,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     deleteRule: \(rel.deleteRule)
                 )
             """
-            descriptorInits.append(relationshipDescriptorInit)
+            relationshipDescriptorInits.append(relationshipDescriptorInit)
         }
 
         // Generate reverse indexes for @OWLDataProperty(to:) fields.
@@ -578,7 +578,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                     commonOptions: .init()
                                 )
                             """
-                            descriptorInits.append(reverseIndexInit)
                             indexDescriptorInits.append(reverseIndexInit)
                         }
                     }
@@ -605,7 +604,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                         commonOptions: .init()
                     )
                 """
-                descriptorInits.append(graphIndexInit)
                 indexDescriptorInits.append(graphIndexInit)
 
                 let objPropDescriptorInit = """
@@ -616,28 +614,9 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                         toFieldName: "\(objPropInfo.toField)"
                     )
                 """
-                descriptorInits.append(objPropDescriptorInit)
+                objectPropertyDescriptorInits.append(objPropDescriptorInit)
             }
         }
-
-        // Generate _persistableDescriptors (macro-generated descriptors from #Index, @Relationship, @OWLObjectProperty)
-        // NOTE: This is NOT `descriptors` — the unified `descriptors` property is provided by
-        // protocol extensions in Persistable (default) and OWLClassEntity (constrained override).
-        // This separation allows independent macros to contribute descriptors without coupling.
-        let descriptorsArray = descriptorInits.isEmpty
-            ? "[]"
-            : "[\n            \(descriptorInits.joined(separator: ",\n            "))\n        ]"
-        let descriptorsExpression = indexDescriptorInits.isEmpty
-            ? descriptorsArray
-            : "try \(descriptorsArray)"
-        let descriptorsDecl: DeclSyntax = """
-            public static var _persistableDescriptors: [any Descriptor] {
-                get throws(IndexDeclarationError) {
-                    \(raw: descriptorsExpression)
-                }
-            }
-            """
-        decls.append(descriptorsDecl)
 
         let indexDescriptorsArray = indexDescriptorInits.isEmpty
             ? "[]"
@@ -653,6 +632,26 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             }
             """
         decls.append(indexDescriptorsDecl)
+
+        let relationshipsArray = relationshipDescriptorInits.isEmpty
+            ? "[]"
+            : "[\n            \(relationshipDescriptorInits.joined(separator: ",\n            "))\n        ]"
+        let relationshipsDecl: DeclSyntax = """
+            public static var relationshipDescriptors: [RelationshipDescriptor] {
+                \(raw: relationshipsArray)
+            }
+            """
+        decls.append(relationshipsDecl)
+
+        let objectPropertiesArray = objectPropertyDescriptorInits.isEmpty
+            ? "[]"
+            : "[\n            \(objectPropertyDescriptorInits.joined(separator: ",\n            "))\n        ]"
+        let objectPropertiesDecl: DeclSyntax = """
+            public static var owlObjectPropertyDescriptors: [OWLObjectPropertyDescriptor] {
+                \(raw: objectPropertiesArray)
+            }
+            """
+        decls.append(objectPropertiesDecl)
 
         // Generate directoryPathComponents property
         // Always generate (no default in Persistable extension to avoid conflicts with Polymorphable)

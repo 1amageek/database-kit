@@ -50,11 +50,3 @@ extension RelationshipDescriptor: CustomStringConvertible {
         "RelationshipDescriptor(\(name) -> \(relatedTypeName), \(cardinality), \(deleteRule))"
     }
 }
-
-extension Persistable {
-    public static var relationshipDescriptors: [RelationshipDescriptor] {
-        get throws(IndexDeclarationError) {
-            try descriptors.compactMap { $0 as? RelationshipDescriptor }
-        }
-    }
-}

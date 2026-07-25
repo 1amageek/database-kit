@@ -450,8 +450,8 @@ struct OntologyMacroTests {
     }
 
     @Test("@OWLObjectProperty generates OWLObjectPropertyDescriptor")
-    func objectPropertyDescriptorGenerated() throws {
-        let descs = try OntAssignment.owlObjectPropertyDescriptors
+    func objectPropertyDescriptorGenerated() {
+        let descs = OntAssignment.owlObjectPropertyDescriptors
         #expect(descs.count == 1)
         #expect(descs[0].iri == "https://example.org/onto#employs")
         #expect(descs[0].fromFieldName == "employeeID")
@@ -490,38 +490,30 @@ struct OntologyMacroTests {
     }
 }
 
-// MARK: - Descriptor Ownership Tests
+// MARK: - Typed Metadata Ownership Tests
 
-@Suite("Descriptor Ownership Tests")
-struct DescriptorOwnershipTests {
+@Suite("Typed Metadata Ownership Tests")
+struct TypedMetadataOwnershipTests {
 
-    // -- _persistableDescriptors --
-
-    @Test("@Persistable generates _persistableDescriptors")
-    func persistableDescriptorsGenerated() throws {
+    @Test("@Persistable generates its typed index collection")
+    func persistableIndexesGenerated() throws {
         // OntPlainModel has no #Index → empty
-        #expect(try OntPlainModel._persistableDescriptors.isEmpty)
+        #expect(try OntPlainModel._persistableIndexDescriptors.isEmpty)
     }
 
-    @Test("_persistableDescriptors contains #Index descriptors")
-    func persistableDescriptorsContainsIndex() throws {
+    @Test("The persistable index collection contains #Index declarations")
+    func persistableIndexesContainIndex() throws {
         // OntProduct has a scalar index on category.
-        let descs = try OntProduct._persistableDescriptors
-        let indexDescs = descs.compactMap { $0 as? IndexDescriptor }
-        #expect(indexDescs.contains { $0.name.contains("category") })
+        let indexes = try OntProduct._persistableIndexDescriptors
+        #expect(indexes.contains { $0.name.contains("category") })
     }
-
-    // -- _owlRDFDescriptors --
 
     @Test("@OWLClass generates its canonical RDF index descriptor")
     func owlRDFDescriptorsGenerated() throws {
-        let descs = try OntEmployee._owlRDFDescriptors
-        #expect(descs.count == 1)
-
-        let indexDesc = descs[0] as? IndexDescriptor
-        #expect(indexDesc != nil)
-        #expect(indexDesc?.name == "OntEmployee_owl_rdf")
-        #expect(indexDesc?.kindIdentifier == "owl_class_rdf")
+        let indexes = try OntEmployee._owlRDFIndexDescriptors
+        #expect(indexes.count == 1)
+        #expect(indexes[0].name == "OntEmployee_owl_rdf")
+        #expect(indexes[0].kindIdentifier == "owl_class_rdf")
     }
 
     @Test("Non-OWL type has no OWL RDF index descriptor")
@@ -533,28 +525,24 @@ struct DescriptorOwnershipTests {
         #expect(owlRDF == nil)
     }
 
-    // -- Descriptor merging --
-
-    @Test("OWLClassEntity.descriptors merges record and RDF descriptors")
-    func descriptorsMerge() throws {
+    @Test("OWLClassEntity merges persisted and RDF indexes without type erasure")
+    func indexesMerge() throws {
         // OntProduct combines ontology, scalar-index, and transient metadata.
-        let all = try OntProduct.descriptors
-        let indexDescs = all.compactMap { $0 as? IndexDescriptor }
+        let indexes = try OntProduct.indexDescriptors
 
         // The record index and RDF projection are both registered.
-        let scalar = indexDescs.first { $0.kindIdentifier == "scalar" }
-        let owlRDF = indexDescs.first { $0.kindIdentifier == "owl_class_rdf" }
+        let scalar = indexes.first { $0.kindIdentifier == "scalar" }
+        let owlRDF = indexes.first { $0.kindIdentifier == "owl_class_rdf" }
 
         #expect(scalar != nil, "Should contain scalar index from #Index")
         #expect(owlRDF != nil, "Should contain RDF projection from @OWLClass")
     }
 
-    @Test("Plain type descriptors == _persistableDescriptors (no merge)")
-    func plainTypeDescriptorsDefault() throws {
-        // No @OWLClass → descriptors defaults to _persistableDescriptors
-        let descs = try OntPlainModel.descriptors
-        let persistable = try OntPlainModel._persistableDescriptors
-        #expect(descs.count == persistable.count)
+    @Test("Plain model exposes only its persistable indexes")
+    func plainTypeIndexesDefault() throws {
+        let indexes = try OntPlainModel.indexDescriptors
+        let persistableIndexes = try OntPlainModel._persistableIndexDescriptors
+        #expect(indexes == persistableIndexes)
     }
 
     // -- OWLClassRDFIndexKind --

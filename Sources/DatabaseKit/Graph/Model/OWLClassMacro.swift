@@ -47,7 +47,7 @@ import DatabaseTypes
     member,
     names: named(ontologyClassIRI), named(ontologyPropertyDescriptors),
         named(ontologyIndividualIRIBase), named(ontologyGraph),
-        named(ontologySubject), named(ontologyQuads), named(_owlRDFDescriptors),
+        named(ontologySubject), named(ontologyQuads),
         named(_owlRDFIndexDescriptors)
 )
 @attached(extension, conformances: OWLClassEntity)

@@ -59,7 +59,7 @@ struct PersistableReferenceTests {
 
     @Test("Relationship metadata is derived from typed fields")
     func relationshipMetadata() throws {
-        let descriptors = try ReferenceOwnerModel.relationshipDescriptors
+        let descriptors = ReferenceOwnerModel.relationshipDescriptors
 
         #expect(descriptors.count == 3)
         let required = try #require(descriptors.first { $0.propertyName == "required" })

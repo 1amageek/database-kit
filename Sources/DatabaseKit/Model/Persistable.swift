@@ -89,48 +89,21 @@ public protocol Persistable: FieldValueEncodable {
     /// **Example**: `["id", "email", "name", "createdAt"]`
     static var allFields: [String] { get }
 
-    /// All descriptors for this persistable type
-    ///
-    /// Contains all metadata descriptors including:
-    /// - `IndexDescriptor`: Generated from `#Index` macro
-    /// - `RelationshipDescriptor`: Generated from `@Relationship` macro (Relationship module)
-    /// - Future: `EncryptionDescriptor`, `TTLDescriptor`, etc.
-    ///
-    /// **Type-safe access**:
-    /// Each module provides extension methods for type-safe access:
-    /// - `indexDescriptors` (Core)
-    /// - `relationshipDescriptors` (Relationship module)
-    ///
-    /// **Example**:
-    /// ```swift
-    /// // Access all descriptors
-    /// let allDescriptors = try User.descriptors
-    ///
-    /// // Type-safe access via extensions
-    /// let indexes = try User.indexDescriptors
-    /// let relationships = User.relationshipDescriptors  // requires Relationship module
-    /// ```
-    /// Macro-generated descriptors from @Persistable (#Index, @Relationship, @OWLObjectProperty).
-    ///
-    /// Override point for @Persistable macro. Other macros provide descriptors
-    /// through separate properties (e.g., `_owlRDFDescriptors` from @OWLClass).
-    static var _persistableDescriptors: [any Descriptor] {
-        get throws(IndexDeclarationError)
-    }
-
     /// Macro-generated index descriptors without dynamic type recovery.
     static var _persistableIndexDescriptors: [IndexDescriptor] {
         get throws(IndexDeclarationError)
     }
 
-    /// Unified descriptor array merging all sources.
+    /// Validated index declarations for this model.
     ///
-    /// Default implementation returns `_persistableDescriptors`.
-    /// Constrained extensions on protocols like `OWLClassEntity` override this
-    /// to merge additional descriptors.
-    static var descriptors: [any Descriptor] {
+    /// Index metadata remains homogeneous so Embedded consumers never need
+    /// existential storage or runtime type recovery.
+    static var indexDescriptors: [IndexDescriptor] {
         get throws(IndexDeclarationError)
     }
+
+    /// Typed relationship declarations for this model.
+    static var relationshipDescriptors: [RelationshipDescriptor] { get }
 
     // MARK: - Directory Metadata
 
@@ -300,34 +273,20 @@ public extension Persistable {
         id.persistableIdentifierValue
     }
 
-    /// Default: no macro-generated descriptors.
-    static var _persistableDescriptors: [any Descriptor] {
-        get throws(IndexDeclarationError) { [] }
-    }
-
     /// Default: no macro-generated indexes.
     static var _persistableIndexDescriptors: [IndexDescriptor] {
         get throws(IndexDeclarationError) { [] }
     }
 
-    /// Default: unified descriptors = macro-generated descriptors only.
-    ///
-    /// Overridden by constrained extensions (e.g., `Persistable where Self: OWLClassEntity`)
-    /// to merge additional descriptor sources.
-    static var descriptors: [any Descriptor] {
-        get throws(IndexDeclarationError) {
-            try _persistableDescriptors
-        }
-    }
-
-    /// Type-safe access to index descriptors
-    ///
-    /// Filters `descriptors` to return only `IndexDescriptor` instances.
+    /// Default index declarations contain only those emitted by `@Persistable`.
     static var indexDescriptors: [IndexDescriptor] {
         get throws(IndexDeclarationError) {
             try _persistableIndexDescriptors
         }
     }
+
+    /// Default: no relationships.
+    static var relationshipDescriptors: [RelationshipDescriptor] { [] }
 
     /// Default implementation uses persistableType as single path component
     ///
