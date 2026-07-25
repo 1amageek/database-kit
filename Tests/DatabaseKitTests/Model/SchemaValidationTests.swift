@@ -32,7 +32,7 @@ private struct InvalidVectorConfigurationEntity {
         name: "invalid_vector"
     )
 
-    var embedding: [Float]
+    var embedding: Vector
 }
 
 @Persistable
@@ -154,10 +154,15 @@ struct SchemaValidationTests {
                 .invalidIndexDeclaration(
                     IndexDeclarationError(
                         indexName: "invalid_scalar",
-                        validationError: .unsupportedType(
+                        validationError: .unsupportedField(
                             index: "scalar",
-                            type: [String].self,
-                            reason: "Scalar index requires Comparable types"
+                            field: FieldSchema(
+                                name: "tags",
+                                fieldNumber: 2,
+                                type: .string,
+                                isArray: true
+                            ),
+                            reason: "Scalar index requires Comparable fields"
                         )
                     )
                 )

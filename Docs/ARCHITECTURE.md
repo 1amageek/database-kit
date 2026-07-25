@@ -93,7 +93,7 @@ generated `Field<Model, Value>` containing stable identity and
 `FieldSchemaType`. `IndexDescriptor` stores those canonical field descriptions,
 not `KeyPath`, `PartialKeyPath`, `AnyKeyPath`, or `Any.Type`.
 
-Construction evaluates both `IndexKind.validateTypes` and
+Construction evaluates both `IndexKind.validateFields` and
 `validateConfiguration`, and requires the selected generated fields to match
 the fields declared by the concrete kind. Invalid descriptors fail during
 construction; macro-generated descriptor accessors and `Schema` preserve that

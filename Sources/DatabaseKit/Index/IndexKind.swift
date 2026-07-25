@@ -19,7 +19,7 @@ import DatabaseTypes
 /// - Extended: Reverse DNS format ("com.mycompany.bloom_filter")
 ///
 /// **Design principles**:
-/// - Type-safe validation (using Any.Type)
+/// - Static validation through canonical field schemas
 /// - Structure declaration (SubspaceStructure)
 /// - Separation of implementation (no execution logic)
 ///
@@ -30,10 +30,10 @@ import DatabaseTypes
 ///     public static let identifier = "scalar"
 ///     public static let subspaceStructure = SubspaceStructure.flat
 ///
-///     public static func validateTypes(_ types: [Any.Type]) throws {
-///         for type in types {
-///             guard TypeValidation.isComparable(type) else {
-///                 throw IndexTypeValidationError.unsupportedType(...)
+///     public static func validateFields(_ fields: [FieldSchema]) throws {
+///         for field in fields {
+///             guard field.supportsOrderedIndex else {
+///                 throw IndexValidationError.unsupportedField(...)
 ///             }
 ///         }
 ///     }
@@ -49,7 +49,7 @@ import DatabaseTypes
 ///     public let falsePositiveRate: Double
 ///     public let expectedCapacity: Int
 ///
-///     public static func validateTypes(_ types: [Any.Type]) throws {
+///     public static func validateFields(_ fields: [FieldSchema]) throws {
 ///         // Custom validation logic
 ///     }
 ///
@@ -110,108 +110,26 @@ public protocol IndexKind: Sendable, Hashable {
     /// separately by `fieldNames` and must not be duplicated here.
     var metadata: [String: FieldValue] { get }
 
-    /// Validate whether this index kind supports specified types
+    /// Validate whether this index kind supports the selected persisted fields.
     ///
     /// **Parameters**:
-    /// - types: Types of indexed fields (array order corresponds to fieldNames)
+    /// - fields: Canonical field schemas in the same order as `fieldNames`
     ///
-    /// **Throws**: IndexTypeValidationError if type not supported
-    static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError)
+    /// **Throws**: `IndexValidationError` when a field contract is unsupported
+    static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError)
 
     /// Validate configuration values that are independent of field types.
     ///
     /// `IndexDescriptor` evaluates this contract when it captures a concrete
     /// index declaration. `Schema` then rejects any captured failure before
     /// exposing the catalog to a runtime.
-    func validateConfiguration() throws(IndexTypeValidationError)
+    func validateConfiguration() throws(IndexValidationError)
 }
 
 extension IndexKind {
     public var metadata: [String: FieldValue] { [:] }
 
-    public func validateConfiguration() throws(IndexTypeValidationError) {}
-}
-
-/// Index type validation error
-///
-/// **Example**:
-/// ```swift
-/// throw IndexTypeValidationError.unsupportedType(
-///     index: "vector",
-///     type: String.self,
-///     reason: "Vector index requires array types"
-/// )
-/// ```
-public enum IndexTypeValidationError:
-    Error,
-    Sendable,
-    Equatable,
-    CustomStringConvertible
-{
-    /// Unsupported type
-    ///
-    /// - Parameters:
-    ///   - index: Index kind identifier
-    ///   - type: Unsupported type
-    ///   - reason: Error reason (user-facing message)
-    case unsupportedType(index: String, type: Any.Type, reason: String)
-
-    /// Invalid field count
-    ///
-    /// - Parameters:
-    ///   - index: Index kind identifier
-    ///   - expected: Expected field count
-    ///   - actual: Actual field count
-    case invalidTypeCount(index: String, expected: Int, actual: Int)
-
-    /// Custom validation failed
-    ///
-    /// - Parameters:
-    ///   - index: Index kind identifier
-    ///   - reason: Failure reason (user-facing message)
-    case invalidConfiguration(index: String, reason: String)
-
-    public var description: String {
-        switch self {
-        case let .unsupportedType(index, type, reason):
-            return "Index '\(index)' does not support type '\(type)': \(reason)"
-
-        case let .invalidTypeCount(index, expected, actual):
-            return "Index '\(index)' expects \(expected) field(s), but got \(actual)"
-
-        case let .invalidConfiguration(index, reason):
-            return "Index '\(index)' has invalid configuration: \(reason)"
-        }
-    }
-
-    public static func == (
-        lhs: IndexTypeValidationError,
-        rhs: IndexTypeValidationError
-    ) -> Bool {
-        switch (lhs, rhs) {
-        case let (
-            .unsupportedType(lhsIndex, lhsType, lhsReason),
-            .unsupportedType(rhsIndex, rhsType, rhsReason)
-        ):
-            return lhsIndex == rhsIndex
-                && ObjectIdentifier(lhsType) == ObjectIdentifier(rhsType)
-                && lhsReason == rhsReason
-        case let (
-            .invalidTypeCount(lhsIndex, lhsExpected, lhsActual),
-            .invalidTypeCount(rhsIndex, rhsExpected, rhsActual)
-        ):
-            return lhsIndex == rhsIndex
-                && lhsExpected == rhsExpected
-                && lhsActual == rhsActual
-        case let (
-            .invalidConfiguration(lhsIndex, lhsReason),
-            .invalidConfiguration(rhsIndex, rhsReason)
-        ):
-            return lhsIndex == rhsIndex && lhsReason == rhsReason
-        default:
-            return false
-        }
-    }
+    public func validateConfiguration() throws(IndexValidationError) {}
 }

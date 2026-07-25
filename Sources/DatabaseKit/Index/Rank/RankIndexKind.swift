@@ -100,7 +100,7 @@ public struct RankIndexKind<Root: Persistable, Score: IndexNumericValue>: IndexK
         self.bucketSize = bucketSize
     }
 
-    public func validateConfiguration() throws(IndexTypeValidationError) {
+    public func validateConfiguration() throws(IndexValidationError) {
         guard bucketSize > 0 else {
             throw .invalidConfiguration(
                 index: Self.identifier,
@@ -109,24 +109,22 @@ public struct RankIndexKind<Root: Persistable, Score: IndexNumericValue>: IndexK
         }
     }
 
-    /// Type validation
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count == 1 else {
-            throw .invalidTypeCount(
+    /// Persisted field validation
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count == 1 else {
+            throw .invalidFieldCount(
                 index: identifier,
                 expected: 1,
-                actual: types.count
+                actual: fields.count
             )
         }
-        for type in types {
-            guard TypeValidation.isNumeric(
-                TypeValidation.unwrapped(type)
-            ) else {
-                throw .unsupportedType(
+        for field in fields {
+            guard field.isNumeric else {
+                throw .unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "Rank score fields must be numeric"
                 )
             }

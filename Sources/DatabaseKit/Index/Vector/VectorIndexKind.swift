@@ -108,7 +108,7 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
         self.metric = metric
     }
 
-    public func validateConfiguration() throws(IndexTypeValidationError) {
+    public func validateConfiguration() throws(IndexValidationError) {
         guard dimensions > 0 else {
             throw .invalidConfiguration(
                 index: Self.identifier,
@@ -117,28 +117,23 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
         }
     }
 
-    /// Type validation
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count == 1 else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    /// Persisted field validation
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count == 1 else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
-                actual: types.count
+                actual: fields.count
             )
         }
-        guard let type = types.first else { return }
-        let valueType = TypeValidation.unwrapped(type)
-        if valueType == DatabaseTypes.Vector.self {
-            return
-        }
-        guard let elementType = TypeValidation.arrayElementType(valueType),
-              TypeValidation.isNumeric(elementType) else {
-            throw .unsupportedType(
+        guard let field = fields.first else { return }
+        guard field.type == .vector, !field.isArray else {
+            throw .unsupportedField(
                 index: identifier,
-                type: type,
-                reason: "Vector fields must be Vector or arrays of numeric values"
+                field: field,
+                reason: "Vector index fields must use the canonical Vector primitive"
             )
         }
     }

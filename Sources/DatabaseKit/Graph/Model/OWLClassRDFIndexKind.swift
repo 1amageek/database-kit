@@ -41,7 +41,7 @@ public struct OWLClassRDFIndexKind<Root: OWLClassEntity>: IndexKind, Sendable, H
         self.graph = graph
     }
 
-    public func validateConfiguration() throws(IndexTypeValidationError) {
+    public func validateConfiguration() throws(IndexValidationError) {
         guard !individualIRIBase.isEmpty else {
             throw .invalidConfiguration(
                 index: Self.identifier,
@@ -50,14 +50,14 @@ public struct OWLClassRDFIndexKind<Root: OWLClassEntity>: IndexKind, Sendable, H
         }
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.isEmpty else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.isEmpty else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 0,
-                actual: types.count
+                actual: fields.count
             )
         }
     }

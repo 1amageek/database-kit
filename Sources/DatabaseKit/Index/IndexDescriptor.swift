@@ -122,10 +122,26 @@ public struct IndexDescriptor: Descriptor, Sendable {
                 )
             )
         }
+        var fieldsByName: [String: FieldSchema] = [:]
+        for field in Root.fieldSchemas {
+            fieldsByName[field.name] = field
+        }
+        var fields: [FieldSchema] = []
+        fields.reserveCapacity(fieldNames.count)
+        for fieldName in fieldNames {
+            guard let field = fieldsByName[fieldName] else {
+                throw IndexDeclarationError(
+                    indexName: name,
+                    validationError: .invalidConfiguration(
+                        index: Kind.identifier,
+                        reason: "Field '\(fieldName)' is absent from the static schema"
+                    )
+                )
+            }
+            fields.append(field)
+        }
         do {
-            try Kind.validateTypes(
-                keyPaths.map { type(of: $0).valueType }
-            )
+            try Kind.validateFields(fields)
             try kind.validateConfiguration()
         } catch let validationError {
             throw IndexDeclarationError(

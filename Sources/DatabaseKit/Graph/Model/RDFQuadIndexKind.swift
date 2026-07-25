@@ -64,32 +64,32 @@ public struct RDFQuadIndexKind<Root: Persistable>: IndexKind {
         self.graphField = Root.fieldName(for: graph)
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count == 3 || types.count == 4 else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count == 3 || fields.count == 4 else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 4,
-                actual: types.count
+                actual: fields.count
             )
         }
 
-        for type in types.prefix(3) where type != RDFTerm.self {
-            throw IndexTypeValidationError.unsupportedType(
+        for field in fields.prefix(3)
+        where field.type != .rdfTerm || field.isArray {
+            throw IndexValidationError.unsupportedField(
                 index: identifier,
-                type: type,
+                field: field,
                 reason: "subject, predicate, and object fields must be RDFTerm"
             )
         }
 
-        if types.count == 4 {
-            let graphType = types[3]
-            guard graphType == RDFTerm.self
-                    || graphType == Optional<RDFTerm>.self else {
-                throw IndexTypeValidationError.unsupportedType(
+        if fields.count == 4 {
+            let graphField = fields[3]
+            guard graphField.type == .rdfTerm, !graphField.isArray else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: graphType,
+                    field: graphField,
                     reason: "graph field must be RDFTerm or Optional<RDFTerm>"
                 )
             }

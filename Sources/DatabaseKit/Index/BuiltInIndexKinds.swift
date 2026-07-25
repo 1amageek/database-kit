@@ -61,22 +61,22 @@ public struct ScalarIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = fieldNames
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard !types.isEmpty else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard !fields.isEmpty else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
                 actual: 0
             )
         }
-        for type in types {
-            guard TypeValidation.isComparable(type) else {
-                throw IndexTypeValidationError.unsupportedType(
+        for field in fields {
+            guard field.supportsOrderedIndex else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: type,
-                    reason: "Scalar index requires Comparable types"
+                    field: field,
+                    reason: "Scalar index requires Comparable fields"
                 )
             }
         }
@@ -133,14 +133,14 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = fieldNames
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        for type in types {
-            guard TypeValidation.isComparable(type) else {
-                throw IndexTypeValidationError.unsupportedType(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        for field in fields {
+            guard field.supportsOrderedIndex else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "Count index grouping fields must be Comparable"
                 )
             }
@@ -153,7 +153,7 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
 /// Aggregation index for summing numeric values by grouping fields
 ///
 /// **Type-Safe Design**: The `Value` type parameter preserves numeric type information,
-/// ensuring integers remain integers and floating-point types use appropriate storage.
+/// ensuring integers remain integers and floating-point fields use appropriate storage.
 ///
 /// **Usage**:
 /// ```swift
@@ -171,15 +171,15 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
 /// - `[indexSubspace][groupKey1][groupKey2]...["count"] = positive Int64`
 ///
 /// **Storage**:
-/// - Signed integer types: Stored as exact Int64 bytes
-/// - Unsigned integer types: Stored as exact UInt64 bytes
-/// - Floating-point types: Stored as a finite compensated accumulator
+/// - Signed integer fields: Stored as exact Int64 bytes
+/// - Unsigned integer fields: Stored as exact UInt64 bytes
+/// - Floating-point fields: Stored as a finite compensated accumulator
 ///
 /// **Supports**:
 /// - Get sum by group key
 /// - Checked read/replace mutations in the caller's transaction
 /// - Multiple grouping fields
-/// - Precision preservation for integer types
+/// - Precision preservation for integer fields
 public struct SumIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKind {
     public static var identifier: String { "sum" }
     public static var subspaceStructure: SubspaceStructure { .aggregation }
@@ -236,31 +236,31 @@ public struct SumIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKi
         self.valueType = valueType
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count >= 1 else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count >= 1 else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
-                actual: types.count
+                actual: fields.count
             )
         }
-        let groupingTypes = types.dropLast()
-        for type in groupingTypes {
-            guard TypeValidation.isComparable(type) else {
-                throw IndexTypeValidationError.unsupportedType(
+        let groupingFields = fields.dropLast()
+        for field in groupingFields {
+            guard field.supportsOrderedIndex else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "Sum index grouping fields must be Comparable"
                 )
             }
         }
-        guard let valueType = types.last else { return }
-        guard TypeValidation.isNumeric(valueType) else {
-            throw IndexTypeValidationError.unsupportedType(
+        guard let valueField = fields.last else { return }
+        guard valueField.isNumeric else {
+            throw IndexValidationError.unsupportedField(
                 index: identifier,
-                type: valueType,
+                field: valueField,
                 reason: "Sum index value field must be Numeric"
             )
         }
@@ -343,21 +343,21 @@ public struct MinIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
         self.valueType = valueType
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count >= 1 else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count >= 1 else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
-                actual: types.count
+                actual: fields.count
             )
         }
-        for type in types {
-            guard TypeValidation.isComparable(type) else {
-                throw IndexTypeValidationError.unsupportedType(
+        for field in fields {
+            guard field.supportsOrderedIndex else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "Min index requires all fields to be Comparable"
                 )
             }
@@ -441,21 +441,21 @@ public struct MaxIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
         self.valueType = valueType
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count >= 1 else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count >= 1 else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
-                actual: types.count
+                actual: fields.count
             )
         }
-        for type in types {
-            guard TypeValidation.isComparable(type) else {
-                throw IndexTypeValidationError.unsupportedType(
+        for field in fields {
+            guard field.supportsOrderedIndex else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "Max index requires all fields to be Comparable"
                 )
             }
@@ -486,9 +486,9 @@ public struct MaxIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
 /// - `[indexSubspace][groupKey]["count"] = positive Int64`
 ///
 /// **Storage**:
-/// - Signed integer types: Sum stored as exact Int128 bytes
-/// - Unsigned integer types: Sum stored as exact UInt128 bytes
-/// - Floating-point types: Sum stored as a finite compensated accumulator
+/// - Signed integer fields: Sum stored as exact Int128 bytes
+/// - Unsigned integer fields: Sum stored as exact UInt128 bytes
+/// - Floating-point fields: Sum stored as a finite compensated accumulator
 ///
 /// **Result**: Exact integer when integral; otherwise a losslessly representable
 /// `Double`. A non-representable exact integer quotient fails explicitly.
@@ -549,31 +549,31 @@ public struct AverageIndexKind<Root: Persistable, Value: IndexNumericValue>: Ind
         self.valueType = valueType
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count >= 1 else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count >= 1 else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
-                actual: types.count
+                actual: fields.count
             )
         }
-        let groupingTypes = types.dropLast()
-        for type in groupingTypes {
-            guard TypeValidation.isComparable(type) else {
-                throw IndexTypeValidationError.unsupportedType(
+        let groupingFields = fields.dropLast()
+        for field in groupingFields {
+            guard field.supportsOrderedIndex else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "Average index grouping fields must be Comparable"
                 )
             }
         }
-        guard let valueType = types.last else { return }
-        guard TypeValidation.isNumeric(valueType) else {
-            throw IndexTypeValidationError.unsupportedType(
+        guard let valueField = fields.last else { return }
+        guard valueField.isNumeric else {
+            throw IndexValidationError.unsupportedField(
                 index: identifier,
-                type: valueType,
+                field: valueField,
                 reason: "Average index value field must be Numeric"
             )
         }
@@ -653,7 +653,7 @@ public struct VersionIndexKind<Root: Persistable>: IndexKind {
         self.strategy = strategy
     }
 
-    public func validateConfiguration() throws(IndexTypeValidationError) {
+    public func validateConfiguration() throws(IndexValidationError) {
         switch strategy {
         case .keepAll:
             return
@@ -674,14 +674,14 @@ public struct VersionIndexKind<Root: Persistable>: IndexKind {
         }
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count == 1 else {
-            throw .invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count == 1 else {
+            throw .invalidFieldCount(
                 index: identifier,
                 expected: 1,
-                actual: types.count
+                actual: fields.count
             )
         }
     }
@@ -736,14 +736,14 @@ public struct CountUpdatesIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = fieldNames
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count == 1 else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count == 1 else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
-                actual: types.count
+                actual: fields.count
             )
         }
     }
@@ -818,22 +818,22 @@ public struct CountNotNullIndexKind<Root: Persistable>: IndexKind {
         self.valueFieldName = valueFieldName
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count >= 1 else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count >= 1 else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
                 actual: 0
             )
         }
-        let groupingTypes = types.dropLast()
-        for type in groupingTypes {
-            guard TypeValidation.isComparable(type) else {
-                throw IndexTypeValidationError.unsupportedType(
+        let groupingFields = fields.dropLast()
+        for field in groupingFields {
+            guard field.supportsOrderedIndex else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "CountNotNull index grouping fields must be Comparable"
                 )
             }
@@ -907,22 +907,22 @@ public struct BitmapIndexKind<Root: Persistable>: IndexKind {
         self.fieldNames = fieldNames
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard !types.isEmpty else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard !fields.isEmpty else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
                 actual: 0
             )
         }
-        for type in types {
-            guard TypeValidation.isComparable(type) else {
-                throw IndexTypeValidationError.unsupportedType(
+        for field in fields {
+            guard field.supportsOrderedIndex else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: type,
-                    reason: "Bitmap index requires Comparable types"
+                    field: field,
+                    reason: "Bitmap index requires Comparable fields"
                 )
             }
         }
@@ -1044,7 +1044,7 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
         self.windowCount = windowCount
     }
 
-    public func validateConfiguration() throws(IndexTypeValidationError) {
+    public func validateConfiguration() throws(IndexValidationError) {
         guard windowCount > 0 else {
             throw .invalidConfiguration(
                 index: Self.identifier,
@@ -1060,30 +1060,30 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
         }
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard !types.isEmpty else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard !fields.isEmpty else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
                 actual: 0
             )
         }
-        for type in types.dropLast() {
-            guard TypeValidation.isComparable(type) else {
-                throw .unsupportedType(
+        for field in fields.dropLast() {
+            guard field.supportsOrderedIndex else {
+                throw .unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "Leaderboard grouping fields must be Comparable"
                 )
             }
         }
-        guard let scoreType = types.last else { return }
-        guard TypeValidation.unwrapped(scoreType) == Int64.self else {
-            throw IndexTypeValidationError.unsupportedType(
+        guard let scoreField = fields.last else { return }
+        guard scoreField.type == .int64 && !scoreField.isArray else {
+            throw IndexValidationError.unsupportedField(
                 index: identifier,
-                type: scoreType,
+                field: scoreField,
                 reason: "Leaderboard score field must be Int64"
             )
         }
@@ -1212,7 +1212,7 @@ public struct DistinctIndexKind<Root: Persistable>: IndexKind {
         self.precision = precision
     }
 
-    public func validateConfiguration() throws(IndexTypeValidationError) {
+    public func validateConfiguration() throws(IndexValidationError) {
         guard (4...17).contains(precision) else {
             throw .invalidConfiguration(
                 index: Self.identifier,
@@ -1221,31 +1221,33 @@ public struct DistinctIndexKind<Root: Persistable>: IndexKind {
         }
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count >= 1 else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count >= 1 else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
                 actual: 0
             )
         }
-        let groupingTypes = types.dropLast()
-        for type in groupingTypes {
-            guard TypeValidation.isComparable(type) else {
-                throw IndexTypeValidationError.unsupportedType(
+        let groupingFields = fields.dropLast()
+        for field in groupingFields {
+            guard field.supportsOrderedIndex else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "Distinct index grouping fields must be Comparable"
                 )
             }
         }
-        guard let valueType = types.last,
-              TypeValidation.isHashable(valueType) else {
-            throw .unsupportedType(
+        guard let valueField = fields.last else {
+            return
+        }
+        guard valueField.supportsEqualityIndex else {
+            throw .unsupportedField(
                 index: identifier,
-                type: types.last ?? Any.self,
+                field: valueField,
                 reason: "Distinct index values must be Hashable"
             )
         }
@@ -1349,7 +1351,7 @@ public struct PercentileIndexKind<Root: Persistable, Value: IndexNumericValue>: 
         self.compression = compression
     }
 
-    public func validateConfiguration() throws(IndexTypeValidationError) {
+    public func validateConfiguration() throws(IndexValidationError) {
         guard compression.isFinite,
               (1.0...1_000.0).contains(compression) else {
             throw .invalidConfiguration(
@@ -1359,33 +1361,33 @@ public struct PercentileIndexKind<Root: Persistable, Value: IndexNumericValue>: 
         }
     }
 
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count >= 1 else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count >= 1 else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 1,
                 actual: 0
             )
         }
         // Grouping fields must be Comparable
-        let groupingTypes = types.dropLast()
-        for type in groupingTypes {
-            guard TypeValidation.isComparable(type) else {
-                throw IndexTypeValidationError.unsupportedType(
+        let groupingFields = fields.dropLast()
+        for field in groupingFields {
+            guard field.supportsOrderedIndex else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "Percentile index grouping fields must be Comparable"
                 )
             }
         }
         // Value field must be Numeric
-        guard let valueType = types.last else { return }
-        guard TypeValidation.isNumeric(valueType) else {
-            throw IndexTypeValidationError.unsupportedType(
+        guard let valueField = fields.last else { return }
+        guard valueField.isNumeric else {
+            throw IndexValidationError.unsupportedField(
                 index: identifier,
-                type: valueType,
+                field: valueField,
                 reason: "Percentile index value field must be Numeric"
             )
         }

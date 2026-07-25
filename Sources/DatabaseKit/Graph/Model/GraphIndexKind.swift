@@ -121,30 +121,26 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     }
 
     /// Validate that every property-graph identity field is a String.
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count >= 2 else {
-            throw IndexTypeValidationError.invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count >= 2 else {
+            throw IndexValidationError.invalidFieldCount(
                 index: identifier,
                 expected: 2,
-                actual: types.count
+                actual: fields.count
             )
         }
 
-        for type in types {
-            guard isPropertyGraphString(type) else {
-                throw IndexTypeValidationError.unsupportedType(
+        for field in fields {
+            guard field.type == .string, !field.isArray else {
+                throw IndexValidationError.unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "property-graph identity fields must be String or String?"
                 )
             }
         }
-    }
-
-    private static func isPropertyGraphString(_ type: Any.Type) -> Bool {
-        TypeValidation.unwrapped(type) == String.self
     }
 
     // MARK: - Initialization

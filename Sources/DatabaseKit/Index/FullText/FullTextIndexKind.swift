@@ -132,7 +132,7 @@ public struct FullTextIndexKind<Root: Persistable>: IndexKind {
         self.minTermLength = minTermLength
     }
 
-    public func validateConfiguration() throws(IndexTypeValidationError) {
+    public func validateConfiguration() throws(IndexValidationError) {
         guard ngramSize > 0 else {
             throw .invalidConfiguration(
                 index: Self.identifier,
@@ -147,22 +147,22 @@ public struct FullTextIndexKind<Root: Persistable>: IndexKind {
         }
     }
 
-    /// Type validation
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard !types.isEmpty else {
-            throw .invalidTypeCount(
+    /// Persisted field validation
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard !fields.isEmpty else {
+            throw .invalidFieldCount(
                 index: identifier,
                 expected: 1,
-                actual: types.count
+                actual: fields.count
             )
         }
-        for type in types {
-            guard TypeValidation.unwrapped(type) == String.self else {
-                throw .unsupportedType(
+        for field in fields {
+            guard field.type == .string, !field.isArray else {
+                throw .unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "Full-text index fields must be String"
                 )
             }

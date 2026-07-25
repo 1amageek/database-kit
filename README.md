@@ -332,19 +332,20 @@ public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
         self.resolution = resolution
     }
 
-    public static func validateTypes(
-        _ types: [FieldSchemaType]
-    ) throws(IndexTypeValidationError) {
-        guard types.count == 1 else {
-            throw .invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count == 1 else {
+            throw .invalidFieldCount(
                 index: identifier,
                 expected: 1,
-                actual: types.count
+                actual: fields.count
             )
         }
-        guard types[0] == .timestamp else {
-            throw .invalidConfiguration(
+        guard fields[0].type == .timestamp, !fields[0].isArray else {
+            throw .unsupportedField(
                 index: identifier,
+                field: fields[0],
                 reason: "Time-series fields must use timestamp values"
             )
         }

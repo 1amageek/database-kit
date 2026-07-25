@@ -77,7 +77,7 @@ public struct PermutedIndexKind<Root: Persistable>: IndexKind {
         self.permutation = permutation
     }
 
-    public func validateConfiguration() throws(IndexTypeValidationError) {
+    public func validateConfiguration() throws(IndexValidationError) {
         guard permutation.size == fieldNames.count else {
             throw .invalidConfiguration(
                 index: Self.identifier,
@@ -86,26 +86,26 @@ public struct PermutedIndexKind<Root: Persistable>: IndexKind {
         }
     }
 
-    /// Type validation
+    /// Persisted field validation
     ///
     /// Permuted indexes require at least 2 fields (single field doesn't need reordering)
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count >= 2 else {
-            throw .invalidTypeCount(
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count >= 2 else {
+            throw .invalidFieldCount(
                 index: identifier,
                 expected: 2,
-                actual: types.count
+                actual: fields.count
             )
         }
         // All fields must be Comparable for index ordering
-        for type in types {
-            guard TypeValidation.isComparable(type) else {
-                throw .unsupportedType(
+        for field in fields {
+            guard field.supportsOrderedIndex else {
+                throw .unsupportedField(
                     index: identifier,
-                    type: type,
-                    reason: "Permuted index requires Comparable types"
+                    field: field,
+                    reason: "Permuted index requires Comparable fields"
                 )
             }
         }

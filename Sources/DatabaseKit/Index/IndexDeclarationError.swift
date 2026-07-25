@@ -6,11 +6,11 @@ public struct IndexDeclarationError:
   CustomStringConvertible
 {
   public let indexName: String
-  public let validationError: IndexTypeValidationError
+  public let validationError: IndexValidationError
 
   public init(
     indexName: String,
-    validationError: IndexTypeValidationError
+    validationError: IndexValidationError
   ) {
     self.indexName = indexName
     self.validationError = validationError

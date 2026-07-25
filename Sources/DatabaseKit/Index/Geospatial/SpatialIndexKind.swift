@@ -97,7 +97,7 @@ public struct SpatialIndexKind<Root: Persistable>: IndexKind {
         self.level = level
     }
 
-    public func validateConfiguration() throws(IndexTypeValidationError) {
+    public func validateConfiguration() throws(IndexValidationError) {
         let maximumLevel = encoding == .morton && fieldNames.count == 3
             ? 20
             : 30
@@ -115,24 +115,22 @@ public struct SpatialIndexKind<Root: Persistable>: IndexKind {
         }
     }
 
-    /// Type validation
-    public static func validateTypes(
-        _ types: [Any.Type]
-    ) throws(IndexTypeValidationError) {
-        guard types.count >= 2 && types.count <= 3 else {
-            throw .invalidTypeCount(
+    /// Persisted field validation
+    public static func validateFields(
+        _ fields: [FieldSchema]
+    ) throws(IndexValidationError) {
+        guard fields.count >= 2 && fields.count <= 3 else {
+            throw .invalidFieldCount(
                 index: identifier,
                 expected: 2,
-                actual: types.count
+                actual: fields.count
             )
         }
-        for type in types {
-            guard TypeValidation.isNumeric(
-                TypeValidation.unwrapped(type)
-            ) else {
-                throw .unsupportedType(
+        for field in fields {
+            guard field.isNumeric else {
+                throw .unsupportedField(
                     index: identifier,
-                    type: type,
+                    field: field,
                     reason: "Spatial coordinates must be numeric"
                 )
             }
