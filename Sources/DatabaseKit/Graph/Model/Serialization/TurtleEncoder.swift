@@ -700,10 +700,15 @@ private struct TurtleWriter {
     }
 
     private func joinStatements(_ parts: [String]) -> String {
-        if parts.count <= 1 {
-            return parts.first ?? ""
+        guard let last = parts.last else {
+            return ""
         }
-        return parts.dropLast().map { $0 + " ;" }.joined(separator: "\n") + "\n" + parts.last!
+        guard parts.count > 1 else {
+            return last
+        }
+        return parts.dropLast().map { $0 + " ;" }.joined(separator: "\n")
+            + "\n"
+            + last
     }
 }
 

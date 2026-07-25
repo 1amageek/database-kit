@@ -331,14 +331,7 @@ extension SelectQuery {
 
     /// Returns true if this query contains aggregation
     public var hasAggregation: Bool {
-        groupBy != nil && !groupBy!.isEmpty
-    }
-
-    /// Returns true if this query is a correlated subquery
-    public var isCorrelated: Bool {
-        // A correlated subquery references columns from outer queries
-        // This is a simplified check - full implementation would track scopes
-        false
+        groupBy?.isEmpty == false
     }
 
     private func collectVariables(from source: DataSource, into vars: inout Set<String>) {
