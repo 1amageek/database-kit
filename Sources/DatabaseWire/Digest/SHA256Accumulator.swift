@@ -4,7 +4,7 @@ import DatabaseTypes
 ///
 /// Input buffers are borrowed synchronously. Finalization allocates only the
 /// 32-byte digest result and consumes the accumulator.
-struct SHA256Accumulator: Sendable {
+public struct SHA256Accumulator: Sendable {
     public static let digestByteCount = 32
 
     private var state = State()

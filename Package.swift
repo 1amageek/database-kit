@@ -83,6 +83,10 @@ let package = Package(
                 .product(name: "DatabaseTypes", package: "database-types"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(
+                    name: "SwiftSyntaxMacroExpansion",
+                    package: "swift-syntax"
+                ),
+                .product(
                     name: "SwiftSyntaxMacrosTestSupport",
                     package: "swift-syntax"
                 ),

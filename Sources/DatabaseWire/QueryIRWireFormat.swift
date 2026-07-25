@@ -2,7 +2,7 @@ import DatabaseTypes
 import DatabaseKit
 
 /// Canonical binary codec for the Foundation-independent query intermediate representation.
-enum QueryIRWireFormat {
+public enum QueryIRWireFormat {
     public static func encode(
         _ statement: QueryStatement,
         limits: DatabaseWireLimits = .default

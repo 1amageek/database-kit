@@ -1,5 +1,6 @@
 import DatabaseTypes
 import Testing
+import SwiftSyntaxMacroExpansion
 import SwiftSyntaxMacrosTestSupport
 import DatabaseKitMacros
 @testable import DatabaseKit
@@ -23,7 +24,7 @@ struct ModelMacroValidationTests {
                 var count: Int
             }
 
-            extension PlatformIntegerDocument: Persistable, Sendable {
+            extension PlatformIntegerDocument: Persistable {
             }
             """,
             diagnostics: [
@@ -33,8 +34,11 @@ struct ModelMacroValidationTests {
                     column: 1
                 )
             ],
-            macros: [
-                "Persistable": PersistableMacro.self
+            macroSpecs: [
+                "Persistable": MacroSpec(
+                    type: PersistableMacro.self,
+                    conformances: ["Persistable"]
+                )
             ]
         )
     }

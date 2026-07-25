@@ -1,5 +1,5 @@
 /// A failure that occurs before or during borrowed database-wire emission.
-enum DatabaseWireEmissionError<DestinationFailure: Error>: Error {
+public enum DatabaseWireEmissionError<DestinationFailure: Error>: Error {
     /// Canonical measurement or encoding failed.
     case encoding(DatabaseWireError)
 
