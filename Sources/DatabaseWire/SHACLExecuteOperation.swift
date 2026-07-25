@@ -297,10 +297,12 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct ShapesPage: WireValue, Hashable {
+    public struct ShapesPage: WireValue {
+        private let shapeElements: RetainedResultElements<RDFQuad>
+
         public let graph: String
         public let revision: UInt64
-        public let shapes: [RDFQuad]
+        public var shapeCount: Int { shapeElements.count }
         public let continuation: ByteString?
 
         public init(
@@ -311,8 +313,21 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
         ) {
             self.graph = graph
             self.revision = revision
-            self.shapes = shapes
+            self.shapeElements = RetainedResultElements(shapes)
             self.continuation = continuation
+        }
+
+        public func makeShapeIterator() -> ResultIterator<RDFQuad> {
+            shapeElements.makeIterator(decodeElement: RDFQuad.init(from:))
+        }
+
+        public func materializedShapes(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [RDFQuad] {
+            try shapeElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: RDFQuad.init(from:)
+            )
         }
 
         func encode(
@@ -320,32 +335,38 @@ public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
         ) throws(DatabaseWireError) {
             try writer.writeString(graph)
             writer.writeUInt64(revision)
-            try writer.writeCount(shapes.count)
-            for shape in shapes { try shape.encode(into: &writer) }
+            try shapeElements.encode(
+                into: &writer,
+                encodeElement: {
+                    (
+                        shape: RDFQuad,
+                        writer: inout DatabaseWireWriter
+                    ) throws(DatabaseWireError) in
+                    try shape.encode(into: &writer)
+                },
+                validateElement: RDFQuad.validateWireRepresentation(from:)
+            )
             try writer.writeOptionalBytes(continuation)
         }
 
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let graph = try reader.readString()
-            let revision = try reader.readUInt64()
-            let count = try reader.readCount()
-            var shapes: [RDFQuad] = []
-            shapes.reserveCapacity(count)
-            for _ in 0..<count {
-                shapes.append(try RDFQuad(from: &reader))
-            }
-            self.init(
-                graph: graph,
-                revision: revision,
-                shapes: shapes,
-                continuation: try reader.readOptionalBytes()
+            self.graph = try reader.readString()
+            self.revision = try reader.readUInt64()
+            self.shapeElements = try RetainedResultElements(
+                from: &reader,
+                validateElement: RDFQuad.validateWireRepresentation(from:)
             )
+            self.continuation = try reader.readOptionalBytes()
+        }
+
+        var retainedEncodedShapes: ByteString? {
+            shapeElements.retainedBytes
         }
     }
 
-    public enum Response: WireValue, Hashable {
+    public enum Response: WireValue {
         case shapes(ShapesPage)
         case mutation(RevisionMutationResult)
         case validation(ValidationReport)

@@ -1,7 +1,7 @@
 import DatabaseKit
 import DatabaseTypes
 
-public struct ValidationReport: WireValue, Hashable {
+public struct ValidationReport: WireValue {
     public enum Severity: UInt8, Sendable, Hashable {
         case information = 1
         case warning = 2
@@ -93,6 +93,27 @@ public struct ValidationReport: WireValue, Hashable {
             )
         }
 
+        static func validateWireRepresentation(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            _ = try Severity(from: &reader)
+            _ = try reader.readValidatedUTF8Bytes()
+            let messageCount = try reader.readCount()
+            for _ in 0..<messageCount {
+                _ = try reader.readValidatedUTF8Bytes()
+            }
+            try validateOptionalTerm(from: &reader)
+            if try reader.readBool() {
+                try SHACLPath.validateWireRepresentation(from: &reader)
+            }
+            try validateOptionalTerm(from: &reader)
+            if try reader.readBool() {
+                _ = try reader.readValidatedUTF8Bytes()
+            }
+            try validateOptionalTerm(from: &reader)
+            try FieldValueWireValidator.validateObject(from: &reader)
+        }
+
         private static func encodeOptionalTerm(
             _ term: RDFTerm?,
             into writer: inout DatabaseWireWriter
@@ -120,10 +141,20 @@ public struct ValidationReport: WireValue, Hashable {
         ) throws(DatabaseWireError) -> SHACLPath? {
             try reader.readBool() ? try SHACLPath(from: &reader) : nil
         }
+
+        private static func validateOptionalTerm(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            if try reader.readBool() {
+                try reader.validateCanonicalRDFTerm(role: .term)
+            }
+        }
     }
 
+    private let issueElements: RetainedResultElements<Issue>
+
     public let conforms: Bool
-    public let issues: [Issue]
+    public var issueCount: Int { issueElements.count }
     public let continuation: ByteString?
 
     public init(
@@ -132,31 +163,53 @@ public struct ValidationReport: WireValue, Hashable {
         continuation: ByteString? = nil
     ) {
         self.conforms = conforms
-        self.issues = issues
+        self.issueElements = RetainedResultElements(issues)
         self.continuation = continuation
+    }
+
+    public func makeIssueIterator() -> ResultIterator<Issue> {
+        issueElements.makeIterator(decodeElement: Issue.init(from:))
+    }
+
+    public func materializedIssues(
+        maximumCount: Int
+    ) throws(DatabaseWireError) -> [Issue] {
+        try issueElements.materialized(
+            maximumCount: maximumCount,
+            decodeElement: Issue.init(from:)
+        )
     }
 
     func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         writer.writeBool(conforms)
-        try writer.writeCount(issues.count)
-        for issue in issues { try issue.encode(into: &writer) }
+        try issueElements.encode(
+            into: &writer,
+            encodeElement: {
+                (
+                    issue: Issue,
+                    writer: inout DatabaseWireWriter
+                ) throws(DatabaseWireError) in
+                try issue.encode(into: &writer)
+            },
+            validateElement: Issue.validateWireRepresentation(from:)
+        )
         try writer.writeOptionalBytes(continuation)
     }
 
     init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
-        let conforms = try reader.readBool()
-        let count = try reader.readCount()
-        var issues: [Issue] = []
-        issues.reserveCapacity(count)
-        for _ in 0..<count { issues.append(try Issue(from: &reader)) }
-        self.init(
-            conforms: conforms,
-            issues: issues,
-            continuation: try reader.readOptionalBytes()
+        self.conforms = try reader.readBool()
+        self.issueElements = try RetainedResultElements(
+            from: &reader,
+            validateElement: Issue.validateWireRepresentation(from:)
         )
+        self.continuation = try reader.readOptionalBytes()
+    }
+
+    var retainedEncodedIssues: ByteString? {
+        issueElements.retainedBytes
     }
 }

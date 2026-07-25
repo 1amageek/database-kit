@@ -223,7 +223,7 @@ struct TypedOperationWireTests {
             try expectRoundTrip(OntologyExecuteOperation.Request(invocation: invocation))
         }
 
-        try expectRoundTrip(
+        try expectCanonicalRoundTrip(
             OntologyExecuteOperation.Response.document(
                 .init(
                     ontology: document.ontology,
@@ -233,22 +233,22 @@ struct TypedOperationWireTests {
                 )
             )
         )
-        try expectRoundTrip(
+        try expectCanonicalRoundTrip(
             OntologyExecuteOperation.Response.mutation(
                 .init(commitVersion: 10, revision: 6)
             )
         )
-        try expectRoundTrip(
+        try expectCanonicalRoundTrip(
             OntologyExecuteOperation.Response.inference(
                 .init(inferredAxioms: [try quad], isComplete: true)
             )
         )
-        try expectRoundTrip(
+        try expectCanonicalRoundTrip(
             OntologyExecuteOperation.Response.hierarchy(
                 .init(entries: [.init(resource: "urn:Thing", depth: 1)])
             )
         )
-        try expectRoundTrip(
+        try expectCanonicalRoundTrip(
             OntologyExecuteOperation.Response.validation(
                 try validationReport()
             )
@@ -300,7 +300,7 @@ struct TypedOperationWireTests {
         for invocation in invocations {
             try expectRoundTrip(SHACLExecuteOperation.Request(invocation: invocation))
         }
-        try expectRoundTrip(
+        try expectCanonicalRoundTrip(
             SHACLExecuteOperation.Response.shapes(
                 .init(
                     graph: "urn:calendar:shapes",
@@ -309,7 +309,7 @@ struct TypedOperationWireTests {
                 )
             )
         )
-        try expectRoundTrip(
+        try expectCanonicalRoundTrip(
             SHACLExecuteOperation.Response.validation(
                 try validationReport()
             )

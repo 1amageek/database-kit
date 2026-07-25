@@ -230,11 +230,14 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct DocumentPage: WireValue, Hashable {
+    public struct DocumentPage: WireValue {
+        private let importElements: RetainedResultElements<String>
+        private let axiomElements: RetainedResultElements<RDFQuad>
+
         public let ontology: String
         public let revision: UInt64
-        public let imports: [String]
-        public let axioms: [RDFQuad]
+        public var importCount: Int { importElements.count }
+        public var axiomCount: Int { axiomElements.count }
         public let continuation: ByteString?
 
         public init(
@@ -246,9 +249,43 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
         ) {
             self.ontology = ontology
             self.revision = revision
-            self.imports = imports
-            self.axioms = axioms
+            self.importElements = RetainedResultElements(imports)
+            self.axiomElements = RetainedResultElements(axioms)
             self.continuation = continuation
+        }
+
+        public func makeImportIterator() -> ResultIterator<String> {
+            importElements.makeIterator(
+                decodeElement: {
+                    reader throws(DatabaseWireError) in
+                    try reader.readString()
+                }
+            )
+        }
+
+        public func makeAxiomIterator() -> ResultIterator<RDFQuad> {
+            axiomElements.makeIterator(decodeElement: RDFQuad.init(from:))
+        }
+
+        public func materializedImports(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [String] {
+            try importElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: {
+                    reader throws(DatabaseWireError) in
+                    try reader.readString()
+                }
+            )
+        }
+
+        public func materializedAxioms(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [RDFQuad] {
+            try axiomElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: RDFQuad.init(from:)
+            )
         }
 
         func encode(
@@ -256,40 +293,88 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
         ) throws(DatabaseWireError) {
             try writer.writeString(ontology)
             writer.writeUInt64(revision)
-            try writer.writeCount(imports.count)
-            for value in imports { try writer.writeString(value) }
-            try writer.writeCount(axioms.count)
-            for axiom in axioms { try axiom.encode(into: &writer) }
+            try Self.encodeStrings(importElements, into: &writer)
+            try Self.encodeQuads(axiomElements, into: &writer)
             try writer.writeOptionalBytes(continuation)
         }
 
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let ontology = try reader.readString()
-            let revision = try reader.readUInt64()
-            let importCount = try reader.readCount()
-            var imports: [String] = []
-            imports.reserveCapacity(importCount)
-            for _ in 0..<importCount { imports.append(try reader.readString()) }
-            let axiomCount = try reader.readCount()
-            var axioms: [RDFQuad] = []
-            axioms.reserveCapacity(axiomCount)
-            for _ in 0..<axiomCount {
-                axioms.append(try RDFQuad(from: &reader))
-            }
-            self.init(
-                ontology: ontology,
-                revision: revision,
-                imports: imports,
-                axioms: axioms,
-                continuation: try reader.readOptionalBytes()
+            self.ontology = try reader.readString()
+            self.revision = try reader.readUInt64()
+            self.importElements = try Self.decodeStrings(from: &reader)
+            self.axiomElements = try Self.decodeQuads(from: &reader)
+            self.continuation = try reader.readOptionalBytes()
+        }
+
+        var retainedEncodedAxioms: ByteString? {
+            axiomElements.retainedBytes
+        }
+
+        private static func encodeStrings(
+            _ elements: RetainedResultElements<String>,
+            into writer: inout DatabaseWireWriter
+        ) throws(DatabaseWireError) {
+            try elements.encode(
+                into: &writer,
+                encodeElement: {
+                    (
+                        value: String,
+                        writer: inout DatabaseWireWriter
+                    ) throws(DatabaseWireError) in
+                    try writer.writeString(value)
+                },
+                validateElement: {
+                    reader throws(DatabaseWireError) in
+                    _ = try reader.readValidatedUTF8Bytes()
+                }
+            )
+        }
+
+        private static func decodeStrings(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) -> RetainedResultElements<String> {
+            try RetainedResultElements(
+                from: &reader,
+                validateElement: {
+                    reader throws(DatabaseWireError) in
+                    _ = try reader.readValidatedUTF8Bytes()
+                }
+            )
+        }
+
+        fileprivate static func encodeQuads(
+            _ elements: RetainedResultElements<RDFQuad>,
+            into writer: inout DatabaseWireWriter
+        ) throws(DatabaseWireError) {
+            try elements.encode(
+                into: &writer,
+                encodeElement: {
+                    (
+                        quad: RDFQuad,
+                        writer: inout DatabaseWireWriter
+                    ) throws(DatabaseWireError) in
+                    try quad.encode(into: &writer)
+                },
+                validateElement: RDFQuad.validateWireRepresentation(from:)
+            )
+        }
+
+        fileprivate static func decodeQuads(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) -> RetainedResultElements<RDFQuad> {
+            try RetainedResultElements(
+                from: &reader,
+                validateElement: RDFQuad.validateWireRepresentation(from:)
             )
         }
     }
 
-    public struct InferencePage: WireValue, Hashable {
-        public let inferredAxioms: [RDFQuad]
+    public struct InferencePage: WireValue {
+        private let axiomElements: RetainedResultElements<RDFQuad>
+
+        public var inferredAxiomCount: Int { axiomElements.count }
         public let isComplete: Bool
         public let continuation: ByteString?
 
@@ -298,16 +383,29 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
             isComplete: Bool,
             continuation: ByteString? = nil
         ) {
-            self.inferredAxioms = inferredAxioms
+            self.axiomElements = RetainedResultElements(inferredAxioms)
             self.isComplete = isComplete
             self.continuation = continuation
+        }
+
+        public func makeInferredAxiomIterator()
+            -> ResultIterator<RDFQuad> {
+            axiomElements.makeIterator(decodeElement: RDFQuad.init(from:))
+        }
+
+        public func materializedInferredAxioms(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [RDFQuad] {
+            try axiomElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: RDFQuad.init(from:)
+            )
         }
 
         func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
-            try writer.writeCount(inferredAxioms.count)
-            for axiom in inferredAxioms { try axiom.encode(into: &writer) }
+            try DocumentPage.encodeQuads(axiomElements, into: &writer)
             writer.writeBool(isComplete)
             try writer.writeOptionalBytes(continuation)
         }
@@ -315,17 +413,9 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let count = try reader.readCount()
-            var axioms: [RDFQuad] = []
-            axioms.reserveCapacity(count)
-            for _ in 0..<count {
-                axioms.append(try RDFQuad(from: &reader))
-            }
-            self.init(
-                inferredAxioms: axioms,
-                isComplete: try reader.readBool(),
-                continuation: try reader.readOptionalBytes()
-            )
+            self.axiomElements = try DocumentPage.decodeQuads(from: &reader)
+            self.isComplete = try reader.readBool()
+            self.continuation = try reader.readOptionalBytes()
         }
     }
 
@@ -353,42 +443,72 @@ public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
                 depth: try reader.readUInt32()
             )
         }
+
+        static func validateWireRepresentation(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            _ = try reader.readValidatedUTF8Bytes()
+            _ = try reader.readUInt32()
+        }
     }
 
-    public struct HierarchyPage: WireValue, Hashable {
-        public let entries: [HierarchyEntry]
+    public struct HierarchyPage: WireValue {
+        private let entryElements: RetainedResultElements<HierarchyEntry>
+
+        public var entryCount: Int { entryElements.count }
         public let continuation: ByteString?
 
         public init(entries: [HierarchyEntry], continuation: ByteString? = nil) {
-            self.entries = entries
+            self.entryElements = RetainedResultElements(entries)
             self.continuation = continuation
+        }
+
+        public func makeEntryIterator() -> ResultIterator<HierarchyEntry> {
+            entryElements.makeIterator(
+                decodeElement: HierarchyEntry.init(from:)
+            )
+        }
+
+        public func materializedEntries(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [HierarchyEntry] {
+            try entryElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: HierarchyEntry.init(from:)
+            )
         }
 
         func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
-            try writer.writeCount(entries.count)
-            for entry in entries { try entry.encode(into: &writer) }
+            try entryElements.encode(
+                into: &writer,
+                encodeElement: {
+                    (
+                        entry: HierarchyEntry,
+                        writer: inout DatabaseWireWriter
+                    ) throws(DatabaseWireError) in
+                    try entry.encode(into: &writer)
+                },
+                validateElement:
+                    HierarchyEntry.validateWireRepresentation(from:)
+            )
             try writer.writeOptionalBytes(continuation)
         }
 
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let count = try reader.readCount()
-            var entries: [HierarchyEntry] = []
-            entries.reserveCapacity(count)
-            for _ in 0..<count {
-                entries.append(try HierarchyEntry(from: &reader))
-            }
-            self.init(
-                entries: entries,
-                continuation: try reader.readOptionalBytes()
+            self.entryElements = try RetainedResultElements(
+                from: &reader,
+                validateElement:
+                    HierarchyEntry.validateWireRepresentation(from:)
             )
+            self.continuation = try reader.readOptionalBytes()
         }
     }
 
-    public enum Response: WireValue, Hashable {
+    public enum Response: WireValue {
         case document(DocumentPage)
         case mutation(RevisionMutationResult)
         case inference(InferencePage)

@@ -107,6 +107,68 @@ extension SHACLPath: WireValue {
             }
         }
     }
+
+    static func validateWireRepresentation(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) {
+        var frames: [ValidationFrame] = []
+        var openNestedValueCount = 0
+        defer { reader.abandonNestedValues(openNestedValueCount) }
+
+        while true {
+            try reader.beginNestedValue()
+            openNestedValueCount += 1
+
+            switch try reader.readUInt8() {
+            case 1:
+                let rawIRI = try reader.readString()
+                do {
+                    _ = try RDFPredicateIRI(rawIRI)
+                } catch {
+                    throw .invalidRDFPredicateIRI(rawIRI)
+                }
+                try reader.endNestedValue()
+                openNestedValueCount -= 1
+
+                var needsNextChild = false
+                while let frame = frames.popLast() {
+                    switch frame {
+                    case .unary:
+                        try reader.endNestedValue()
+                        openNestedValueCount -= 1
+
+                    case .list(let remaining):
+                        if remaining > 1 {
+                            frames.append(.list(remaining: remaining - 1))
+                            needsNextChild = true
+                            break
+                        }
+                        try reader.endNestedValue()
+                        openNestedValueCount -= 1
+                    }
+                    if needsNextChild { break }
+                }
+                if !needsNextChild {
+                    return
+                }
+
+            case 2, 5, 6, 7:
+                frames.append(.unary)
+
+            case 3, 4:
+                let count = try reader.readCount()
+                guard count >= 2 else {
+                    throw .invalidSHACLPath(
+                        .insufficientMembers(actual: count)
+                    )
+                }
+                frames.append(.list(remaining: count))
+
+            case let invalidTag:
+                throw .invalidValueTag(invalidTag)
+            }
+        }
+    }
 }
 
 private extension SHACLPath {
@@ -123,6 +185,11 @@ private extension SHACLPath {
             count: Int,
             elements: [SHACLPath] = []
         )
+    }
+
+    enum ValidationFrame {
+        case unary
+        case list(remaining: Int)
     }
 
     static func finish(
