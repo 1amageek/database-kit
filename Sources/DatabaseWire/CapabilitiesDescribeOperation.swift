@@ -1,5 +1,5 @@
 import DatabaseTypes
-public enum CapabilitiesDescribeOperation: DatabaseOperation {
+public enum CapabilitiesDescribeOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.capabilitiesDescribe
     public typealias Request = EmptyOperationPayload
 

@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-public enum JobStartOperation: DatabaseOperation {
+public enum JobStartOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.jobStart
 
     public struct RetryPolicy: DatabaseWireValue, Hashable {

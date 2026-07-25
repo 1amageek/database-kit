@@ -21,6 +21,11 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidReferenceCardinality(UInt8)
     case invalidReferenceDeleteRule(UInt8)
     case invalidOperationIdentifier(UInt16)
+    case unexpectedOperationIdentifier(
+        expected: DatabaseOperationIdentifier,
+        actual: DatabaseOperationIdentifier
+    )
+    case unexpectedRequestIdentifier(expected: UInt64, actual: UInt64)
     case invalidJobOperationFamily(UInt16)
     case invalidJobOperationKind
     case nonCanonicalJobOperationSet
@@ -28,9 +33,7 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidJobStatus
     case invalidJobCancellationResponse
     case invalidCommandAccess(UInt8)
-    case mismatchedCommandAccess(expected: UInt8, actual: UInt8)
-    case invalidCommandIdentifierValue
-    case invalidCommandIdentifier(expected: String, actual: String)
+    case invalidCommandIdentifier(CommandIdentifierError)
     case invalidMessageKind(UInt8)
     case invalidErrorCategory(UInt8)
     case invalidRetryability(UInt8)

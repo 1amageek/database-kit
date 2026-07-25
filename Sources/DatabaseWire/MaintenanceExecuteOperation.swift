@@ -1,7 +1,7 @@
 import DatabaseKit
 import DatabaseTypes
 
-public enum MaintenanceExecuteOperation: DatabaseOperation {
+public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.maintenanceExecute
 
     public enum Invocation: Sendable, Hashable {

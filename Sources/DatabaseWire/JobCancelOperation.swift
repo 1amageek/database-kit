@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-public enum JobCancelOperation: DatabaseOperation {
+public enum JobCancelOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.jobCancel
 
     public struct Request: DatabaseWireValue, Hashable {

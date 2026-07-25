@@ -30,22 +30,25 @@ public enum DatabaseEnvelopeCodec {
         }
     }
 
-    public static func encodeRequest<Operation: DatabaseOperation>(
-        _ operation: Operation.Type = Operation.self,
+    static func encodeRequest<Request>(
+        identifier: DatabaseOperationIdentifier,
         requestID: UInt64,
         metadata: DatabaseRequestMetadata,
-        request: Operation.Request,
-        limits: DatabaseWireLimits = .default
+        request: Request,
+        limits: DatabaseWireLimits,
+        encode:
+            (Request, inout DatabaseWireWriter)
+                throws(DatabaseWireError) -> Void
     ) throws(DatabaseWireError) -> ByteString {
         try encodeMeasured(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             writeHeader(kind: .request, into: &writer)
             writer.writeUInt64(requestID)
-            Operation.identifier.encode(into: &writer)
+            identifier.encode(into: &writer)
             try metadata.encode(into: &writer)
             try writer.writeLengthPrefixed {
                 (payloadWriter: inout DatabaseWireWriter) throws(DatabaseWireError) in
-                try request.encode(into: &payloadWriter)
+                try encode(request, &payloadWriter)
             }
         }
     }
@@ -226,6 +229,33 @@ public enum DatabaseEnvelopeCodec {
         } catch {
             return .failure(error)
         }
+    }
+
+    static func encodeValue<Value>(
+        _ value: Value,
+        limits: DatabaseWireLimits,
+        encode:
+            (Value, inout DatabaseWireWriter)
+                throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) -> ByteString {
+        try encodeMeasured(limits: limits) {
+            (writer: inout DatabaseWireWriter)
+                throws(DatabaseWireError) in
+            try encode(value, &writer)
+        }
+    }
+
+    static func decodeValue<Value>(
+        from bytes: ByteString,
+        limits: DatabaseWireLimits,
+        decode:
+            (inout DatabaseWireReader)
+                throws(DatabaseWireError) -> Value
+    ) throws(DatabaseWireError) -> Value {
+        var reader = DatabaseWireReader(bytes, limits: limits)
+        let value = try decode(&reader)
+        try reader.ensureFullyRead()
+        return value
     }
 
     private static func writeHeader(

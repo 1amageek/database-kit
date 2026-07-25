@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-public enum SHACLExecuteOperation: DatabaseOperation {
+public enum SHACLExecuteOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.shaclExecute
 
     public enum Entailment: Sendable, Hashable {

@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-public enum JobResultOperation: DatabaseOperation {
+public enum JobResultOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.jobResult
     public static let maximumResponsePageBytes = 512 * 1_024
     public static let maximumResponseBytes = 4 * 1_024 * 1_024

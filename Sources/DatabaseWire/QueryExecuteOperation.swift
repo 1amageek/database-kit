@@ -1,7 +1,7 @@
 import DatabaseTypes
 import DatabaseKit
 
-public enum QueryExecuteOperation: DatabaseOperation {
+public enum QueryExecuteOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.queryExecute
 
     public enum Language: UInt8, Sendable, Hashable {

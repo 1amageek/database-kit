@@ -22,6 +22,14 @@ public struct DatabaseJobOperationIdentifier:
         self.kind = kind
     }
 
+    init(
+        validatedFamily family: DatabaseOperationIdentifier,
+        validatedKind kind: String
+    ) {
+        self.family = family
+        self.kind = kind
+    }
+
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {

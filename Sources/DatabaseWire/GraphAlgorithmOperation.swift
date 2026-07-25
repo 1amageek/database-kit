@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-public enum GraphAlgorithmOperation: DatabaseOperation {
+public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.graphAlgorithm
 
     public enum GraphSelector: Sendable, Hashable {

@@ -1,7 +1,7 @@
 import DatabaseKit
 import DatabaseTypes
 
-public enum SchemaDescribeOperation: DatabaseOperation {
+public enum SchemaDescribeOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.schemaDescribe
     public typealias Request = EmptyOperationPayload
 

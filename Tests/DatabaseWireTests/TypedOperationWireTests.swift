@@ -307,20 +307,26 @@ struct TypedOperationWireTests {
     func commandAndMaintenanceRoundTrip() throws {
         try expectRoundTrip(
             CommandRequest(
-                command: "calendar.activateImport",
-                access: .readWrite,
-                input: [0x72, 0x75, 0x6E, 0x2D, 0x31]
+                command: CommandDeclaration(
+                    identifier: try CommandIdentifier(
+                        "calendar.activateImport"
+                    ),
+                    access: .readWrite
+                ),
+                input: try FieldObject([
+                    (key: "runID", value: .string("run-1")),
+                ])
             )
         )
         try expectRoundTrip(
             CommandExecuteOperation.Response.read(
-                output: [1],
+                output: .bool(true),
                 continuation: [2]
             )
         )
         try expectRoundTrip(
             CommandExecuteOperation.Response.write(
-                output: [1],
+                output: .uint64(1),
                 commitVersion: 42,
                 continuation: nil
             )
@@ -391,10 +397,22 @@ struct TypedOperationWireTests {
         )
     }
 
-    @Test("typed command frames are byte-identical to canonical raw command frames")
-    func typedCommandFramesMatchCanonicalFrames() throws {
-        let input = ActivateImportCommandInput(runID: "run-1", expectedRevision: 7)
-        let output = ActivateImportCommandOutput(activated: true, importedCount: 128)
+    @Test("command descriptors bind semantic input and output to the fixed operation")
+    func commandDescriptorBindsCanonicalPayloads() throws {
+        let declaration = CommandDeclaration(
+            identifier: try CommandIdentifier("calendar.activateImport"),
+            access: .readWrite
+        )
+        let input = try FieldObject([
+            (key: "expectedRevision", value: .uint64(7)),
+            (key: "runID", value: .string("run-1")),
+        ])
+        let output = FieldValue.object(
+            try FieldObject([
+                (key: "activated", value: .bool(true)),
+                (key: "importedCount", value: .uint64(128)),
+            ])
+        )
         let budget = ExecutionBudget(
             maximumRows: 512,
             maximumWorkUnits: 4_096,
@@ -403,73 +421,60 @@ struct TypedOperationWireTests {
             timeoutMilliseconds: 2_000,
         )
         try expectRoundTrip(budget)
-        let encodedInput = try DatabaseEnvelopeCodec.encode(input)
-        let encodedOutput = try DatabaseEnvelopeCodec.encode(output)
-
-        let rawRequest = try DatabaseEnvelopeCodec.encode(
-            CommandRequest(
-                command: ActivateImportCommand.identifier,
-                access: .readWrite,
-                input: encodedInput,
-                budget: budget
-            )
+        let request = CommandRequest(
+            command: declaration,
+            input: input,
+            budget: budget
         )
-        let typedRequest = try DatabaseEnvelopeCodec.encode(
-            CommandInvocation<ActivateImportCommand>(
-                input: input,
-                budget: budget
-            )
-        )
-        #expect(typedRequest == rawRequest)
+        let requestPayload = try DatabaseOperations.commandExecute
+            .encodeRequestPayload(request)
         #expect(
-            try DatabaseEnvelopeCodec.decode(
-                CommandInvocation<ActivateImportCommand>.self,
-                from: rawRequest
-            ).input == input
+            try DatabaseOperations.commandExecute.decodeRequestPayload(
+                requestPayload
+            ) == request
         )
 
-        let rawResponse = try DatabaseEnvelopeCodec.encode(
-            CommandExecuteOperation.Response.write(
-                output: encodedOutput,
-                commitVersion: 42,
-                continuation: [3, 2, 1]
-            )
+        let requestFrame = try DatabaseOperations.commandExecute.encodeRequest(
+            requestID: 17,
+            metadata: .init(traceID: "command"),
+            request: request
         )
-        let typedResponse = try DatabaseEnvelopeCodec.encode(
-            WriteCommandResult<ActivateImportCommandOutput>(
-                output: output,
-                commitVersion: 42,
-                continuation: [3, 2, 1]
-            )
+        let requestEnvelope = try DatabaseEnvelopeCodec.decodeRequest(
+            requestFrame
         )
-        #expect(typedResponse == rawResponse)
-        let decodedWriteResult = try DatabaseEnvelopeCodec.decode(
-            WriteCommandResult<ActivateImportCommandOutput>.self,
-            from: rawResponse
+        #expect(
+            try DatabaseOperations.commandExecute.decodeRequest(
+                requestEnvelope
+            ) == request
         )
-        #expect(decodedWriteResult.output == output)
-        #expect(decodedWriteResult.commitVersion == 42)
 
-        let rawReadResponse = try DatabaseEnvelopeCodec.encode(
-            CommandExecuteOperation.Response.read(
-                output: encodedOutput,
-                continuation: [1, 2, 3]
+        let response = CommandExecuteOperation.Response.write(
+            output: output,
+            commitVersion: 42,
+            continuation: [3, 2, 1]
+        )
+        let responseFrame = try DatabaseOperations.commandExecute
+            .encodeResponse(
+                requestID: 17,
+                response: response
             )
-        )
-        let typedReadResponse = try DatabaseEnvelopeCodec.encode(
-            ReadCommandResult<ActivateImportCommandOutput>(
-                output: output,
-                continuation: [1, 2, 3]
-            )
-        )
-        #expect(typedReadResponse == rawReadResponse)
         #expect(
-            CommandOperation<ActivateImportCommand>.identifier
-                == .commandExecute
+            try DatabaseOperations.commandExecute.decodeResponse(
+                responseFrame,
+                matching: 17
+            ) == .success(response)
+        )
+
+        let readResponse = CommandExecuteOperation.Response.read(
+            output: output,
+            continuation: [1, 2, 3]
         )
         #expect(
-            CommandOperation<InspectImportCommand>.identifier
-                == .commandExecute
+            try DatabaseOperations.commandExecute.decodeResponsePayload(
+                DatabaseOperations.commandExecute.encodeResponsePayload(
+                    readResponse
+                )
+            ) == readResponse
         )
     }
 
@@ -484,80 +489,29 @@ struct TypedOperationWireTests {
             )
         }
 
-        let input = ActivateImportCommandInput(
-            runID: "run-1",
-            expectedRevision: 7
-        )
-        let mismatchedRequest = try DatabaseWireWriter.encode {
-            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
-            try writer.writeString(ActivateImportCommand.identifier)
-            try CommandAccess.readOnly.encode(into: &writer)
-            try writer.writeLengthPrefixed {
-                (payloadWriter: inout DatabaseWireWriter)
-                    throws(DatabaseWireError) in
-                try input.encode(into: &payloadWriter)
-            }
-            try ExecutionBudget().encode(into: &writer)
-        }
-        #expect(
-            throws: DatabaseWireError.mismatchedCommandAccess(
-                expected: CommandAccess.readWrite.rawValue,
-                actual: CommandAccess.readOnly.rawValue
-            )
-        ) {
-            try DatabaseEnvelopeCodec.decode(
-                CommandInvocation<ActivateImportCommand>.self,
-                from: mismatchedRequest
-            )
-        }
-
-        #expect(
-            throws: DatabaseWireError.mismatchedCommandAccess(
-                expected: CommandAccess.readWrite.rawValue,
-                actual: CommandAccess.readOnly.rawValue
-            )
-        ) {
-            try DatabaseEnvelopeCodec.decode(
-                WriteCommandResult<ActivateImportCommandOutput>.self,
-                from: [CommandAccess.readOnly.rawValue]
-            )
-        }
-
-        #expect(throws: DatabaseWireError.invalidCommandIdentifierValue) {
-            try DatabaseEnvelopeCodec.encode(
-                CommandRequest(
-                    command: "",
-                    access: .readOnly
-                )
-            )
-        }
-
         let oversizedIdentifier = String(
             repeating: "a",
-            count: CommandRequest.maximumIdentifierUTF8Bytes + 1
+            count: CommandIdentifier.maximumUTF8Bytes + 1
         )
         #expect(
-            throws: DatabaseWireError.stringTooLarge(
-                actual: oversizedIdentifier.utf8.count,
-                maximum: CommandRequest.maximumIdentifierUTF8Bytes
+            throws: CommandIdentifierError.tooLong(
+                actualUTF8Bytes: oversizedIdentifier.utf8.count,
+                maximumUTF8Bytes: CommandIdentifier.maximumUTF8Bytes
             )
         ) {
-            try DatabaseEnvelopeCodec.encode(
-                CommandRequest(
-                    command: oversizedIdentifier,
-                    access: .readOnly
-                )
-            )
+            try CommandIdentifier(oversizedIdentifier)
         }
 
         let emptyIdentifierRequest = try DatabaseWireWriter.encode {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             try writer.writeString("")
             try CommandAccess.readOnly.encode(into: &writer)
-            try writer.writeBytes([])
+            try FieldObject().encode(into: &writer)
             try ExecutionBudget().encode(into: &writer)
         }
-        #expect(throws: DatabaseWireError.invalidCommandIdentifierValue) {
+        #expect(
+            throws: DatabaseWireError.invalidCommandIdentifier(.empty)
+        ) {
             try DatabaseEnvelopeCodec.decode(
                 CommandRequest.self,
                 from: emptyIdentifierRequest
@@ -567,8 +521,7 @@ struct TypedOperationWireTests {
 
     @Test("durable job lifecycle uses canonical identifiers and outcomes")
     func jobFamilyRoundTrips() throws {
-        let jobOperation = try DatabaseMaintenanceJobDescriptor
-            .jobOperationIdentifier()
+        let jobOperation = JobOperations.maintenance.identifier
         let job = DatabaseJobIdentity(
             jobID: jobID,
             operation: jobOperation
@@ -802,8 +755,7 @@ struct TypedOperationWireTests {
             family: .commandExecute,
             kind: "calendar.import.validate"
         )
-        let maintenance = try DatabaseMaintenanceJobDescriptor
-            .jobOperationIdentifier()
+        let maintenance = JobOperations.maintenance.identifier
         let response = CapabilitiesDescribeOperation.Response(
             runtimeVersion: "1",
             features: [],
@@ -848,8 +800,7 @@ struct TypedOperationWireTests {
 
     @Test("job result enforces digest, page, and continuation limits")
     func jobResultEnforcesFieldLimits() throws {
-        let jobOperation = try DatabaseMaintenanceJobDescriptor
-            .jobOperationIdentifier()
+        let jobOperation = JobOperations.maintenance.identifier
         let job = DatabaseJobIdentity(
             jobID: jobID,
             operation: jobOperation
@@ -904,8 +855,7 @@ struct TypedOperationWireTests {
     @Test("job result digest is canonical across page boundaries")
     func jobResultDigestIsCanonicalAcrossPageBoundaries() throws {
         var accumulator = DatabaseJobResultDigestAccumulator(
-            operation: try DatabaseMaintenanceJobDescriptor
-                .jobOperationIdentifier()
+            operation: JobOperations.maintenance.identifier
         )
         accumulator.update([0x01, 0x02])
         accumulator.update([0x03, 0x04, 0x05])
@@ -926,8 +876,7 @@ struct TypedOperationWireTests {
             (0..<1_000).map { UInt8(truncatingIfNeeded: $0) }
         )
         var accumulator = DatabaseJobResultDigestAccumulator(
-            operation: try DatabaseMaintenanceJobDescriptor
-                .jobOperationIdentifier()
+            operation: JobOperations.maintenance.identifier
         )
         accumulator.update(payload[0..<63])
         accumulator.update(payload[63..<511])
@@ -999,8 +948,7 @@ struct TypedOperationWireTests {
 
     @Test("job result binding includes job identity and operation kind")
     func jobResultBindingIsStrict() throws {
-        let maintenance = try DatabaseMaintenanceJobDescriptor
-            .jobOperationIdentifier()
+        let maintenance = JobOperations.maintenance.identifier
         let calendar = try DatabaseJobOperationIdentifier(
             family: .maintenanceExecute,
             kind: "calendar.import.validate"
@@ -1052,51 +1000,52 @@ struct TypedOperationWireTests {
         }
     }
 
-    @Test("declared job start is wire-identical without an inner payload buffer")
-    func declaredJobStartUsesTheCanonicalWireLayout() throws {
+    @Test("typed job start binds the canonical maintenance request payload")
+    func typedJobStartUsesTheCanonicalWireLayout() throws {
         let request = MaintenanceExecuteOperation.Request(invocation: .compact)
         let retryPolicy = JobStartOperation.RetryPolicy(
             maximumAttempts: 2,
             initialBackoffMilliseconds: 10,
             maximumBackoffMilliseconds: 20
         )
-        let declaredFrame = try DatabaseEnvelopeCodec.encodeRequest(
-            DeclaredJobStart<
-                DatabaseMaintenanceJobDescriptor
-            >.self,
+        let start = try JobOperations.maintenance.makeStartRequest(
+            request,
+            maximumSliceWorkUnits: 77,
+            retryPolicy: retryPolicy
+        )
+        let typedFrame = try DatabaseOperations.jobStart.encodeRequest(
             requestID: 91,
             metadata: DatabaseRequestMetadata(traceID: "declared-job"),
-            request: JobInvocation(
-                request: request,
-                maximumSliceWorkUnits: 77,
-                retryPolicy: retryPolicy
-            )
+            request: start
         )
 
-        let rawFrame = try DatabaseEnvelopeCodec.encodeRequest(
-            JobStartOperation.self,
+        let canonicalFrame = try DatabaseOperations.jobStart.encodeRequest(
             requestID: 91,
             metadata: DatabaseRequestMetadata(traceID: "declared-job"),
             request: JobStartOperation.Request(
-                operation: try DatabaseMaintenanceJobDescriptor
-                    .jobOperationIdentifier(),
-                requestPayload: try DatabaseEnvelopeCodec.encode(request),
+                operation: JobOperations.maintenance.identifier,
+                requestPayload: try DatabaseOperations.maintenanceExecute
+                    .encodeRequestPayload(request),
                 maximumSliceWorkUnits: 77,
                 retryPolicy: retryPolicy
             )
         )
 
-        #expect(declaredFrame == rawFrame)
-        let envelope = try DatabaseEnvelopeCodec.decodeRequest(declaredFrame)
-        let rawRequest = try DatabaseEnvelopeCodec.decode(
-            JobStartOperation.Request.self,
-            from: envelope.payload
+        #expect(typedFrame == canonicalFrame)
+        let envelope = try DatabaseEnvelopeCodec.decodeRequest(typedFrame)
+        let rawRequest = try DatabaseOperations.jobStart.decodeRequest(
+            envelope
         )
         #expect(
-            try DatabaseEnvelopeCodec.decode(
-                MaintenanceExecuteOperation.Request.self,
-                from: rawRequest.requestPayload
+            try JobOperations.maintenance.operation.decodeRequestPayload(
+                rawRequest.requestPayload
             ) == request
+        )
+        #expect(
+            JobOperations.maintenance.identifier
+                == (try DatabaseOperations.maintenanceExecute.resumableJob(
+                    kind: "database.maintenance"
+                )).identifier
         )
     }
 
@@ -1154,70 +1103,4 @@ struct TypedOperationWireTests {
         let encoded = try DatabaseEnvelopeCodec.encode(value)
         #expect(try DatabaseEnvelopeCodec.decode(Value.self, from: encoded) == value)
     }
-}
-
-private struct ActivateImportCommandInput: DatabaseWireValue, Equatable {
-    let runID: String
-    let expectedRevision: UInt64
-
-    func encode(
-        into writer: inout DatabaseWireWriter
-    ) throws(DatabaseWireError) {
-        try writer.writeString(runID)
-        writer.writeUInt64(expectedRevision)
-    }
-
-    init(runID: String, expectedRevision: UInt64) {
-        self.runID = runID
-        self.expectedRevision = expectedRevision
-    }
-
-    init(
-        from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) {
-        self.init(
-            runID: try reader.readString(),
-            expectedRevision: try reader.readUInt64()
-        )
-    }
-}
-
-private struct ActivateImportCommandOutput: DatabaseWireValue, Equatable {
-    let activated: Bool
-    let importedCount: UInt64
-
-    func encode(
-        into writer: inout DatabaseWireWriter
-    ) throws(DatabaseWireError) {
-        writer.writeBool(activated)
-        writer.writeUInt64(importedCount)
-    }
-
-    init(activated: Bool, importedCount: UInt64) {
-        self.activated = activated
-        self.importedCount = importedCount
-    }
-
-    init(
-        from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) {
-        self.init(
-            activated: try reader.readBool(),
-            importedCount: try reader.readUInt64()
-        )
-    }
-}
-
-private enum ActivateImportCommand: WriteCommandDescriptor {
-    typealias Input = ActivateImportCommandInput
-    typealias Output = ActivateImportCommandOutput
-
-    static let identifier = "calendar.activateImport"
-}
-
-private enum InspectImportCommand: ReadCommandDescriptor {
-    typealias Input = ActivateImportCommandInput
-    typealias Output = ActivateImportCommandOutput
-
-    static let identifier = "calendar.inspectImport"
 }

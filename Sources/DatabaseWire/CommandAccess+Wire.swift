@@ -1,10 +1,6 @@
-import DatabaseTypes
+import DatabaseKit
 
-/// The transaction access required to execute a database command.
-public enum CommandAccess: UInt8, DatabaseWireValue, Hashable {
-    case readOnly = 0
-    case readWrite = 1
-
+extension CommandAccess: DatabaseWireValue {
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {

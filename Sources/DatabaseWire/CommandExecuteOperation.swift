@@ -1,16 +1,17 @@
+import DatabaseKit
 import DatabaseTypes
 
-public enum CommandExecuteOperation: DatabaseOperation {
+public enum CommandExecuteOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.commandExecute
     public typealias Request = CommandRequest
 
     public enum Response: DatabaseWireValue, Hashable {
         case read(
-            output: ByteString,
+            output: FieldValue,
             continuation: ByteString?
         )
         case write(
-            output: ByteString,
+            output: FieldValue,
             commitVersion: UInt64,
             continuation: ByteString?
         )
@@ -30,10 +31,10 @@ public enum CommandExecuteOperation: DatabaseOperation {
             try access.encode(into: &writer)
             switch self {
             case .read(let output, let continuation):
-                try writer.writeBytes(output)
+                try output.encode(into: &writer)
                 try writer.writeOptionalBytes(continuation)
             case .write(let output, let commitVersion, let continuation):
-                try writer.writeBytes(output)
+                try output.encode(into: &writer)
                 writer.writeUInt64(commitVersion)
                 try writer.writeOptionalBytes(continuation)
             }
@@ -45,12 +46,12 @@ public enum CommandExecuteOperation: DatabaseOperation {
             switch try CommandAccess(from: &reader) {
             case .readOnly:
                 self = .read(
-                    output: try reader.readBytes(),
+                    output: try FieldValue(from: &reader),
                     continuation: try reader.readOptionalBytes()
                 )
             case .readWrite:
                 self = .write(
-                    output: try reader.readBytes(),
+                    output: try FieldValue(from: &reader),
                     commitVersion: try reader.readUInt64(),
                     continuation: try reader.readOptionalBytes()
                 )

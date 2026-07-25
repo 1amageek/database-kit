@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-public enum OntologyExecuteOperation: DatabaseOperation {
+public enum OntologyExecuteOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.ontologyExecute
 
     public enum ReasoningProfile: UInt8, Sendable, Hashable {

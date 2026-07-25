@@ -1,21 +1,17 @@
+import DatabaseKit
 import DatabaseTypes
 
 public struct CommandRequest: DatabaseWireValue, Hashable {
-    public static let maximumIdentifierUTF8Bytes = 256
-
-    public let command: String
-    public let access: CommandAccess
-    public let input: ByteString
+    public let command: CommandDeclaration
+    public let input: FieldObject
     public let budget: ExecutionBudget
 
     public init(
-        command: String,
-        access: CommandAccess,
-        input: ByteString = [],
+        command: CommandDeclaration,
+        input: FieldObject = FieldObject(),
         budget: ExecutionBudget = ExecutionBudget()
     ) {
         self.command = command
-        self.access = access
         self.input = input
         self.budget = budget
     }
@@ -23,39 +19,31 @@ public struct CommandRequest: DatabaseWireValue, Hashable {
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
-        try Self.validateIdentifier(command)
-        try writer.writeString(command)
-        try access.encode(into: &writer)
-        try writer.writeBytes(input)
+        try writer.writeString(command.identifier.rawValue)
+        try command.access.encode(into: &writer)
+        try input.encode(into: &writer)
         try budget.encode(into: &writer)
     }
 
     public init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
+        let rawIdentifier = try reader.readString(
+            maximumUTF8Bytes: CommandIdentifier.maximumUTF8Bytes
+        )
+        let identifier: CommandIdentifier
+        do {
+            identifier = try CommandIdentifier(rawIdentifier)
+        } catch let error {
+            throw .invalidCommandIdentifier(error)
+        }
         self.init(
-            command: try reader.readString(
-                maximumUTF8Bytes: Self.maximumIdentifierUTF8Bytes
+            command: CommandDeclaration(
+                identifier: identifier,
+                access: try CommandAccess(from: &reader)
             ),
-            access: try CommandAccess(from: &reader),
-            input: try reader.readBytes(),
+            input: try FieldObject(from: &reader),
             budget: try ExecutionBudget(from: &reader)
         )
-        try Self.validateIdentifier(command)
-    }
-
-    package static func validateIdentifier(
-        _ identifier: String
-    ) throws(DatabaseWireError) {
-        guard !identifier.isEmpty else {
-            throw .invalidCommandIdentifierValue
-        }
-        let byteCount = identifier.utf8.count
-        guard byteCount <= maximumIdentifierUTF8Bytes else {
-            throw .stringTooLarge(
-                actual: byteCount,
-                maximum: maximumIdentifierUTF8Bytes
-            )
-        }
     }
 }

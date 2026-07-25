@@ -205,14 +205,19 @@ The version 1 operation families are fixed:
 | `maintenance.execute` | Migration and index maintenance |
 | `job.start/status/result/cancel` | Durable operation lifecycle |
 
-`command.execute` is one operation family. Each command descriptor declares
-`readOnly` or `readWrite` access, and that access is encoded in both request and
-response payloads. A read response carries output and continuation. A write
-response additionally carries the commit version. Typed decoding rejects an
-access value that does not match the statically selected command descriptor.
-`CommandOperation<Command>` binds `CommandInvocation<Command>` to the
-descriptor's associated result. `ReadCommandResult` has no commit-version
-state; `WriteCommandResult` requires a non-optional commit version.
+`command.execute` is one fixed operation family. `CommandDeclaration` owns a
+validated semantic identifier and its `readOnly` or `readWrite` transaction
+access. `CommandRequest` carries that declaration, one canonical
+`FieldObject`, and an execution budget. A read response carries a
+`FieldValue` and continuation. A write response additionally carries the
+required commit version. Applications cannot introduce arbitrary binary Wire
+payload types or operation identifiers.
+
+Long-running work uses `JobOperation<Request, Response>`, which binds a
+canonical resumable-job identifier to one existing closed
+`DatabaseOperation<Request, Response>`. The inner request and completed
+response therefore reuse the operation's canonical representation rather than
+declaring a second generic Wire conformance path.
 
 ## Runtime Boundary
 

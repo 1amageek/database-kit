@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-public enum JobStatusOperation: DatabaseOperation {
+public enum JobStatusOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.jobStatus
 
     public enum State: UInt8, Sendable, Hashable {

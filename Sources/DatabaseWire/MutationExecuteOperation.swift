@@ -1,7 +1,7 @@
 import DatabaseTypes
 import DatabaseKit
 
-public enum MutationExecuteOperation: DatabaseOperation {
+public enum MutationExecuteOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.mutationExecute
 
     public enum Kind: UInt8, Sendable, Hashable {
