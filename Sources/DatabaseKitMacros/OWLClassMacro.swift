@@ -317,7 +317,7 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
                 \(raw: quadsBinding) quads = [
                     RDFQuad(
                         subject: subject,
-                        predicate: OWLRDFVocabulary.rdfType,
+                        predicate: try OWLRDFVocabulary.rdfType,
                         object: try .iri(
                             validating: Self.ontologyClassIRI
                         ),

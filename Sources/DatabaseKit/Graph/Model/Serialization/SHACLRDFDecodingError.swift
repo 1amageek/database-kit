@@ -12,6 +12,8 @@ public enum SHACLRDFDecodingError: Error, Sendable, Equatable, CustomStringConve
     case invalidShapeIdentifier(String)
     case unsupportedPredicate(String)
     case unsupportedFocusNode(String)
+    case invalidVocabularyIRI(String)
+    case unregisteredVocabularyIRI(String)
 
     public var description: String {
         switch self {
@@ -39,6 +41,10 @@ public enum SHACLRDFDecodingError: Error, Sendable, Equatable, CustomStringConve
             return "Unsupported SHACL predicate: \(value)"
         case .unsupportedFocusNode(let value):
             return "The SHACL value model cannot represent focus node \(value)"
+        case .invalidVocabularyIRI(let value):
+            return "The built-in SHACL vocabulary contains an invalid IRI: \(value)"
+        case .unregisteredVocabularyIRI(let value):
+            return "The SHACL decoder requested an unregistered vocabulary IRI: \(value)"
         }
     }
 }

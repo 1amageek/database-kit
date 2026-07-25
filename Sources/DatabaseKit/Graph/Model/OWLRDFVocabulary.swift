@@ -1,11 +1,33 @@
 import DatabaseTypes
 
 public enum OWLRDFVocabulary {
-    public static let rdfType = RDFPredicateIRI(
-        requiredIRI(
-            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-        )
-    )
+    public static var rdfType: RDFPredicateIRI {
+        get throws(RDFIRIError) {
+            switch rdfTypeResolution {
+            case .success(let predicate):
+                return predicate
+            case .failure(let error):
+                throw error
+            }
+        }
+    }
+
+    private static let rdfTypeResolution = resolveRDFType()
+
+    private static func resolveRDFType() -> Result<
+        RDFPredicateIRI,
+        RDFIRIError
+    > {
+        do {
+            return .success(
+                try RDFPredicateIRI(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                )
+            )
+        } catch {
+            return .failure(error)
+        }
+    }
 
     public static func literal(
         _ lexicalForm: String,
@@ -17,13 +39,5 @@ public enum OWLRDFVocabulary {
                 datatype: datatype.typedLiteralDatatype
             )
         )
-    }
-
-    private static func requiredIRI(_ value: String) -> RDFIRI {
-        do {
-            return try RDFIRI(value)
-        } catch {
-            preconditionFailure("Invalid built-in RDF vocabulary IRI: \(value)")
-        }
     }
 }

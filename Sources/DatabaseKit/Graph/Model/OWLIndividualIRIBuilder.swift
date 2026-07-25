@@ -5,27 +5,27 @@ public enum OWLIndividualIRIBuilder {
         baseIRI: String,
         persistableType: String,
         identifier: Identifier
-    ) throws -> RDFSubject {
-        let term = try term(
-            baseIRI: baseIRI,
-            persistableType: persistableType,
-            identifier: identifier
+    ) throws(OWLProjectionError) -> RDFSubject {
+        .iri(
+            try individualIRI(
+                baseIRI: baseIRI,
+                persistableType: persistableType,
+                lexicalForm: identifier.owlIndividualIdentifierLexicalForm
+            )
         )
-        guard case .iri(let iri) = term else {
-            preconditionFailure("An OWL individual IRI builder produced a non-IRI term")
-        }
-        return .iri(iri)
     }
 
     public static func term<Identifier: OWLIndividualIdentifier>(
         baseIRI: String,
         persistableType: String,
         identifier: Identifier
-    ) throws -> RDFTerm {
-        try term(
-            baseIRI: baseIRI,
-            persistableType: persistableType,
-            lexicalForm: identifier.owlIndividualIdentifierLexicalForm
+    ) throws(OWLProjectionError) -> RDFTerm {
+        .iri(
+            try individualIRI(
+                baseIRI: baseIRI,
+                persistableType: persistableType,
+                lexicalForm: identifier.owlIndividualIdentifierLexicalForm
+            )
         )
     }
 
@@ -33,25 +33,33 @@ public enum OWLIndividualIRIBuilder {
         baseIRI: String,
         persistableType: String,
         value: Value
-    ) throws -> [RDFTerm] {
-        try value.owlObjectPropertyIdentifierLexicalForms.map {
-            try term(
-                baseIRI: baseIRI,
-                persistableType: persistableType,
-                lexicalForm: $0
+    ) throws(OWLProjectionError) -> [RDFTerm] {
+        let lexicalForms = value.owlObjectPropertyIdentifierLexicalForms
+        var result: [RDFTerm] = []
+        result.reserveCapacity(lexicalForms.count)
+        for lexicalForm in lexicalForms {
+            result.append(
+                .iri(
+                    try individualIRI(
+                        baseIRI: baseIRI,
+                        persistableType: persistableType,
+                        lexicalForm: lexicalForm
+                    )
+                )
             )
         }
+        return result
     }
 
-    private static func term(
+    private static func individualIRI(
         baseIRI: String,
         persistableType: String,
         lexicalForm: String
-    ) throws -> RDFTerm {
+    ) throws(OWLProjectionError) -> RDFIRI {
         do {
             _ = try RDFIRI(baseIRI)
         } catch {
-            throw OWLProjectionError.invalidIndividualIRIBase(baseIRI)
+            throw .invalidIndividualIRIBase(baseIRI)
         }
         let separator = baseIRI.hasSuffix("/") || baseIRI.hasSuffix("#") ? "" : "/"
         let value =
@@ -61,9 +69,9 @@ public enum OWLIndividualIRIBuilder {
             + "/"
             + percentEncode(lexicalForm)
         do {
-            return try .iri(validating: value)
+            return try RDFIRI(value)
         } catch {
-            throw OWLProjectionError.invalidIndividualIRI(value)
+            throw .invalidIndividualIRI(value)
         }
     }
 

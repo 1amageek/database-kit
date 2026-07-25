@@ -7,8 +7,8 @@ public struct SHACLRDFDecoder: Sendable {
         graphIRI: String
     ) throws -> SHACLShapesGraph {
         try dataset.validate()
-        let index = Index(dataset.quads)
-        let shapeNodes = index.subjects(
+        let index = try Index(dataset.quads)
+        let shapeNodes = try index.subjects(
             predicate: Vocabulary.rdfType,
             objects: [Vocabulary.nodeShape, Vocabulary.propertyShape]
         ).sorted(by: Self.termOrder)
@@ -36,11 +36,11 @@ public struct SHACLRDFDecoder: Sendable {
             throw SHACLRDFDecodingError.recursiveShape(node.description)
         }
         let nextStack = shapeStack.union([node])
-        let types = Set(index.objects(node, Vocabulary.rdfType))
-        if types.contains(where: {
-            Self.hasIRI($0, Vocabulary.propertyShape)
+        let types = Set(try index.objects(node, Vocabulary.rdfType))
+        if try types.contains(where: {
+            try index.hasIRI($0, Vocabulary.propertyShape)
         }) ||
-            !index.objects(node, Vocabulary.path).isEmpty {
+            !(try index.objects(node, Vocabulary.path)).isEmpty {
             return .property(
                 try decodePropertyShape(
                     node,
@@ -80,10 +80,10 @@ public struct SHACLRDFDecoder: Sendable {
             },
             severity: try decodeSeverity(node, index: index),
             messages: try literalStrings(
-                index.objects(node, Vocabulary.message)
+                try index.objects(node, Vocabulary.message)
             ),
             deactivated: try boolean(
-                index.firstObject(node, Vocabulary.deactivated),
+                try index.firstObject(node, Vocabulary.deactivated),
                 default: false
             )
         )
@@ -98,7 +98,7 @@ public struct SHACLRDFDecoder: Sendable {
             throw SHACLRDFDecodingError.recursiveShape(node.description)
         }
         let nextStack = shapeStack.union([node])
-        guard let pathNode = index.firstObject(node, Vocabulary.path) else {
+        guard let pathNode = try index.firstObject(node, Vocabulary.path) else {
             throw SHACLRDFDecodingError.missingProperty(
                 subject: node.description,
                 predicate: Vocabulary.path
@@ -122,21 +122,25 @@ public struct SHACLRDFDecoder: Sendable {
             },
             severity: try decodeSeverity(node, index: index),
             messages: try literalStrings(
-                index.objects(node, Vocabulary.message)
+                try index.objects(node, Vocabulary.message)
             ),
             deactivated: try boolean(
-                index.firstObject(node, Vocabulary.deactivated),
+                try index.firstObject(node, Vocabulary.deactivated),
                 default: false
             ),
             name: try optionalLiteralString(
-                index.firstObject(node, Vocabulary.name)
+                try index.firstObject(node, Vocabulary.name)
             ),
             shapeDescription: try optionalLiteralString(
-                index.firstObject(node, Vocabulary.description)
+                try index.firstObject(node, Vocabulary.description)
             ),
-            order: try optionalDouble(index.firstObject(node, Vocabulary.order)),
-            group: try optionalIRI(index.firstObject(node, Vocabulary.group)),
-            defaultValue: index.firstObject(node, Vocabulary.defaultValue)
+            order: try optionalDouble(
+                try index.firstObject(node, Vocabulary.order)
+            ),
+            group: try optionalIRI(
+                try index.firstObject(node, Vocabulary.group)
+            ),
+            defaultValue: try index.firstObject(node, Vocabulary.defaultValue)
         )
     }
 
@@ -145,7 +149,7 @@ public struct SHACLRDFDecoder: Sendable {
         index: Index
     ) throws -> [SHACLTarget] {
         var targets: [SHACLTarget] = []
-        for value in index.objects(node, Vocabulary.targetNode) {
+        for value in try index.objects(node, Vocabulary.targetNode) {
             switch value {
             case .iri(let iri):
                 targets.append(.node(.iri(iri)))
@@ -167,7 +171,7 @@ public struct SHACLRDFDecoder: Sendable {
             node,
             Vocabulary.targetObjectsOf
         ).map { .objectsOf(try iri($0)) })
-        if index.objects(node, Vocabulary.target).isEmpty == false {
+        if try index.objects(node, Vocabulary.target).isEmpty == false {
             throw SHACLRDFDecodingError.unsupportedPredicate(Vocabulary.target)
         }
         return targets
@@ -179,48 +183,48 @@ public struct SHACLRDFDecoder: Sendable {
         shapeStack: Set<RDFTerm>
     ) throws -> [SHACLConstraint] {
         var constraints: [SHACLConstraint] = []
-        for value in index.objects(node, Vocabulary.class_) {
+        for value in try index.objects(node, Vocabulary.class_) {
             constraints.append(.class_(try iri(value)))
         }
-        for value in index.objects(node, Vocabulary.datatype) {
+        for value in try index.objects(node, Vocabulary.datatype) {
             constraints.append(.datatype(try iri(value)))
         }
-        for value in index.objects(node, Vocabulary.nodeKind) {
+        for value in try index.objects(node, Vocabulary.nodeKind) {
             constraints.append(.nodeKind(try nodeKind(value)))
         }
-        for value in index.objects(node, Vocabulary.minCount) {
+        for value in try index.objects(node, Vocabulary.minCount) {
             constraints.append(.minCount(try integer(value)))
         }
-        for value in index.objects(node, Vocabulary.maxCount) {
+        for value in try index.objects(node, Vocabulary.maxCount) {
             constraints.append(.maxCount(try integer(value)))
         }
-        for value in index.objects(node, Vocabulary.minExclusive) {
+        for value in try index.objects(node, Vocabulary.minExclusive) {
             constraints.append(.minExclusive(value))
         }
-        for value in index.objects(node, Vocabulary.maxExclusive) {
+        for value in try index.objects(node, Vocabulary.maxExclusive) {
             constraints.append(.maxExclusive(value))
         }
-        for value in index.objects(node, Vocabulary.minInclusive) {
+        for value in try index.objects(node, Vocabulary.minInclusive) {
             constraints.append(.minInclusive(value))
         }
-        for value in index.objects(node, Vocabulary.maxInclusive) {
+        for value in try index.objects(node, Vocabulary.maxInclusive) {
             constraints.append(.maxInclusive(value))
         }
-        for value in index.objects(node, Vocabulary.minLength) {
+        for value in try index.objects(node, Vocabulary.minLength) {
             constraints.append(.minLength(try integer(value)))
         }
-        for value in index.objects(node, Vocabulary.maxLength) {
+        for value in try index.objects(node, Vocabulary.maxLength) {
             constraints.append(.maxLength(try integer(value)))
         }
         let flags = try optionalLiteralString(
-            index.firstObject(node, Vocabulary.flags)
+            try index.firstObject(node, Vocabulary.flags)
         )
-        for value in index.objects(node, Vocabulary.pattern) {
+        for value in try index.objects(node, Vocabulary.pattern) {
             constraints.append(
                 .pattern(try literalString(value), flags: flags)
             )
         }
-        for value in index.objects(node, Vocabulary.languageIn) {
+        for value in try index.objects(node, Vocabulary.languageIn) {
             constraints.append(
                 .languageIn(
                     try decodeList(value, index: index).map(literalString)
@@ -228,13 +232,13 @@ public struct SHACLRDFDecoder: Sendable {
             )
         }
         if try boolean(
-            index.firstObject(node, Vocabulary.uniqueLang),
+            try index.firstObject(node, Vocabulary.uniqueLang),
             default: false
         ) {
             constraints.append(.uniqueLang)
         }
         for (predicate, makeConstraint) in pathConstraintFactories {
-            for value in index.objects(node, predicate) {
+            for value in try index.objects(node, predicate) {
                 constraints.append(
                     makeConstraint(
                         try decodePath(value, index: index, pathStack: [])
@@ -242,7 +246,7 @@ public struct SHACLRDFDecoder: Sendable {
                 )
             }
         }
-        for value in index.objects(node, Vocabulary.not) {
+        for value in try index.objects(node, Vocabulary.not) {
             constraints.append(
                 .not(
                     try decodeShape(
@@ -254,7 +258,7 @@ public struct SHACLRDFDecoder: Sendable {
             )
         }
         for (predicate, makeConstraint) in shapeListConstraintFactories {
-            for value in index.objects(node, predicate) {
+            for value in try index.objects(node, predicate) {
                 constraints.append(
                     makeConstraint(
                         try decodeList(value, index: index).map {
@@ -268,7 +272,7 @@ public struct SHACLRDFDecoder: Sendable {
                 )
             }
         }
-        for value in index.objects(node, Vocabulary.node) {
+        for value in try index.objects(node, Vocabulary.node) {
             let shape = try decodeShape(
                 value,
                 index: index,
@@ -279,7 +283,7 @@ public struct SHACLRDFDecoder: Sendable {
             }
             constraints.append(.node(nodeShape))
         }
-        for value in index.objects(node, Vocabulary.qualifiedValueShape) {
+        for value in try index.objects(node, Vocabulary.qualifiedValueShape) {
             constraints.append(
                 .qualifiedValueShape(
                     shape: try decodeShape(
@@ -288,16 +292,25 @@ public struct SHACLRDFDecoder: Sendable {
                         shapeStack: shapeStack
                     ),
                     min: try optionalInteger(
-                        index.firstObject(node, Vocabulary.qualifiedMinCount)
+                        try index.firstObject(
+                            node,
+                            Vocabulary.qualifiedMinCount
+                        )
                     ),
                     max: try optionalInteger(
-                        index.firstObject(node, Vocabulary.qualifiedMaxCount)
+                        try index.firstObject(
+                            node,
+                            Vocabulary.qualifiedMaxCount
+                        )
                     )
                 )
             )
         }
         if try boolean(
-            index.firstObject(node, Vocabulary.qualifiedValueShapesDisjoint),
+            try index.firstObject(
+                node,
+                Vocabulary.qualifiedValueShapesDisjoint
+            ),
             default: false
         ) {
             throw SHACLRDFDecodingError.unsupportedPredicate(
@@ -305,7 +318,7 @@ public struct SHACLRDFDecoder: Sendable {
             )
         }
         if try boolean(
-            index.firstObject(node, Vocabulary.closed),
+            try index.firstObject(node, Vocabulary.closed),
             default: false
         ) {
             let ignored = try index.firstObject(
@@ -316,10 +329,10 @@ public struct SHACLRDFDecoder: Sendable {
             } ?? []
             constraints.append(.closed(ignoredProperties: ignored))
         }
-        for value in index.objects(node, Vocabulary.hasValue) {
+        for value in try index.objects(node, Vocabulary.hasValue) {
             constraints.append(.hasValue(value))
         }
-        for value in index.objects(node, Vocabulary.in_) {
+        for value in try index.objects(node, Vocabulary.in_) {
             constraints.append(
                 .in_(try decodeList(value, index: index))
             )
@@ -340,12 +353,15 @@ public struct SHACLRDFDecoder: Sendable {
             throw SHACLRDFDecodingError.recursivePath(node.description)
         }
         let nextStack = pathStack.union([node])
-        if let value = index.firstObject(node, Vocabulary.inversePath) {
+        if let value = try index.firstObject(node, Vocabulary.inversePath) {
             return .inverse(
                 try decodePath(value, index: index, pathStack: nextStack)
             )
         }
-        if let value = index.firstObject(node, Vocabulary.alternativePath) {
+        if let value = try index.firstObject(
+            node,
+            Vocabulary.alternativePath
+        ) {
             return .alternative(
                 try SHACLPathList(
                     decodeList(value, index: index).map {
@@ -354,17 +370,26 @@ public struct SHACLRDFDecoder: Sendable {
                 )
             )
         }
-        if let value = index.firstObject(node, Vocabulary.zeroOrMorePath) {
+        if let value = try index.firstObject(
+            node,
+            Vocabulary.zeroOrMorePath
+        ) {
             return .zeroOrMore(
                 try decodePath(value, index: index, pathStack: nextStack)
             )
         }
-        if let value = index.firstObject(node, Vocabulary.oneOrMorePath) {
+        if let value = try index.firstObject(
+            node,
+            Vocabulary.oneOrMorePath
+        ) {
             return .oneOrMore(
                 try decodePath(value, index: index, pathStack: nextStack)
             )
         }
-        if let value = index.firstObject(node, Vocabulary.zeroOrOnePath) {
+        if let value = try index.firstObject(
+            node,
+            Vocabulary.zeroOrOnePath
+        ) {
             return .zeroOrOne(
                 try decodePath(value, index: index, pathStack: nextStack)
             )
@@ -383,14 +408,20 @@ public struct SHACLRDFDecoder: Sendable {
         _ head: RDFTerm,
         index: Index
     ) throws -> [RDFTerm] {
-        if Self.hasIRI(head, Vocabulary.rdfNil) { return [] }
+        if try index.hasIRI(head, Vocabulary.rdfNil) { return [] }
         var values: [RDFTerm] = []
         var visited = Set<RDFTerm>()
         var current = head
-        while !Self.hasIRI(current, Vocabulary.rdfNil) {
+        while try !index.hasIRI(current, Vocabulary.rdfNil) {
             guard visited.insert(current).inserted,
-                  let first = index.onlyObject(current, Vocabulary.rdfFirst),
-                  let rest = index.onlyObject(current, Vocabulary.rdfRest) else {
+                  let first = try index.onlyObject(
+                    current,
+                    Vocabulary.rdfFirst
+                  ),
+                  let rest = try index.onlyObject(
+                    current,
+                    Vocabulary.rdfRest
+                  ) else {
                 throw SHACLRDFDecodingError.malformedList(current.description)
             }
             values.append(first)
@@ -403,7 +434,10 @@ public struct SHACLRDFDecoder: Sendable {
         _ node: RDFTerm,
         index: Index
     ) throws -> SHACLSeverity {
-        guard let value = index.firstObject(node, Vocabulary.severity) else {
+        guard let value = try index.firstObject(
+            node,
+            Vocabulary.severity
+        ) else {
             return .violation
         }
         switch try iri(value) {
@@ -540,8 +574,19 @@ public struct SHACLRDFDecoder: Sendable {
 
     private struct Index {
         private var values: [RDFTerm: [RDFIRI: [RDFTerm]]] = [:]
+        private let vocabularyIRIs: [String: RDFIRI]
 
-        init(_ quads: [RDFQuad]) {
+        init(_ quads: [RDFQuad]) throws(SHACLRDFDecodingError) {
+            var vocabularyIRIs: [String: RDFIRI] = [:]
+            vocabularyIRIs.reserveCapacity(Vocabulary.allIRIs.count)
+            for rawValue in Vocabulary.allIRIs {
+                do {
+                    vocabularyIRIs[rawValue] = try RDFIRI(rawValue)
+                } catch {
+                    throw .invalidVocabularyIRI(rawValue)
+                }
+            }
+            self.vocabularyIRIs = vocabularyIRIs
             for quad in quads {
                 values[quad.subject.term, default: [:]][
                     quad.predicate.iri,
@@ -551,22 +596,28 @@ public struct SHACLRDFDecoder: Sendable {
             }
         }
 
-        func objects(_ subject: RDFTerm, _ predicate: String) -> [RDFTerm] {
-            values[subject]?[Vocabulary.requiredIRI(predicate)] ?? []
+        func objects(
+            _ subject: RDFTerm,
+            _ predicate: String
+        ) throws(SHACLRDFDecodingError) -> [RDFTerm] {
+            guard let predicateIRI = vocabularyIRIs[predicate] else {
+                throw .unregisteredVocabularyIRI(predicate)
+            }
+            return values[subject]?[predicateIRI] ?? []
         }
 
         func firstObject(
             _ subject: RDFTerm,
             _ predicate: String
-        ) -> RDFTerm? {
-            objects(subject, predicate).first
+        ) throws(SHACLRDFDecodingError) -> RDFTerm? {
+            try objects(subject, predicate).first
         }
 
         func onlyObject(
             _ subject: RDFTerm,
             _ predicate: String
-        ) -> RDFTerm? {
-            let matches = objects(subject, predicate)
+        ) throws(SHACLRDFDecodingError) -> RDFTerm? {
+            let matches = try objects(subject, predicate)
             return matches.count == 1 ? matches[0] : nil
         }
 
@@ -579,18 +630,41 @@ public struct SHACLRDFDecoder: Sendable {
 
         func subjects(
             predicate: String,
-            objects: Set<String>
-        ) -> Set<RDFTerm> {
-            Set(values.compactMap { subject, predicates in
-                let matches =
-                    predicates[Vocabulary.requiredIRI(predicate)] ?? []
+            objects: [String]
+        ) throws(SHACLRDFDecodingError) -> Set<RDFTerm> {
+            guard let predicateIRI = vocabularyIRIs[predicate] else {
+                throw .unregisteredVocabularyIRI(predicate)
+            }
+            var objectIRIs = Set<RDFIRI>()
+            objectIRIs.reserveCapacity(objects.count)
+            for object in objects {
+                guard let objectIRI = vocabularyIRIs[object] else {
+                    throw .invalidVocabularyIRI(object)
+                }
+                objectIRIs.insert(objectIRI)
+            }
+            return Set(values.compactMap { subject, predicates in
+                let matches = predicates[predicateIRI] ?? []
                 return matches.contains { term in
                     if case .iri(let value) = term {
-                        return objects.contains(value.rawValue)
+                        return objectIRIs.contains(value)
                     }
                     return false
                 } ? subject : nil
             })
+        }
+
+        func hasIRI(
+            _ term: RDFTerm,
+            _ rawValue: String
+        ) throws(SHACLRDFDecodingError) -> Bool {
+            guard case .iri(let iri) = term else {
+                return false
+            }
+            guard let expected = vocabularyIRIs[rawValue] else {
+                throw .unregisteredVocabularyIRI(rawValue)
+            }
+            return iri == expected
         }
     }
 
@@ -680,24 +754,16 @@ public struct SHACLRDFDecoder: Sendable {
             zeroOrOnePath
         ]
 
-        static func requiredIRI(_ value: String) -> RDFIRI {
-            do {
-                return try RDFIRI(value)
-            } catch {
-                preconditionFailure(
-                    "Invalid built-in SHACL vocabulary IRI: \(value)"
-                )
-            }
+        static var allIRIs: Set<String> {
+            supportedPredicates.union([
+                rdfType,
+                rdfFirst,
+                rdfRest,
+                rdfNil,
+                nodeShape,
+                propertyShape,
+                target,
+            ])
         }
-    }
-
-    private static func hasIRI(
-        _ term: RDFTerm,
-        _ rawValue: String
-    ) -> Bool {
-        guard case .iri(let iri) = term else {
-            return false
-        }
-        return iri == Vocabulary.requiredIRI(rawValue)
     }
 }
