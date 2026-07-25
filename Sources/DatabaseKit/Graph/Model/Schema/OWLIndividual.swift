@@ -163,7 +163,7 @@ extension OWLIndividual: CustomStringConvertible {
 // MARK: - ExpressibleByStringLiteral
 
 extension OWLNamedIndividual: ExpressibleByStringLiteral {
-    public init(stringLiteral value: StringLiteralType) {
+    public init(stringLiteral value: String) {
         self.init(iri: value)
     }
 }

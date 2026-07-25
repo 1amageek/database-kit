@@ -803,13 +803,13 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 }
                 let referenceTarget: String
                 if let relationship {
-                    schemaType = "reference"
+                    schemaType = ".reference"
                     referenceTarget = ", referenceTargetEntity: \(relationship.relatedTypeName).persistableType"
                 } else {
                     referenceTarget = ""
                 }
                 fieldSchemaEntries.append(
-                    "FieldSchema(name: \"\(fieldInfo.name)\", fieldNumber: \(schemaFieldIndex), type: .\(schemaType), isOptional: \(isOptional), isArray: \(isArray)\(referenceTarget))"
+                    "FieldSchema(name: \"\(fieldInfo.name)\", fieldNumber: \(schemaFieldIndex), type: \(schemaType), isOptional: \(isOptional), isArray: \(isArray)\(referenceTarget))"
                 )
             }
         }
@@ -836,7 +836,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             }
             let referenceTarget: String
             if let relationship {
-                schemaType = "reference"
+                schemaType = ".reference"
                 referenceTarget = ", referenceTargetEntity: \(relationship.relatedTypeName).persistableType"
             } else {
                 referenceTarget = ""
@@ -845,7 +845,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 """
                 public static let \(fieldInfo.name) = Field<\(structName), \(fieldType)>(
                     identity: FieldIdentity(name: "\(fieldInfo.name)", number: \(typedFieldIndex)),
-                    type: .\(schemaType),
+                    type: \(schemaType),
                     isOptional: \(isOptional),
                     isArray: \(isArray)\(referenceTarget)
                 )
@@ -864,6 +864,30 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             public static var fields: Fields.Type { Fields.self }
             """
         decls.append(fieldsNamespaceDecl)
+
+        var persistedFieldEncodeEntries: [String] = []
+        for fieldInfo in fieldInfos where !fieldInfo.isTransient {
+            persistedFieldEncodeEntries.append(
+                """
+                try output.write(
+                    Self.fields.\(fieldInfo.name).identity,
+                    value: self.\(fieldInfo.name),
+                    entity: Self.persistableType
+                )
+                """
+            )
+        }
+        let persistedFieldEncodeBody = persistedFieldEncodeEntries.joined(
+            separator: "\n        "
+        )
+        let persistedFieldEncoderDecl: DeclSyntax = """
+            public func encodePersistedFields<Output: DatabaseKit.PersistedFieldOutput>(
+                to output: inout Output
+            ) throws(DatabaseKit.PersistableEncodingFailure<Output.Failure>) {
+                \(raw: persistedFieldEncodeBody)
+            }
+            """
+        decls.append(persistedFieldEncoderDecl)
 
         let recordDecodeAssignments = fieldInfos
             .map { fieldInfo in
@@ -889,7 +913,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(recordDecoderDecl)
 
-        // Generate enumMetadata method with runtime extraction for non-primitive fields
+        // Generate enum metadata through the field type's static value contract.
         let primitiveTypeNames: Set<String> = [
             "String", "Int", "Int8", "Int16", "Int32", "Int64",
             "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
@@ -927,7 +951,9 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 bareType = String(bareType.dropLast())
             }
             if !primitiveTypeNames.contains(bareType) {
-                enumMetadataCases.append("case \"\(fieldInfo.name)\": return EnumMetadata.extract(from: \(bareType).self)")
+                enumMetadataCases.append(
+                    "case \"\(fieldInfo.name)\": return \(bareType).fieldEnumMetadata(named: \"\(bareType)\")"
+                )
             }
         }
         let enumMetadataBody: String
@@ -1365,7 +1391,7 @@ private func generateIndexName(typeName: String, indexKindName: String, fieldNam
     }
 }
 
-/// Maps a Swift type string to (FieldSchemaType name, isOptional, isArray)
+/// Maps a Swift type string to (FieldSchemaType expression, isOptional, isArray)
 ///
 /// Handles Optional<T>, T?, [T], Array<T>, and bare types.
 private func persistedElementType(_ rawType: String) -> String {
@@ -1430,67 +1456,65 @@ private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isO
     let schemaType: String
     switch type {
     case "String":
-        schemaType = "string"
+        schemaType = ".string"
     case "Int":
-        schemaType = "int64"
+        schemaType = ".int64"
     case "Int8":
-        schemaType = "int8"
+        schemaType = ".int8"
     case "Int16":
-        schemaType = "int16"
+        schemaType = ".int16"
     case "Int32":
-        schemaType = "int32"
+        schemaType = ".int32"
     case "Int64":
-        schemaType = "int64"
+        schemaType = ".int64"
     case "UInt":
-        schemaType = "uint64"
+        schemaType = ".uint64"
     case "UInt8":
-        schemaType = "uint8"
+        schemaType = ".uint8"
     case "UInt16":
-        schemaType = "uint16"
+        schemaType = ".uint16"
     case "UInt32":
-        schemaType = "uint32"
+        schemaType = ".uint32"
     case "UInt64":
-        schemaType = "uint64"
+        schemaType = ".uint64"
     case "Double":
-        schemaType = "float64"
+        schemaType = ".float64"
     case "Float":
-        schemaType = "float32"
+        schemaType = ".float32"
     case "Bool":
-        schemaType = "bool"
+        schemaType = ".bool"
     case "ExactDecimal", "DatabaseTypes.ExactDecimal":
-        schemaType = "decimal"
+        schemaType = ".decimal"
     case "CivilDate", "DatabaseTypes.CivilDate":
-        schemaType = "date"
+        schemaType = ".date"
     case "CivilTime", "DatabaseTypes.CivilTime":
-        schemaType = "time"
+        schemaType = ".time"
     case "CivilDateTime", "DatabaseTypes.CivilDateTime":
-        schemaType = "dateTime"
+        schemaType = ".dateTime"
     case "Timestamp", "DatabaseTypes.Timestamp":
-        schemaType = "timestamp"
+        schemaType = ".timestamp"
     case "TimeSpan", "DatabaseTypes.TimeSpan":
-        schemaType = "timeSpan"
+        schemaType = ".timeSpan"
     case "CalendarPeriod", "DatabaseTypes.CalendarPeriod":
-        schemaType = "calendarPeriod"
+        schemaType = ".calendarPeriod"
     case "GeographicPoint", "DatabaseTypes.GeographicPoint":
-        schemaType = "geographicPoint"
+        schemaType = ".geographicPoint"
     case "GeographicPosition", "DatabaseTypes.GeographicPosition":
-        schemaType = "geographicPosition"
+        schemaType = ".geographicPosition"
     case "Vector", "DatabaseTypes.Vector":
-        schemaType = "vector"
+        schemaType = ".vector"
     case "UUID", "DatabaseTypes.UUID":
-        schemaType = "uuid"
+        schemaType = ".uuid"
     case "ByteString", "DatabaseTypes.ByteString":
-        schemaType = "bytes"
+        schemaType = ".bytes"
     case "FieldObject", "DatabaseTypes.FieldObject":
-        schemaType = "object"
+        schemaType = ".object"
     case "EntityReference", "DatabaseTypes.EntityReference":
-        schemaType = "reference"
+        schemaType = ".reference"
     case "RDFTerm", "DatabaseTypes.RDFTerm":
-        schemaType = "rdfTerm"
+        schemaType = ".rdfTerm"
     default:
-        // Non-primitive type: resolve at runtime via RawRepresentable check.
-        // FieldSchemaType.resolve(TypeName.self) returns .enum if RawRepresentable, .nested otherwise.
-        schemaType = "resolve(\(type).self)"
+        schemaType = "\(type).fieldSchemaType"
     }
 
     return (schemaType, isOptional, isArray)

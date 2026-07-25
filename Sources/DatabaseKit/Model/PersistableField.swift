@@ -24,4 +24,14 @@ public struct PersistableField: Sendable, Hashable {
         self.name = name
         self.value = value
     }
+
+    init(
+        validatedNumber number: UInt32,
+        validatedName name: String,
+        value: FieldValue
+    ) {
+        self.number = number
+        self.name = name
+        self.value = value
+    }
 }

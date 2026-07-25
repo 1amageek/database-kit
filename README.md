@@ -147,9 +147,16 @@ struct Product {
 }
 ```
 
-**Generated code**: `persistableType`, `allFields`, `fieldSchemas`,
-`indexDescriptors`, canonical field adaptation, `Sendable` conformance, and
-dynamic member lookup. The model declares `id` and owns its generation policy.
+**Generated code**: `persistableType`, `allFields`, `fieldSchemas`, typed
+`fields`, `indexDescriptors`, concrete `PersistedFieldOutput` traversal,
+canonical decoding, and `Sendable` conformance. The model declares `id` and
+owns its generation policy.
+
+The production encoder does not inspect a model through `Mirror`, `Any`, or a
+runtime metatype. It writes each concrete property directly to the selected
+output. `PersistableFieldEncoder.encode(_:)` is the explicit owned
+materializer for callers that require `[PersistableField]`; Wire and storage
+outputs can consume the generated traversal without that intermediate array.
 
 ## Polymorphic Persistence
 

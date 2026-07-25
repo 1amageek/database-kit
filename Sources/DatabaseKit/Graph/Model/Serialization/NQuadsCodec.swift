@@ -138,17 +138,28 @@ private struct NQuadsLineParser {
             throw RDFSyntaxError.unexpectedToken(expected: "end of line", found: currentDescription, line: line)
         }
 
+        let quad: RDFQuad
         do {
-            let quad = try RDFQuad(
+            quad = try RDFQuad(
                 validatingSubject: subject,
                 predicate: predicate,
                 object: object,
                 graph: graph
             )
+        } catch {
+            throw RDFSyntaxError.invalidQuad(
+                "subject, predicate, or graph term has an invalid RDF role",
+                line: line
+            )
+        }
+        do {
             try quad.validate()
             return quad
         } catch {
-            throw RDFSyntaxError.invalidQuad(String(describing: error), line: line)
+            throw RDFSyntaxError.invalidQuad(
+                "object term violates the canonical RDF term limits",
+                line: line
+            )
         }
     }
 

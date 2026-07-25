@@ -11,12 +11,8 @@ import DatabaseTypes
 ///     case pending
 /// }
 ///
-/// // Automatic metadata via PersistableEnum conformance:
-/// let metadata = Status._enumMetadata
-/// // EnumMetadata(typeName: "Status", cases: ["active", "inactive", "pending"])
-///
-/// // Runtime extraction (used by @Persistable macro):
-/// let metadata = EnumMetadata.extract(from: Status.self)
+/// `@Persistable` supplies the stable source type name while the concrete enum
+/// supplies its cases. No runtime metatype cast is involved.
 /// ```
 public struct EnumMetadata: Sendable, Equatable {
     /// The type name of the enum
@@ -43,29 +39,6 @@ public struct EnumMetadata: Sendable, Equatable {
         return cases.contains(value)
     }
 
-    /// Extract EnumMetadata from a type at runtime.
-    ///
-    /// Returns metadata if the type conforms to `_EnumMetadataProvider`
-    /// (typically via `PersistableEnum`), nil otherwise.
-    ///
-    /// Used by `@Persistable` macro-generated `enumMetadata(for:)`.
-    public static func extract(from type: Any.Type) -> EnumMetadata? {
-        guard let provider = type as? any _EnumMetadataProvider.Type else {
-            return nil
-        }
-        return provider._enumMetadata
-    }
-}
-
-// MARK: - Enum Metadata Provider Protocol
-
-/// Type-erased protocol for providing enum metadata at runtime.
-///
-/// This protocol has no associated types, making it usable as an existential
-/// (`any _EnumMetadataProvider.Type`). Conform to `PersistableEnum` instead
-/// of implementing this directly.
-public protocol _EnumMetadataProvider {
-    static var _enumMetadata: EnumMetadata { get }
 }
 
 // MARK: - PersistableEnum Protocol
@@ -82,26 +55,44 @@ public protocol _EnumMetadataProvider {
 /// }
 /// ```
 ///
-/// The `@Persistable` macro generates `EnumMetadata.extract(from: Status.self)`
-/// for fields whose type is not a known primitive. If the type conforms to
-/// `PersistableEnum`, metadata is returned; otherwise `nil`.
-public protocol PersistableEnum: Sendable, CaseIterable, RawRepresentable, _EnumMetadataProvider
-    where RawValue: Sendable {}
+/// The `@Persistable` macro invokes this concrete type's static field-value
+/// contract. String- and Int-backed enums provide canonical case metadata.
+public protocol PersistableEnum:
+    FieldValueEncodable,
+    CaseIterable,
+    RawRepresentable
+where RawValue: FieldValueEncodable & FieldValueDecodable {}
 
 extension PersistableEnum where RawValue == String {
-    public static var _enumMetadata: EnumMetadata {
+    public static var fieldSchemaType: FieldSchemaType { .enum }
+
+    public static func fieldEnumMetadata(
+        named typeName: String
+    ) -> EnumMetadata? {
         EnumMetadata(
-            typeName: String(describing: Self.self),
+            typeName: typeName,
             cases: allCases.map(\.rawValue)
         )
+    }
+
+    public func encodeFieldValue() -> FieldValue {
+        .string(rawValue)
     }
 }
 
 extension PersistableEnum where RawValue == Int {
-    public static var _enumMetadata: EnumMetadata {
+    public static var fieldSchemaType: FieldSchemaType { .enum }
+
+    public static func fieldEnumMetadata(
+        named typeName: String
+    ) -> EnumMetadata? {
         EnumMetadata(
-            typeName: String(describing: Self.self),
+            typeName: typeName,
             cases: allCases.map { String($0.rawValue) }
         )
+    }
+
+    public func encodeFieldValue() -> FieldValue {
+        .int64(Int64(rawValue))
     }
 }

@@ -4,19 +4,31 @@ import DatabaseKit
 struct PersistableFieldNestedValue:
     Sendable,
     Equatable,
-    FieldValueConvertible,
+    FieldValueEncodable,
     FieldValueDecodable
 {
     let label: String
     let priority: Int64
 
-    func toFieldValue() -> FieldValue {
-        .object(
-            try! FieldObject([
+    static var fieldSchemaType: FieldSchemaType { .nested }
+
+    func encodeFieldValue() throws(PersistableEncodingError) -> FieldValue {
+        do {
+            return .object(
+                try FieldObject([
                 (key: "label", value: .string(label)),
                 (key: "priority", value: .int64(priority)),
-            ])
-        )
+                ])
+            )
+        } catch let error {
+            switch error {
+            case .duplicateKey(let name):
+                throw .invalidSchema(
+                    entity: "PersistableFieldNestedValue",
+                    reason: "field '\(name)' is declared more than once"
+                )
+            }
+        }
     }
 
     static func decodeFieldValue(

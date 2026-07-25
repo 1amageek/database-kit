@@ -6,11 +6,11 @@ import Testing
 struct FieldValueTests {
     @Test("Unsigned Swift scalars preserve their exact values")
     func unsignedIntegerInitializersPreserveExactValues() {
-        #expect(UInt.max.toFieldValue() == .uint64(UInt64(UInt.max)))
-        #expect(UInt8.max.toFieldValue() == .uint8(UInt8.max))
-        #expect(UInt16.max.toFieldValue() == .uint16(UInt16.max))
-        #expect(UInt32.max.toFieldValue() == .uint32(UInt32.max))
-        #expect(UInt64.max.toFieldValue() == .uint64(UInt64.max))
+        #expect(UInt.max.encodeFieldValue() == .uint64(UInt64(UInt.max)))
+        #expect(UInt8.max.encodeFieldValue() == .uint8(UInt8.max))
+        #expect(UInt16.max.encodeFieldValue() == .uint16(UInt16.max))
+        #expect(UInt32.max.encodeFieldValue() == .uint32(UInt32.max))
+        #expect(UInt64.max.encodeFieldValue() == .uint64(UInt64.max))
     }
 
     @Test("Every fixed-width numeric type retains a distinct storage identity")
@@ -176,19 +176,19 @@ struct FieldValueTests {
 
     @Test("Convert from Int")
     func testConvertInt() {
-        let value = (42 as Int).toFieldValue()
+        let value = (42 as Int).encodeFieldValue()
         #expect(value.int64Value == 42)
     }
 
     @Test("Convert from Int32")
     func testConvertInt32() {
-        let value = Int32(42).toFieldValue()
+        let value = Int32(42).encodeFieldValue()
         #expect(value.int32Value == 42)
     }
 
     @Test("Convert from Float")
     func testConvertFloat() {
-        let value = Float(3.14).toFieldValue()
+        let value = Float(3.14).encodeFieldValue()
         #expect(value.float32Value != nil)
     }
 
@@ -196,8 +196,8 @@ struct FieldValueTests {
     func optionalConversionPreservesValueAndAbsence() throws {
         let present: String? = "calendar"
         let absent: String? = nil
-        let presentValue = present.toFieldValue()
-        let absentValue = absent.toFieldValue()
+        let presentValue = try present.encodeFieldValue()
+        let absentValue = try absent.encodeFieldValue()
 
         #expect(presentValue == .string("calendar"))
         #expect(absentValue == .null)

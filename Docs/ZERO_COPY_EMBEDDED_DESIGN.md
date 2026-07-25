@@ -117,6 +117,12 @@ boundary preserves its own typed failure:
 ```swift
 public protocol PersistedFieldOutput {
     associatedtype Failure: Error & Sendable
+
+    mutating func write<Value: FieldValueEncodable>(
+        _ identity: FieldIdentity,
+        value: borrowing Value,
+        entity: String
+    ) throws(PersistableEncodingFailure<Failure>)
 }
 
 public protocol PersistedFieldInput {
@@ -173,14 +179,14 @@ Primitive application conversion uses directional Swift contracts:
 
 ```swift
 public protocol FieldValueEncodable: Sendable {
-    func encodeFieldValue() throws(FieldValueEncodingError) -> FieldValue
+    func encodeFieldValue() throws(PersistableEncodingError) -> FieldValue
 }
 
 public protocol FieldValueDecodable: Sendable {
     static func decodeFieldValue(
         _ value: FieldValue,
         field: String
-    ) throws(FieldValueDecodingError) -> Self
+    ) throws(PersistableDecodingError) -> Self
 }
 ```
 

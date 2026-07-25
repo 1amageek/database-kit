@@ -4,6 +4,31 @@ import Testing
 
 @Suite("Persistable field encoding")
 struct PersistableFieldEncoderTests {
+    @Test("Generated traversal writes typed values directly to its destination")
+    func generatedTraversalUsesConcreteOutput() throws {
+        let document = PersistableFieldEncoderTestDocument(
+            title: "Typed output",
+            externalID: DatabaseTypes.UUID(high: 1, low: 2),
+            occurredAt: try Timestamp(
+                secondsSinceUnixEpoch: 1_721_234_567,
+                nanoseconds: 125_000_000
+            ),
+            values: [1, 2, 3]
+        )
+        var output = FieldIdentityOutput()
+
+        try document.encodePersistedFields(to: &output)
+
+        #expect(output.identities == [
+            FieldIdentity(name: "id", number: 1),
+            FieldIdentity(name: "title", number: 2),
+            FieldIdentity(name: "externalID", number: 3),
+            FieldIdentity(name: "occurredAt", number: 4),
+            FieldIdentity(name: "note", number: 5),
+            FieldIdentity(name: "values", number: 6),
+        ])
+    }
+
     @Test("Compiled documents round-trip without JSON")
     func compiledDocumentRoundTrip() throws {
         let externalID = DatabaseTypes.UUID(
@@ -68,6 +93,25 @@ struct PersistableFieldEncoderTests {
         let decoded = try PersistableFieldNestedTestDocument.decodePersistedFields(fields)
         #expect(decoded.value == current)
         #expect(decoded.history == history)
+    }
+
+    @Test("Enum schema and values use the static field contract")
+    func enumRoundTrip() throws {
+        let document = PersistableEnumTestDocument(status: .active)
+
+        #expect(PersistableEnumTestDocument.fields.status.type == .enum)
+        #expect(
+            PersistableEnumTestDocument.enumMetadata(for: "status")
+                == EnumMetadata(
+                    typeName: "PersistableTestStatus",
+                    cases: ["active", "inactive"]
+                )
+        )
+
+        let fields = try PersistableFieldEncoder.encode(document)
+        #expect(fields.last?.value == .string("active"))
+        let decoded = try PersistableEnumTestDocument.decodePersistedFields(fields)
+        #expect(decoded.status == .active)
     }
 
     @Test("Every primitive field type has one consistent persistence contract")
@@ -190,4 +234,29 @@ struct PersistableFieldEncoderTests {
             return
         }
     }
+}
+
+private struct FieldIdentityOutput: PersistedFieldOutput {
+    typealias Failure = Never
+
+    private(set) var identities: [FieldIdentity] = []
+
+    mutating func write<Value: FieldValueEncodable>(
+        _ identity: FieldIdentity,
+        value: borrowing Value,
+        entity: String
+    ) throws(PersistableEncodingFailure<Never>) {
+        identities.append(identity)
+    }
+}
+
+private enum PersistableTestStatus: String, PersistableEnum {
+    case active
+    case inactive
+}
+
+@Persistable
+private struct PersistableEnumTestDocument {
+    var id: String = "enum-fixture"
+    var status: PersistableTestStatus
 }
