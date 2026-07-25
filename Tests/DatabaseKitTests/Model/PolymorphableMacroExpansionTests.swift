@@ -6,65 +6,52 @@ import DatabaseKitMacros
 @Suite("@Polymorphable Macro Expansion Tests")
 struct PolymorphableMacroExpansionTests {
 
-    @Test("@Polymorphable compiles protocol KeyPaths into logical field selections")
-    func compilesProtocolKeyPathsIntoLogicalFieldSelections() {
+    @Test("@Polymorphable compiles protocol fields into logical selections")
+    func compilesProtocolFieldsIntoLogicalSelections() {
         assertMacroExpansion(
             """
             @Polymorphable
-            protocol MacroEntity: Polymorphable {
+            @PolymorphicDirectory("memory", "entities")
+            @PolymorphicIndex(
+                .scalar,
+                fields: ["title"],
+                storedFields: ["id"],
+                unique: true,
+                name: "MacroEntity_title"
+            )
+            protocol MacroEntity: Polymorphable<MacroEntityPolymorphicGroup> {
                 var id: String { get }
                 var title: String { get }
-
-                #Directory<Self>("memory", "entities")
-                #PolymorphicIndex(
-                    .scalar,
-                    fields: ["title"],
-                    storedFields: ["id"],
-                    unique: true,
-                    name: "MacroEntity_title"
-                )
             }
             """,
             expandedSource: """
-            protocol MacroEntity: Polymorphable {
+            protocol MacroEntity: Polymorphable<MacroEntityPolymorphicGroup> {
                 var id: String { get }
                 var title: String { get }
-
-                #Directory<Self>("memory", "entities")
-                #PolymorphicIndex(
-                    .scalar,
-                    fields: ["title"],
-                    storedFields: ["id"],
-                    unique: true,
-                    name: "MacroEntity_title"
-                )
             }
 
-            extension MacroEntity {
-                public static var polymorphableType: String {
-                    "MacroEntity"
-                }
-                public static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
-                    [.staticPath("memory"), .staticPath("entities")]
-                }
-                public static var polymorphicDirectoryLayer: DatabaseKit.DirectoryLayer {
-                    .default
-                }
-                public static var polymorphicIndexes: [PolymorphicIndexDefinition] {
-                    [
-                        PolymorphicIndexDefinition(
+            enum MacroEntityPolymorphicGroup: DatabaseKit.PolymorphicGroupDeclaration {
+                static let identifier = "MacroEntity"
+
+                static let directoryComponents: [DatabaseKit.DirectoryPathComponent] = [.staticPath("memory"), .staticPath("entities")]
+
+                static let directoryLayer: DatabaseKit.DirectoryLayer = .default
+
+                static let indexes: [DatabaseKit.PolymorphicIndexDefinition] = [
+                    DatabaseKit.PolymorphicIndexDefinition(
                             name: "MacroEntity_title",
                             definition: .scalar,
-                            fields: [PolymorphicIndexField(name: "title", order: .ascending)],
+                            fields: [DatabaseKit.PolymorphicIndexField(name: "title", order: .ascending)],
                             commonOptions: .init(unique: true),
                             storedFieldNames: ["id"]
                         )
-                    ]
-                }
+                ]
             }
             """,
             macros: [
-                "Polymorphable": PolymorphableMacro.self
+                "Polymorphable": PolymorphableMacro.self,
+                "PolymorphicDirectory": PolymorphicDeclarationMarkerMacro.self,
+                "PolymorphicIndex": PolymorphicDeclarationMarkerMacro.self,
             ]
         )
     }
@@ -74,50 +61,40 @@ struct PolymorphableMacroExpansionTests {
         assertMacroExpansion(
             """
             @Polymorphable
-            protocol GlobalCountEntity: Polymorphable {
+            @PolymorphicIndex(
+                .count,
+                groupBy: []
+            )
+            protocol GlobalCountEntity: Polymorphable<GlobalCountEntityPolymorphicGroup> {
                 var id: String { get }
-
-                #PolymorphicIndex(
-                    .count,
-                    groupBy: []
-                )
             }
             """,
             expandedSource: """
-            protocol GlobalCountEntity: Polymorphable {
+            protocol GlobalCountEntity: Polymorphable<GlobalCountEntityPolymorphicGroup> {
                 var id: String { get }
-
-                #PolymorphicIndex(
-                    .count,
-                    groupBy: []
-                )
             }
 
-            extension GlobalCountEntity {
-                public static var polymorphableType: String {
-                    "GlobalCountEntity"
-                }
-                public static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
-                    [.staticPath(polymorphableType)]
-                }
-                public static var polymorphicDirectoryLayer: DatabaseKit.DirectoryLayer {
-                    .default
-                }
-                public static var polymorphicIndexes: [PolymorphicIndexDefinition] {
-                    [
-                        PolymorphicIndexDefinition(
+            enum GlobalCountEntityPolymorphicGroup: DatabaseKit.PolymorphicGroupDeclaration {
+                static let identifier = "GlobalCountEntity"
+
+                static let directoryComponents: [DatabaseKit.DirectoryPathComponent] = [.staticPath(identifier)]
+
+                static let directoryLayer: DatabaseKit.DirectoryLayer = .default
+
+                static let indexes: [DatabaseKit.PolymorphicIndexDefinition] = [
+                    DatabaseKit.PolymorphicIndexDefinition(
                             name: "GlobalCountEntity_count",
                             definition: .count,
                             fields: [],
                             commonOptions: .init(),
                             storedFieldNames: []
                         )
-                    ]
-                }
+                ]
             }
             """,
             macros: [
-                "Polymorphable": PolymorphableMacro.self
+                "Polymorphable": PolymorphableMacro.self,
+                "PolymorphicIndex": PolymorphicDeclarationMarkerMacro.self,
             ]
         )
     }
@@ -136,7 +113,7 @@ struct PolymorphableMacroExpansionTests {
             """,
             diagnostics: [
                 DiagnosticSpec(
-                    message: "@Polymorphable protocols must explicitly inherit from Polymorphable",
+                    message: "@Polymorphable protocol 'MacroEntity' must inherit from Polymorphable<MacroEntityPolymorphicGroup>",
                     line: 1,
                     column: 1
                 )
@@ -152,28 +129,26 @@ struct PolymorphableMacroExpansionTests {
         assertMacroExpansion(
             """
             @Polymorphable
-            protocol MacroEntity: Polymorphable {
+            @PolymorphicIndex(.scalar, fields: ["missing"])
+            protocol MacroEntity: Polymorphable<MacroEntityPolymorphicGroup> {
                 var id: String { get }
-
-                #PolymorphicIndex(.scalar, fields: ["missing"])
             }
             """,
             expandedSource: """
-            protocol MacroEntity: Polymorphable {
+            protocol MacroEntity: Polymorphable<MacroEntityPolymorphicGroup> {
                 var id: String { get }
-
-                #PolymorphicIndex(.scalar, fields: ["missing"])
             }
             """,
             diagnostics: [
                 DiagnosticSpec(
                     message: "Polymorphic index field 'missing' is not declared by protocol 'MacroEntity'",
-                    line: 5,
-                    column: 5
+                    line: 2,
+                    column: 1
                 )
             ],
             macros: [
-                "Polymorphable": PolymorphableMacro.self
+                "Polymorphable": PolymorphableMacro.self,
+                "PolymorphicIndex": PolymorphicDeclarationMarkerMacro.self,
             ]
         )
     }

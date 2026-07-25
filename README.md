@@ -174,16 +174,14 @@ The intended API is:
 
 ```swift
 @Polymorphable
-public protocol Entity: Polymorphable {
-    #Directory<Self>("memory", "entities")
-
+@PolymorphicDirectory("memory", "entities")
+@PolymorphicIndex(
+    .vector(dimensions: 256),
+    embedding: "embedding"
+)
+public protocol Entity: Polymorphable<EntityPolymorphicGroup> {
     var label: String { get }
     var embedding: Vector { get set }
-
-    #PolymorphicIndex(
-        .vector(dimensions: 256),
-        embedding: "embedding"
-    )
 }
 
 @Persistable
@@ -197,16 +195,18 @@ public struct Person: Entity {
 ```
 
 `@Persistable` owns `Persistable` conformance for concrete structs.
-`Polymorphable` inherits from `Persistable`, so a polymorphic protocol only needs
-to inherit from `Polymorphable`.
+`Polymorphable<Group>` owns only static group membership. The domain protocol
+requires the fields shared by its concrete models, while
+`EntityPolymorphicGroup` is the generated metadata declaration.
 
 `@Polymorphable` is a metadata and validation macro. Swift 6.4 does not allow an
 attached macro on a protocol to add protocol inheritance, so the protocol must
-explicitly write `: Polymorphable`.
+explicitly bind the generated declaration with
+`: Polymorphable<EntityPolymorphicGroup>`.
 
 Swift 6.4 cannot form a `KeyPath<Self, Value>` while the protocol containing
 the declaration is still being defined. Protocol-level indexes therefore use
-logical property names with the dedicated `#PolymorphicIndex` macro.
+logical property names with the `@PolymorphicIndex` attribute.
 `@Polymorphable` validates every name against a declared protocol property at
 compile time. `Schema` then resolves the logical property to each concrete
 member's generated `FieldIdentity` and validates its canonical field type.

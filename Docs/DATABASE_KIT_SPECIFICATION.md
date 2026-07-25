@@ -174,6 +174,9 @@ operation frame
 The adaptation contract is:
 
 - `@Persistable` generates concrete, statically typed field adaptation.
+- The declared `id` property determines the generated concrete `ID` associated
+  type; associated-type inference is not deferred to a runtime or compiler
+  witness heuristic.
 - Encoding preserves the declared primitive width and semantic case.
 - Decoding validates field number, field name, requiredness, declared type, and
   nested structure before constructing the model.

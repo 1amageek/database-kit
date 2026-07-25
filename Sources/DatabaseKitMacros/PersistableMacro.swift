@@ -238,6 +238,19 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             ])
         }
 
+        guard let identifierField = fieldInfos.first(where: {
+            $0.name == "id" && !$0.isTransient
+        }) else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(node),
+                    message: MacroExpansionErrorMessage(
+                        "@Persistable requires 'id' to be a persisted field"
+                    )
+                )
+            ])
+        }
+
         func normalizedTypeName(_ typeName: String) -> String {
             let withoutLineComment = typeName.components(separatedBy: "//").first ?? typeName
             let withoutBlockComment = withoutLineComment.components(separatedBy: "/*").first ?? withoutLineComment
@@ -260,6 +273,8 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             }
             return trimmed
         }
+
+        let identifierTypeName = normalizedTypeName(identifierField.type)
 
         func defaultInitializationExpr(
             for fieldInfo: (name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)
@@ -502,6 +517,11 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         }
 
         var decls: [DeclSyntax] = []
+
+        let identifierTypeDecl: DeclSyntax = """
+            public typealias ID = \(raw: identifierTypeName)
+            """
+        decls.append(identifierTypeDecl)
 
         // Generate persistableType property
         let persistableTypeDecl: DeclSyntax = """
@@ -951,8 +971,12 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
+        let requestedConformances = protocols.map { $0.trimmedDescription }
+        guard !requestedConformances.isEmpty else {
+            return []
+        }
         let conformanceExt: DeclSyntax = """
-            extension \(type.trimmed): Persistable, Sendable {}
+            extension \(type.trimmed): \(raw: requestedConformances.joined(separator: ", ")) {}
             """
 
         if let extensionDecl = conformanceExt.as(ExtensionDeclSyntax.self) {
@@ -1479,6 +1503,7 @@ struct DatabaseDeclarationPlugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
         PersistableMacro.self,
         PolymorphableMacro.self,
+        PolymorphicDeclarationMarkerMacro.self,
         IndexMacro.self,
         DirectoryMacro.self,
         TransientMacro.self,

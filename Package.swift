@@ -14,6 +14,10 @@ let package = Package(
     products: [
         .library(name: "DatabaseKit", targets: ["DatabaseKit"]),
         .library(name: "DatabaseWire", targets: ["DatabaseWire"]),
+        .library(
+            name: "DatabaseKitFoundation",
+            targets: ["DatabaseKitFoundation"]
+        ),
     ],
     dependencies: [
         .package(
@@ -49,6 +53,20 @@ let package = Package(
                 .product(name: "DatabaseTypes", package: "database-types"),
             ]
         ),
+        .target(
+            name: "DatabaseKitFoundation",
+            dependencies: [
+                "DatabaseKit",
+                .product(
+                    name: "DatabaseTypes",
+                    package: "database-types"
+                ),
+                .product(
+                    name: "DatabaseTypesFoundation",
+                    package: "database-types"
+                ),
+            ]
+        ),
         .testTarget(
             name: "DatabaseKitTests",
             dependencies: [
@@ -67,6 +85,14 @@ let package = Package(
             dependencies: [
                 "DatabaseKit",
                 "DatabaseWire",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ]
+        ),
+        .testTarget(
+            name: "DatabaseKitFoundationTests",
+            dependencies: [
+                "DatabaseKit",
+                "DatabaseKitFoundation",
                 .product(name: "DatabaseTypes", package: "database-types"),
             ]
         ),

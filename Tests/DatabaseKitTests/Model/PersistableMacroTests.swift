@@ -486,27 +486,26 @@ struct TransientUser {
     var isOnline: Bool = false      // Transient boolean
 }
 
-protocol MacroPolymorphicDocument: Polymorphable {
-    var id: String { get }
-    var title: String { get }
+enum MacroPolymorphicDocumentGroup: PolymorphicGroupDeclaration {
+    static let identifier = "MacroPolymorphicDocument"
+    static let directoryComponents: [DirectoryPathComponent] = [
+        .staticPath("macro-polymorphic-documents")
+    ]
+    static let directoryLayer: DirectoryLayer = .default
+    static let indexes: [PolymorphicIndexDefinition] = [
+        PolymorphicIndexDefinition(
+            name: "MacroPolymorphicDocument_title",
+            definition: .scalar,
+            fields: [.init(name: "title")]
+        )
+    ]
 }
 
-extension MacroPolymorphicDocument {
-    static var polymorphableType: String { "MacroPolymorphicDocument" }
-
-    static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
-        [.staticPath("macro-polymorphic-documents")]
-    }
-
-    static var polymorphicIndexes: [PolymorphicIndexDefinition] {
-        [
-            PolymorphicIndexDefinition(
-                name: "MacroPolymorphicDocument_title",
-                definition: .scalar,
-                fields: [.init(name: "title")]
-            )
-        ]
-    }
+protocol MacroPolymorphicDocument:
+    Polymorphable<MacroPolymorphicDocumentGroup>
+{
+    var id: String { get }
+    var title: String { get }
 }
 
 @Persistable
@@ -526,7 +525,9 @@ struct MacroPolymorphicReport: MacroPolymorphicDocument {
 }
 
 @Polymorphable
-protocol MacroGeneratedPolymorphicDocument: Polymorphable {
+protocol MacroGeneratedPolymorphicDocument:
+    Polymorphable<MacroGeneratedPolymorphicDocumentPolymorphicGroup>
+{
     var id: String { get }
     var title: String { get }
 }

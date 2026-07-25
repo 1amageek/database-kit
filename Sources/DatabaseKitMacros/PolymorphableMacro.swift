@@ -6,80 +6,56 @@ import SwiftDiagnostics
 
 /// @Polymorphable macro implementation
 ///
-/// Generates polymorphic group metadata for a protocol definition.
-/// Enables multiple Persistable types to share a directory and indexes.
-/// The protocol must explicitly inherit from `Polymorphable`; Swift does not
-/// allow an attached macro to add protocol inheritance through an extension.
+/// Generates a concrete polymorphic group declaration. The annotated protocol
+/// binds that declaration in its `Polymorphable<Group>` inheritance clause.
 ///
 /// **Generated code includes**:
-/// - `static var polymorphableType: String`
-/// - `static var directoryPathComponents: [DirectoryPathComponent]`
-/// - `static var directoryLayer: DirectoryLayer`
-/// - `static var polymorphicIndexes: [PolymorphicIndexDefinition]`
+/// - A concrete `{ProtocolName}PolymorphicGroup` metadata declaration
 ///
 /// **Usage**:
 /// ```swift
 /// @Polymorphable
-/// protocol Document: Polymorphable {
+/// @PolymorphicDirectory("app", "documents")
+/// @PolymorphicIndex(
+///     .scalar,
+///     fields: ["title"],
+///     name: "Document_title"
+/// )
+/// protocol Document: Polymorphable<DocumentPolymorphicGroup> {
 ///     var id: String { get }
 ///     var title: String { get }
-///
-///     #Directory<Self>("app", "documents")
-///     #PolymorphicIndex(
-///         .scalar,
-///         fields: ["title"],
-///         name: "Document_title"
-///     )
 /// }
 /// ```
-public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
+public struct PolymorphableMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
-        providingMembersOf declaration: some DeclGroupSyntax,
-        conformingTo protocols: [TypeSyntax],
+        providingPeersOf declaration: some DeclSyntaxProtocol,
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-        // @Polymorphable can only be applied to protocols
-        guard declaration.is(ProtocolDeclSyntax.self) else {
-            throw DiagnosticsError(diagnostics: [
-                Diagnostic(
-                    node: Syntax(node),
-                    message: MacroExpansionErrorMessage("@Polymorphable can only be applied to protocols")
-                )
-            ])
+        guard let protocolDecl = declaration.as(ProtocolDeclSyntax.self) else {
+            return []
         }
-        guard let protocolDecl = declaration.as(ProtocolDeclSyntax.self),
-              protocolDecl.inheritsPolymorphable else {
+        let protocolName = protocolDecl.name.text
+        let declarationName = "\(protocolName)PolymorphicGroup"
+        guard protocolDecl.polymorphicGroupType == declarationName else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
                     message: MacroExpansionErrorMessage(
-                        "@Polymorphable protocols must explicitly inherit from Polymorphable"
+                        "@Polymorphable protocol '\(protocolName)' must inherit from Polymorphable<\(declarationName)>"
                     )
                 )
             ])
         }
-
-        // MemberMacro: Don't generate members in the protocol itself
-        // All implementations are provided via ExtensionMacro below
-        return []
-    }
-
-    public static func expansion(
-        of node: AttributeSyntax,
-        attachedTo declaration: some DeclGroupSyntax,
-        providingExtensionsOf type: some TypeSyntaxProtocol,
-        conformingTo protocols: [TypeSyntax],
-        in context: some MacroExpansionContext
-    ) throws -> [ExtensionDeclSyntax] {
-        // Get protocol name
-        guard let protocolDecl = declaration.as(ProtocolDeclSyntax.self) else {
-            return []
-        }
-        guard protocolDecl.inheritsPolymorphable else {
-            return []
-        }
-        let protocolName = protocolDecl.name.text
+        let access = protocolDecl.modifiers.first { modifier in
+            switch modifier.name.tokenKind {
+            case .keyword(.public), .keyword(.package):
+                return true
+            default:
+                return false
+            }
+        }?.name.text
+        let accessPrefix = access.map { "\($0) " } ?? ""
         let protocolFieldNames: Set<String> = Set(
             protocolDecl.memberBlock.members.compactMap { member -> String? in
                 guard
@@ -100,19 +76,42 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
         var directoryLayerValue: String = ".default"
         var indexDefinitions: [ExprSyntax] = []
 
-        for member in protocolDecl.memberBlock.members {
-            // Check for #Directory freestanding macro
-            if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
-               macroDecl.macroName.text == "Directory" {
-                (directoryPathComponents, directoryLayerValue) = parseDirectoryMacro(macroDecl)
+        var foundDirectory = false
+        for element in protocolDecl.attributes {
+            guard
+                let attribute = element.as(AttributeSyntax.self),
+                let arguments = attribute.arguments?.as(
+                    LabeledExprListSyntax.self
+                )
+            else {
+                continue
             }
-
-            // Check for #PolymorphicIndex freestanding macro.
-            if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
-               macroDecl.macroName.text == "PolymorphicIndex" {
+            let attributeName = attribute.attributeName.trimmedDescription
+                .split(separator: ".")
+                .last
+                .map(String.init)
+            if attributeName == "PolymorphicDirectory" {
+                guard !foundDirectory else {
+                    throw DiagnosticsError(diagnostics: [
+                        Diagnostic(
+                            node: Syntax(attribute),
+                            message: MacroExpansionErrorMessage(
+                                "A polymorphic protocol can declare only one @PolymorphicDirectory"
+                            )
+                        )
+                    ])
+                }
+                foundDirectory = true
+                (directoryPathComponents, directoryLayerValue) =
+                    try parseDirectoryArguments(
+                        arguments,
+                        node: Syntax(attribute)
+                    )
+            } else if attributeName == "PolymorphicIndex" {
                 indexDefinitions.append(
-                    try parseIndexMacro(
-                        macroDecl,
+                    try parseIndexArguments(
+                        arguments,
+                        node: Syntax(attribute),
                         protocolName: protocolName,
                         protocolFieldNames: protocolFieldNames
                     )
@@ -120,110 +119,126 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
             }
         }
 
-        // Build extension members as independent syntax nodes so SwiftSyntax owns
-        // indentation and trivia for each declaration.
-        var extensionMembers: [DeclSyntax] = []
-
-        // polymorphableType
-        extensionMembers.append("""
-            public static var polymorphableType: String { "\(raw: protocolName)" }
-        """)
-
-        // polymorphicDirectoryPathComponents - shared directory for all conforming types
+        let componentsExpression: String
         if !directoryPathComponents.isEmpty {
-            let componentsArray = directoryPathComponents.joined(separator: ", ")
-            extensionMembers.append("""
-                public static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] { [\(raw: componentsArray)] }
-            """)
+            componentsExpression = "[\(directoryPathComponents.joined(separator: ", "))]"
         } else {
-            // Default: use polymorphableType as path
-            extensionMembers.append("""
-                public static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] { [.staticPath(polymorphableType)] }
-            """)
+            componentsExpression = "[.staticPath(identifier)]"
         }
 
-        // polymorphicDirectoryLayer
-        // Qualify the semantic directory policy emitted into the client module.
-        extensionMembers.append("""
-            public static var polymorphicDirectoryLayer: DatabaseKit.DirectoryLayer { \(raw: directoryLayerValue) }
-        """)
+        let indexesExpression: String
+        if indexDefinitions.isEmpty {
+            indexesExpression = "[]"
+        } else {
+            let definitions = indexDefinitions
+                .map(\.trimmedDescription)
+                .joined(separator: ",\n")
+            indexesExpression = "[\n\(definitions)\n]"
+        }
 
-        // polymorphicIndexes
-        if !indexDefinitions.isEmpty {
-            let definitionsArray = ArrayExprSyntax {
-                for (index, definition) in indexDefinitions.enumerated() {
-                    ArrayElementSyntax(
-                        leadingTrivia: .spaces(4),
-                        expression: definition.trimmed,
-                        trailingComma: index == indexDefinitions.index(before: indexDefinitions.endIndex)
-                            ? nil
-                            : .commaToken(trailingTrivia: .newline)
-                    )
-                }
+        let declaration: DeclSyntax = """
+            \(raw: accessPrefix)enum \(raw: declarationName): DatabaseKit.PolymorphicGroupDeclaration {
+                \(raw: accessPrefix)static let identifier = "\(raw: protocolName)"
+
+                \(raw: accessPrefix)static let directoryComponents: [DatabaseKit.DirectoryPathComponent] = \(raw: componentsExpression)
+
+                \(raw: accessPrefix)static let directoryLayer: DatabaseKit.DirectoryLayer = \(raw: directoryLayerValue)
+
+                \(raw: accessPrefix)static let indexes: [DatabaseKit.PolymorphicIndexDefinition] = \(raw: indexesExpression)
             }
-            .with(\.leftSquare, .leftSquareToken(trailingTrivia: .newline))
-            .with(\.rightSquare, .rightSquareToken(leadingTrivia: .newline))
-            extensionMembers.append("""
-                public static var polymorphicIndexes: [PolymorphicIndexDefinition] {
-                    \(definitionsArray)
-                }
-            """)
-        }
-
-        // Generate extension with implementations
-        // Note: The protocol must explicitly inherit from Polymorphable
-        // e.g., `protocol Document: Polymorphable { ... }`
-        // This extension only provides default implementations
-        let extensionDecl = try ExtensionDeclSyntax("extension \(type.trimmed)") {
-            for member in extensionMembers {
-                member
-            }
-        }
-        return [extensionDecl]
+            """
+        return [declaration]
     }
 }
 
 // MARK: - Helper Functions
 
 private extension ProtocolDeclSyntax {
-    var inheritsPolymorphable: Bool {
-        inheritanceClause?.inheritedTypes.contains { inheritedType in
-            let name = inheritedType.type.trimmedDescription
-            return name == "Polymorphable" || name.hasSuffix(".Polymorphable")
-        } ?? false
+    var polymorphicGroupType: String? {
+        for inheritedType in inheritanceClause?.inheritedTypes ?? [] {
+            let spelling = inheritedType.type.trimmedDescription
+                .replacingOccurrences(of: " ", with: "")
+            guard
+                let markerRange = spelling.range(
+                    of: "Polymorphable<",
+                    options: .backwards
+                ),
+                spelling.last == ">"
+            else {
+                continue
+            }
+            return String(
+                spelling[
+                    markerRange.upperBound ..< spelling.index(before: spelling.endIndex)
+                ]
+            )
+        }
+        return nil
     }
 }
 
-/// Parse #Directory macro and extract path components and layer
-private func parseDirectoryMacro(_ macroDecl: MacroExpansionDeclSyntax) -> (components: [String], layer: String) {
+/// Parse a polymorphic directory attribute.
+private func parseDirectoryArguments(
+    _ arguments: LabeledExprListSyntax,
+    node: Syntax
+) throws -> (components: [String], layer: String) {
     var directoryPathComponents: [String] = []
     var directoryLayerValue: String = ".default"
 
-    for arg in macroDecl.arguments {
+    for arg in arguments {
         // Check for "layer:" argument
         if let label = arg.label, label.text == "layer" {
-            if let memberAccess = arg.expression.as(MemberAccessExprSyntax.self) {
-                directoryLayerValue = ".\(memberAccess.declName.baseName.text)"
+            guard
+                let memberAccess = arg.expression.as(
+                    MemberAccessExprSyntax.self
+                )
+            else {
+                throw DiagnosticsError(diagnostics: [
+                    Diagnostic(
+                        node: Syntax(arg.expression),
+                        message: MacroExpansionErrorMessage(
+                            "@PolymorphicDirectory layer must be a DirectoryLayer case"
+                        )
+                    )
+                ])
             }
+            directoryLayerValue = ".\(memberAccess.declName.baseName.text)"
             continue
         }
 
-        let expr = arg.expression
-
-        // Compile a string literal into a canonical static path component.
-        if let stringLiteral = expr.as(StringLiteralExprSyntax.self),
-           let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
-            let pathValue = segment.content.text
-            directoryPathComponents.append(".staticPath(\"\(pathValue)\")")
+        guard
+            let pathValue = staticStringLiteralValue(arg.expression),
+            !pathValue.isEmpty
+        else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(arg.expression),
+                    message: MacroExpansionErrorMessage(
+                        "@PolymorphicDirectory components must be nonempty string literals"
+                    )
+                )
+            ])
         }
+        directoryPathComponents.append(".staticPath(\"\(pathValue)\")")
     }
 
+    guard !directoryPathComponents.isEmpty else {
+        throw DiagnosticsError(diagnostics: [
+            Diagnostic(
+                node: node,
+                message: MacroExpansionErrorMessage(
+                    "@PolymorphicDirectory requires at least one path component"
+                )
+            )
+        ])
+    }
     return (directoryPathComponents, directoryLayerValue)
 }
 
 /// Compile a protocol index declaration into a logical definition.
-private func parseIndexMacro(
-    _ macroDecl: MacroExpansionDeclSyntax,
+private func parseIndexArguments(
+    _ arguments: LabeledExprListSyntax,
+    node: Syntax,
     protocolName: String,
     protocolFieldNames: Set<String>
 ) throws -> ExprSyntax {
@@ -235,7 +250,7 @@ private func parseIndexMacro(
     var isUnique = false
     var indexName: String?
 
-    for arg in macroDecl.arguments {
+    for arg in arguments {
         if arg.label == nil {
             definition = parseIndexDefinition(arg.expression)
             definitionExpression = arg.expression.description
@@ -291,9 +306,9 @@ private func parseIndexMacro(
     guard let definition, let definitionExpression else {
         throw DiagnosticsError(diagnostics: [
             Diagnostic(
-                node: Syntax(macroDecl),
+                node: node,
                 message: MacroExpansionErrorMessage(
-                    "#Index requires an IndexDefinition case"
+                    "@PolymorphicIndex requires an IndexDefinition case"
                 )
             )
         ])
@@ -301,19 +316,19 @@ private func parseIndexMacro(
     let keyPaths = try selectedIndexFieldPaths(
         definition: definition,
         roles: fieldsByRole,
-        node: Syntax(macroDecl)
+        node: node
     )
     try validateIndexFieldOrders(
         definition: definition,
         roles: fieldsByRole,
         orders: fieldOrders,
-        node: Syntax(macroDecl)
+        node: node
     )
     for keyPath in keyPaths + storedFieldKeyPaths {
         guard !keyPath.contains(".") else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
-                    node: Syntax(macroDecl),
+                    node: node,
                     message: MacroExpansionErrorMessage(
                         "Polymorphic index field '\(keyPath)' must identify one protocol property"
                     )
@@ -323,7 +338,7 @@ private func parseIndexMacro(
         guard protocolFieldNames.contains(keyPath) else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
-                    node: Syntax(macroDecl),
+                    node: node,
                     message: MacroExpansionErrorMessage(
                         "Polymorphic index field '\(keyPath)' is not declared by protocol '\(protocolName)'"
                     )
@@ -355,7 +370,7 @@ private func parseIndexMacro(
         } else {
             order = ".ascending"
         }
-        return "PolymorphicIndexField(name: \"\(fieldName)\", order: \(order))"
+        return "DatabaseKit.PolymorphicIndexField(name: \"\(fieldName)\", order: \(order))"
     }
     .joined(separator: ", ")
     let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
@@ -363,7 +378,7 @@ private func parseIndexMacro(
         .map { "\"\($0)\"" }
         .joined(separator: ", ")
     let expression: ExprSyntax = """
-        PolymorphicIndexDefinition(
+        DatabaseKit.PolymorphicIndexDefinition(
             name: "\(raw: finalIndexName)",
             definition: \(raw: definitionExpression),
             fields: [\(raw: compiledFields)],
@@ -393,4 +408,15 @@ private func collectStringLiterals(
         }
         return segment.content.text
     }
+}
+
+private func staticStringLiteralValue(_ expression: ExprSyntax) -> String? {
+    guard
+        let literal = expression.as(StringLiteralExprSyntax.self),
+        literal.segments.count == 1,
+        let segment = literal.segments.first?.as(StringSegmentSyntax.self)
+    else {
+        return nil
+    }
+    return segment.content.text
 }

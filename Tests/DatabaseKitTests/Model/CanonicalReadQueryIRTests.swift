@@ -3,16 +3,13 @@ import Testing
 import Foundation
 import DatabaseKit
 
-protocol CanonicalReadDocument: Polymorphable {
+@Polymorphable
+@PolymorphicDirectory("canonical-read-documents")
+protocol CanonicalReadDocument:
+    Polymorphable<CanonicalReadDocumentPolymorphicGroup>
+{
     var id: String { get }
     var title: String { get }
-}
-
-extension CanonicalReadDocument {
-    static var polymorphableType: String { "CanonicalReadDocument" }
-    static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
-        [.staticPath("canonical-read-documents")]
-    }
 }
 
 struct CanonicalReadArticle: Persistable, Sendable, CanonicalReadDocument {
@@ -51,30 +48,23 @@ struct CanonicalReadReport: Persistable, Sendable, CanonicalReadDocument {
     static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
 }
 
-protocol IndexedCanonicalReadDocument: Polymorphable {
+@Polymorphable
+@PolymorphicDirectory("indexed-canonical-read-documents")
+@PolymorphicIndex(
+    .scalar,
+    fields: ["title"],
+    name: "IndexedCanonicalReadDocument_title"
+)
+@PolymorphicIndex(
+    .scalar,
+    fields: ["id"],
+    name: "IndexedCanonicalReadDocument_id"
+)
+protocol IndexedCanonicalReadDocument:
+    Polymorphable<IndexedCanonicalReadDocumentPolymorphicGroup>
+{
     var id: String { get }
     var title: String { get }
-}
-
-extension IndexedCanonicalReadDocument {
-    static var polymorphableType: String { "IndexedCanonicalReadDocument" }
-    static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
-        [.staticPath("indexed-canonical-read-documents")]
-    }
-    static var polymorphicIndexes: [PolymorphicIndexDefinition] {
-        [
-            PolymorphicIndexDefinition(
-                name: "IndexedCanonicalReadDocument_title",
-                definition: .scalar,
-                fields: [.init(name: "title")]
-            ),
-            PolymorphicIndexDefinition(
-                name: "IndexedCanonicalReadDocument_id",
-                definition: .scalar,
-                fields: [.init(name: "id")]
-            )
-        ]
-    }
 }
 
 struct IndexedCanonicalReadArticle: Persistable, Sendable, IndexedCanonicalReadDocument {
@@ -147,30 +137,6 @@ enum CanonicalReadIndexedSchema: VersionedSchema {
             ]
         }
     }
-}
-
-@Polymorphable
-protocol DifferentlyOrderedDocument: Polymorphable {
-    var id: String { get }
-    var title: String { get }
-
-    #PolymorphicIndex(
-        .scalar,
-        fields: ["title"],
-        name: "DifferentlyOrderedDocument_title"
-    )
-}
-
-@Persistable
-struct TitleSecondDocument: DifferentlyOrderedDocument {
-    var id: String
-    var title: String
-}
-
-@Persistable
-struct TitleFirstDocument: DifferentlyOrderedDocument {
-    var title: String
-    var id: String
 }
 
 @Suite("Canonical Read QueryIR")

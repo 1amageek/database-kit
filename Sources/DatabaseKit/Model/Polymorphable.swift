@@ -25,16 +25,15 @@ import DatabaseTypes
 /// **Usage**:
 /// ```swift
 /// @Polymorphable
-/// protocol Document: Polymorphable {
+/// @PolymorphicDirectory("app", "documents")
+/// @PolymorphicIndex(
+///     .scalar,
+///     fields: ["title"],
+///     name: "Document_title"
+/// )
+/// protocol Document: Polymorphable<DocumentPolymorphicGroup> {
 ///     var id: String { get }
 ///     var title: String { get }
-///
-///     #Directory<Self>("app", "documents")
-///     #PolymorphicIndex(
-///         .scalar,
-///         fields: ["title"],
-///         name: "Document_title"
-///     )
 /// }
 ///
 /// @Persistable
@@ -89,72 +88,34 @@ import DatabaseTypes
 ///     ]
 /// )
 /// ```
-public protocol Polymorphable: Persistable {
-    // MARK: - Type Metadata
-
-    /// Unique identifier for this polymorphic group
-    ///
-    /// Typically the protocol name (e.g., "Document").
-    /// Used for identifying which polymorphic group a type belongs to.
-    static var polymorphableType: String { get }
-
-    // MARK: - Polymorphic Directory Metadata
-
-    /// Directory path components for polymorphic shared storage
-    ///
-    /// All conforming types are stored under this directory for polymorphic queries.
-    /// Generated from `#Directory<P>` macro in the protocol body.
-    ///
-    /// **Example**:
-    /// ```swift
-    /// #Directory<Document>("app", "documents")
-    /// // → [.staticPath("app"), .staticPath("documents")]
-    /// ```
-    ///
-    /// **Note**: Polymorphic protocols cannot use dynamic `Field` components
-    /// since they don't have instance values.
-    static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] { get }
-
-    /// Directory layer type for polymorphic shared storage
-    ///
-    /// Generated from `#Directory<P>` macro's `layer:` parameter.
-    static var polymorphicDirectoryLayer: DirectoryLayer { get }
-
-    // MARK: - Polymorphic Index Metadata
-
-    /// Logical index definitions shared across all conforming types.
-    ///
-    /// Generated from `#Index` macro declarations in the protocol body.
-    /// These indexes span all conforming types and are stored in the polymorphic directory.
-    ///
-    /// **Example**:
-    /// ```swift
-    /// #PolymorphicIndex(
-    ///     .scalar,
-    ///     fields: ["title"],
-    ///     name: "Document_title"
-    /// )
-    /// ```
-    ///
-    /// Field names are resolved against each concrete member schema. Runtime
-    /// key paths are never retained by this contract.
-    static var polymorphicIndexes: [PolymorphicIndexDefinition] { get }
+public protocol Polymorphable<Group>: Sendable {
+    /// Concrete metadata declaration generated for the annotated group.
+    associatedtype Group: PolymorphicGroupDeclaration
 }
 
 // MARK: - Default Implementations
 
 public extension Polymorphable {
-    /// Default implementation returns no polymorphic indexes.
-    static var polymorphicIndexes: [PolymorphicIndexDefinition] { [] }
+    /// Stable identifier for this polymorphic group.
+    static var polymorphableType: String { Group.identifier }
 
-    /// Default implementation returns `.default` layer
-    static var polymorphicDirectoryLayer: DirectoryLayer { .default }
-
-    /// Default implementation uses polymorphableType as directory
+    /// Shared storage directory for this polymorphic group.
     static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
-        [.staticPath(polymorphableType)]
+        Group.directoryComponents
     }
 
+    /// Directory policy for the shared storage directory.
+    static var polymorphicDirectoryLayer: DirectoryLayer {
+        Group.directoryLayer
+    }
+
+    /// Logical indexes shared by every concrete model in this group.
+    static var polymorphicIndexes: [PolymorphicIndexDefinition] {
+        Group.indexes
+    }
+}
+
+public extension Persistable where Self: Polymorphable {
     static var polymorphicMembership: PolymorphicMembership? {
         PolymorphicMembership(
             identifier: polymorphableType,
