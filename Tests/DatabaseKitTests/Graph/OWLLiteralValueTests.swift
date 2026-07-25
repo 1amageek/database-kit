@@ -6,7 +6,7 @@ import Testing
 struct OWLLiteralValueTests {
     @Test func dateLiteralUsesCanonicalFoundationIndependentValue() throws {
         let date = try CivilDate(year: 2026, month: 7, day: 20)
-        let literal = try RDFLiteral.date(date)
+        let literal = RDFLiteral.date(date)
 
         #expect(literal.lexicalForm == "2026-07-20")
         #expect(literal.datatypeIRI == XSDDatatype.date.iri)
