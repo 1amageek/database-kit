@@ -193,6 +193,10 @@ public protocol FieldValueEncodable: Sendable {
     func encodeFieldValue() throws(PersistableEncodingError) -> FieldValue
 }
 
+public protocol FieldValueRepresentable: FieldValueEncodable {
+    func encodeFieldValue() -> FieldValue
+}
+
 public protocol FieldValueDecodable: Sendable {
     static func decodeFieldValue(
         _ value: FieldValue,
@@ -201,8 +205,10 @@ public protocol FieldValueDecodable: Sendable {
 }
 ```
 
-A bidirectional convenience refinement may be named
-`FieldValueRepresentable`. A public catch-all `Codec` is not introduced.
+`FieldValueRepresentable` is a total representation contract, not a
+bidirectional convenience alias. Query construction uses it when a valid
+`FieldValue` must exist at initialization time. A public catch-all `Codec` is
+not introduced.
 Foundation scalar conformances are supplied only by
 `DatabaseKitFoundation`, which uses the canonical conversion rules from
 `DatabaseTypesFoundation`.

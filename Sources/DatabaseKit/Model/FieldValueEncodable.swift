@@ -18,149 +18,149 @@ public extension FieldValueEncodable {
     }
 }
 
-extension Bool: FieldValueEncodable {
+extension Bool: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .bool }
-    public func encodeFieldValue() -> FieldValue { .bool(self) }
+    public var fieldValue: FieldValue { .bool(self) }
 }
 
-extension Int: FieldValueEncodable {
+extension Int: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .int64 }
-    public func encodeFieldValue() -> FieldValue { .int64(Int64(self)) }
+    public var fieldValue: FieldValue { .int64(Int64(self)) }
 }
 
-extension Int8: FieldValueEncodable {
+extension Int8: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .int8 }
-    public func encodeFieldValue() -> FieldValue { .int8(self) }
+    public var fieldValue: FieldValue { .int8(self) }
 }
 
-extension Int16: FieldValueEncodable {
+extension Int16: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .int16 }
-    public func encodeFieldValue() -> FieldValue { .int16(self) }
+    public var fieldValue: FieldValue { .int16(self) }
 }
 
-extension Int32: FieldValueEncodable {
+extension Int32: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .int32 }
-    public func encodeFieldValue() -> FieldValue { .int32(self) }
+    public var fieldValue: FieldValue { .int32(self) }
 }
 
-extension Int64: FieldValueEncodable {
+extension Int64: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .int64 }
-    public func encodeFieldValue() -> FieldValue { .int64(self) }
+    public var fieldValue: FieldValue { .int64(self) }
 }
 
-extension UInt: FieldValueEncodable {
+extension UInt: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .uint64 }
-    public func encodeFieldValue() -> FieldValue { .uint64(UInt64(self)) }
+    public var fieldValue: FieldValue { .uint64(UInt64(self)) }
 }
 
-extension UInt8: FieldValueEncodable {
+extension UInt8: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .uint8 }
-    public func encodeFieldValue() -> FieldValue { .uint8(self) }
+    public var fieldValue: FieldValue { .uint8(self) }
 }
 
-extension UInt16: FieldValueEncodable {
+extension UInt16: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .uint16 }
-    public func encodeFieldValue() -> FieldValue { .uint16(self) }
+    public var fieldValue: FieldValue { .uint16(self) }
 }
 
-extension UInt32: FieldValueEncodable {
+extension UInt32: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .uint32 }
-    public func encodeFieldValue() -> FieldValue { .uint32(self) }
+    public var fieldValue: FieldValue { .uint32(self) }
 }
 
-extension UInt64: FieldValueEncodable {
+extension UInt64: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .uint64 }
-    public func encodeFieldValue() -> FieldValue { .uint64(self) }
+    public var fieldValue: FieldValue { .uint64(self) }
 }
 
-extension Float: FieldValueEncodable {
+extension Float: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .float32 }
-    public func encodeFieldValue() -> FieldValue { .float32(self) }
+    public var fieldValue: FieldValue { .float32(self) }
 }
 
-extension Double: FieldValueEncodable {
+extension Double: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .float64 }
-    public func encodeFieldValue() -> FieldValue { .float64(self) }
+    public var fieldValue: FieldValue { .float64(self) }
 }
 
-extension String: FieldValueEncodable {
+extension String: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .string }
-    public func encodeFieldValue() -> FieldValue { .string(self) }
+    public var fieldValue: FieldValue { .string(self) }
 }
 
-extension ExactDecimal: FieldValueEncodable {
+extension ExactDecimal: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .decimal }
-    public func encodeFieldValue() -> FieldValue { .decimal(self) }
+    public var fieldValue: FieldValue { .decimal(self) }
 }
 
-extension ByteString: FieldValueEncodable {
+extension ByteString: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .bytes }
-    public func encodeFieldValue() -> FieldValue { .bytes(self) }
+    public var fieldValue: FieldValue { .bytes(self) }
 }
 
-extension CivilDate: FieldValueEncodable {
+extension CivilDate: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .date }
-    public func encodeFieldValue() -> FieldValue { .date(self) }
+    public var fieldValue: FieldValue { .date(self) }
 }
 
-extension CivilTime: FieldValueEncodable {
+extension CivilTime: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .time }
-    public func encodeFieldValue() -> FieldValue { .time(self) }
+    public var fieldValue: FieldValue { .time(self) }
 }
 
-extension CivilDateTime: FieldValueEncodable {
+extension CivilDateTime: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .dateTime }
-    public func encodeFieldValue() -> FieldValue { .dateTime(self) }
+    public var fieldValue: FieldValue { .dateTime(self) }
 }
 
-extension Timestamp: FieldValueEncodable {
+extension Timestamp: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .timestamp }
-    public func encodeFieldValue() -> FieldValue { .timestamp(self) }
+    public var fieldValue: FieldValue { .timestamp(self) }
 }
 
-extension TimeSpan: FieldValueEncodable {
+extension TimeSpan: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .timeSpan }
-    public func encodeFieldValue() -> FieldValue { .timeSpan(self) }
+    public var fieldValue: FieldValue { .timeSpan(self) }
 }
 
-extension CalendarPeriod: FieldValueEncodable {
+extension CalendarPeriod: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .calendarPeriod }
-    public func encodeFieldValue() -> FieldValue { .calendarPeriod(self) }
+    public var fieldValue: FieldValue { .calendarPeriod(self) }
 }
 
-extension GeographicPoint: FieldValueEncodable {
+extension GeographicPoint: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .geographicPoint }
-    public func encodeFieldValue() -> FieldValue { .geographicPoint(self) }
+    public var fieldValue: FieldValue { .geographicPoint(self) }
 }
 
-extension GeographicPosition: FieldValueEncodable {
+extension GeographicPosition: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .geographicPosition }
-    public func encodeFieldValue() -> FieldValue { .geographicPosition(self) }
+    public var fieldValue: FieldValue { .geographicPosition(self) }
 }
 
-extension DatabaseTypes.Vector: FieldValueEncodable {
+extension DatabaseTypes.Vector: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .vector }
-    public func encodeFieldValue() -> FieldValue { .vector(self) }
+    public var fieldValue: FieldValue { .vector(self) }
 }
 
-extension DatabaseTypes.UUID: FieldValueEncodable {
+extension DatabaseTypes.UUID: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .uuid }
-    public func encodeFieldValue() -> FieldValue { .uuid(self) }
+    public var fieldValue: FieldValue { .uuid(self) }
 }
 
-extension FieldObject: FieldValueEncodable {
+extension FieldObject: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .object }
-    public func encodeFieldValue() -> FieldValue { .object(self) }
+    public var fieldValue: FieldValue { .object(self) }
 }
 
-extension EntityReference: FieldValueEncodable {
+extension EntityReference: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .reference }
-    public func encodeFieldValue() -> FieldValue { .reference(self) }
+    public var fieldValue: FieldValue { .reference(self) }
 }
 
-extension RDFTerm: FieldValueEncodable {
+extension RDFTerm: FieldValueEncodable, FieldValueRepresentable {
     public static var fieldSchemaType: FieldSchemaType { .rdfTerm }
-    public func encodeFieldValue() -> FieldValue { .rdfTerm(self) }
+    public var fieldValue: FieldValue { .rdfTerm(self) }
 }
 
 extension Array: FieldValueEncodable where Element: FieldValueEncodable {
@@ -178,6 +178,17 @@ extension Array: FieldValueEncodable where Element: FieldValueEncodable {
     }
 }
 
+extension Array: FieldValueRepresentable where Element: FieldValueRepresentable {
+    public var fieldValue: FieldValue {
+        var values: [FieldValue] = []
+        values.reserveCapacity(count)
+        for element in self {
+            values.append(element.fieldValue)
+        }
+        return .array(values)
+    }
+}
+
 extension Optional: FieldValueEncodable where Wrapped: FieldValueEncodable {
     public static var fieldSchemaType: FieldSchemaType {
         Wrapped.fieldSchemaType
@@ -187,6 +198,17 @@ extension Optional: FieldValueEncodable where Wrapped: FieldValueEncodable {
         switch self {
         case .some(let value):
             return try value.encodeFieldValue()
+        case .none:
+            return .null
+        }
+    }
+}
+
+extension Optional: FieldValueRepresentable where Wrapped: FieldValueRepresentable {
+    public var fieldValue: FieldValue {
+        switch self {
+        case .some(let value):
+            return value.fieldValue
         case .none:
             return .null
         }

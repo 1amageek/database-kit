@@ -4,6 +4,16 @@ import Testing
 
 @Suite("FieldValue Tests")
 struct FieldValueTests {
+    @Test("Representable values provide a total canonical conversion")
+    func representableValuesEncodeWithoutFailure() throws {
+        #expect(canonicalValue(Int16(-12)) == .int16(-12))
+        #expect(
+            canonicalValue([UInt8(1), UInt8(2)])
+                == .array([.uint8(1), .uint8(2)])
+        )
+        #expect(canonicalValue(Optional<String>.none) == .null)
+    }
+
     @Test("Unsigned Swift scalars preserve their exact values")
     func unsignedIntegerInitializersPreserveExactValues() {
         #expect(UInt.max.encodeFieldValue() == .uint64(UInt64(UInt.max)))
@@ -455,5 +465,11 @@ struct FieldValueTests {
         let roundedDoubleHash = try roundedDouble.stableHash()
         #expect(roundedIntegerHash != roundedDoubleHash)
         #expect(roundedInteger.compare(to: roundedDouble) == .greaterThan)
+    }
+
+    private func canonicalValue<Value: FieldValueRepresentable>(
+        _ value: borrowing Value
+    ) -> FieldValue {
+        value.encodeFieldValue()
     }
 }

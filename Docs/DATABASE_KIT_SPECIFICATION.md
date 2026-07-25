@@ -193,6 +193,10 @@ The adaptation contract is:
   formats, but that conformance is independent of database persistence.
 - Canonical adaptation does not use reflection, string-based runtime type
   recovery, or a mutable global registry.
+- `FieldValueRepresentable` is the total, non-failing refinement used when an
+  API must contain a canonical value immediately, including query predicate
+  construction. `FieldValueEncodable` remains the broader, typed-failure
+  contract for model adaptation that may reject an invalid application value.
 
 The public adaptation vocabulary is based on persistence and field
 representation: `Persistable`, `PersistableField`, `PersistableIdentifier`,
