@@ -1,7 +1,6 @@
 import DatabaseTypes
 import Testing
 @testable import DatabaseKit
-import DatabaseKit
 
 @Persistable
 private struct SchemaValidationEntity {
@@ -14,7 +13,8 @@ private struct SchemaValidationEntity {
 private struct InvalidScalarIndexEntity {
     var id: String = "fixture-id"
     #Index(
-        ScalarIndexKind<InvalidScalarIndexEntity>(fields: [\.tags]),
+        .scalar,
+        fields: [\InvalidScalarIndexEntity.tags],
         name: "invalid_scalar"
     )
 
@@ -25,10 +25,8 @@ private struct InvalidScalarIndexEntity {
 private struct InvalidVectorConfigurationEntity {
     var id: String = "fixture-id"
     #Index(
-        VectorIndexKind<InvalidVectorConfigurationEntity>(
-            embedding: \.embedding,
-            dimensions: 0
-        ),
+        .vector(dimensions: 0),
+        embedding: \InvalidVectorConfigurationEntity.embedding,
         name: "invalid_vector"
     )
 
@@ -39,7 +37,8 @@ private struct InvalidVectorConfigurationEntity {
 private struct OptionalScalarIndexEntity {
     var id: String = "fixture-id"
     #Index(
-        ScalarIndexKind<OptionalScalarIndexEntity>(fields: [\.value]),
+        .scalar,
+        fields: [\OptionalScalarIndexEntity.value],
         name: "optional_scalar"
     )
 
@@ -110,16 +109,14 @@ struct SchemaValidationTests {
     func duplicateIndexNamesFailConstruction() throws {
         let first = try IndexDescriptor(
             name: "duplicate_index",
-            keyPaths: [\SchemaValidationEntity.first],
             kind: ScalarIndexKind<SchemaValidationEntity>(
-                fields: [\SchemaValidationEntity.first]
+                fields: [SchemaValidationEntity.fields.first.ascending]
             )
         )
         let second = try IndexDescriptor(
             name: "duplicate_index",
-            keyPaths: [\SchemaValidationEntity.second],
             kind: ScalarIndexKind<SchemaValidationEntity>(
-                fields: [\SchemaValidationEntity.second]
+                fields: [SchemaValidationEntity.fields.second.ascending]
             )
         )
 
@@ -162,7 +159,7 @@ struct SchemaValidationTests {
                                 type: .string,
                                 isArray: true
                             ),
-                            reason: "Scalar index requires Comparable fields"
+                            reason: "Scalar index requires fields with canonical ordering"
                         )
                     )
                 )
@@ -198,22 +195,26 @@ struct SchemaValidationTests {
         #expect(schema.allIndexNames == ["optional_scalar"])
     }
 
-    @Test("Descriptor key paths must match the concrete index kind")
-    func descriptorKeyPathsMustMatchKind() {
+    @Test("Descriptor field identities must match the static schema")
+    func descriptorFieldIdentitiesMustMatchSchema() {
         #expect(
             throws: IndexDeclarationError(
                 indexName: "mismatched_descriptor",
                 validationError: .invalidConfiguration(
                     index: "scalar",
-                    reason: "Descriptor key paths must match the index kind fields"
+                    reason: "Field identity 'first#3' is absent from the static schema"
                 )
             )
         ) {
             try IndexDescriptor(
                 name: "mismatched_descriptor",
-                keyPaths: [\SchemaValidationEntity.second],
                 kind: ScalarIndexKind<SchemaValidationEntity>(
-                    fields: [\SchemaValidationEntity.first]
+                    fields: [
+                        Field<SchemaValidationEntity, String>(
+                            identity: FieldIdentity(name: "first", number: 3),
+                            type: .string
+                        ).ascending
+                    ]
                 )
             )
         }

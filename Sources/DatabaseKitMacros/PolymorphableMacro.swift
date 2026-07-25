@@ -15,7 +15,7 @@ import SwiftDiagnostics
 /// - `static var polymorphableType: String`
 /// - `static var directoryPathComponents: [DirectoryPathComponent]`
 /// - `static var directoryLayer: DirectoryLayer`
-/// - `static var indexDescriptors: [IndexDescriptor]`
+/// - `static var polymorphicIndexes: [PolymorphicIndexDefinition]`
 ///
 /// **Usage**:
 /// ```swift
@@ -25,7 +25,11 @@ import SwiftDiagnostics
 ///     var title: String { get }
 ///
 ///     #Directory<Self>("app", "documents")
-///     #Index(ScalarIndexKind<Self>(fields: [\Self.title]), name: "Document_title")
+///     #PolymorphicIndex(
+///         .scalar,
+///         fields: ["title"],
+///         name: "Document_title"
+///     )
 /// }
 /// ```
 public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
@@ -76,11 +80,25 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
             return []
         }
         let protocolName = protocolDecl.name.text
+        let protocolFieldNames: Set<String> = Set(
+            protocolDecl.memberBlock.members.compactMap { member -> String? in
+                guard
+                    let variable = member.decl.as(VariableDeclSyntax.self),
+                    let binding = variable.bindings.first,
+                    let identifier = binding.pattern.as(
+                        IdentifierPatternSyntax.self
+                    )
+                else {
+                    return nil
+                }
+                return identifier.identifier.text
+            }
+        )
 
-        // Parse #Directory and #Index macros from protocol body
+        // Parse directory and polymorphic-index declarations.
         var directoryPathComponents: [String] = []
         var directoryLayerValue: String = ".default"
-        var indexDescriptors: [ExprSyntax] = []
+        var indexDefinitions: [ExprSyntax] = []
 
         for member in protocolDecl.memberBlock.members {
             // Check for #Directory freestanding macro
@@ -89,12 +107,16 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
                 (directoryPathComponents, directoryLayerValue) = parseDirectoryMacro(macroDecl)
             }
 
-            // Check for #Index freestanding macro
+            // Check for #PolymorphicIndex freestanding macro.
             if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
-               macroDecl.macroName.text == "Index" {
-                if let indexDesc = parseIndexMacro(macroDecl, protocolName: protocolName) {
-                    indexDescriptors.append(indexDesc)
-                }
+               macroDecl.macroName.text == "PolymorphicIndex" {
+                indexDefinitions.append(
+                    try parseIndexMacro(
+                        macroDecl,
+                        protocolName: protocolName,
+                        protocolFieldNames: protocolFieldNames
+                    )
+                )
             }
         }
 
@@ -126,14 +148,14 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
             public static var polymorphicDirectoryLayer: DatabaseKit.DirectoryLayer { \(raw: directoryLayerValue) }
         """)
 
-        // polymorphicIndexDescriptors
-        if !indexDescriptors.isEmpty {
-            let descriptorsArray = ArrayExprSyntax {
-                for (index, descriptor) in indexDescriptors.enumerated() {
+        // polymorphicIndexes
+        if !indexDefinitions.isEmpty {
+            let definitionsArray = ArrayExprSyntax {
+                for (index, definition) in indexDefinitions.enumerated() {
                     ArrayElementSyntax(
                         leadingTrivia: .spaces(4),
-                        expression: descriptor.trimmed,
-                        trailingComma: index == indexDescriptors.index(before: indexDescriptors.endIndex)
+                        expression: definition.trimmed,
+                        trailingComma: index == indexDefinitions.index(before: indexDefinitions.endIndex)
                             ? nil
                             : .commaToken(trailingTrivia: .newline)
                     )
@@ -141,15 +163,9 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
             }
             .with(\.leftSquare, .leftSquareToken(trailingTrivia: .newline))
             .with(\.rightSquare, .rightSquareToken(leadingTrivia: .newline))
-            let throwingDescriptorsArray = TryExprSyntax(
-                tryKeyword: .keyword(.try, trailingTrivia: .space),
-                expression: descriptorsArray
-            )
             extensionMembers.append("""
-                public static var polymorphicIndexDescriptors: [IndexDescriptor] {
-                    get throws(IndexDeclarationError) {
-                        \(throwingDescriptorsArray)
-                    }
+                public static var polymorphicIndexes: [PolymorphicIndexDefinition] {
+                    \(definitionsArray)
                 }
             """)
         }
@@ -169,17 +185,6 @@ public struct PolymorphableMacro: MemberMacro, ExtensionMacro {
 
 // MARK: - Helper Functions
 
-/// Extract field name from KeyPath expression
-private func extractKeyPathString(from keyPathExpr: KeyPathExprSyntax) -> String {
-    var pathComponents: [String] = []
-    for component in keyPathExpr.components {
-        if let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
-            pathComponents.append(property.declName.baseName.text)
-        }
-    }
-    return pathComponents.joined(separator: ".")
-}
-
 private extension ProtocolDeclSyntax {
     var inheritsPolymorphable: Bool {
         inheritanceClause?.inheritedTypes.contains { inheritedType in
@@ -187,40 +192,6 @@ private extension ProtocolDeclSyntax {
             return name == "Polymorphable" || name.hasSuffix(".Polymorphable")
         } ?? false
     }
-}
-
-private func collectKeyPathStrings(from expression: ExprSyntax) -> [String] {
-    if let arrayExpr = expression.as(ArrayExprSyntax.self) {
-        return arrayExpr.elements.compactMap { element in
-            guard let keyPathExpr = element.expression.as(KeyPathExprSyntax.self) else {
-                return nil
-            }
-            let keyPathString = extractKeyPathString(from: keyPathExpr)
-            return keyPathString.isEmpty ? nil : keyPathString
-        }
-    }
-    if let keyPathExpr = expression.as(KeyPathExprSyntax.self) {
-        let keyPathString = extractKeyPathString(from: keyPathExpr)
-        return keyPathString.isEmpty ? [] : [keyPathString]
-    }
-    return []
-}
-
-/// Rewrite protocol-level index expressions so generated descriptors are
-/// materialized per concrete conforming type.
-///
-/// `#Index(ScalarIndexKind<Document>(fields: [\.title]))` becomes
-/// `ScalarIndexKind<Self>(fields: [\Self.title])` inside `extension Document`.
-private func rewriteIndexKindExpression(
-    _ expression: String,
-    protocolName: String
-) -> String {
-    expression
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .replacingOccurrences(of: "<\(protocolName)>", with: "<Self>")
-        .replacingOccurrences(of: "<\(protocolName),", with: "<Self,")
-        .replacingOccurrences(of: "\\\(protocolName).", with: "\\Self.")
-        .replacingOccurrences(of: "\\.", with: "\\Self.")
 }
 
 /// Parse #Directory macro and extract path components and layer
@@ -250,103 +221,176 @@ private func parseDirectoryMacro(_ macroDecl: MacroExpansionDeclSyntax) -> (comp
     return (directoryPathComponents, directoryLayerValue)
 }
 
-/// Parse #Index macro and generate an IndexDescriptor expression.
-private func parseIndexMacro(_ macroDecl: MacroExpansionDeclSyntax, protocolName: String) -> ExprSyntax? {
-    var keyPaths: [String] = []
+/// Compile a protocol index declaration into a logical definition.
+private func parseIndexMacro(
+    _ macroDecl: MacroExpansionDeclSyntax,
+    protocolName: String,
+    protocolFieldNames: Set<String>
+) throws -> ExprSyntax {
+    var fieldsByRole: [String: [String]] = [:]
     var storedFieldKeyPaths: [String] = []
-    var indexKindExpr: String?
-    var indexKindName: String?
+    var fieldOrders: [String] = []
+    var definition: ParsedIndexDefinition?
+    var definitionExpression: String?
     var isUnique = false
     var indexName: String?
 
     for arg in macroDecl.arguments {
-        // First unlabeled argument: IndexKind expression
         if arg.label == nil {
-            if let funcCall = arg.expression.as(FunctionCallExprSyntax.self) {
-                indexKindName = funcCall.calledExpression.description
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                // Extract KeyPaths from function arguments
-                for funcArg in funcCall.arguments {
-                    keyPaths.append(contentsOf: collectKeyPathStrings(from: funcArg.expression))
+            definition = parseIndexDefinition(arg.expression)
+            definitionExpression = arg.expression.description
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if let label = arg.label,
+                  label.text == "storedFields"
+                    || label.text == "storedFieldNames" {
+            let stringFields = collectStringLiterals(from: arg.expression)
+            storedFieldKeyPaths.append(
+                contentsOf: stringFields.isEmpty
+                    ? collectKeyPathStrings(from: arg.expression)
+                    : stringFields
+            )
+        } else if let label = arg.label, label.text == "orders" {
+            if let orders = arg.expression.as(ArrayExprSyntax.self) {
+                fieldOrders = orders.elements.map {
+                    $0.expression.description.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )
                 }
-
-                indexKindExpr = arg.expression.description.trimmingCharacters(in: .whitespaces)
             }
-        }
-        // "storedFields:" argument
-        else if let label = arg.label, label.text == "storedFields" {
-            storedFieldKeyPaths.append(contentsOf: collectKeyPathStrings(from: arg.expression))
-        }
-        // "unique:" argument
-        else if let label = arg.label, label.text == "unique" {
+        } else if let label = arg.label, label.text == "unique" {
             if let boolExpr = arg.expression.as(BooleanLiteralExprSyntax.self) {
                 isUnique = boolExpr.literal.text == "true"
             }
-        }
-        // "name:" argument
-        else if let label = arg.label, label.text == "name" {
+        } else if let label = arg.label, label.text == "name" {
             if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self),
                let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
                 indexName = segment.content.text
             }
+        } else if let label = arg.label {
+            let role: String
+            switch label.text {
+            case "fieldNames": role = "fields"
+            case "groupByNames": role = "groupBy"
+            case "valueName": role = "value"
+            case "fieldName": role = "field"
+            case "embeddingName": role = "embedding"
+            case "locationName": role = "location"
+            case "fromName": role = "from"
+            case "edgeName": role = "edge"
+            case "toName": role = "to"
+            case "graphName": role = "graph"
+            default: role = label.text
+            }
+            let stringFields = collectStringLiterals(from: arg.expression)
+            fieldsByRole[role] = stringFields.isEmpty
+                ? collectKeyPathStrings(from: arg.expression)
+                : stringFields
         }
     }
 
-    let isCountIndex = indexKindName?
-        .components(separatedBy: "<")
-        .first?
-        .trimmingCharacters(in: .whitespacesAndNewlines) == "CountIndexKind"
-    guard !keyPaths.isEmpty || isCountIndex else { return nil }
+    guard let definition, let definitionExpression else {
+        throw DiagnosticsError(diagnostics: [
+            Diagnostic(
+                node: Syntax(macroDecl),
+                message: MacroExpansionErrorMessage(
+                    "#Index requires an IndexDefinition case"
+                )
+            )
+        ])
+    }
+    let keyPaths = try selectedIndexFieldPaths(
+        definition: definition,
+        roles: fieldsByRole,
+        node: Syntax(macroDecl)
+    )
+    try validateIndexFieldOrders(
+        definition: definition,
+        roles: fieldsByRole,
+        orders: fieldOrders,
+        node: Syntax(macroDecl)
+    )
+    for keyPath in keyPaths + storedFieldKeyPaths {
+        guard !keyPath.contains(".") else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(macroDecl),
+                    message: MacroExpansionErrorMessage(
+                        "Polymorphic index field '\(keyPath)' must identify one protocol property"
+                    )
+                )
+            ])
+        }
+        guard protocolFieldNames.contains(keyPath) else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(macroDecl),
+                    message: MacroExpansionErrorMessage(
+                        "Polymorphic index field '\(keyPath)' is not declared by protocol '\(protocolName)'"
+                    )
+                )
+            ])
+        }
+    }
 
-    // Generate index name if not provided
     let finalIndexName: String
     if let customName = indexName {
         finalIndexName = customName
     } else {
         let flattenedKeyPaths = keyPaths.map { $0.replacingOccurrences(of: ".", with: "_") }
-        if isCountIndex, flattenedKeyPaths.isEmpty {
-            finalIndexName = "\(protocolName)_count"
+        finalIndexName = generateIndexName(
+            typeName: protocolName,
+            definition: definition,
+            fieldNames: flattenedKeyPaths
+        )
+    }
+
+    let compiledFields = keyPaths.enumerated().map { offset, fieldName in
+        let order: String
+        if !fieldOrders.isEmpty {
+            order = fieldOrders[offset]
+        } else if definition.name == "rank"
+                    || (definition.name == "timeWindowLeaderboard"
+                        && offset == keyPaths.index(before: keyPaths.endIndex)) {
+            order = ".descending"
         } else {
-            finalIndexName = "\(protocolName)_\(flattenedKeyPaths.joined(separator: "_"))"
+            order = ".ascending"
         }
+        return "PolymorphicIndexField(name: \"\(fieldName)\", order: \(order))"
     }
-
-    let keyPathsExpression: String
-    if keyPaths.isEmpty {
-        keyPathsExpression = "[PartialKeyPath<Self>]()"
-    } else {
-        let keyPathsLiterals = keyPaths
-            .map { "\\Self.\($0)" }
-            .joined(separator: ", ")
-        keyPathsExpression = "[\(keyPathsLiterals)]"
-    }
-    let kindInit = rewriteIndexKindExpression(
-        indexKindExpr ?? "ScalarIndexKind(fields: [])",
-        protocolName: protocolName
-    )
+    .joined(separator: ", ")
     let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
-
-    if storedFieldKeyPaths.isEmpty {
-        let expression: ExprSyntax = """
-            IndexDescriptor(
-                name: "\(raw: finalIndexName)",
-                keyPaths: \(raw: keyPathsExpression),
-                kind: \(raw: kindInit),
-                commonOptions: \(raw: optionsInit)
-            )
-        """
-        return expression
-    }
-
-    let storedFieldNamesLiterals = storedFieldKeyPaths.map { "\"\($0)\"" }.joined(separator: ", ")
+    let storedFieldNames = storedFieldKeyPaths
+        .map { "\"\($0)\"" }
+        .joined(separator: ", ")
     let expression: ExprSyntax = """
-        IndexDescriptor(
+        PolymorphicIndexDefinition(
             name: "\(raw: finalIndexName)",
-            keyPaths: \(raw: keyPathsExpression),
-            kind: \(raw: kindInit),
+            definition: \(raw: definitionExpression),
+            fields: [\(raw: compiledFields)],
             commonOptions: \(raw: optionsInit),
-            storedFieldNames: [\(raw: storedFieldNamesLiterals)]
+            storedFieldNames: [\(raw: storedFieldNames)]
         )
     """
     return expression
+}
+
+private func collectStringLiterals(
+    from expression: ExprSyntax
+) -> [String] {
+    if let literal = expression.as(StringLiteralExprSyntax.self),
+       let segment = literal.segments.first?.as(StringSegmentSyntax.self) {
+        return [segment.content.text]
+    }
+    guard let array = expression.as(ArrayExprSyntax.self) else {
+        return []
+    }
+    return array.elements.compactMap { element in
+        guard
+            let literal = element.expression.as(StringLiteralExprSyntax.self),
+            let segment = literal.segments.first?.as(StringSegmentSyntax.self)
+        else {
+            return nil
+        }
+        return segment.content.text
+    }
 }

@@ -18,11 +18,14 @@ import DatabaseTypes
 /// struct Follow {
 ///     var follower: String
 ///     var followee: String
+///     var label: String
 ///
-///     #Index(GraphIndexKind<Follow>.adjacency(
-///         source: \.follower,
-///         target: \.followee
-///     ))
+///     #Index(
+///         .graph(strategy: .adjacency),
+///         from: \Follow.follower,
+///         edge: \Follow.label,
+///         to: \Follow.followee
+///     )
 /// }
 /// ```
 ///
@@ -41,6 +44,8 @@ import DatabaseTypes
 ///   All 6 permutations of (from, edge, to)
 /// ```
 public struct GraphIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     /// Unique identifier for this index kind
     public static var identifier: String { "graph" }
 
@@ -49,18 +54,25 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
 
     // MARK: - Fields
 
-    /// Source node field name.
-    public let fromField: String
+    public let indexFields: [IndexField<Root>]
+    private let includesEdgeField: Bool
+    private let includesGraphField: Bool
 
-    /// Edge label field name.
-    /// Empty string means no edge field (single edge type)
-    public let edgeField: String
+    public var fromField: String {
+        indexFields[0].name
+    }
 
-    /// Target node field name.
-    public let toField: String
+    public var edgeField: String {
+        includesEdgeField ? indexFields[1].name : ""
+    }
 
-    /// Optional property-graph namespace field name.
-    public let graphField: String?
+    public var toField: String {
+        indexFields[includesEdgeField ? 2 : 1].name
+    }
+
+    public var graphField: String? {
+        includesGraphField ? indexFields.last?.name : nil
+    }
 
     /// Storage strategy determining number of index orderings
     public let strategy: PropertyGraphIndexStrategy
@@ -71,20 +83,6 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     }
 
     // MARK: - IndexKind Protocol
-
-    /// All field names for IndexKind protocol
-    public var fieldNames: [String] {
-        var fields: [String]
-        if edgeField.isEmpty {
-            fields = [fromField, toField]
-        } else {
-            fields = [fromField, edgeField, toField]
-        }
-        if let graphField {
-            fields.append(graphField)
-        }
-        return fields
-    }
 
     /// Default index name
     public var indexName: String {
@@ -145,40 +143,30 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
 
     // MARK: - Initialization
 
-    /// Initialize with all parameters
-    ///
-    /// - Parameters:
-    ///   - from: KeyPath to from/source/subject field
-    ///   - edge: KeyPath to edge/label/predicate field
-    ///   - to: KeyPath to to/target/object field
-    ///   - graph: Optional KeyPath to graph/named graph field
-    ///   - strategy: Storage strategy (default: .tripleStore)
     public init(
-        from: PartialKeyPath<Root>,
-        edge: PartialKeyPath<Root>,
-        to: PartialKeyPath<Root>,
-        graph: PartialKeyPath<Root>? = nil,
+        from: IndexField<Root>,
+        edge: IndexField<Root>,
+        to: IndexField<Root>,
+        graph: IndexField<Root>? = nil,
         strategy: PropertyGraphIndexStrategy = .tripleStore
     ) {
-        self.fromField = Root.fieldName(for: from)
-        self.edgeField = Root.fieldName(for: edge)
-        self.toField = Root.fieldName(for: to)
-        self.graphField = graph.map { Root.fieldName(for: $0) }
+        self.indexFields = [from, edge, to] + (graph.map { [$0] } ?? [])
+        self.includesEdgeField = true
+        self.includesGraphField = graph != nil
         self.strategy = strategy
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(
-        fromField: String,
-        edgeField: String,
-        toField: String,
-        graphField: String? = nil,
+    package init(
+        canonicalFields: [IndexFieldMetadata],
+        includesEdgeField: Bool,
+        includesGraphField: Bool,
         strategy: PropertyGraphIndexStrategy = .tripleStore
     ) {
-        self.fromField = fromField
-        self.edgeField = edgeField
-        self.toField = toField
-        self.graphField = graphField
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
+        self.includesEdgeField = includesEdgeField
+        self.includesGraphField = includesGraphField
         self.strategy = strategy
     }
 
@@ -196,12 +184,12 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     ///   - graph: Optional KeyPath to named graph field
     /// - Returns: GraphIndexKind configured for adjacency queries
     public static func adjacency(
-        source: PartialKeyPath<Root>,
-        target: PartialKeyPath<Root>,
-        label: PartialKeyPath<Root>? = nil,
-        graph: PartialKeyPath<Root>? = nil
+        source: IndexField<Root>,
+        target: IndexField<Root>,
+        label: IndexField<Root>? = nil,
+        graph: IndexField<Root>? = nil
     ) -> GraphIndexKind {
-        if let label = label {
+        if let label {
             return GraphIndexKind(
                 from: source,
                 edge: label,
@@ -209,15 +197,14 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
                 graph: graph,
                 strategy: .adjacency
             )
-        } else {
-            return GraphIndexKind(
-                fromField: Root.fieldName(for: source),
-                edgeField: "",
-                toField: Root.fieldName(for: target),
-                graphField: graph.map { Root.fieldName(for: $0) },
-                strategy: .adjacency
-            )
         }
+        return GraphIndexKind(
+            canonicalFields: [source.metadata, target.metadata]
+                + (graph.map { [$0.metadata] } ?? []),
+            includesEdgeField: false,
+            includesGraphField: graph != nil,
+            strategy: .adjacency
+        )
     }
 
     /// Create high-performance knowledge graph index
@@ -232,10 +219,10 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
     ///   - graph: Optional KeyPath to named graph field
     /// - Returns: GraphIndexKind with hexastore strategy
     public static func knowledgeGraph(
-        entity: PartialKeyPath<Root>,
-        relation: PartialKeyPath<Root>,
-        value: PartialKeyPath<Root>,
-        graph: PartialKeyPath<Root>? = nil
+        entity: IndexField<Root>,
+        relation: IndexField<Root>,
+        value: IndexField<Root>,
+        graph: IndexField<Root>? = nil
     ) -> GraphIndexKind {
         GraphIndexKind(
             from: entity,
@@ -250,12 +237,12 @@ public struct GraphIndexKind<Root: Persistable>: IndexKind {
 
     /// Check if edge field is present
     public var hasEdgeField: Bool {
-        !edgeField.isEmpty
+        includesEdgeField
     }
 
     /// Check if graph field is present
     public var hasGraphField: Bool {
-        graphField != nil
+        includesGraphField
     }
 }
 

@@ -60,6 +60,8 @@ import DatabaseTypes
 /// }
 /// ```
 public protocol IndexKind: Sendable, Hashable {
+    associatedtype Model: Persistable
+
     /// Unique identifier for this kind
     ///
     /// **Naming convention**:
@@ -96,11 +98,10 @@ public protocol IndexKind: Sendable, Hashable {
     /// - VectorIndexKind: "Document_vector_embedding"
     var indexName: String { get }
 
-    /// Field names used by this index
+    /// Model-scoped fields selected by this index.
     ///
-    /// Stored as canonical field names for type-erased metadata.
-    /// Order matters for composite indexes.
-    var fieldNames: [String] { get }
+    /// Order is part of the persisted key contract.
+    var indexFields: [IndexField<Model>] { get }
 
     /// Canonical, Foundation-free metadata consumed after the concrete generic
     /// index kind crosses a schema or runtime boundary.
@@ -129,6 +130,10 @@ public protocol IndexKind: Sendable, Hashable {
 }
 
 extension IndexKind {
+    public var fieldNames: [String] {
+        indexFields.map { $0.name }
+    }
+
     public var metadata: [String: FieldValue] { [:] }
 
     public func validateConfiguration() throws(IndexValidationError) {}

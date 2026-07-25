@@ -6,8 +6,8 @@ import DatabaseKitMacros
 @Suite("@Polymorphable Macro Expansion Tests")
 struct PolymorphableMacroExpansionTests {
 
-    @Test("@Polymorphable expands indexed protocol metadata with Self KeyPaths")
-    func expandsIndexedProtocolMetadataWithSelfKeyPaths() {
+    @Test("@Polymorphable compiles protocol KeyPaths into logical field selections")
+    func compilesProtocolKeyPathsIntoLogicalFieldSelections() {
         assertMacroExpansion(
             """
             @Polymorphable
@@ -16,9 +16,10 @@ struct PolymorphableMacroExpansionTests {
                 var title: String { get }
 
                 #Directory<Self>("memory", "entities")
-                #Index(
-                    ScalarIndexKind<Self>(fields: [\\Self.title]),
-                    storedFields: [\\Self.id],
+                #PolymorphicIndex(
+                    .scalar,
+                    fields: ["title"],
+                    storedFields: ["id"],
                     unique: true,
                     name: "MacroEntity_title"
                 )
@@ -30,9 +31,10 @@ struct PolymorphableMacroExpansionTests {
                 var title: String { get }
 
                 #Directory<Self>("memory", "entities")
-                #Index(
-                    ScalarIndexKind<Self>(fields: [\\Self.title]),
-                    storedFields: [\\Self.id],
+                #PolymorphicIndex(
+                    .scalar,
+                    fields: ["title"],
+                    storedFields: ["id"],
                     unique: true,
                     name: "MacroEntity_title"
                 )
@@ -48,18 +50,16 @@ struct PolymorphableMacroExpansionTests {
                 public static var polymorphicDirectoryLayer: DatabaseKit.DirectoryLayer {
                     .default
                 }
-                public static var polymorphicIndexDescriptors: [IndexDescriptor] {
-                    get throws(IndexDeclarationError) {
-                        try [
-                            IndexDescriptor(
-                                name: "MacroEntity_title",
-                                keyPaths: [\\Self.title],
-                                kind: ScalarIndexKind<Self>(fields: [\\Self.title]),
-                                commonOptions: .init(unique: true),
-                                storedFieldNames: ["id"]
-                            )
-                        ]
-                    }
+                public static var polymorphicIndexes: [PolymorphicIndexDefinition] {
+                    [
+                        PolymorphicIndexDefinition(
+                            name: "MacroEntity_title",
+                            definition: .scalar,
+                            fields: [PolymorphicIndexField(name: "title", order: .ascending)],
+                            commonOptions: .init(unique: true),
+                            storedFieldNames: ["id"]
+                        )
+                    ]
                 }
             }
             """,
@@ -77,8 +77,9 @@ struct PolymorphableMacroExpansionTests {
             protocol GlobalCountEntity: Polymorphable {
                 var id: String { get }
 
-                #Index(
-                    CountIndexKind<Self>(groupBy: [])
+                #PolymorphicIndex(
+                    .count,
+                    groupBy: []
                 )
             }
             """,
@@ -86,8 +87,9 @@ struct PolymorphableMacroExpansionTests {
             protocol GlobalCountEntity: Polymorphable {
                 var id: String { get }
 
-                #Index(
-                    CountIndexKind<Self>(groupBy: [])
+                #PolymorphicIndex(
+                    .count,
+                    groupBy: []
                 )
             }
 
@@ -101,17 +103,16 @@ struct PolymorphableMacroExpansionTests {
                 public static var polymorphicDirectoryLayer: DatabaseKit.DirectoryLayer {
                     .default
                 }
-                public static var polymorphicIndexDescriptors: [IndexDescriptor] {
-                    get throws(IndexDeclarationError) {
-                        try [
-                            IndexDescriptor(
-                                name: "GlobalCountEntity_count",
-                                keyPaths: [PartialKeyPath<Self>](),
-                                kind: CountIndexKind<Self>(groupBy: []),
-                                commonOptions: .init()
-                            )
-                        ]
-                    }
+                public static var polymorphicIndexes: [PolymorphicIndexDefinition] {
+                    [
+                        PolymorphicIndexDefinition(
+                            name: "GlobalCountEntity_count",
+                            definition: .count,
+                            fields: [],
+                            commonOptions: .init(),
+                            storedFieldNames: []
+                        )
+                    ]
                 }
             }
             """,
@@ -138,6 +139,37 @@ struct PolymorphableMacroExpansionTests {
                     message: "@Polymorphable protocols must explicitly inherit from Polymorphable",
                     line: 1,
                     column: 1
+                )
+            ],
+            macros: [
+                "Polymorphable": PolymorphableMacro.self
+            ]
+        )
+    }
+
+    @Test("@Polymorphable rejects index fields absent from the protocol")
+    func rejectsUnknownProtocolIndexFields() {
+        assertMacroExpansion(
+            """
+            @Polymorphable
+            protocol MacroEntity: Polymorphable {
+                var id: String { get }
+
+                #PolymorphicIndex(.scalar, fields: ["missing"])
+            }
+            """,
+            expandedSource: """
+            protocol MacroEntity: Polymorphable {
+                var id: String { get }
+
+                #PolymorphicIndex(.scalar, fields: ["missing"])
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "Polymorphic index field 'missing' is not declared by protocol 'MacroEntity'",
+                    line: 5,
+                    column: 5
                 )
             ],
             macros: [

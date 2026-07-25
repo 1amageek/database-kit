@@ -1,12 +1,6 @@
 import DatabaseTypes
 import Testing
 @testable import DatabaseKit
-import DatabaseKit
-import DatabaseKit
-import DatabaseKit
-import DatabaseKit
-import DatabaseKit
-import DatabaseKit
 
 @Suite("#Index Macro E2E Tests")
 struct IndexMacroE2ETests {
@@ -45,7 +39,8 @@ struct IndexMacroE2ETests {
     @Test("#Index preserves kind-specific metadata")
     func preservesKindSpecificMetadata() throws {
         let scalar = try Self.descriptor(named: "e2e_scalar_category").kind
-        #expect(scalar.fieldNames == ["category"])
+        #expect(scalar.fieldNames == ["category", "status"])
+        #expect(scalar.fields.map(\.order) == [.ascending, .descending])
         #expect(scalar.metadata.isEmpty)
 
         for name in [
@@ -119,7 +114,7 @@ struct IndexMacroE2ETests {
                 named: "e2e_spatial_latitude_longitude"
             ).kind
         )
-        #expect(spatial.fieldNames == ["latitude", "longitude"])
+        #expect(spatial.fieldNames == ["location"])
         #expect(spatial.encoding == .s2)
         #expect(spatial.level == 12)
 
@@ -151,7 +146,7 @@ struct IndexMacroE2ETests {
     }
 
     private static let expectedSpecs: [ExpectedIndexSpec] = [
-        .init(name: "e2e_scalar_category", kindIdentifier: "scalar", fieldNames: ["category"]),
+        .init(name: "e2e_scalar_category", kindIdentifier: "scalar", fieldNames: ["category", "status"]),
         .init(name: "e2e_count_category", kindIdentifier: "count", fieldNames: ["category"]),
         .init(name: "e2e_sum_category_amount", kindIdentifier: "sum", fieldNames: ["category", "amount"]),
         .init(name: "e2e_min_category_amount", kindIdentifier: "min", fieldNames: ["category", "amount"]),
@@ -166,7 +161,7 @@ struct IndexMacroE2ETests {
         .init(name: "e2e_percentile_category_latency", kindIdentifier: "percentile", fieldNames: ["category", "latency"]),
         .init(name: "e2e_vector_embedding", kindIdentifier: "vector", fieldNames: ["embedding"]),
         .init(name: "e2e_fulltext_title_body", kindIdentifier: "fulltext", fieldNames: ["title", "body"]),
-        .init(name: "e2e_spatial_latitude_longitude", kindIdentifier: "spatial", fieldNames: ["latitude", "longitude"]),
+        .init(name: "e2e_spatial_latitude_longitude", kindIdentifier: "spatial", fieldNames: ["location"]),
         .init(name: "e2e_rank_score", kindIdentifier: "rank", fieldNames: ["score"]),
         .init(name: "e2e_permuted_category_status_title", kindIdentifier: "permuted", fieldNames: ["category", "status", "title"]),
         .init(name: "e2e_graph_subject_predicate_object_graph", kindIdentifier: "graph", fieldNames: ["subject", "predicate", "object", "graphName"]),
@@ -195,67 +190,136 @@ private struct ExpectedIndexSpec: Sendable {
 private struct IndexMacroE2ERecord {
     var id: String = "fixture-id"
     #Index(
-        ScalarIndexKind<IndexMacroE2ERecord>(fields: [\.category]),
+        .scalar,
+        fields: [
+            \IndexMacroE2ERecord.category,
+            \IndexMacroE2ERecord.status,
+        ],
+        orders: [.ascending, .descending],
         storedFields: [\IndexMacroE2ERecord.title],
         unique: true,
         name: "e2e_scalar_category"
     )
-    #Index(CountIndexKind<IndexMacroE2ERecord>(groupBy: [\.category]), name: "e2e_count_category")
-    #Index(SumIndexKind<IndexMacroE2ERecord, Double>(groupBy: [\.category], value: \.amount), name: "e2e_sum_category_amount")
-    #Index(MinIndexKind<IndexMacroE2ERecord, Double>(groupBy: [\.category], value: \.amount), name: "e2e_min_category_amount")
-    #Index(MaxIndexKind<IndexMacroE2ERecord, Double>(groupBy: [\.category], value: \.amount), name: "e2e_max_category_amount")
-    #Index(AverageIndexKind<IndexMacroE2ERecord, Double>(groupBy: [\.category], value: \.amount), name: "e2e_average_category_amount")
-    #Index(VersionIndexKind<IndexMacroE2ERecord>(field: \.id, strategy: .keepLast(5)), name: "e2e_version_id")
-    #Index(CountUpdatesIndexKind<IndexMacroE2ERecord>(field: \.id), name: "e2e_count_updates_id")
-    #Index(CountNotNullIndexKind<IndexMacroE2ERecord>(groupBy: [\.category], value: \.optionalTag), name: "e2e_count_not_null_category_optional_tag")
-    #Index(BitmapIndexKind<IndexMacroE2ERecord>(field: \.status), name: "e2e_bitmap_status")
     #Index(
-        TimeWindowLeaderboardIndexKind<IndexMacroE2ERecord>(
-            scoreField: \.score,
-            groupBy: [\.category],
+        .count,
+        groupBy: [\IndexMacroE2ERecord.category],
+        name: "e2e_count_category"
+    )
+    #Index(
+        .sum,
+        groupBy: [\IndexMacroE2ERecord.category],
+        value: \IndexMacroE2ERecord.amount,
+        name: "e2e_sum_category_amount"
+    )
+    #Index(
+        .minimum,
+        groupBy: [\IndexMacroE2ERecord.category],
+        value: \IndexMacroE2ERecord.amount,
+        name: "e2e_min_category_amount"
+    )
+    #Index(
+        .maximum,
+        groupBy: [\IndexMacroE2ERecord.category],
+        value: \IndexMacroE2ERecord.amount,
+        name: "e2e_max_category_amount"
+    )
+    #Index(
+        .average,
+        groupBy: [\IndexMacroE2ERecord.category],
+        value: \IndexMacroE2ERecord.amount,
+        name: "e2e_average_category_amount"
+    )
+    #Index(
+        .version(strategy: .keepLast(5)),
+        field: \IndexMacroE2ERecord.id,
+        name: "e2e_version_id"
+    )
+    #Index(
+        .countUpdates,
+        field: \IndexMacroE2ERecord.id,
+        name: "e2e_count_updates_id"
+    )
+    #Index(
+        .countNotNull,
+        groupBy: [\IndexMacroE2ERecord.category],
+        value: \IndexMacroE2ERecord.optionalTag,
+        name: "e2e_count_not_null_category_optional_tag"
+    )
+    #Index(
+        .bitmap,
+        field: \IndexMacroE2ERecord.status,
+        name: "e2e_bitmap_status"
+    )
+    #Index(
+        .timeWindowLeaderboard(
             window: .weekly,
             windowCount: 4
         ),
+        groupBy: [\IndexMacroE2ERecord.category],
+        field: \IndexMacroE2ERecord.score,
         name: "e2e_time_window_leaderboard_category_score"
     )
-    #Index(DistinctIndexKind<IndexMacroE2ERecord>(groupBy: [\.category], value: \.userID, precision: 12), name: "e2e_distinct_category_user")
-    #Index(PercentileIndexKind<IndexMacroE2ERecord, Double>(groupBy: [\.category], value: \.latency, compression: 50), name: "e2e_percentile_category_latency")
-    #Index(VectorIndexKind<IndexMacroE2ERecord>(embedding: \.embedding, dimensions: 3, metric: .cosine), name: "e2e_vector_embedding")
     #Index(
-        FullTextIndexKind<IndexMacroE2ERecord>(
-            fields: [\.title, \.body],
+        .distinct(precision: 12),
+        groupBy: [\IndexMacroE2ERecord.category],
+        value: \IndexMacroE2ERecord.userID,
+        name: "e2e_distinct_category_user"
+    )
+    #Index(
+        .percentile(compression: 50),
+        groupBy: [\IndexMacroE2ERecord.category],
+        value: \IndexMacroE2ERecord.latency,
+        name: "e2e_percentile_category_latency"
+    )
+    #Index(
+        .vector(
+            dimensions: 3,
+            metric: .cosine
+        ),
+        embedding: \IndexMacroE2ERecord.embedding,
+        name: "e2e_vector_embedding"
+    )
+    #Index(
+        .fullText(
             tokenizer: .ngram,
             storePositions: false,
             ngramSize: 2,
             minTermLength: 1
         ),
+        fields: [
+            \IndexMacroE2ERecord.title,
+            \IndexMacroE2ERecord.body,
+        ],
         name: "e2e_fulltext_title_body"
     )
     #Index(
-        SpatialIndexKind<IndexMacroE2ERecord>(
-            latitude: \.latitude,
-            longitude: \.longitude,
+        .spatial(
             encoding: .s2,
             level: 12
         ),
+        location: \IndexMacroE2ERecord.location,
         name: "e2e_spatial_latitude_longitude"
     )
-    #Index(RankIndexKind<IndexMacroE2ERecord, Int64>(field: \.score, bucketSize: 50), name: "e2e_rank_score")
     #Index(
-        PermutedIndexKind<IndexMacroE2ERecord>(
-            fields: [\.category, \.status, \.title],
-            permutation: .swapping(0, 1, size: 3)
-        ),
+        .rank(bucketSize: 50),
+        field: \IndexMacroE2ERecord.score,
+        name: "e2e_rank_score"
+    )
+    #Index(
+        .permuted(permutation: .swapping(0, 1, size: 3)),
+        fields: [
+            \IndexMacroE2ERecord.category,
+            \IndexMacroE2ERecord.status,
+            \IndexMacroE2ERecord.title,
+        ],
         name: "e2e_permuted_category_status_title"
     )
     #Index(
-        GraphIndexKind<IndexMacroE2ERecord>(
-            from: \.subject,
-            edge: \.predicate,
-            to: \.object,
-            graph: \.graphName,
-            strategy: .hexastore
-        ),
+        .graph(strategy: .hexastore),
+        from: \IndexMacroE2ERecord.subject,
+        edge: \IndexMacroE2ERecord.predicate,
+        to: \IndexMacroE2ERecord.object,
+        graph: \IndexMacroE2ERecord.graphName,
         name: "e2e_graph_subject_predicate_object_graph"
     )
 
@@ -268,9 +332,8 @@ private struct IndexMacroE2ERecord {
     var latency: Double
     var userID: String
     var optionalTag: String?
-    var embedding: [Float]
-    var latitude: Double
-    var longitude: Double
+    var embedding: Vector
+    var location: GeographicPoint
     var subject: String
     var predicate: String
     var object: String

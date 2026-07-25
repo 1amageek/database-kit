@@ -9,14 +9,14 @@ public struct PolymorphicGroup: Sendable, Equatable, Hashable {
     public let identifier: String
     public let directoryComponents: [DirectoryPathComponent]
     public let directoryLayer: DirectoryLayer
-    public let indexes: [IndexDescriptorMetadata]
+    public let indexes: [PolymorphicIndexMetadata]
     public let memberTypeNames: [String]
 
     public init(
         identifier: String,
         directoryComponents: [DirectoryPathComponent],
         directoryLayer: DirectoryLayer = .default,
-        indexes: [IndexDescriptorMetadata] = [],
+        indexes: [PolymorphicIndexMetadata] = [],
         memberTypeNames: [String] = []
     ) {
         self.identifier = identifier

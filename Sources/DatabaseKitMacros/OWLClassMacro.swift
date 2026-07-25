@@ -333,7 +333,7 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
         let owlRDFDecl: DeclSyntax = """
             public static var _owlRDFIndexDescriptors: [IndexDescriptor] {
                 get throws(IndexDeclarationError) {
-                    try [IndexDescriptor(name: \(raw: structName).persistableType + "_owl_rdf", keyPaths: [] as [PartialKeyPath<\(raw: structName)>], kind: OWLClassRDFIndexKind<\(raw: structName)>(individualIRIBase: "\(raw: individualIRIBase)", graph: Self.ontologyGraph))]
+                    try [IndexDescriptor(name: \(raw: structName).persistableType + "_owl_rdf", kind: OWLClassRDFIndexKind<\(raw: structName)>(individualIRIBase: "\(raw: individualIRIBase)", graph: Self.ontologyGraph))]
                 }
             }
 

@@ -25,11 +25,10 @@ public struct CommonIndexOptions: Sendable, Hashable {
     /// **Example**:
     /// ```swift
     /// // Email index with uniqueness constraint
-    /// IndexDescriptor(
-    ///     name: "User_email",
-    ///     keyPaths: ["email"],
-    ///     kind: .scalar,
-    ///     commonOptions: .init(unique: true)
+    /// #Index(
+    ///     .scalar,
+    ///     fields: [\User.email],
+    ///     unique: true
     /// )
     /// ```
     public let unique: Bool

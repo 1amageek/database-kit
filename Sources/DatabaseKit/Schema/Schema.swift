@@ -90,7 +90,7 @@ public final class Schema: Sendable {
         /// nil when the entity describes a type unavailable in this process.
         public let persistableType: (any Persistable.Type)?
 
-        /// Typed index descriptors (runtime only, requires KeyPath)
+        /// Validated index descriptors available to the runtime.
         ///
         /// Empty when no compiled descriptor is available.
         public let indexDescriptors: [IndexDescriptor]
@@ -540,7 +540,7 @@ public final class Schema: Sendable {
     /// Access polymorphic groups by identifier
     public let polymorphicGroupsByIdentifier: [String: PolymorphicGroup]
 
-    /// Runtime typed index descriptors for each concrete polymorphic member.
+    /// Materialized index descriptors for each concrete polymorphic member.
     private let polymorphicIndexDescriptorsByIdentifierAndMemberName: [String: [String: [IndexDescriptor]]]
 
     /// Index descriptors (metadata only)
@@ -718,13 +718,11 @@ public final class Schema: Sendable {
         polymorphicGroupsByIdentifier[identifier]
     }
 
-    /// Get KeyPath-free logical index metadata for a polymorphic group.
+    /// Get logical index metadata for a polymorphic group.
     ///
     /// Logical polymorphic metadata is validated across all concrete members at
-    /// schema construction time. It intentionally does not expose `IndexDescriptor`
-    /// because `IndexDescriptor` carries concrete `KeyPath` and `IndexKind<Self>`
-    /// values that are only valid for one member type.
-    public func polymorphicIndexCatalog(identifier: String) -> [IndexDescriptorMetadata] {
+    /// schema construction time.
+    public func polymorphicIndexCatalog(identifier: String) -> [PolymorphicIndexMetadata] {
         polymorphicGroupsByIdentifier[identifier]?.indexes ?? []
     }
 
@@ -737,9 +735,9 @@ public final class Schema: Sendable {
 
     /// Get typed index descriptors for a concrete member of a polymorphic group.
     ///
-    /// Polymorphic indexes share one logical index name, but their KeyPaths are
-    /// concrete-type-specific. Runtime write maintenance must use this accessor
-    /// so descriptors for one member type are not applied to another member type.
+    /// Polymorphic indexes share one logical index name, while field numbers are
+    /// concrete-schema-specific. Runtime write maintenance uses this accessor so
+    /// each member receives its resolved field identities.
     public func polymorphicIndexDescriptors(
         identifier: String,
         memberType: any Persistable.Type
@@ -822,21 +820,29 @@ public final class Schema: Sendable {
             let memberTypeNames = polymorphicTypes.map { $0.0.persistableType }.sorted()
             let allMemberNames = Set(memberTypeNames)
             var descriptorsByMemberName: [String: [IndexDescriptor]] = [:]
-            var logicalIndexByName: [String: IndexDescriptorMetadata] = [:]
+            var logicalIndexByName: [String: PolymorphicIndexMetadata] = [:]
             var logicalIndexOrder: [String] = []
             var membersByIndexName: [String: Set<String>] = [:]
 
             for (memberType, polymorphicType) in polymorphicTypes {
-                let descriptors: [IndexDescriptor]
-                do {
-                    descriptors = try polymorphicType.polymorphicIndexDescriptors
-                } catch let declarationError {
-                    throw .invalidIndexDeclaration(declarationError)
+                var descriptors: [IndexDescriptor] = []
+                descriptors.reserveCapacity(polymorphicType.polymorphicIndexes.count)
+                let definitions = polymorphicType.polymorphicIndexes
+                for definition in definitions {
+                    do {
+                        descriptors.append(
+                            try definition.descriptor(
+                                fieldSchemas: memberType.fieldSchemas
+                            )
+                        )
+                    } catch let declarationError {
+                        throw .invalidIndexDeclaration(declarationError)
+                    }
                 }
                 descriptorsByMemberName[memberType.persistableType] = descriptors
 
                 var seenNamesForMember: Set<String> = []
-                for descriptor in descriptors {
+                for (definition, descriptor) in zip(definitions, descriptors) {
                     guard seenNamesForMember.insert(descriptor.name).inserted else {
                         throw .duplicatePolymorphicIndex(
                             group: identifier,
@@ -845,7 +851,10 @@ public final class Schema: Sendable {
                         )
                     }
 
-                    let logicalDescriptor = IndexDescriptorMetadata(descriptor)
+                    let logicalDescriptor = PolymorphicIndexMetadata(
+                        descriptor: descriptor,
+                        fields: definition.fields
+                    )
                     if let existing = logicalIndexByName[descriptor.name] {
                         guard existing == logicalDescriptor else {
                             throw .inconsistentPolymorphicIndex(

@@ -5,20 +5,18 @@ import DatabaseTypes
 /// Entities remain the source of truth. The execution layer maintains six
 /// derived orderings in the same transaction as the entity mutation.
 public struct RDFQuadIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "rdf_quad" }
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
-    public let subjectField: String
-    public let predicateField: String
-    public let objectField: String
-    public let graphField: String?
+    public let indexFields: [IndexField<Root>]
 
-    public var fieldNames: [String] {
-        var fields = [subjectField, predicateField, objectField]
-        if let graphField {
-            fields.append(graphField)
-        }
-        return fields
+    public var subjectField: String { indexFields[0].name }
+    public var predicateField: String { indexFields[1].name }
+    public var objectField: String { indexFields[2].name }
+    public var graphField: String? {
+        indexFields.count == 4 ? indexFields[3].name : nil
     }
 
     public var indexName: String {
@@ -30,38 +28,29 @@ public struct RDFQuadIndexKind<Root: Persistable>: IndexKind {
     }
 
     public init(
-        subject: KeyPath<Root, RDFTerm>,
-        predicate: KeyPath<Root, RDFTerm>,
-        object: KeyPath<Root, RDFTerm>
+        subject: IndexField<Root>,
+        predicate: IndexField<Root>,
+        object: IndexField<Root>
     ) {
-        self.subjectField = Root.fieldName(for: subject)
-        self.predicateField = Root.fieldName(for: predicate)
-        self.objectField = Root.fieldName(for: object)
-        self.graphField = nil
+        self.indexFields = [
+            subject,
+            predicate,
+            object,
+        ]
     }
 
     public init(
-        subject: KeyPath<Root, RDFTerm>,
-        predicate: KeyPath<Root, RDFTerm>,
-        object: KeyPath<Root, RDFTerm>,
-        graph: KeyPath<Root, RDFTerm>
+        subject: IndexField<Root>,
+        predicate: IndexField<Root>,
+        object: IndexField<Root>,
+        graph: IndexField<Root>
     ) {
-        self.subjectField = Root.fieldName(for: subject)
-        self.predicateField = Root.fieldName(for: predicate)
-        self.objectField = Root.fieldName(for: object)
-        self.graphField = Root.fieldName(for: graph)
-    }
-
-    public init(
-        subject: KeyPath<Root, RDFTerm>,
-        predicate: KeyPath<Root, RDFTerm>,
-        object: KeyPath<Root, RDFTerm>,
-        graph: KeyPath<Root, RDFTerm?>
-    ) {
-        self.subjectField = Root.fieldName(for: subject)
-        self.predicateField = Root.fieldName(for: predicate)
-        self.objectField = Root.fieldName(for: object)
-        self.graphField = Root.fieldName(for: graph)
+        self.indexFields = [
+            subject,
+            predicate,
+            object,
+            graph,
+        ]
     }
 
     public static func validateFields(
@@ -94,66 +83,5 @@ public struct RDFQuadIndexKind<Root: Persistable>: IndexKind {
                 )
             }
         }
-    }
-}
-
-extension RDFQuadIndexKind {
-    /// Builds the canonical schema value without creating a concrete index
-    /// kind instance. Runtime schema boundaries consume this representation.
-    public static func canonical(
-        subject: KeyPath<Root, RDFTerm>,
-        predicate: KeyPath<Root, RDFTerm>,
-        object: KeyPath<Root, RDFTerm>,
-        graph: KeyPath<Root, RDFTerm>
-    ) -> IndexKindMetadata {
-        IndexKindMetadata(
-            identifier: identifier,
-            subspaceStructure: subspaceStructure,
-            fieldNames: [
-                Root.fieldName(for: subject),
-                Root.fieldName(for: predicate),
-                Root.fieldName(for: object),
-                Root.fieldName(for: graph),
-            ],
-            metadata: [:]
-        )
-    }
-
-    /// Builds canonical metadata for a nullable graph field.
-    public static func canonical(
-        subject: KeyPath<Root, RDFTerm>,
-        predicate: KeyPath<Root, RDFTerm>,
-        object: KeyPath<Root, RDFTerm>,
-        graph: KeyPath<Root, RDFTerm?>
-    ) -> IndexKindMetadata {
-        IndexKindMetadata(
-            identifier: identifier,
-            subspaceStructure: subspaceStructure,
-            fieldNames: [
-                Root.fieldName(for: subject),
-                Root.fieldName(for: predicate),
-                Root.fieldName(for: object),
-                Root.fieldName(for: graph),
-            ],
-            metadata: [:]
-        )
-    }
-
-    /// Builds canonical metadata for the default graph.
-    public static func canonical(
-        subject: KeyPath<Root, RDFTerm>,
-        predicate: KeyPath<Root, RDFTerm>,
-        object: KeyPath<Root, RDFTerm>
-    ) -> IndexKindMetadata {
-        IndexKindMetadata(
-            identifier: identifier,
-            subspaceStructure: subspaceStructure,
-            fieldNames: [
-                Root.fieldName(for: subject),
-                Root.fieldName(for: predicate),
-                Root.fieldName(for: object),
-            ],
-            metadata: [:]
-        )
     }
 }

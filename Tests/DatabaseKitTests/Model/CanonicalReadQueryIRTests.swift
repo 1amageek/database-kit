@@ -76,21 +76,19 @@ extension IndexedCanonicalReadDocument {
     static var polymorphicDirectoryPathComponents: [DirectoryPathComponent] {
         [.staticPath("indexed-canonical-read-documents")]
     }
-    static var polymorphicIndexDescriptors: [IndexDescriptor] {
-        get throws(IndexDeclarationError) {
-            try [
-                IndexDescriptor(
-                    name: "IndexedCanonicalReadDocument_title",
-                    keyPaths: [\Self.title],
-                    kind: ScalarIndexKind<Self>(fields: [\Self.title])
-                ),
-                IndexDescriptor(
-                    name: "IndexedCanonicalReadDocument_id",
-                    keyPaths: [\Self.id],
-                    kind: ScalarIndexKind<Self>(fields: [\Self.id])
-                )
-            ]
-        }
+    static var polymorphicIndexes: [PolymorphicIndexDefinition] {
+        [
+            PolymorphicIndexDefinition(
+                name: "IndexedCanonicalReadDocument_title",
+                definition: .scalar,
+                fields: [.init(name: "title")]
+            ),
+            PolymorphicIndexDefinition(
+                name: "IndexedCanonicalReadDocument_id",
+                definition: .scalar,
+                fields: [.init(name: "id")]
+            )
+        ]
     }
 }
 
@@ -102,6 +100,12 @@ struct IndexedCanonicalReadArticle: Persistable, Sendable, IndexedCanonicalReadD
 
     static var persistableType: String { "IndexedCanonicalReadArticle" }
     static var allFields: [String] { ["id", "title"] }
+    static var fieldSchemas: [FieldSchema] {
+        [
+            FieldSchema(name: "id", fieldNumber: 1, type: .string),
+            FieldSchema(name: "title", fieldNumber: 2, type: .string),
+        ]
+    }
     static func fieldNumber(for fieldName: String) -> Int? {
         switch fieldName {
         case "id": return 1
@@ -110,16 +114,6 @@ struct IndexedCanonicalReadArticle: Persistable, Sendable, IndexedCanonicalReadD
         }
     }
     static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
-    static func fieldName(for keyPath: PartialKeyPath<Self>) -> String {
-        let description = "\(keyPath)"
-        if description.hasSuffix(".id") {
-            return "id"
-        }
-        if description.hasSuffix(".title") {
-            return "title"
-        }
-        return description
-    }
     subscript(dynamicMember member: String) -> (any Sendable)? {
         switch member {
         case "id": return id
@@ -137,6 +131,12 @@ struct IndexedCanonicalReadReport: Persistable, Sendable, IndexedCanonicalReadDo
 
     static var persistableType: String { "IndexedCanonicalReadReport" }
     static var allFields: [String] { ["id", "title"] }
+    static var fieldSchemas: [FieldSchema] {
+        [
+            FieldSchema(name: "id", fieldNumber: 1, type: .string),
+            FieldSchema(name: "title", fieldNumber: 2, type: .string),
+        ]
+    }
     static func fieldNumber(for fieldName: String) -> Int? {
         switch fieldName {
         case "id": return 1
@@ -145,16 +145,6 @@ struct IndexedCanonicalReadReport: Persistable, Sendable, IndexedCanonicalReadDo
         }
     }
     static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
-    static func fieldName(for keyPath: PartialKeyPath<Self>) -> String {
-        let description = "\(keyPath)"
-        if description.hasSuffix(".id") {
-            return "id"
-        }
-        if description.hasSuffix(".title") {
-            return "title"
-        }
-        return description
-    }
     subscript(dynamicMember member: String) -> (any Sendable)? {
         switch member {
         case "id": return id
@@ -180,6 +170,30 @@ enum CanonicalReadIndexedSchema: VersionedSchema {
     ]
 }
 
+@Polymorphable
+protocol DifferentlyOrderedDocument: Polymorphable {
+    var id: String { get }
+    var title: String { get }
+
+    #PolymorphicIndex(
+        .scalar,
+        fields: ["title"],
+        name: "DifferentlyOrderedDocument_title"
+    )
+}
+
+@Persistable
+struct TitleSecondDocument: DifferentlyOrderedDocument {
+    var id: String
+    var title: String
+}
+
+@Persistable
+struct TitleFirstDocument: DifferentlyOrderedDocument {
+    var title: String
+    var id: String
+}
+
 @Suite("Canonical Read QueryIR")
 struct CanonicalReadQueryIRTests {
     @Test("Schema builds polymorphic group catalog")
@@ -190,6 +204,35 @@ struct CanonicalReadQueryIRTests {
         #expect(group.identifier == "CanonicalReadDocument")
         #expect(group.memberTypeNames == ["CanonicalReadArticle", "CanonicalReadReport"])
         #expect(schema.polymorphicIndexCatalog(identifier: "CanonicalReadDocument").isEmpty)
+    }
+
+    @Test("Polymorphic logical fields allow concrete field numbers to differ")
+    func polymorphicLogicalFieldsAllowConcreteFieldNumbersToDiffer() throws {
+        let schema = try Schema([
+            TitleSecondDocument.self,
+            TitleFirstDocument.self,
+        ])
+
+        let first = try #require(
+            schema.polymorphicIndexDescriptors(
+                identifier: "DifferentlyOrderedDocument",
+                memberType: TitleFirstDocument.self
+            ).first
+        )
+        let second = try #require(
+            schema.polymorphicIndexDescriptors(
+                identifier: "DifferentlyOrderedDocument",
+                memberType: TitleSecondDocument.self
+            ).first
+        )
+
+        #expect(first.kind.fields.map(\.number) == [1])
+        #expect(second.kind.fields.map(\.number) == [2])
+        #expect(
+            schema.polymorphicIndexCatalog(
+                identifier: "DifferentlyOrderedDocument"
+            ).first?.fieldNames == ["title"]
+        )
     }
 
     @Test("Schema materializes canonical polymorphic index descriptors")

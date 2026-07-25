@@ -14,7 +14,10 @@ import DatabaseTypes
 /// ```swift
 /// @Persistable
 /// struct Product {
-///     #Index(ScalarIndexKind<Product>(fields: [\.category, \.price]))
+///     #Index(
+///         .scalar,
+///         fields: [\Product.category, \Product.price]
+///     )
 ///     var category: String
 ///     var price: Int64
 /// }
@@ -32,14 +35,20 @@ import DatabaseTypes
 /// **Covering Index (Index-Only Scan)**:
 /// Use `storedFields` on `#Index` macro to store additional fields:
 /// ```swift
-/// #Index(ScalarIndexKind<Product>(fields: [\.category]), storedFields: [\.name, \.price])
+/// #Index(
+///     .scalar,
+///     fields: [\Product.category],
+///     storedFields: [\Product.name, \Product.price]
+/// )
 /// ```
 public struct ScalarIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "scalar" }
     public static var subspaceStructure: SubspaceStructure { .flat }
 
     /// Field names for this index (stored as canonical field names)
-    public let fieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
     /// Default index name: "{TypeName}_{field1}_{field2}_..."
     public var indexName: String {
@@ -49,16 +58,14 @@ public struct ScalarIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_\(flattenedNames.joined(separator: "_"))"
     }
 
-    /// Initialize with KeyPaths (converted to field names internally)
-    ///
-    /// - Parameter fields: KeyPaths to indexed fields
-    public init(fields: [PartialKeyPath<Root>]) {
-        self.fieldNames = fields.map { Root.fieldName(for: $0) }
+    public init(fields: [IndexField<Root>]) {
+        self.indexFields = fields
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(fieldNames: [String]) {
-        self.fieldNames = fieldNames
+    package init(canonicalFields: [IndexFieldMetadata]) {
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
     }
 
     public static func validateFields(
@@ -91,7 +98,7 @@ public struct ScalarIndexKind<Root: Persistable>: IndexKind {
 /// ```swift
 /// @Persistable
 /// struct Order {
-///     #Index(CountIndexKind<Order>(groupBy: [\.status, \.type]))
+///     #Index(.count, groupBy: [\Order.status, \Order.type])
 ///     var status: String
 ///     var type: String
 /// }
@@ -104,11 +111,13 @@ public struct ScalarIndexKind<Root: Persistable>: IndexKind {
 /// - Checked increment/decrement in the caller's transaction
 /// - Multiple grouping fields
 public struct CountIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "count" }
     public static var subspaceStructure: SubspaceStructure { .aggregation }
 
     /// Field names for grouping (stored as canonical field names)
-    public let fieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
     /// Default index name: "{TypeName}_count_{field1}_{field2}_..."
     public var indexName: String {
@@ -121,16 +130,14 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_count_\(flattenedNames.joined(separator: "_"))"
     }
 
-    /// Initialize with KeyPaths (converted to field names internally)
-    ///
-    /// - Parameter groupBy: KeyPaths to grouping fields
-    public init(groupBy: [PartialKeyPath<Root>]) {
-        self.fieldNames = groupBy.map { Root.fieldName(for: $0) }
+    public init(groupBy: [IndexField<Root>]) {
+        self.indexFields = groupBy
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(fieldNames: [String]) {
-        self.fieldNames = fieldNames
+    package init(canonicalFields: [IndexFieldMetadata]) {
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
     }
 
     public static func validateFields(
@@ -162,7 +169,11 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
 ///     var customerId: String
 ///     var amount: Int64  // Type preserved as Int64
 ///
-///     #Index(SumIndexKind<Order, Int64>(groupBy: [\.customerId], value: \.amount))
+///     #Index(
+///         .sum,
+///         groupBy: [\Order.customerId],
+///         value: \Order.amount
+///     )
 /// }
 /// ```
 ///
@@ -181,22 +192,23 @@ public struct CountIndexKind<Root: Persistable>: IndexKind {
 /// - Multiple grouping fields
 /// - Precision preservation for integer fields
 public struct SumIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "sum" }
     public static var subspaceStructure: SubspaceStructure { .aggregation }
 
-    /// Field names for grouping
-    public let groupByFieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
-    /// Field name for the value to sum
-    public let valueFieldName: String
+    public var groupByFieldNames: [String] {
+        indexFields.dropLast().map { $0.name }
+    }
+
+    public var valueFieldName: String {
+        indexFields.last?.name ?? ""
+    }
 
     /// Stable scalar type used by the runtime.
     public let valueType: IndexScalarType
-
-    /// All field names (groupBy + value) for IndexKind protocol
-    public var fieldNames: [String] {
-        groupByFieldNames + [valueFieldName]
-    }
 
     /// Default index name: "{TypeName}_sum_{groupField1}_{valueField}"
     public var indexName: String {
@@ -214,25 +226,18 @@ public struct SumIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKi
         return "\(Root.persistableType)_sum_\(groupNames.joined(separator: "_"))_\(valueName)"
     }
 
-    /// Initialize with KeyPaths - type is inferred from KeyPath
-    ///
-    /// - Parameters:
-    ///   - groupBy: KeyPaths to grouping fields
-    ///   - value: KeyPath to the numeric field to sum (type inferred)
-    public init(groupBy: [PartialKeyPath<Root>], value: KeyPath<Root, Value>) {
-        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
-        self.valueFieldName = Root.fieldName(for: value)
+    public init(groupBy: [IndexField<Root>], value: IndexField<Root>) {
+        self.indexFields = groupBy + [value]
         self.valueType = Value.indexScalarType
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(
-        groupByFieldNames: [String],
-        valueFieldName: String,
+    package init(
+        canonicalFields: [IndexFieldMetadata],
         valueType: IndexScalarType
     ) {
-        self.groupByFieldNames = groupByFieldNames
-        self.valueFieldName = valueFieldName
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.valueType = valueType
     }
 
@@ -281,7 +286,11 @@ public struct SumIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKi
 ///     var category: String
 ///     var price: Int64  // Type preserved as Int64
 ///
-///     #Index(MinIndexKind<Product, Int64>(groupBy: [\.category], value: \.price))
+///     #Index(
+///         .minimum,
+///         groupBy: [\Product.category],
+///         value: \Product.price
+///     )
 /// }
 /// ```
 ///
@@ -292,22 +301,23 @@ public struct SumIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKi
 /// - Efficient min tracking via sorted storage
 /// - Type preservation for result
 public struct MinIndexKind<Root: Persistable, Value: IndexComparableValue>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "min" }
     public static var subspaceStructure: SubspaceStructure { .flat }
 
-    /// Field names for grouping
-    public let groupByFieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
-    /// Field name for the value to track minimum
-    public let valueFieldName: String
+    public var groupByFieldNames: [String] {
+        indexFields.dropLast().map { $0.name }
+    }
+
+    public var valueFieldName: String {
+        indexFields.last?.name ?? ""
+    }
 
     /// Stable scalar type used by the runtime.
     public let valueType: IndexScalarType
-
-    /// All field names (groupBy + value) for IndexKind protocol
-    public var fieldNames: [String] {
-        groupByFieldNames + [valueFieldName]
-    }
 
     /// Default index name: "{TypeName}_min_{groupField1}_{valueField}"
     public var indexName: String {
@@ -325,21 +335,18 @@ public struct MinIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
         return "\(Root.persistableType)_min_\(groupNames.joined(separator: "_"))_\(valueName)"
     }
 
-    /// Initialize with KeyPaths - type is inferred from KeyPath
-    public init(groupBy: [PartialKeyPath<Root>], value: KeyPath<Root, Value>) {
-        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
-        self.valueFieldName = Root.fieldName(for: value)
+    public init(groupBy: [IndexField<Root>], value: IndexField<Root>) {
+        self.indexFields = groupBy + [value]
         self.valueType = Value.indexScalarType
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(
-        groupByFieldNames: [String],
-        valueFieldName: String,
+    package init(
+        canonicalFields: [IndexFieldMetadata],
         valueType: IndexScalarType
     ) {
-        self.groupByFieldNames = groupByFieldNames
-        self.valueFieldName = valueFieldName
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.valueType = valueType
     }
 
@@ -379,7 +386,11 @@ public struct MinIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
 ///     var category: String
 ///     var price: Int64  // Type preserved as Int64
 ///
-///     #Index(MaxIndexKind<Product, Int64>(groupBy: [\.category], value: \.price))
+///     #Index(
+///         .maximum,
+///         groupBy: [\Product.category],
+///         value: \Product.price
+///     )
 /// }
 /// ```
 ///
@@ -390,22 +401,23 @@ public struct MinIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
 /// - Efficient max tracking via reverse-sorted storage
 /// - Type preservation for result
 public struct MaxIndexKind<Root: Persistable, Value: IndexComparableValue>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "max" }
     public static var subspaceStructure: SubspaceStructure { .flat }
 
-    /// Field names for grouping
-    public let groupByFieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
-    /// Field name for the value to track maximum
-    public let valueFieldName: String
+    public var groupByFieldNames: [String] {
+        indexFields.dropLast().map { $0.name }
+    }
+
+    public var valueFieldName: String {
+        indexFields.last?.name ?? ""
+    }
 
     /// Stable scalar type used by the runtime.
     public let valueType: IndexScalarType
-
-    /// All field names (groupBy + value) for IndexKind protocol
-    public var fieldNames: [String] {
-        groupByFieldNames + [valueFieldName]
-    }
 
     /// Default index name: "{TypeName}_max_{groupField1}_{valueField}"
     public var indexName: String {
@@ -423,21 +435,18 @@ public struct MaxIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
         return "\(Root.persistableType)_max_\(groupNames.joined(separator: "_"))_\(valueName)"
     }
 
-    /// Initialize with KeyPaths - type is inferred from KeyPath
-    public init(groupBy: [PartialKeyPath<Root>], value: KeyPath<Root, Value>) {
-        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
-        self.valueFieldName = Root.fieldName(for: value)
+    public init(groupBy: [IndexField<Root>], value: IndexField<Root>) {
+        self.indexFields = groupBy + [value]
         self.valueType = Value.indexScalarType
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(
-        groupByFieldNames: [String],
-        valueFieldName: String,
+    package init(
+        canonicalFields: [IndexFieldMetadata],
         valueType: IndexScalarType
     ) {
-        self.groupByFieldNames = groupByFieldNames
-        self.valueFieldName = valueFieldName
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.valueType = valueType
     }
 
@@ -477,7 +486,11 @@ public struct MaxIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
 ///     var productID: Int64
 ///     var rating: Int64
 ///
-///     #Index(AverageIndexKind<Review, Int64>(groupBy: [\.productID], value: \.rating))
+///     #Index(
+///         .average,
+///         groupBy: [\Review.productID],
+///         value: \Review.rating
+///     )
 /// }
 /// ```
 ///
@@ -498,22 +511,23 @@ public struct MaxIndexKind<Root: Persistable, Value: IndexComparableValue>: Inde
 /// - Checked read/replace mutations in the caller's transaction
 /// - Precision preservation for sum storage
 public struct AverageIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "average" }
     public static var subspaceStructure: SubspaceStructure { .aggregation }
 
-    /// Field names for grouping
-    public let groupByFieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
-    /// Field name for the value to average
-    public let valueFieldName: String
+    public var groupByFieldNames: [String] {
+        indexFields.dropLast().map { $0.name }
+    }
+
+    public var valueFieldName: String {
+        indexFields.last?.name ?? ""
+    }
 
     /// Stable scalar type used by the runtime.
     public let valueType: IndexScalarType
-
-    /// All field names (groupBy + value) for IndexKind protocol
-    public var fieldNames: [String] {
-        groupByFieldNames + [valueFieldName]
-    }
 
     /// Default index name: "{TypeName}_avg_{groupField1}_{valueField}"
     public var indexName: String {
@@ -531,21 +545,18 @@ public struct AverageIndexKind<Root: Persistable, Value: IndexNumericValue>: Ind
         return "\(Root.persistableType)_avg_\(groupNames.joined(separator: "_"))_\(valueName)"
     }
 
-    /// Initialize with KeyPaths - type is inferred from KeyPath
-    public init(groupBy: [PartialKeyPath<Root>], value: KeyPath<Root, Value>) {
-        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
-        self.valueFieldName = Root.fieldName(for: value)
+    public init(groupBy: [IndexField<Root>], value: IndexField<Root>) {
+        self.indexFields = groupBy + [value]
         self.valueType = Value.indexScalarType
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(
-        groupByFieldNames: [String],
-        valueFieldName: String,
+    package init(
+        canonicalFields: [IndexFieldMetadata],
         valueType: IndexScalarType
     ) {
-        self.groupByFieldNames = groupByFieldNames
-        self.valueFieldName = valueFieldName
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.valueType = valueType
     }
 
@@ -620,11 +631,13 @@ public enum VersionHistoryStrategy: Sendable, Hashable {
 /// - Rollback to previous versions
 /// - Automatic cleanup based on retention strategy
 public struct VersionIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "version" }
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
     /// Field name for version tracking (typically the primary key)
-    public let fieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
     /// Version history retention strategy
     public let strategy: VersionHistoryStrategy
@@ -637,19 +650,21 @@ public struct VersionIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_version_\(flattenedNames.joined(separator: "_"))"
     }
 
-    /// Initialize with KeyPath
-    ///
-    /// - Parameters:
-    ///   - field: KeyPath to the field for version tracking (typically id)
-    ///   - strategy: Version history retention strategy (default: keepAll)
-    public init(field: PartialKeyPath<Root>, strategy: VersionHistoryStrategy = .keepAll) {
-        self.fieldNames = [Root.fieldName(for: field)]
+    public init(
+        field: IndexField<Root>,
+        strategy: VersionHistoryStrategy = .keepAll
+    ) {
+        self.indexFields = [field]
         self.strategy = strategy
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(fieldNames: [String], strategy: VersionHistoryStrategy = .keepAll) {
-        self.fieldNames = fieldNames
+    package init(
+        canonicalFields: [IndexFieldMetadata],
+        strategy: VersionHistoryStrategy = .keepAll
+    ) {
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.strategy = strategy
     }
 
@@ -710,11 +725,13 @@ public struct VersionIndexKind<Root: Persistable>: IndexKind {
 ///
 /// **Reference**: FDB Record Layer COUNT_UPDATES index type
 public struct CountUpdatesIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "count_updates" }
     public static var subspaceStructure: SubspaceStructure { .flat }
 
     /// Field names (typically the primary key field)
-    public let fieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
     /// Default index name: "{TypeName}_updates_{field}"
     public var indexName: String {
@@ -724,16 +741,14 @@ public struct CountUpdatesIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_updates_\(flattenedNames.joined(separator: "_"))"
     }
 
-    /// Initialize with KeyPath
-    ///
-    /// - Parameter field: KeyPath to the field (typically the primary key)
-    public init(field: PartialKeyPath<Root>) {
-        self.fieldNames = [Root.fieldName(for: field)]
+    public init(field: IndexField<Root>) {
+        self.indexFields = [field]
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(fieldNames: [String]) {
-        self.fieldNames = fieldNames
+    package init(canonicalFields: [IndexFieldMetadata]) {
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
     }
 
     public static func validateFields(
@@ -772,18 +787,19 @@ public struct CountUpdatesIndexKind<Root: Persistable>: IndexKind {
 ///
 /// **Reference**: FDB Record Layer COUNT_NOT_NULL index type
 public struct CountNotNullIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "count_not_null" }
     public static var subspaceStructure: SubspaceStructure { .aggregation }
 
-    /// Field names for grouping
-    public let groupByFieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
-    /// Field name to check for null
-    public let valueFieldName: String
+    public var groupByFieldNames: [String] {
+        indexFields.dropLast().map { $0.name }
+    }
 
-    /// All field names (groupBy + value) for IndexKind protocol
-    public var fieldNames: [String] {
-        groupByFieldNames + [valueFieldName]
+    public var valueFieldName: String {
+        indexFields.last?.name ?? ""
     }
 
     /// Default index name: "{TypeName}_notnull_{groupFields}_{valueField}"
@@ -802,20 +818,17 @@ public struct CountNotNullIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_notnull_\(groupNames.joined(separator: "_"))_\(valueName)"
     }
 
-    /// Initialize with KeyPaths
-    ///
-    /// - Parameters:
-    ///   - groupBy: KeyPaths to grouping fields
-    ///   - value: KeyPath to the field to check for null
-    public init(groupBy: [PartialKeyPath<Root>], value: PartialKeyPath<Root>) {
-        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
-        self.valueFieldName = Root.fieldName(for: value)
+    public init(
+        groupBy: [IndexField<Root>],
+        value: IndexField<Root>
+    ) {
+        self.indexFields = groupBy + [value]
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(groupByFieldNames: [String], valueFieldName: String) {
-        self.groupByFieldNames = groupByFieldNames
-        self.valueFieldName = valueFieldName
+    package init(canonicalFields: [IndexFieldMetadata]) {
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
     }
 
     public static func validateFields(
@@ -874,11 +887,13 @@ public struct CountNotNullIndexKind<Root: Persistable>: IndexKind {
 /// - Queries with multiple AND/OR conditions
 /// - Aggregation queries
 public struct BitmapIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "bitmap" }
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
     /// Field names for this index
-    public let fieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
     /// Default index name: "{TypeName}_bitmap_{field}"
     public var indexName: String {
@@ -888,23 +903,18 @@ public struct BitmapIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_bitmap_\(flattenedNames.joined(separator: "_"))"
     }
 
-    /// Initialize with KeyPath
-    ///
-    /// - Parameter field: KeyPath to the low-cardinality field
-    public init(field: PartialKeyPath<Root>) {
-        self.fieldNames = [Root.fieldName(for: field)]
+    public init(field: IndexField<Root>) {
+        self.indexFields = [field]
     }
 
-    /// Initialize with multiple KeyPaths for composite bitmap
-    ///
-    /// - Parameter fields: KeyPaths to fields
-    public init(fields: [PartialKeyPath<Root>]) {
-        self.fieldNames = fields.map { Root.fieldName(for: $0) }
+    public init(fields: [IndexField<Root>]) {
+        self.indexFields = fields
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(fieldNames: [String]) {
-        self.fieldNames = fieldNames
+    package init(canonicalFields: [IndexFieldMetadata]) {
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
     }
 
     public static func validateFields(
@@ -976,11 +986,16 @@ public struct BitmapIndexKind<Root: Persistable>: IndexKind {
 ///
 /// **Reference**: FDB Record Layer TIME_WINDOW_LEADERBOARD index type
 public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "time_window_leaderboard" }
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
-    /// Field name for the score to rank
-    public let scoreFieldName: String
+    public let indexFields: [IndexField<Root>]
+
+    public var scoreFieldName: String {
+        indexFields.last?.name ?? ""
+    }
 
     /// Window type
     public let window: LeaderboardWindowType
@@ -988,12 +1003,8 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
     /// Number of windows to keep (history depth)
     public let windowCount: Int
 
-    /// Optional grouping fields (e.g., by region, by game mode)
-    public let groupByFieldNames: [String]
-
-    /// All field names for IndexKind protocol
-    public var fieldNames: [String] {
-        groupByFieldNames + [scoreFieldName]
+    public var groupByFieldNames: [String] {
+        indexFields.dropLast().map { $0.name }
     }
 
     /// Default index name
@@ -1012,34 +1023,25 @@ public struct TimeWindowLeaderboardIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_leaderboard_\(groupNames.joined(separator: "_"))_\(scoreName)"
     }
 
-    /// Initialize with KeyPaths - type is inferred from KeyPath
-    ///
-    /// - Parameters:
-    ///   - scoreField: KeyPath to the score field (type inferred)
-    ///   - groupBy: Optional grouping fields (default: empty)
-    ///   - window: Window type (default: daily)
-    ///   - windowCount: Number of windows to keep (default: 7)
     public init(
-        scoreField: KeyPath<Root, Int64>,
-        groupBy: [PartialKeyPath<Root>] = [],
+        scoreField: IndexField<Root>,
+        groupBy: [IndexField<Root>] = [],
         window: LeaderboardWindowType = .daily,
         windowCount: Int = 7
     ) {
-        self.scoreFieldName = Root.fieldName(for: scoreField)
-        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
+        self.indexFields = groupBy + [scoreField]
         self.window = window
         self.windowCount = windowCount
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(
-        scoreFieldName: String,
-        groupByFieldNames: [String] = [],
+    package init(
+        canonicalFields: [IndexFieldMetadata],
         window: LeaderboardWindowType = .daily,
         windowCount: Int = 7
     ) {
-        self.scoreFieldName = scoreFieldName
-        self.groupByFieldNames = groupByFieldNames
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.window = window
         self.windowCount = windowCount
     }
@@ -1157,25 +1159,26 @@ public enum LeaderboardWindowType: Sendable, Hashable {
 ///
 /// **Reference**: Heule, Nunkesser, Hall. "HyperLogLog in Practice" (Google, 2013)
 public struct DistinctIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "distinct" }
     public static var subspaceStructure: SubspaceStructure { .aggregation }
 
-    /// Field names for grouping
-    public let groupByFieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
-    /// Field name for the value to count distinct
-    public let valueFieldName: String
+    public var groupByFieldNames: [String] {
+        indexFields.dropLast().map { $0.name }
+    }
+
+    public var valueFieldName: String {
+        indexFields.last?.name ?? ""
+    }
 
     /// HyperLogLog precision parameter (default: 14)
     /// - p=14: 16KB memory, ~0.81% error
     /// - p=12: 4KB memory, ~1.63% error
     /// - Supported persisted range: 4...17
     public let precision: Int
-
-    /// All field names (groupBy + value) for IndexKind protocol
-    public var fieldNames: [String] {
-        groupByFieldNames + [valueFieldName]
-    }
 
     /// Default index name: "{TypeName}_distinct_{groupFields}_{valueField}"
     public var indexName: String {
@@ -1193,22 +1196,22 @@ public struct DistinctIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_distinct_\(groupNames.joined(separator: "_"))_\(valueName)"
     }
 
-    /// Initialize with KeyPaths
-    ///
-    /// - Parameters:
-    ///   - groupBy: KeyPaths to grouping fields (empty for global distinct)
-    ///   - value: KeyPath to the field to count distinct values
-    ///   - precision: HyperLogLog precision parameter (default: 14)
-    public init(groupBy: [PartialKeyPath<Root>] = [], value: PartialKeyPath<Root>, precision: Int = 14) {
-        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
-        self.valueFieldName = Root.fieldName(for: value)
+    public init(
+        groupBy: [IndexField<Root>] = [],
+        value: IndexField<Root>,
+        precision: Int = 14
+    ) {
+        self.indexFields = groupBy + [value]
         self.precision = precision
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(groupByFieldNames: [String], valueFieldName: String, precision: Int = 14) {
-        self.groupByFieldNames = groupByFieldNames
-        self.valueFieldName = valueFieldName
+    package init(
+        canonicalFields: [IndexFieldMetadata],
+        precision: Int = 14
+    ) {
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.precision = precision
     }
 
@@ -1291,14 +1294,20 @@ public struct DistinctIndexKind<Root: Persistable>: IndexKind {
 ///
 /// **Reference**: Dunning, T. & Ertl, O. "Computing Extremely Accurate Quantiles Using t-Digests" (2019)
 public struct PercentileIndexKind<Root: Persistable, Value: IndexNumericValue>: IndexKind {
+    public typealias Model = Root
+
     public static var identifier: String { "percentile" }
     public static var subspaceStructure: SubspaceStructure { .aggregation }
 
-    /// Field names for grouping
-    public let groupByFieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
-    /// Field name for the value to track percentiles
-    public let valueFieldName: String
+    public var groupByFieldNames: [String] {
+        indexFields.dropLast().map { $0.name }
+    }
+
+    public var valueFieldName: String {
+        indexFields.last?.name ?? ""
+    }
 
     /// t-digest compression parameter (default: 100)
     /// - Higher = more accuracy, more memory
@@ -1306,11 +1315,6 @@ public struct PercentileIndexKind<Root: Persistable, Value: IndexNumericValue>: 
     /// - 100: Balanced (recommended)
     /// - 200: Higher accuracy, more memory
     public let compression: Double
-
-    /// All field names (groupBy + value) for IndexKind protocol
-    public var fieldNames: [String] {
-        groupByFieldNames + [valueFieldName]
-    }
 
     /// Default index name: "{TypeName}_percentile_{groupFields}_{valueField}"
     public var indexName: String {
@@ -1328,26 +1332,22 @@ public struct PercentileIndexKind<Root: Persistable, Value: IndexNumericValue>: 
         return "\(Root.persistableType)_percentile_\(groupNames.joined(separator: "_"))_\(valueName)"
     }
 
-    /// Initialize with KeyPaths
-    ///
-    /// - Parameters:
-    ///   - groupBy: KeyPaths to grouping fields (empty for global percentile)
-    ///   - value: KeyPath to the numeric field to track percentiles
-    ///   - compression: t-digest compression parameter (default: 100)
-    public init(groupBy: [PartialKeyPath<Root>] = [], value: KeyPath<Root, Value>, compression: Double = 100) {
-        self.groupByFieldNames = groupBy.map { Root.fieldName(for: $0) }
-        self.valueFieldName = Root.fieldName(for: value)
+    public init(
+        groupBy: [IndexField<Root>] = [],
+        value: IndexField<Root>,
+        compression: Double = 100
+    ) {
+        self.indexFields = groupBy + [value]
         self.compression = compression
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(
-        groupByFieldNames: [String],
-        valueFieldName: String,
+    package init(
+        canonicalFields: [IndexFieldMetadata],
         compression: Double = 100
     ) {
-        self.groupByFieldNames = groupByFieldNames
-        self.valueFieldName = valueFieldName
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.compression = compression
     }
 

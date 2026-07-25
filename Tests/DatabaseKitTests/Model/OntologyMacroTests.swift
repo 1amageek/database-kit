@@ -53,7 +53,7 @@ struct OntDepartment {
 )
 struct OntProduct {
     var id: String = "fixture-id"
-    #Index(ScalarIndexKind<OntProduct>(fields: [\.category]))
+    #Index(.scalar, fields: [\OntProduct.category])
 
     @OWLDataProperty("https://example.org/onto#productName")
     var productName: String
@@ -130,7 +130,7 @@ struct OntFullDepartment {
 )
 struct OntFullProduct {
     var id: String = "fixture-id"
-    #Index(ScalarIndexKind<OntFullProduct>(fields: [\.category]))
+    #Index(.scalar, fields: [\OntFullProduct.category])
 
     @OWLDataProperty("http://example.org/onto#productName")
     var productName: String
@@ -505,7 +505,7 @@ struct DescriptorOwnershipTests {
 
     @Test("_persistableDescriptors contains #Index descriptors")
     func persistableDescriptorsContainsIndex() throws {
-        // OntProduct has #Index(ScalarIndexKind<...>(fields: [\.category]))
+        // OntProduct has a scalar index on category.
         let descs = try OntProduct._persistableDescriptors
         let indexDescs = descs.compactMap { $0 as? IndexDescriptor }
         #expect(indexDescs.contains { $0.name.contains("category") })
@@ -537,7 +537,7 @@ struct DescriptorOwnershipTests {
 
     @Test("OWLClassEntity.descriptors merges record and RDF descriptors")
     func descriptorsMerge() throws {
-        // OntProduct has @OWLClass + #Index(ScalarIndexKind) + @Transient
+        // OntProduct combines ontology, scalar-index, and transient metadata.
         let all = try OntProduct.descriptors
         let indexDescs = all.compactMap { $0 as? IndexDescriptor }
 

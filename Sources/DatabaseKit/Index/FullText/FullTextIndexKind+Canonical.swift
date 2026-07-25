@@ -26,7 +26,7 @@ extension FullTextIndexKind {
         }
 
         self.init(
-            fieldNames: kind.fieldNames,
+            canonicalFields: kind.fields,
             tokenizer: tokenizer,
             storePositions: try kind.requireBool("storePositions"),
             ngramSize: ngramSize,

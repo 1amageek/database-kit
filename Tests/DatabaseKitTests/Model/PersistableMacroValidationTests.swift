@@ -75,12 +75,27 @@ struct ModelMacroValidationTests {
     @Test("IndexKind types can be instantiated")
     func indexKindInstantiation() throws {
         // Verify that all built-in IndexKinds can be created with proper generic parameters
-        _ = ScalarIndexKind<SimpleUser>(fields: [\.email])
-        _ = CountIndexKind<OrderedIndexProduct>(groupBy: [\.category])
-        _ = SumIndexKind<OrderedIndexProduct, Double>(groupBy: [\.category], value: \.price)
-        _ = MinIndexKind<OrderedIndexProduct, Double>(groupBy: [\.category], value: \.price)
-        _ = MaxIndexKind<OrderedIndexProduct, Double>(groupBy: [\.category], value: \.price)
-        _ = VersionIndexKind<SimpleUser>(field: \.email)
+        _ = ScalarIndexKind<SimpleUser>(
+            fields: [SimpleUser.fields.email.ascending]
+        )
+        _ = CountIndexKind<OrderedIndexProduct>(
+            groupBy: [OrderedIndexProduct.fields.category.ascending]
+        )
+        _ = SumIndexKind<OrderedIndexProduct, Double>(
+            groupBy: [OrderedIndexProduct.fields.category.ascending],
+            value: OrderedIndexProduct.fields.price.ascending
+        )
+        _ = MinIndexKind<OrderedIndexProduct, Double>(
+            groupBy: [OrderedIndexProduct.fields.category.ascending],
+            value: OrderedIndexProduct.fields.price.ascending
+        )
+        _ = MaxIndexKind<OrderedIndexProduct, Double>(
+            groupBy: [OrderedIndexProduct.fields.category.ascending],
+            value: OrderedIndexProduct.fields.price.ascending
+        )
+        _ = VersionIndexKind<SimpleUser>(
+            field: SimpleUser.fields.email.ascending
+        )
 
         // All should succeed without throwing
     }
@@ -108,9 +123,9 @@ struct ModelMacroValidationTests {
 @Persistable
 struct OrderedIndexProduct {
     var id: String = "fixture-id"
-    #Index(ScalarIndexKind<OrderedIndexProduct>(fields: [\.category]))
-    #Index(ScalarIndexKind<OrderedIndexProduct>(fields: [\.price]))
-    #Index(ScalarIndexKind<OrderedIndexProduct>(fields: [\.name]))
+    #Index(.scalar, fields: [\OrderedIndexProduct.category])
+    #Index(.scalar, fields: [\OrderedIndexProduct.price])
+    #Index(.scalar, fields: [\OrderedIndexProduct.name])
 
     var category: String
     var price: Double

@@ -38,7 +38,7 @@ import DatabaseTypes
 ///     var score: Int64
 ///     var name: String
 ///
-///     #Index(RankIndexKind<Player, Int64>(field: \.score, bucketSize: 10))
+///     #Index(.rank(bucketSize: 10), field: \Player.score)
 /// }
 ///
 /// // Queries:
@@ -52,6 +52,8 @@ import DatabaseTypes
 /// - Medium (100): Balanced (default)
 /// - Large (1000): Fewer levels, faster writes, slower counts
 public struct RankIndexKind<Root: Persistable, Score: IndexNumericValue>: IndexKind {
+    public typealias Model = Root
+
     /// Identifier: "rank"
     public static var identifier: String { "rank" }
 
@@ -59,7 +61,7 @@ public struct RankIndexKind<Root: Persistable, Score: IndexNumericValue>: IndexK
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
     /// Field names for this index
-    public let fieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
     /// Stable score scalar type used by the runtime.
     public let scoreType: IndexScalarType
@@ -78,24 +80,20 @@ public struct RankIndexKind<Root: Persistable, Score: IndexNumericValue>: IndexK
         return "\(Root.persistableType)_rank_\(flattenedNames.joined(separator: "_"))"
     }
 
-    /// Initialize with KeyPath - type is inferred from KeyPath
-    ///
-    /// - Parameters:
-    ///   - field: KeyPath to the score field (type inferred)
-    ///   - bucketSize: Bucket size for Range Tree (default: 100)
-    public init(field: KeyPath<Root, Score>, bucketSize: Int = 100) {
-        self.fieldNames = [Root.fieldName(for: field)]
+    public init(field: IndexField<Root>, bucketSize: Int = 100) {
+        self.indexFields = [field]
         self.scoreType = Score.indexScalarType
         self.bucketSize = bucketSize
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(
-        fieldNames: [String],
+    package init(
+        canonicalFields: [IndexFieldMetadata],
         scoreType: IndexScalarType,
         bucketSize: Int = 100
     ) {
-        self.fieldNames = fieldNames
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.scoreType = scoreType
         self.bucketSize = bucketSize
     }

@@ -218,43 +218,56 @@ struct AggregationIndexKindValidationTests {
 private struct AggregationKindValidationRecord {
     var id: String = "fixture-id"
     #Index(
-        CountIndexKind<AggregationKindValidationRecord>(groupBy: []),
+        .count,
         name: "global_count"
     )
     #Index(
-        SumIndexKind<AggregationKindValidationRecord, Int64>(groupBy: [], value: \.value),
+        .sum,
+        value: \AggregationKindValidationRecord.value,
         name: "global_sum"
     )
     #Index(
-        AverageIndexKind<AggregationKindValidationRecord, Int64>(groupBy: [], value: \.value),
+        .average,
+        value: \AggregationKindValidationRecord.value,
         name: "global_average"
     )
     #Index(
-        MinIndexKind<AggregationKindValidationRecord, Int64>(groupBy: [], value: \.value),
+        .minimum,
+        value: \AggregationKindValidationRecord.value,
         name: "global_min"
     )
     #Index(
-        MaxIndexKind<AggregationKindValidationRecord, Int64>(groupBy: [], value: \.value),
+        .maximum,
+        value: \AggregationKindValidationRecord.value,
         name: "global_max"
     )
     #Index(
-        CountIndexKind<AggregationKindValidationRecord>(groupBy: [\.group]),
+        .count,
+        groupBy: [\AggregationKindValidationRecord.group],
         name: "grouped_count"
     )
     #Index(
-        SumIndexKind<AggregationKindValidationRecord, Int64>(groupBy: [\.group], value: \.value),
+        .sum,
+        groupBy: [\AggregationKindValidationRecord.group],
+        value: \AggregationKindValidationRecord.value,
         name: "grouped_sum"
     )
     #Index(
-        AverageIndexKind<AggregationKindValidationRecord, Int64>(groupBy: [\.group], value: \.value),
+        .average,
+        groupBy: [\AggregationKindValidationRecord.group],
+        value: \AggregationKindValidationRecord.value,
         name: "grouped_average"
     )
     #Index(
-        MinIndexKind<AggregationKindValidationRecord, Int64>(groupBy: [\.group], value: \.value),
+        .minimum,
+        groupBy: [\AggregationKindValidationRecord.group],
+        value: \AggregationKindValidationRecord.value,
         name: "grouped_min"
     )
     #Index(
-        MaxIndexKind<AggregationKindValidationRecord, Int64>(groupBy: [\.group], value: \.value),
+        .maximum,
+        groupBy: [\AggregationKindValidationRecord.group],
+        value: \AggregationKindValidationRecord.value,
         name: "grouped_max"
     )
 

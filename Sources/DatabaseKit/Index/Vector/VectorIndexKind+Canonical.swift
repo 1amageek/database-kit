@@ -20,7 +20,7 @@ extension VectorIndexKind {
         }
 
         self.init(
-            fieldNames: kind.fieldNames,
+            canonicalFields: kind.fields,
             dimensions: dimensions,
             metric: metric
         )

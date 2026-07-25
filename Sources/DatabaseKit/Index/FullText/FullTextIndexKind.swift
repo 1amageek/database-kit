@@ -66,6 +66,8 @@ public enum TokenizationStrategy: String, Sendable, Hashable {
 /// }
 /// ```
 public struct FullTextIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     /// Identifier: "fulltext"
     public static var identifier: String { "fulltext" }
 
@@ -73,7 +75,7 @@ public struct FullTextIndexKind<Root: Persistable>: IndexKind {
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
     /// Field names for this index
-    public let fieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
     /// Tokenization strategy
     public let tokenizer: TokenizationStrategy
@@ -95,22 +97,22 @@ public struct FullTextIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_fulltext_\(flattenedNames.joined(separator: "_"))"
     }
 
-    /// Initialize with KeyPaths
+    /// Initialize with model-scoped fields.
     ///
     /// - Parameters:
-    ///   - fields: KeyPaths to text fields to index
+    ///   - fields: Text fields to index
     ///   - tokenizer: Tokenization strategy (default: .simple)
     ///   - storePositions: Whether to store term positions (default: true)
     ///   - ngramSize: N-gram size for ngram tokenizer (default: 3)
     ///   - minTermLength: Minimum term length to index (default: 2)
     public init(
-        fields: [PartialKeyPath<Root>],
+        fields: [IndexField<Root>],
         tokenizer: TokenizationStrategy = .simple,
         storePositions: Bool = true,
         ngramSize: Int = 3,
         minTermLength: Int = 2
     ) {
-        self.fieldNames = fields.map { Root.fieldName(for: $0) }
+        self.indexFields = fields
         self.tokenizer = tokenizer
         self.storePositions = storePositions
         self.ngramSize = ngramSize
@@ -119,13 +121,15 @@ public struct FullTextIndexKind<Root: Persistable>: IndexKind {
 
     /// Initialize with field name strings (from canonical metadata)
     public init(
-        fieldNames: [String],
+        canonicalFields: [IndexFieldMetadata],
         tokenizer: TokenizationStrategy = .simple,
         storePositions: Bool = true,
         ngramSize: Int = 3,
         minTermLength: Int = 2
     ) {
-        self.fieldNames = fieldNames
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.tokenizer = tokenizer
         self.storePositions = storePositions
         self.ngramSize = ngramSize

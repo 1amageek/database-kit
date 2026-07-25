@@ -46,8 +46,7 @@ extension TimeWindowLeaderboardIndexKind {
         }
 
         self.init(
-            scoreFieldName: kind.fieldNames[kind.fieldNames.count - 1],
-            groupByFieldNames: Array(kind.fieldNames.dropLast()),
+            canonicalFields: kind.fields,
             window: window,
             windowCount: windowCount
         )

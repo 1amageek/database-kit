@@ -47,14 +47,15 @@ public enum SpatialEncoding: String, Sendable, Hashable {
 /// }
 /// ```
 public struct SpatialIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     /// Identifier: "spatial"
     public static var identifier: String { "spatial" }
 
     /// Subspace structure: flat
     public static var subspaceStructure: SubspaceStructure { .flat }
 
-    /// Field names for this index (lat/lon or x/y/z)
-    public let fieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
     /// Spatial encoding scheme
     public let encoding: SpatialEncoding
@@ -72,45 +73,34 @@ public struct SpatialIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_spatial_\(flattenedNames.joined(separator: "_"))"
     }
 
-    /// Initialize with KeyPaths for 2D coordinates (lat/lon)
-    ///
-    /// - Parameters:
-    ///   - latitude: KeyPath to latitude field
-    ///   - longitude: KeyPath to longitude field
-    ///   - encoding: Spatial encoding scheme (default: .s2)
-    ///   - level: Precision level (default: 15)
     public init(
-        latitude: PartialKeyPath<Root>,
-        longitude: PartialKeyPath<Root>,
+        location: IndexField<Root>,
         encoding: SpatialEncoding = .s2,
         level: Int = 15
     ) {
-        self.fieldNames = [Root.fieldName(for: latitude), Root.fieldName(for: longitude)]
+        self.indexFields = [location]
         self.encoding = encoding
         self.level = level
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(fieldNames: [String], encoding: SpatialEncoding = .s2, level: Int = 15) {
-        self.fieldNames = fieldNames
+    package init(
+        canonicalFields: [IndexFieldMetadata],
+        encoding: SpatialEncoding = .s2,
+        level: Int = 15
+    ) {
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.encoding = encoding
         self.level = level
     }
 
     public func validateConfiguration() throws(IndexValidationError) {
-        let maximumLevel = encoding == .morton && fieldNames.count == 3
-            ? 20
-            : 30
+        let maximumLevel = encoding == .morton ? 20 : 30
         guard (0...maximumLevel).contains(level) else {
             throw .invalidConfiguration(
                 index: Self.identifier,
                 reason: "Level must be in 0...\(maximumLevel)"
-            )
-        }
-        guard encoding != .s2 || fieldNames.count == 2 else {
-            throw .invalidConfiguration(
-                index: Self.identifier,
-                reason: "S2 indexes require latitude and longitude fields"
             )
         }
     }
@@ -119,19 +109,21 @@ public struct SpatialIndexKind<Root: Persistable>: IndexKind {
     public static func validateFields(
         _ fields: [FieldSchema]
     ) throws(IndexValidationError) {
-        guard fields.count >= 2 && fields.count <= 3 else {
+        guard fields.count == 1 else {
             throw .invalidFieldCount(
                 index: identifier,
-                expected: 2,
+                expected: 1,
                 actual: fields.count
             )
         }
         for field in fields {
-            guard field.isNumeric else {
+            guard !field.isArray,
+                  (field.type == .geographicPoint
+                    || field.type == .geographicPosition) else {
                 throw .unsupportedField(
                     index: identifier,
                     field: field,
-                    reason: "Spatial coordinates must be numeric"
+                    reason: "Spatial indexes require a geographic point or position"
                 )
             }
         }

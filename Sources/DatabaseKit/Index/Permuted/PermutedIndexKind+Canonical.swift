@@ -19,6 +19,6 @@ extension PermutedIndexKind {
                 key: "permutation"
             )
         }
-        self.init(fieldNames: kind.fieldNames, permutation: permutation)
+        self.init(canonicalFields: kind.fields, permutation: permutation)
     }
 }

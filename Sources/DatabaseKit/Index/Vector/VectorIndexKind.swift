@@ -58,6 +58,8 @@ public enum VectorMetric: String, Sendable, Hashable {
 /// - Model defines **what** to index (dimensions, metric)
 /// - Runtime selects **how** to index (algorithm: flat/HNSW/IVF via AlgorithmConfiguration)
 public struct VectorIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     /// Identifier: "vector"
     public static var identifier: String { "vector" }
 
@@ -65,7 +67,7 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
     /// Field name for the vector field
-    public let fieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
     /// Vector dimensions (e.g., 384 for MiniLM, 768 for BERT, 1536 for OpenAI)
     public let dimensions: Int
@@ -81,29 +83,24 @@ public struct VectorIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_vector_\(flattenedNames.joined(separator: "_"))"
     }
 
-    /// Initialize with KeyPath
-    ///
-    /// **Model-level configuration**: Only data structure properties
-    /// - embedding: KeyPath to the vector field
-    /// - dimensions: Vector size (must match embedding model)
-    /// - metric: Distance calculation method
-    ///
-    /// **Not included here**: Algorithm selection (flatScan/HNSW/IVF)
-    /// - Algorithm is runtime configuration (via AlgorithmConfiguration)
-    ///
-    /// - Parameters:
-    ///   - embedding: KeyPath to the vector field
-    ///   - dimensions: Vector dimensions (must be positive)
-    ///   - metric: Distance metric (default: cosine)
-    public init(embedding: PartialKeyPath<Root>, dimensions: Int, metric: VectorMetric = .cosine) {
-        self.fieldNames = [Root.fieldName(for: embedding)]
+    public init(
+        embedding: IndexField<Root>,
+        dimensions: Int,
+        metric: VectorMetric = .cosine
+    ) {
+        self.indexFields = [embedding]
         self.dimensions = dimensions
         self.metric = metric
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(fieldNames: [String], dimensions: Int, metric: VectorMetric = .cosine) {
-        self.fieldNames = fieldNames
+    package init(
+        canonicalFields: [IndexFieldMetadata],
+        dimensions: Int,
+        metric: VectorMetric = .cosine
+    ) {
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.dimensions = dimensions
         self.metric = metric
     }

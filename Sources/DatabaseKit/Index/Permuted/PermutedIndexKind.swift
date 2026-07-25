@@ -25,7 +25,10 @@ import DatabaseTypes
 /// **Usage**:
 /// ```swift
 /// // Base compound index on (country, city, name)
-/// #Index(ScalarIndexKind<Location>(fields: [\.country, \.city, \.name]))
+/// #Index(
+///     .scalar,
+///     fields: [\Location.country, \Location.city, \Location.name]
+/// )
 ///
 /// // Permuted index for (city, country, name) ordering
 /// #Index(
@@ -40,6 +43,8 @@ import DatabaseTypes
 /// - Base index (country, city, name): Best for queries starting with country
 /// - Permuted index (city, country, name): Best for queries starting with city
 public struct PermutedIndexKind<Root: Persistable>: IndexKind {
+    public typealias Model = Root
+
     /// Identifier: "permuted"
     public static var identifier: String { "permuted" }
 
@@ -47,7 +52,7 @@ public struct PermutedIndexKind<Root: Persistable>: IndexKind {
     public static var subspaceStructure: SubspaceStructure { .flat }
 
     /// Field names for this index
-    public let fieldNames: [String]
+    public let indexFields: [IndexField<Root>]
 
     /// The permutation defining field reordering
     public let permutation: Permutation
@@ -61,19 +66,23 @@ public struct PermutedIndexKind<Root: Persistable>: IndexKind {
         return "\(Root.persistableType)_permuted_\(flattenedNames.joined(separator: "_"))_\(permStr)"
     }
 
-    /// Initialize with KeyPaths and permutation
+    /// Initialize with model-scoped fields and a permutation.
     ///
     /// - Parameters:
-    ///   - fields: KeyPaths to fields in original order
+    ///   - fields: Fields in original order
     ///   - permutation: The permutation to apply to field ordering
-    public init(fields: [PartialKeyPath<Root>], permutation: Permutation) {
-        self.fieldNames = fields.map { Root.fieldName(for: $0) }
+    public init(fields: [IndexField<Root>], permutation: Permutation) {
+        self.indexFields = fields
         self.permutation = permutation
     }
 
-    /// Initialize with field name strings (from canonical metadata)
-    public init(fieldNames: [String], permutation: Permutation) {
-        self.fieldNames = fieldNames
+    package init(
+        canonicalFields: [IndexFieldMetadata],
+        permutation: Permutation
+    ) {
+        self.indexFields = canonicalFields.map {
+            IndexField<Root>(metadata: $0)
+        }
         self.permutation = permutation
     }
 

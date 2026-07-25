@@ -5,7 +5,7 @@ import DatabaseTypes
 /// index behavior without retaining a generic model type.
 /// - `identifier`: IndexKind.identifier
 /// - `subspaceStructure`: IndexKind.subspaceStructure
-/// - `fieldNames`: IndexKind.fieldNames
+/// - `fields`: selected field identities and key ordering
 /// - `metadata`: Kind-specific properties (dimensions, metric, strategy, etc.)
 
 public struct IndexKindMetadata: Sendable, Hashable {
@@ -16,8 +16,12 @@ public struct IndexKindMetadata: Sendable, Hashable {
     /// Subspace structure for index storage
     public let subspaceStructure: SubspaceStructure
 
-    /// Field names for indexed KeyPaths
-    public let fieldNames: [String]
+    /// Selected persisted fields.
+    public let fields: [IndexFieldMetadata]
+
+    public var fieldNames: [String] {
+        fields.map { $0.name }
+    }
 
     /// Kind-specific metadata:
     /// - Vector: "dimensions", "metric"
@@ -33,7 +37,7 @@ public struct IndexKindMetadata: Sendable, Hashable {
     public init<Kind: IndexKind>(_ kind: borrowing Kind) {
         self.identifier = Kind.identifier
         self.subspaceStructure = Kind.subspaceStructure
-        self.fieldNames = kind.fieldNames
+        self.fields = kind.indexFields.map { $0.metadata }
         self.metadata = kind.metadata
     }
 
@@ -42,12 +46,12 @@ public struct IndexKindMetadata: Sendable, Hashable {
     public init(
         identifier: String,
         subspaceStructure: SubspaceStructure,
-        fieldNames: [String],
+        fields: [IndexFieldMetadata],
         metadata: [String: FieldValue]
     ) {
         self.identifier = identifier
         self.subspaceStructure = subspaceStructure
-        self.fieldNames = fieldNames
+        self.fields = fields
         self.metadata = metadata
     }
 }

@@ -30,7 +30,11 @@ import DatabaseTypes
 ///     var title: String { get }
 ///
 ///     #Directory<Self>("app", "documents")
-///     #Index(ScalarIndexKind<Self>(fields: [\Self.title]), name: "Document_title")
+///     #PolymorphicIndex(
+///         .scalar,
+///         fields: ["title"],
+///         name: "Document_title"
+///     )
 /// }
 ///
 /// @Persistable
@@ -119,32 +123,30 @@ public protocol Polymorphable: Persistable {
 
     // MARK: - Polymorphic Index Metadata
 
-    /// Index descriptors shared across all conforming types
+    /// Logical index definitions shared across all conforming types.
     ///
     /// Generated from `#Index` macro declarations in the protocol body.
     /// These indexes span all conforming types and are stored in the polymorphic directory.
     ///
     /// **Example**:
     /// ```swift
-    /// #Index(
-    ///     ScalarIndexKind<Self>(fields: [\Self.title]),
+    /// #PolymorphicIndex(
+    ///     .scalar,
+    ///     fields: ["title"],
     ///     name: "Document_title"
     /// )
     /// ```
     ///
-    /// **Note**: Index fields must be properties defined in the protocol.
-    static var polymorphicIndexDescriptors: [IndexDescriptor] {
-        get throws(IndexDeclarationError)
-    }
+    /// Field names are resolved against each concrete member schema. Runtime
+    /// key paths are never retained by this contract.
+    static var polymorphicIndexes: [PolymorphicIndexDefinition] { get }
 }
 
 // MARK: - Default Implementations
 
 public extension Polymorphable {
-    /// Default implementation returns empty array (no polymorphic indexes)
-    static var polymorphicIndexDescriptors: [IndexDescriptor] {
-        get throws(IndexDeclarationError) { [] }
-    }
+    /// Default implementation returns no polymorphic indexes.
+    static var polymorphicIndexes: [PolymorphicIndexDefinition] { [] }
 
     /// Default implementation returns `.default` layer
     static var polymorphicDirectoryLayer: DirectoryLayer { .default }

@@ -49,7 +49,11 @@ struct IndexKindMetadataTests {
         IndexKindMetadata(
             identifier: "test",
             subspaceStructure: .flat,
-            fieldNames: ["value"],
+            fields: [
+                IndexFieldMetadata(
+                    identity: FieldIdentity(name: "value", number: 1)
+                )
+            ],
             metadata: values
         )
     }

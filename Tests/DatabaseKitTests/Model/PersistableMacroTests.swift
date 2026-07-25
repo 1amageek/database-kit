@@ -346,7 +346,7 @@ struct StaticAndComputedMemberModel {
 @Persistable
 struct IndexedUser {
     var id: String = "fixture-id"
-    #Index(ScalarIndexKind<IndexedUser>(fields: [\.email]), unique: true)
+    #Index(.scalar, fields: [\IndexedUser.email], unique: true)
 
     var email: String
     var name: String
@@ -355,8 +355,8 @@ struct IndexedUser {
 @Persistable
 struct Product {
     var id: String = "fixture-id"
-    #Index(ScalarIndexKind<Product>(fields: [\.category]))
-    #Index(ScalarIndexKind<Product>(fields: [\.category, \.price]))
+    #Index(.scalar, fields: [\Product.category])
+    #Index(.scalar, fields: [\Product.category, \Product.price])
 
     var category: String
     var price: Double
@@ -366,7 +366,11 @@ struct Product {
 @Persistable
 struct CustomNamedUser {
     var id: String = "fixture-id"
-    #Index(ScalarIndexKind<CustomNamedUser>(fields: [\.email]), name: "user_email_idx")
+    #Index(
+        .scalar,
+        fields: [\CustomNamedUser.email],
+        name: "user_email_idx"
+    )
 
     var email: String
 }
@@ -394,9 +398,13 @@ struct FieldNumberUser {
 @Persistable
 struct Analytics {
     var id: String = "fixture-id"
-    #Index(ScalarIndexKind<Analytics>(fields: [\.category]))
-    #Index(CountIndexKind<Analytics>(groupBy: [\.category]))
-    #Index(SumIndexKind<Analytics, Double>(groupBy: [\.category], value: \.value))
+    #Index(.scalar, fields: [\Analytics.category])
+    #Index(.count, groupBy: [\Analytics.category])
+    #Index(
+        .sum,
+        groupBy: [\Analytics.category],
+        value: \Analytics.value
+    )
 
     var category: String
     var value: Double
@@ -445,16 +453,14 @@ extension MacroPolymorphicDocument {
         [.staticPath("macro-polymorphic-documents")]
     }
 
-    static var polymorphicIndexDescriptors: [IndexDescriptor] {
-        get throws(IndexDeclarationError) {
-            try [
-                IndexDescriptor(
-                    name: "MacroPolymorphicDocument_title",
-                    keyPaths: [\Self.title],
-                    kind: ScalarIndexKind<Self>(fields: [\Self.title])
-                )
-            ]
-        }
+    static var polymorphicIndexes: [PolymorphicIndexDefinition] {
+        [
+            PolymorphicIndexDefinition(
+                name: "MacroPolymorphicDocument_title",
+                definition: .scalar,
+                fields: [.init(name: "title")]
+            )
+        ]
     }
 }
 

@@ -6,10 +6,9 @@ extension GraphIndexKind {
     ) throws(IndexKindMetadataError) {
         let metadata = try PropertyGraphIndexMetadata(canonical: kind)
         self.init(
-            fromField: metadata.sourceFieldName,
-            edgeField: metadata.labelFieldName,
-            toField: metadata.targetFieldName,
-            graphField: metadata.namespaceFieldName,
+            canonicalFields: kind.fields,
+            includesEdgeField: !metadata.labelFieldName.isEmpty,
+            includesGraphField: metadata.namespaceFieldName != nil,
             strategy: metadata.declarativeStrategy
         )
     }

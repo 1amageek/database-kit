@@ -105,8 +105,8 @@ import DatabaseKit
 @Persistable
 struct User {
     #Directory<User>("app", "users")
-    #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
-    #Index(ScalarIndexKind<User>(fields: [\.createdAt]))
+    #Index(.scalar, fields: [\User.email], unique: true)
+    #Index(.scalar, fields: [\User.createdAt])
 
     var id: String
     var email: String
@@ -134,8 +134,11 @@ The `@Persistable` macro generates all required protocol conformances:
 ```swift
 @Persistable
 struct Product {
-    #Index(ScalarIndexKind<Product>(fields: [\.category, \.price]))
-    #Index(ScalarIndexKind<Product>(fields: [\.name]), unique: true)
+    #Index(
+        .scalar,
+        fields: [\Product.category, \Product.price]
+    )
+    #Index(.scalar, fields: [\Product.name], unique: true)
 
     var id: String
     var name: String
@@ -171,16 +174,19 @@ public protocol Entity: Polymorphable {
     #Directory<Self>("memory", "entities")
 
     var label: String { get }
-    var embedding: [Float] { get set }
+    var embedding: Vector { get set }
 
-    #Index(VectorIndexKind<Self>(embedding: \Self.embedding, dimensions: 256))
+    #PolymorphicIndex(
+        .vector(dimensions: 256),
+        embedding: "embedding"
+    )
 }
 
 @Persistable
 public struct Person: Entity {
     public var id: String
     public var name: String
-    public var embedding: [Float]
+    public var embedding: Vector
 
     public var label: String { name }
 }
@@ -296,15 +302,19 @@ PermutedIndexKind<Pair>(
 )
 ```
 
-Schema macros may accept KeyPath syntax directly:
+Concrete model declarations accept KeyPath syntax directly:
 
 ```swift
-#Index(VectorIndexKind<Self>(embedding: \Self.embedding, dimensions: 256))
+#Index(
+    .vector(dimensions: 256),
+    embedding: \Document.embedding
+)
 ```
 
-The enclosing macro consumes `\Self.embedding` and emits the corresponding
-generated field descriptor. The runtime `VectorIndexKind` does not retain that
-KeyPath.
+The enclosing macro consumes `\Document.embedding` and emits the corresponding
+generated field identity. Protocol-level polymorphic declarations use
+`fieldNames`, which `@Polymorphable` verifies against protocol properties.
+Neither runtime path retains a KeyPath.
 
 ## Custom Index Kinds
 

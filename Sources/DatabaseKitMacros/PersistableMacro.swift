@@ -26,7 +26,7 @@ import SwiftDiagnostics
 /// @Persistable
 /// struct User {
 ///     var id: String
-///     #Index(ScalarIndexKind<User>(fields: [\.email]), unique: true)
+///     #Index(.scalar, fields: [\User.email], unique: true)
 ///
 ///     var email: String
 ///     var name: String
@@ -333,112 +333,92 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         }
 
         // Extract #Index macro calls and generate descriptors
-        // Also collect all keyPath strings for fieldName(for:) generation
         var descriptorInits: [String] = []  // All descriptors (Index, Relationship, etc.)
         var indexDescriptorInits: [String] = []
-        var allIndexKeyPaths: Set<String> = []  // Collect all keyPaths for fieldName generation
 
         for member in structDecl.memberBlock.members {
             if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
                macroDecl.macroName.text == "Index" {
 
-                // Format: #Index(IndexKind<T>(...), storedFields: [...], unique: Bool, name: String?)
-                // First unlabeled argument is the IndexKind expression (type specified in IndexKind generic)
-                var keyPaths: [String] = []
+                // Format: #Index(.scalar, fields: [\Model.field], ...)
+                // The macro owns the KeyPath-to-IndexField transition.
+                var fieldPathsByRole: [String: [String]] = [:]
                 var storedFieldKeyPaths: [String] = []
-                var indexKindExpr: String?
-                var indexKindName: String?
+                var fieldOrders: [String] = []
+                var definition: ParsedIndexDefinition?
+                var definitionExpression: String?
                 var isUnique = false
                 var indexName: String?
 
                 for arg in macroDecl.arguments {
-                    // First unlabeled argument: IndexKind expression (e.g., ScalarIndexKind(fields: [\.email]))
                     if arg.label == nil {
-                        if let funcCall = arg.expression.as(FunctionCallExprSyntax.self) {
-                            // Extract IndexKind name (e.g., "ScalarIndexKind")
-                            indexKindName = funcCall.calledExpression.description.trimmingCharacters(in: .whitespaces)
-
-                            // Extract KeyPaths from all function arguments
-                            var extractedKeyPaths: [String] = []
-                            var keyPathsByArgumentLabel: [String: [String]] = [:]
-                            for funcArg in funcCall.arguments {
-                                var argumentKeyPaths: [String] = []
-
-                                // Check if argument is an array of KeyPaths (e.g., fields: [\.email, \.name])
-                                if let arrayExpr = funcArg.expression.as(ArrayExprSyntax.self) {
-                                    for element in arrayExpr.elements {
-                                        if let keyPathExpr = element.expression.as(KeyPathExprSyntax.self) {
-                                            let keyPathString = extractKeyPathString(from: keyPathExpr)
-                                            if !keyPathString.isEmpty {
-                                                argumentKeyPaths.append(keyPathString)
-                                            }
-                                        }
-                                    }
-                                }
-                                // Check if argument is a single KeyPath (e.g., value: \.price)
-                                else if let keyPathExpr = funcArg.expression.as(KeyPathExprSyntax.self) {
-                                    let keyPathString = extractKeyPathString(from: keyPathExpr)
-                                    if !keyPathString.isEmpty {
-                                        argumentKeyPaths.append(keyPathString)
-                                    }
-                                }
-
-                                if let label = funcArg.label?.text {
-                                    keyPathsByArgumentLabel[label, default: []].append(contentsOf: argumentKeyPaths)
-                                }
-                                extractedKeyPaths.append(contentsOf: argumentKeyPaths)
-                            }
-
-                            let selectedKeyPaths: [String]
-                            if indexKindName?.contains("TimeWindowLeaderboardIndexKind") == true {
-                                selectedKeyPaths = (keyPathsByArgumentLabel["groupBy"] ?? []) +
-                                    (keyPathsByArgumentLabel["scoreField"] ?? [])
-                            } else {
-                                selectedKeyPaths = extractedKeyPaths
-                            }
-                            keyPaths.append(contentsOf: selectedKeyPaths)
-                            for keyPath in selectedKeyPaths {
-                                allIndexKeyPaths.insert(keyPath)
-                            }
-
-                            // Store the original expression as-is
-                            indexKindExpr = arg.expression.description.trimmingCharacters(in: .whitespaces)
+                        definition = parseIndexDefinition(arg.expression)
+                        definitionExpression = arg.expression.description
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                    } else if let label = arg.label, label.text == "storedFields" {
+                        for keyPathString in collectKeyPathStrings(
+                            from: arg.expression
+                        ) {
+                            storedFieldKeyPaths.append(keyPathString)
                         }
-                    }
-                    // "storedFields:" argument (KeyPath array for covering index)
-                    else if let label = arg.label, label.text == "storedFields" {
-                        if let arrayExpr = arg.expression.as(ArrayExprSyntax.self) {
-                            for element in arrayExpr.elements {
-                                if let keyPathExpr = element.expression.as(KeyPathExprSyntax.self) {
-                                    let keyPathString = extractKeyPathString(from: keyPathExpr)
-                                    if !keyPathString.isEmpty {
-                                        storedFieldKeyPaths.append(keyPathString)
-                                        allIndexKeyPaths.insert(keyPathString)
-                                    }
-                                }
+                    } else if let label = arg.label, label.text == "orders" {
+                        if let orders = arg.expression.as(ArrayExprSyntax.self) {
+                            fieldOrders = orders.elements.map {
+                                $0.expression.description.trimmingCharacters(
+                                    in: .whitespacesAndNewlines
+                                )
                             }
                         }
-                    }
-                    // "unique:" argument
-                    else if let label = arg.label, label.text == "unique" {
+                    } else if let label = arg.label, label.text == "unique" {
                         if let boolExpr = arg.expression.as(BooleanLiteralExprSyntax.self) {
                             isUnique = boolExpr.literal.text == "true"
                         }
-                    }
-                    // "name:" argument
-                    else if let label = arg.label, label.text == "name" {
+                    } else if let label = arg.label, label.text == "name" {
                         if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self),
                            let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
                             indexName = segment.content.text
                         }
+                    } else if let label = arg.label {
+                        fieldPathsByRole[label.text] = collectKeyPathStrings(
+                            from: arg.expression
+                        )
                     }
                 }
 
-                let isCountIndex = indexKindName?
-                    .components(separatedBy: "<")
-                    .first?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) == "CountIndexKind"
-                guard !keyPaths.isEmpty || isCountIndex else { continue }
+                guard let definition, let definitionExpression else {
+                    throw DiagnosticsError(diagnostics: [
+                        Diagnostic(
+                            node: Syntax(macroDecl),
+                            message: MacroExpansionErrorMessage(
+                                "#Index requires an IndexDefinition case"
+                            )
+                        )
+                    ])
+                }
+
+                let keyPaths = try selectedIndexFieldPaths(
+                    definition: definition,
+                    roles: fieldPathsByRole,
+                    node: Syntax(macroDecl)
+                )
+                try validateIndexFieldOrders(
+                    definition: definition,
+                    roles: fieldPathsByRole,
+                    orders: fieldOrders,
+                    node: Syntax(macroDecl)
+                )
+                for keyPath in keyPaths {
+                    guard !keyPath.contains(".") else {
+                        throw DiagnosticsError(diagnostics: [
+                            Diagnostic(
+                                node: Syntax(macroDecl),
+                                message: MacroExpansionErrorMessage(
+                                    "Index field '\(keyPath)' must identify one persisted property"
+                                )
+                            )
+                        ])
+                    }
+                }
 
                 // Generate index name if not provided
                 // Use IndexKind-specific naming patterns
@@ -449,35 +429,30 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     let flattenedKeyPaths = keyPaths.map { $0.replacingOccurrences(of: ".", with: "_") }
                     finalIndexName = generateIndexName(
                         typeName: typeName,
-                        indexKindName: indexKindName ?? "scalar",
+                        definition: definition,
                         fieldNames: flattenedKeyPaths
                     )
                 }
 
-                // Generate IndexDescriptor initialization with KeyPaths
-                // e.g., [\User.email, \User.address.city]
-                let keyPathsExpression: String
-                if keyPaths.isEmpty {
-                    keyPathsExpression = "[PartialKeyPath<\(structName)>]()"
-                } else {
-                    let keyPathsLiterals = keyPaths
-                        .map { "\\\(structName).\($0)" }
-                        .joined(separator: ", ")
-                    keyPathsExpression = "[\(keyPathsLiterals)]"
-                }
-                let kindInit = indexKindExpr ?? "ScalarIndexKind(fieldNames: [])"
+                let selectedFields = compiledIndexFields(
+                    definition: definition,
+                    fieldPaths: keyPaths,
+                    rootType: structName,
+                    fieldOrders: fieldOrders
+                )
                 let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
 
-                // Generate stored field names if present.
-                let storedFieldNamesLiterals = storedFieldKeyPaths.map { "\"\($0)\"" }.joined(separator: ", ")
+                let storedFields = storedFieldKeyPaths
+                    .map { "\(structName).fields.\($0).ascending" }
+                    .joined(separator: ", ")
 
                 let descriptorInit: String
                 if storedFieldKeyPaths.isEmpty {
                     descriptorInit = """
                         IndexDescriptor(
                             name: "\(finalIndexName)",
-                            keyPaths: \(keyPathsExpression),
-                            kind: \(kindInit),
+                            definition: \(definitionExpression),
+                            fields: \(selectedFields),
                             commonOptions: \(optionsInit)
                         )
                     """
@@ -485,10 +460,10 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     descriptorInit = """
                         IndexDescriptor(
                             name: "\(finalIndexName)",
-                            keyPaths: \(keyPathsExpression),
-                            kind: \(kindInit),
+                            definition: \(definitionExpression),
+                            fields: \(selectedFields),
                             commonOptions: \(optionsInit),
-                            storedFieldNames: [\(storedFieldNamesLiterals)]
+                            storedFields: [\(storedFields)]
                         )
                     """
                 }
@@ -598,8 +573,9 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                             let reverseIndexInit = """
                                 IndexDescriptor(
                                     name: "\(reverseIndexName)",
-                                    keyPaths: [\\\(structName).\(fieldName)],
-                                    kind: ScalarIndexKind<\(structName)>(fieldNames: ["\(fieldName)"]),
+                                    kind: ScalarIndexKind<\(structName)>(
+                                        fields: [\(structName).fields.\(fieldName).ascending]
+                                    ),
                                     commonOptions: .init()
                                 )
                             """
@@ -619,10 +595,9 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 let graphIndexInit = """
                     IndexDescriptor(
                         name: "\(graphIndexName)",
-                        keyPaths: [\\\(structName).\(objPropInfo.fromField), \\\(structName).\(objPropInfo.toField)],
                         kind: GraphIndexKind<\(structName)>.adjacency(
-                            source: \\.\(objPropInfo.fromField),
-                            target: \\.\(objPropInfo.toField)
+                            source: \(structName).fields.\(objPropInfo.fromField).ascending,
+                            target: \(structName).fields.\(objPropInfo.toField).ascending
                         ),
                         commonOptions: .init()
                     )
@@ -1009,137 +984,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(subscriptDecl)
 
-        // Generate fieldName(for:) methods for KeyPath → String conversion
-        // Include top-level fields and all indexed keyPaths (including nested)
-        var fieldNameCases: [String] = []
-
-        // Add top-level fields (excludes transient, but includes @Relationship below)
-        for fieldInfo in fieldInfos {
-            if !fieldInfo.isTransient {
-                fieldNameCases.append("if keyPath == \\\(structName).\(fieldInfo.name) { return \"\(fieldInfo.name)\" }")
-            }
-        }
-
-        // Add nested keyPaths from #Index declarations
-        for keyPathStr in allIndexKeyPaths.sorted() {
-            // Skip top-level fields (already added)
-            if !keyPathStr.contains(".") { continue }
-            fieldNameCases.append("if keyPath == \\\(structName).\(keyPathStr) { return \"\(keyPathStr)\" }")
-        }
-
-        let fieldNameBody = fieldNameCases.joined(separator: "\n        ")
-
-        // Generate value-type-based dispatch for uniquely-typed fields.
-        //
-        // Release builds with Whole-Module Optimization can share computed
-        // KeyPath accessors across generic specializations. When a polymorphic
-        // protocol extension creates `\Self.field` via generic context, the
-        // resulting KeyPath has identity that differs from a literal
-        // `\ConcreteType.field`, so the identity-based dispatch above and the
-        // `_fieldName(fromKeyPathDescription:)` parser both miss (the
-        // description is `\Type.<computed 0xADDR (ValueType)>`).
-        //
-        // Bridge that gap by emitting type-based dispatch for fields whose
-        // value type is unique within the struct. We deliberately only emit
-        // these for *uniquely-typed* fields so multiple same-typed fields
-        // cannot collide. Two-typed fields fall back to identity/description.
-        func canonicalTypeString(_ raw: String) -> String {
-            var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            while s.hasSuffix("?") {
-                s = "Optional<" + String(s.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines) + ">"
-            }
-            if s.hasPrefix("[") && s.hasSuffix("]") {
-                let inner = String(s.dropFirst().dropLast())
-                var depth = 0
-                var colonIndex: String.Index? = nil
-                for idx in inner.indices {
-                    let c = inner[idx]
-                    if c == "<" || c == "[" || c == "(" { depth += 1 }
-                    else if c == ">" || c == "]" || c == ")" { depth -= 1 }
-                    else if c == ":" && depth == 0 {
-                        colonIndex = idx
-                        break
-                    }
-                }
-                if let colonIndex {
-                    let key = inner[..<colonIndex].trimmingCharacters(in: .whitespacesAndNewlines)
-                    let value = inner[inner.index(after: colonIndex)...].trimmingCharacters(in: .whitespacesAndNewlines)
-                    s = "Dictionary<\(key), \(value)>"
-                } else {
-                    s = "Array<\(inner.trimmingCharacters(in: .whitespacesAndNewlines))>"
-                }
-            }
-            return s
-        }
-
-        var canonicalTypeCounts: [String: Int] = [:]
-        for fieldInfo in fieldInfos where !fieldInfo.isTransient {
-            canonicalTypeCounts[canonicalTypeString(fieldInfo.type), default: 0] += 1
-        }
-        var valueTypeDispatchCases: [String] = []
-        var partialKeyPathTypeDispatchCases: [String] = []
-        for fieldInfo in fieldInfos where !fieldInfo.isTransient {
-            let canonical = canonicalTypeString(fieldInfo.type)
-            guard canonicalTypeCounts[canonical] == 1 else { continue }
-            let fieldType = fieldInfo.type.trimmingCharacters(in: .whitespacesAndNewlines)
-            valueTypeDispatchCases.append("if Value.self == (\(fieldType)).self { return \"\(fieldInfo.name)\" }")
-            partialKeyPathTypeDispatchCases.append("if keyPath as? KeyPath<\(structName), \(fieldType)> != nil { return \"\(fieldInfo.name)\" }")
-        }
-        let valueTypeDispatchBody = valueTypeDispatchCases.joined(separator: "\n        ")
-        let partialKeyPathTypeDispatchBody = partialKeyPathTypeDispatchCases.joined(separator: "\n        ")
-
-        let fieldNameDecl: DeclSyntax = """
-            public static func fieldName<Value>(for keyPath: KeyPath<\(raw: structName), Value>) -> String {
-                \(raw: fieldNameBody)
-                \(raw: valueTypeDispatchBody)
-                let description = "\\(keyPath)"
-                return _fieldName(fromKeyPathDescription: description) ?? description
-            }
-            """
-        decls.append(fieldNameDecl)
-
-        // Generate PartialKeyPath version
-        let partialFieldNameDecl: DeclSyntax = """
-            public static func fieldName(for keyPath: PartialKeyPath<\(raw: structName)>) -> String {
-                \(raw: fieldNameBody)
-                \(raw: partialKeyPathTypeDispatchBody)
-                let description = "\\(keyPath)"
-                return _fieldName(fromKeyPathDescription: description) ?? description
-            }
-            """
-        decls.append(partialFieldNameDecl)
-
-        // Generate AnyKeyPath version (for type-erased usage)
-        let anyFieldNameDecl: DeclSyntax = """
-            public static func fieldName(for keyPath: AnyKeyPath) -> String {
-                if let partialKeyPath = keyPath as? PartialKeyPath<\(raw: structName)> {
-                    return fieldName(for: partialKeyPath)
-                }
-                let description = "\\(keyPath)"
-                return _fieldName(fromKeyPathDescription: description) ?? description
-            }
-            """
-        decls.append(anyFieldNameDecl)
-
-        let fieldNameFallbackDecl: DeclSyntax = """
-            private static func _fieldName(fromKeyPathDescription description: String) -> String? {
-                let parts = description.split(separator: ".").map(String.init)
-                for index in parts.indices {
-                    let component = parts[index].hasPrefix("\\\\")
-                        ? String(parts[index].dropFirst())
-                        : parts[index]
-                    guard allFields.contains(component) else {
-                        continue
-                    }
-                    var fieldPathParts = Array(parts[index...])
-                    fieldPathParts[0] = component
-                    return fieldPathParts.joined(separator: ".")
-                }
-                return nil
-            }
-            """
-        decls.append(fieldNameFallbackDecl)
-
         // Generate an initializer for all persisted fields.
         let initParams = fieldInfos
             .filter { !$0.isTransient }
@@ -1198,11 +1042,13 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 ///
 /// **Usage**:
 /// ```swift
-/// // IndexKind with KeyPaths in constructor (type specified in IndexKind generic)
-/// #Index(ScalarIndexKind<Product>(fields: [\.email]), unique: true)
-/// #Index(ScalarIndexKind<Product>(fields: [\.category, \.price]))
-/// #Index(CountIndexKind<Product>(groupBy: [\.category]))
-/// #Index(SumIndexKind<Product>(groupBy: [\.category], value: \.price))
+/// #Index(.scalar, fields: [\Product.email], unique: true)
+/// #Index(.count, groupBy: [\Product.category])
+/// #Index(
+///     .sum,
+///     groupBy: [\Product.category],
+///     value: \Product.price
+/// )
 /// ```
 ///
 /// This is a marker macro. Validation is performed, but no code is generated.
@@ -1212,31 +1058,37 @@ public struct IndexMacro: DeclarationMacro {
         of node: some FreestandingMacroExpansionSyntax,
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-        // First argument must be an IndexKind expression (unlabeled)
+        // The first argument selects index semantics. Field key paths are
+        // separate labeled arguments so the compiler can type-check them.
         guard let firstArg = node.arguments.first else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: MacroExpansionErrorMessage("#Index requires an IndexKind (e.g., ScalarIndexKind<T>(fields: [\\.email]))")
+                    message: MacroExpansionErrorMessage(
+                        "#Index requires an IndexDefinition case"
+                    )
                 )
             ])
         }
 
-        // Validate that first argument is unlabeled and is a function call (IndexKind initializer)
         guard firstArg.label == nil else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(firstArg),
-                    message: MacroExpansionErrorMessage("First argument must be an IndexKind (e.g., ScalarIndexKind<T>(fields: [\\.email]))")
+                    message: MacroExpansionErrorMessage(
+                        "The IndexDefinition must be the first unlabeled argument"
+                    )
                 )
             ])
         }
 
-        guard let _ = firstArg.expression.as(FunctionCallExprSyntax.self) else {
+        guard parseIndexDefinition(firstArg.expression) != nil else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(firstArg.expression),
-                    message: MacroExpansionErrorMessage("First argument must be an IndexKind initializer (e.g., ScalarIndexKind<T>(fields: [\\.email]))")
+                    message: MacroExpansionErrorMessage(
+                        "The first argument must be an IndexDefinition case such as '.scalar'"
+                    )
                 )
             ])
         }
@@ -1307,87 +1159,250 @@ public struct TransientMacro: PeerMacro {
 
 // MARK: - Helper Functions
 
-/// Extracts field name string from KeyPath expression
-/// e.g., \.email → "email", \.address.city → "address.city"
-private func extractKeyPathString(from keyPathExpr: KeyPathExprSyntax) -> String {
-    var pathComponents: [String] = []
-    for component in keyPathExpr.components {
-        if let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
-            pathComponents.append(property.declName.baseName.text)
-        }
-    }
-    return pathComponents.joined(separator: ".")
+struct ParsedIndexDefinition {
+    let name: String
+    let arguments: [String: String]
 }
 
-/// Generates index name based on IndexKind type and field names
-/// Mirrors the indexName computed property in each IndexKind implementation
-private func generateIndexName(typeName: String, indexKindName: String, fieldNames: [String]) -> String {
-    // Remove generic parameter if present (e.g., "ScalarIndexKind<Product>" → "ScalarIndexKind")
-    let kindBaseName = indexKindName.components(separatedBy: "<").first ?? indexKindName
+func parseIndexDefinition(
+    _ expression: ExprSyntax
+) -> ParsedIndexDefinition? {
+    if let member = expression.as(MemberAccessExprSyntax.self) {
+        return ParsedIndexDefinition(
+            name: member.declName.baseName.text,
+            arguments: [:]
+        )
+    }
+    guard
+        let call = expression.as(FunctionCallExprSyntax.self),
+        let member = call.calledExpression.as(MemberAccessExprSyntax.self)
+    else {
+        return nil
+    }
 
-    switch kindBaseName {
-    case "ScalarIndexKind":
-        // Format: {TypeName}_{field1}_{field2}
-        return "\(typeName)_\(fieldNames.joined(separator: "_"))"
-
-    case "CountIndexKind":
-        // Format: {TypeName}_count_{field1}_{field2}
-        if fieldNames.isEmpty {
-            return "\(typeName)_count"
+    var arguments: [String: String] = [:]
+    for argument in call.arguments {
+        guard let label = argument.label?.text else {
+            continue
         }
-        return "\(typeName)_count_\(fieldNames.joined(separator: "_"))"
+        arguments[label] = argument.expression.description
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    return ParsedIndexDefinition(
+        name: member.declName.baseName.text,
+        arguments: arguments
+    )
+}
 
-    case "SumIndexKind":
-        // Format: {TypeName}_sum_{groupFields}__{valueField}
-        // Last field is the value field
-        if fieldNames.count > 1 {
-            let groupFields = Array(fieldNames.dropLast())
-            let valueField = fieldNames.last!
-            return "\(typeName)_sum_\(groupFields.joined(separator: "_"))__\(valueField)"
+func selectedIndexFieldPaths(
+    definition: ParsedIndexDefinition,
+    roles: [String: [String]],
+    node: Syntax
+) throws -> [String] {
+    func one(_ role: String) throws -> String {
+        guard let fields = roles[role], fields.count == 1 else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: node,
+                    message: MacroExpansionErrorMessage(
+                        ".\(definition.name) requires exactly one '\(role)' field"
+                    )
+                )
+            ])
         }
-        return "\(typeName)_sum_\(fieldNames.joined(separator: "_"))"
+        return fields[0]
+    }
 
-    case "MinIndexKind":
-        // Format: {TypeName}_min_{groupFields}__{valueField}
-        if fieldNames.count > 1 {
-            let groupFields = Array(fieldNames.dropLast())
-            let valueField = fieldNames.last!
-            return "\(typeName)_min_\(groupFields.joined(separator: "_"))__\(valueField)"
-        }
-        return "\(typeName)_min_\(fieldNames.joined(separator: "_"))"
-
-    case "MaxIndexKind":
-        // Format: {TypeName}_max_{groupFields}__{valueField}
-        if fieldNames.count > 1 {
-            let groupFields = Array(fieldNames.dropLast())
-            let valueField = fieldNames.last!
-            return "\(typeName)_max_\(groupFields.joined(separator: "_"))__\(valueField)"
-        }
-        return "\(typeName)_max_\(fieldNames.joined(separator: "_"))"
-
-    case "AverageIndexKind":
-        // Format: {TypeName}_avg_{groupFields}__{valueField}
-        if fieldNames.count > 1 {
-            let groupFields = Array(fieldNames.dropLast())
-            let valueField = fieldNames.last!
-            return "\(typeName)_avg_\(groupFields.joined(separator: "_"))__\(valueField)"
-        }
-        return "\(typeName)_avg_\(fieldNames.joined(separator: "_"))"
-
-    case "VersionIndexKind":
-        // Format: {TypeName}_version_{field}
-        return "\(typeName)_version_\(fieldNames.joined(separator: "_"))"
-
+    let allowedRoles: Set<String>
+    switch definition.name {
+    case "scalar", "fullText", "permuted":
+        allowedRoles = ["fields"]
+    case "count":
+        allowedRoles = ["groupBy"]
+    case "sum", "minimum", "maximum", "average",
+         "countNotNull", "distinct", "percentile":
+        allowedRoles = ["groupBy", "value"]
+    case "version", "countUpdates", "bitmap", "rank":
+        allowedRoles = ["field"]
+    case "timeWindowLeaderboard":
+        allowedRoles = ["groupBy", "field"]
+    case "vector":
+        allowedRoles = ["embedding"]
+    case "spatial":
+        allowedRoles = ["location"]
+    case "graph":
+        allowedRoles = ["from", "edge", "to", "graph"]
     default:
-        // Default pattern for custom/third-party IndexKinds
-        // Format: {TypeName}_{kindIdentifier}_{fields}
-        let kindIdentifier = kindBaseName
-            .replacingOccurrences(of: "IndexKind", with: "")
-            .lowercased()
-        if kindIdentifier.isEmpty {
-            return "\(typeName)_\(fieldNames.joined(separator: "_"))"
+        throw DiagnosticsError(diagnostics: [
+            Diagnostic(
+                node: node,
+                message: MacroExpansionErrorMessage(
+                    "Unsupported IndexDefinition '.\(definition.name)'"
+                )
+            )
+        ])
+    }
+    for (role, fields) in roles
+    where !fields.isEmpty && !allowedRoles.contains(role) {
+        throw DiagnosticsError(diagnostics: [
+            Diagnostic(
+                node: node,
+                message: MacroExpansionErrorMessage(
+                    ".\(definition.name) does not accept '\(role)' fields"
+                )
+            )
+        ])
+    }
+
+    switch definition.name {
+    case "scalar", "fullText", "permuted":
+        let fields = roles["fields"] ?? []
+        guard !fields.isEmpty else {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: node,
+                    message: MacroExpansionErrorMessage(
+                        ".\(definition.name) requires at least one field"
+                    )
+                )
+            ])
         }
-        return "\(typeName)_\(kindIdentifier)_\(fieldNames.joined(separator: "_"))"
+        return fields
+    case "count":
+        return roles["groupBy"] ?? []
+    case "sum", "minimum", "maximum", "average",
+         "countNotNull", "distinct", "percentile":
+        return (roles["groupBy"] ?? []) + [try one("value")]
+    case "version", "countUpdates", "bitmap", "rank":
+        return [try one("field")]
+    case "timeWindowLeaderboard":
+        return (roles["groupBy"] ?? []) + [try one("field")]
+    case "vector":
+        return [try one("embedding")]
+    case "spatial":
+        return [try one("location")]
+    case "graph":
+        var fields = [
+            try one("from"),
+            try one("edge"),
+            try one("to"),
+        ]
+        if let graph = roles["graph"], !graph.isEmpty {
+            guard graph.count == 1 else {
+                throw DiagnosticsError(diagnostics: [
+                    Diagnostic(
+                        node: node,
+                        message: MacroExpansionErrorMessage(
+                            ".graph accepts at most one 'graph' field"
+                        )
+                    )
+                ])
+            }
+            fields.append(graph[0])
+        }
+        return fields
+    default:
+        return []
+    }
+}
+
+func validateIndexFieldOrders(
+    definition: ParsedIndexDefinition,
+    roles: [String: [String]],
+    orders: [String],
+    node: Syntax
+) throws {
+    guard !orders.isEmpty else {
+        return
+    }
+    guard definition.name == "scalar" || definition.name == "permuted" else {
+        throw DiagnosticsError(diagnostics: [
+            Diagnostic(
+                node: node,
+                message: MacroExpansionErrorMessage(
+                    "'orders' is supported by scalar and permuted indexes"
+                )
+            )
+        ])
+    }
+    let fieldCount = roles["fields"]?.count ?? 0
+    guard orders.count == fieldCount else {
+        throw DiagnosticsError(diagnostics: [
+            Diagnostic(
+                node: node,
+                message: MacroExpansionErrorMessage(
+                    "'orders' must contain one value for each indexed field"
+                )
+            )
+        ])
+    }
+}
+
+private func compiledIndexFields(
+    definition: ParsedIndexDefinition,
+    fieldPaths: [String],
+    rootType: String,
+    fieldOrders: [String]
+) -> String {
+    guard !fieldPaths.isEmpty else {
+        return "[IndexField<\(rootType)>]()"
+    }
+    let elements = fieldPaths.enumerated().map { offset, path in
+        let order: String
+        if !fieldOrders.isEmpty {
+            order = fieldOrders[offset]
+        } else if definition.name == "rank"
+                    || (definition.name == "timeWindowLeaderboard"
+                        && offset == fieldPaths.index(before: fieldPaths.endIndex)) {
+            order = ".descending"
+        } else {
+            order = ".ascending"
+        }
+        let member = order.hasPrefix(".")
+            ? String(order.dropFirst())
+            : order
+        return "\(rootType).fields.\(path).\(member)"
+    }
+    .joined(separator: ", ")
+    return "[\(elements)]"
+}
+
+/// Generates the default persisted index name from declaration semantics.
+func generateIndexName(
+    typeName: String,
+    definition: ParsedIndexDefinition,
+    fieldNames: [String]
+) -> String {
+    func prefixed(_ prefix: String) -> String {
+        if fieldNames.isEmpty {
+            return "\(typeName)_\(prefix)"
+        }
+        return "\(typeName)_\(prefix)_\(fieldNames.joined(separator: "_"))"
+    }
+
+    switch definition.name {
+    case "scalar":
+        return "\(typeName)_\(fieldNames.joined(separator: "_"))"
+    case "count": return prefixed("count")
+    case "sum": return prefixed("sum")
+    case "minimum": return prefixed("min")
+    case "maximum": return prefixed("max")
+    case "average": return prefixed("avg")
+    case "version": return prefixed("version")
+    case "countUpdates": return prefixed("updates")
+    case "countNotNull": return prefixed("notnull")
+    case "bitmap": return prefixed("bitmap")
+    case "timeWindowLeaderboard": return prefixed("leaderboard")
+    case "distinct": return prefixed("distinct")
+    case "percentile": return prefixed("percentile")
+    case "vector": return prefixed("vector")
+    case "fullText": return prefixed("fulltext")
+    case "spatial": return prefixed("spatial")
+    case "rank": return prefixed("rank")
+    case "permuted": return prefixed("permuted")
+    case "graph": return prefixed("graph")
+    default:
+        return prefixed(definition.name)
     }
 }
 

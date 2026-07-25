@@ -6,6 +6,8 @@ import DatabaseTypes
 /// quad for `rdf:type` and one quad for each declared OWL property in the same
 /// transaction as the entity mutation.
 public struct OWLClassRDFIndexKind<Root: OWLClassEntity>: IndexKind, Sendable, Hashable {
+    public typealias Model = Root
+
     public static var identifier: String { "owl_class_rdf" }
     public static var subspaceStructure: SubspaceStructure { .hierarchical }
 
@@ -13,7 +15,7 @@ public struct OWLClassRDFIndexKind<Root: OWLClassEntity>: IndexKind, Sendable, H
         "\(Root.persistableType)_owl_rdf"
     }
 
-    public var fieldNames: [String] { [] }
+    public var indexFields: [IndexField<Root>] { [] }
 
     /// Base IRI used to identify materialized individuals.
     ///
