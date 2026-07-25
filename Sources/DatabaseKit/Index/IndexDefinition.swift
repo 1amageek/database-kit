@@ -43,7 +43,7 @@ public enum IndexDefinition: Sendable {
 }
 
 extension IndexDefinition {
-    package var identifier: String {
+    public var identifier: String {
         switch self {
         case .scalar: "scalar"
         case .count: "count"
@@ -67,7 +67,7 @@ extension IndexDefinition {
         }
     }
 
-    package var subspaceStructure: SubspaceStructure {
+    public var subspaceStructure: SubspaceStructure {
         switch self {
         case .scalar, .minimum, .maximum, .countUpdates, .spatial, .permuted:
             .flat
@@ -509,6 +509,433 @@ extension IndexDefinition {
                 "hasEdgeField": .bool(true),
                 "hasGraphField": .bool(schemas.count == 4),
             ]
+        }
+    }
+}
+
+extension IndexDefinition {
+    /// Restores built-in index semantics from validated schema metadata.
+    ///
+    /// Field identities remain in `IndexKindMetadata`; this value restores the
+    /// behavior-changing configuration only. Unknown identifiers belong to an
+    /// `IndexKind` extension and are rejected by this built-in initializer.
+    public init(
+        metadata kind: IndexKindMetadata
+    ) throws(IndexKindMetadataError) {
+        func validate(
+            identifier: String,
+            subspaceStructure: SubspaceStructure,
+            requiredMetadata: Set<String> = [],
+            optionalMetadata: Set<String> = []
+        ) throws(IndexKindMetadataError) {
+            try kind.validateIdentity(
+                identifier: identifier,
+                subspaceStructure: subspaceStructure
+            )
+            try kind.validateMetadataKeys(
+                required: requiredMetadata,
+                optional: optionalMetadata
+            )
+        }
+
+        switch kind.identifier {
+        case "scalar":
+            try validate(identifier: "scalar", subspaceStructure: .flat)
+            try kind.validateFieldCount(minimum: 1)
+            self = .scalar
+
+        case "count":
+            try validate(identifier: "count", subspaceStructure: .aggregation)
+            try kind.validateFieldNames()
+            self = .count
+
+        case "sum":
+            try validate(
+                identifier: "sum",
+                subspaceStructure: .aggregation,
+                requiredMetadata: ["valueType"]
+            )
+            try kind.validateFieldCount(minimum: 1)
+            _ = try kind.requireScalarType("valueType")
+            self = .sum
+
+        case "min":
+            try validate(
+                identifier: "min",
+                subspaceStructure: .flat,
+                requiredMetadata: ["valueType"]
+            )
+            try kind.validateFieldCount(minimum: 1)
+            _ = try kind.requireScalarType("valueType")
+            self = .minimum
+
+        case "max":
+            try validate(
+                identifier: "max",
+                subspaceStructure: .flat,
+                requiredMetadata: ["valueType"]
+            )
+            try kind.validateFieldCount(minimum: 1)
+            _ = try kind.requireScalarType("valueType")
+            self = .maximum
+
+        case "average":
+            try validate(
+                identifier: "average",
+                subspaceStructure: .aggregation,
+                requiredMetadata: ["valueType"]
+            )
+            try kind.validateFieldCount(minimum: 1)
+            _ = try kind.requireScalarType("valueType")
+            self = .average
+
+        case "version":
+            self = try Self.versionDefinition(metadata: kind)
+
+        case "count_updates":
+            try validate(
+                identifier: "count_updates",
+                subspaceStructure: .flat
+            )
+            try kind.validateFieldCount(1)
+            self = .countUpdates
+
+        case "count_not_null":
+            try validate(
+                identifier: "count_not_null",
+                subspaceStructure: .aggregation
+            )
+            try kind.validateFieldCount(minimum: 1)
+            self = .countNotNull
+
+        case "bitmap":
+            try validate(identifier: "bitmap", subspaceStructure: .hierarchical)
+            try kind.validateFieldCount(1)
+            self = .bitmap
+
+        case "time_window_leaderboard":
+            try validate(
+                identifier: "time_window_leaderboard",
+                subspaceStructure: .hierarchical,
+                requiredMetadata: ["window", "windowCount"],
+                optionalMetadata: ["windowDurationSeconds"]
+            )
+            try kind.validateFieldCount(minimum: 1)
+            self = try Self.timeWindowDefinition(metadata: kind)
+
+        case "distinct":
+            try validate(
+                identifier: "distinct",
+                subspaceStructure: .aggregation,
+                requiredMetadata: ["precision"]
+            )
+            try kind.validateFieldCount(minimum: 1)
+            let precision = try kind.requireInt("precision")
+            guard (4...17).contains(precision) else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "precision"
+                )
+            }
+            self = .distinct(precision: precision)
+
+        case "percentile":
+            try validate(
+                identifier: "percentile",
+                subspaceStructure: .aggregation,
+                requiredMetadata: ["compression"]
+            )
+            try kind.validateFieldCount(minimum: 1)
+            let compression = try kind.requireDouble("compression")
+            guard compression.isFinite,
+                  (1...1_000).contains(compression) else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "compression"
+                )
+            }
+            self = .percentile(compression: compression)
+
+        case "vector":
+            try validate(
+                identifier: "vector",
+                subspaceStructure: .hierarchical,
+                requiredMetadata: ["dimensions", "metric"]
+            )
+            try kind.validateFieldCount(1)
+            let dimensions = try kind.requireInt("dimensions")
+            guard dimensions > 0 else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "dimensions"
+                )
+            }
+            let metricValue = try kind.requireString("metric")
+            guard let metric = VectorMetric(rawValue: metricValue) else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "metric"
+                )
+            }
+            self = .vector(dimensions: dimensions, metric: metric)
+
+        case "fulltext":
+            try validate(
+                identifier: "fulltext",
+                subspaceStructure: .hierarchical,
+                requiredMetadata: [
+                    "tokenizer",
+                    "storePositions",
+                    "ngramSize",
+                    "minTermLength",
+                ]
+            )
+            try kind.validateFieldCount(minimum: 1)
+            let tokenizerValue = try kind.requireString("tokenizer")
+            guard let tokenizer = TokenizationStrategy(rawValue: tokenizerValue) else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "tokenizer"
+                )
+            }
+            let ngramSize = try kind.requireInt("ngramSize")
+            guard ngramSize > 0 else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "ngramSize"
+                )
+            }
+            let minTermLength = try kind.requireInt("minTermLength")
+            guard minTermLength > 0 else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "minTermLength"
+                )
+            }
+            self = .fullText(
+                tokenizer: tokenizer,
+                storePositions: try kind.requireBool("storePositions"),
+                ngramSize: ngramSize,
+                minTermLength: minTermLength
+            )
+
+        case "spatial":
+            try validate(
+                identifier: "spatial",
+                subspaceStructure: .flat,
+                requiredMetadata: ["encoding", "level"]
+            )
+            try kind.validateFieldCount(1)
+            let encodingValue = try kind.requireString("encoding")
+            guard let encoding = SpatialEncoding(rawValue: encodingValue) else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "encoding"
+                )
+            }
+            let level = try kind.requireInt("level")
+            let maximumLevel = encoding == .morton ? 20 : 30
+            guard (0...maximumLevel).contains(level) else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "level"
+                )
+            }
+            self = .spatial(encoding: encoding, level: level)
+
+        case "rank":
+            try validate(
+                identifier: "rank",
+                subspaceStructure: .hierarchical,
+                requiredMetadata: ["scoreType", "bucketSize"]
+            )
+            try kind.validateFieldCount(1)
+            _ = try kind.requireScalarType("scoreType")
+            let bucketSize = try kind.requireInt("bucketSize")
+            guard bucketSize > 0 else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "bucketSize"
+                )
+            }
+            self = .rank(bucketSize: bucketSize)
+
+        case "permuted":
+            try validate(
+                identifier: "permuted",
+                subspaceStructure: .flat,
+                requiredMetadata: ["permutation"]
+            )
+            try kind.validateFieldCount(minimum: 2)
+            let permutation: Permutation
+            do {
+                permutation = try Permutation(
+                    indices: kind.requireIntArray("permutation")
+                )
+            } catch {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "permutation"
+                )
+            }
+            guard permutation.size == kind.fields.count else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "permutation"
+                )
+            }
+            self = .permuted(permutation: permutation)
+
+        case "graph":
+            try validate(
+                identifier: "graph",
+                subspaceStructure: .hierarchical,
+                requiredMetadata: [
+                    "strategy",
+                    "hasEdgeField",
+                    "hasGraphField",
+                ]
+            )
+            try kind.validateFieldCount(minimum: 3, maximum: 4)
+            let strategyValue = try kind.requireString("strategy")
+            guard let strategy = GraphIndexStrategy(rawValue: strategyValue) else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "strategy"
+                )
+            }
+            guard try kind.requireBool("hasEdgeField") else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "hasEdgeField"
+                )
+            }
+            guard try kind.requireBool("hasGraphField")
+                    == (kind.fields.count == 4) else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "hasGraphField"
+                )
+            }
+            self = .graph(strategy: strategy)
+
+        default:
+            throw .unknownIdentifier(kind.identifier)
+        }
+    }
+
+    private static func versionDefinition(
+        metadata kind: IndexKindMetadata
+    ) throws(IndexKindMetadataError) -> IndexDefinition {
+        try kind.validateIdentity(
+            identifier: "version",
+            subspaceStructure: .hierarchical
+        )
+        try kind.validateMetadataKeys(
+            required: ["strategy"],
+            optional: ["strategyCount", "strategyDurationSeconds"]
+        )
+        try kind.validateFieldCount(1)
+
+        switch try kind.requireString("strategy") {
+        case "keepAll":
+            guard kind.metadata["strategyCount"] == nil,
+                  kind.metadata["strategyDurationSeconds"] == nil else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "strategy"
+                )
+            }
+            return .version(strategy: .keepAll)
+        case "keepLast":
+            guard kind.metadata["strategyDurationSeconds"] == nil else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "strategyDurationSeconds"
+                )
+            }
+            let count = try kind.requireInt("strategyCount")
+            guard count > 0 else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "strategyCount"
+                )
+            }
+            return .version(strategy: .keepLast(count))
+        case "keepForDuration":
+            guard kind.metadata["strategyCount"] == nil else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "strategyCount"
+                )
+            }
+            let duration = try kind.requireDouble("strategyDurationSeconds")
+            guard duration.isFinite, duration > 0 else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "strategyDurationSeconds"
+                )
+            }
+            return .version(strategy: .keepForDuration(duration))
+        default:
+            throw .invalidMetadata(
+                identifier: kind.identifier,
+                key: "strategy"
+            )
+        }
+    }
+
+    private static func timeWindowDefinition(
+        metadata kind: IndexKindMetadata
+    ) throws(IndexKindMetadataError) -> IndexDefinition {
+        let window: LeaderboardWindowType
+        switch try kind.requireString("window") {
+        case "hourly":
+            try rejectWindowDuration(kind)
+            window = .hourly
+        case "daily":
+            try rejectWindowDuration(kind)
+            window = .daily
+        case "weekly":
+            try rejectWindowDuration(kind)
+            window = .weekly
+        case "monthly":
+            try rejectWindowDuration(kind)
+            window = .monthly
+        case "custom":
+            let duration = try kind.requireDouble("windowDurationSeconds")
+            guard duration.isFinite, duration > 0 else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "windowDurationSeconds"
+                )
+            }
+            window = .custom(duration: duration)
+        default:
+            throw .invalidMetadata(
+                identifier: kind.identifier,
+                key: "window"
+            )
+        }
+
+        let count = try kind.requireInt("windowCount")
+        guard count > 0 else {
+            throw .invalidMetadata(
+                identifier: kind.identifier,
+                key: "windowCount"
+            )
+        }
+        return .timeWindowLeaderboard(window: window, windowCount: count)
+    }
+
+    private static func rejectWindowDuration(
+        _ kind: IndexKindMetadata
+    ) throws(IndexKindMetadataError) {
+        guard kind.metadata["windowDurationSeconds"] == nil else {
+            throw .unexpectedMetadata(
+                identifier: kind.identifier,
+                key: "windowDurationSeconds"
+            )
         }
     }
 }

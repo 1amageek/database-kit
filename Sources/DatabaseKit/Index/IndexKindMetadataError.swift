@@ -1,6 +1,7 @@
 import DatabaseTypes
 /// Errors produced while decoding canonical index metadata.
 public enum IndexKindMetadataError: Error, Sendable, Equatable, CustomStringConvertible {
+    case unknownIdentifier(String)
     case kindMismatch(expected: String, actual: String)
     case subspaceStructureMismatch(
         identifier: String,
@@ -15,6 +16,8 @@ public enum IndexKindMetadataError: Error, Sendable, Equatable, CustomStringConv
 
     public var description: String {
         switch self {
+        case .unknownIdentifier(let identifier):
+            return "Unknown index kind identifier '\(identifier)'"
         case .kindMismatch(let expected, let actual):
             return "Expected index kind '\(expected)', got '\(actual)'"
         case .subspaceStructureMismatch(let identifier, let expected, let actual):

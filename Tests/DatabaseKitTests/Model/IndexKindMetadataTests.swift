@@ -43,6 +43,47 @@ struct IndexKindMetadataTests {
         }
     }
 
+    @Test("Built-in definition rejects an extension identifier")
+    func builtInDefinitionRejectsExtensionIdentifier() {
+        let metadata = IndexKindMetadata(
+            identifier: "com.example.custom",
+            subspaceStructure: .flat,
+            fields: [],
+            metadata: [:]
+        )
+
+        #expect(
+            throws: IndexKindMetadataError.unknownIdentifier(
+                "com.example.custom"
+            )
+        ) {
+            _ = try IndexDefinition(metadata: metadata)
+        }
+    }
+
+    @Test("Built-in definition rejects unexpected configuration")
+    func builtInDefinitionRejectsUnexpectedConfiguration() {
+        let metadata = IndexKindMetadata(
+            identifier: "scalar",
+            subspaceStructure: .flat,
+            fields: [
+                IndexFieldMetadata(
+                    identity: FieldIdentity(name: "value", number: 1)
+                )
+            ],
+            metadata: ["dimensions": .int64(3)]
+        )
+
+        #expect(
+            throws: IndexKindMetadataError.unexpectedMetadata(
+                identifier: "scalar",
+                key: "dimensions"
+            )
+        ) {
+            _ = try IndexDefinition(metadata: metadata)
+        }
+    }
+
     private func makeMetadata(
         _ values: [String: FieldValue]
     ) -> IndexKindMetadata {

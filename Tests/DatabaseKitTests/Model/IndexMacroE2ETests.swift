@@ -67,15 +67,17 @@ struct IndexMacroE2ETests {
         #expect(countNotNull.fieldNames == ["category", "optionalTag"])
         #expect(countNotNull.metadata.isEmpty)
 
-        let leaderboard = try TimeWindowLeaderboardIndexKind<IndexMacroE2ERecord>(
-            canonical: Self.descriptor(
+        let leaderboard = try IndexDefinition(
+            metadata: Self.descriptor(
                 named: "e2e_time_window_leaderboard_category_score"
             ).kind
         )
-        #expect(leaderboard.groupByFieldNames == ["category"])
-        #expect(leaderboard.scoreFieldName == "score")
-        #expect(leaderboard.window == .weekly)
-        #expect(leaderboard.windowCount == 4)
+        guard case .timeWindowLeaderboard(let window, let windowCount) = leaderboard else {
+            Issue.record("Expected time-window leaderboard definition")
+            return
+        }
+        #expect(window == .weekly)
+        #expect(windowCount == 4)
 
         let distinct = try AggregationIndexMetadata(
             canonical: Self.descriptor(named: "e2e_distinct_category_user").kind
@@ -93,56 +95,85 @@ struct IndexMacroE2ETests {
         #expect(percentile.valueFieldName == "latency")
         #expect(percentile.compression == 50)
 
-        let vector = try VectorIndexKind<IndexMacroE2ERecord>(
-            canonical: Self.descriptor(named: "e2e_vector_embedding").kind
+        let vector = try IndexDefinition(
+            metadata: Self.descriptor(named: "e2e_vector_embedding").kind
         )
-        #expect(vector.fieldNames == ["embedding"])
-        #expect(vector.dimensions == 3)
-        #expect(vector.metric == .cosine)
+        guard case .vector(let dimensions, let metric) = vector else {
+            Issue.record("Expected vector definition")
+            return
+        }
+        #expect(dimensions == 3)
+        #expect(metric == .cosine)
 
-        let fullText = try FullTextIndexKind<IndexMacroE2ERecord>(
-            canonical: Self.descriptor(named: "e2e_fulltext_title_body").kind
+        let fullText = try IndexDefinition(
+            metadata: Self.descriptor(named: "e2e_fulltext_title_body").kind
         )
-        #expect(fullText.fieldNames == ["title", "body"])
-        #expect(fullText.tokenizer == .ngram)
-        #expect(fullText.storePositions == false)
-        #expect(fullText.ngramSize == 2)
-        #expect(fullText.minTermLength == 1)
+        guard case .fullText(
+            let tokenizer,
+            let storePositions,
+            let ngramSize,
+            let minTermLength
+        ) = fullText else {
+            Issue.record("Expected full-text definition")
+            return
+        }
+        #expect(tokenizer == .ngram)
+        #expect(storePositions == false)
+        #expect(ngramSize == 2)
+        #expect(minTermLength == 1)
 
-        let spatial = try SpatialIndexKind<IndexMacroE2ERecord>(
-            canonical: Self.descriptor(
+        let spatial = try IndexDefinition(
+            metadata: Self.descriptor(
                 named: "e2e_spatial_latitude_longitude"
             ).kind
         )
-        #expect(spatial.fieldNames == ["location"])
-        #expect(spatial.encoding == .s2)
-        #expect(spatial.level == 12)
+        guard case .spatial(let encoding, let level) = spatial else {
+            Issue.record("Expected spatial definition")
+            return
+        }
+        #expect(encoding == .s2)
+        #expect(level == 12)
 
         let rank = try Self.descriptor(named: "e2e_rank_score").kind
         #expect(rank.fieldNames == ["score"])
         #expect(try rank.requireScalarType("scoreType") == .int64)
         #expect(try rank.requireInt("bucketSize") == 50)
 
-        let permuted = try PermutedIndexKind<IndexMacroE2ERecord>(
-            canonical: Self.descriptor(
+        let permuted = try IndexDefinition(
+            metadata: Self.descriptor(
                 named: "e2e_permuted_category_status_title"
             ).kind
         )
-        #expect(permuted.fieldNames == ["category", "status", "title"])
-        #expect(permuted.permutation.indices == [1, 0, 2])
+        guard case .permuted(let permutation) = permuted else {
+            Issue.record("Expected permuted definition")
+            return
+        }
+        #expect(permutation.indices == [1, 0, 2])
 
-        let graph = try GraphIndexKind<IndexMacroE2ERecord>(
-            canonical: Self.descriptor(
+        let graph = try IndexDefinition(
+            metadata: Self.descriptor(
                 named: "e2e_graph_subject_predicate_object_graph"
             ).kind
         )
-        #expect(graph.fieldNames == ["subject", "predicate", "object", "graphName"])
-        #expect(graph.fromField == "subject")
-        #expect(graph.edgeField == "predicate")
-        #expect(graph.toField == "object")
-        #expect(graph.graphField == "graphName")
-        #expect(graph.strategy == .hexastore)
+        guard case .graph(let strategy) = graph else {
+            Issue.record("Expected graph definition")
+            return
+        }
+        #expect(strategy == .hexastore)
 
+    }
+
+    @Test("Every macro descriptor restores one built-in definition")
+    func restoresEveryBuiltInDefinition() throws {
+        for specification in Self.expectedSpecs {
+            let descriptor = try Self.descriptor(named: specification.name)
+            let definition = try IndexDefinition(metadata: descriptor.kind)
+            #expect(definition.identifier == specification.kindIdentifier)
+            #expect(
+                definition.subspaceStructure
+                    == descriptor.kind.subspaceStructure
+            )
+        }
     }
 
     private static let expectedSpecs: [ExpectedIndexSpec] = [
