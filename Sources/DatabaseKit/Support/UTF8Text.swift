@@ -46,57 +46,6 @@ package enum UTF8Text {
         return nil
     }
 
-    public static func replacingOccurrences(
-        in value: String,
-        of pattern: String,
-        with replacement: String
-    ) -> String {
-        precondition(!pattern.isEmpty, "Replacement pattern must not be empty")
-        let sourceByteCount = value.utf8.count
-        let byteGrowthPerMatch = replacement.utf8.count - pattern.utf8.count
-        let outputCapacity: Int
-        if byteGrowthPerMatch > 0 {
-            let matchCount = occurrenceCount(of: pattern, in: value)
-            let (growth, growthOverflow) = byteGrowthPerMatch
-                .multipliedReportingOverflow(by: matchCount)
-            let (capacity, capacityOverflow) = sourceByteCount
-                .addingReportingOverflow(growth)
-            precondition(
-                !growthOverflow && !capacityOverflow,
-                "Replacement output exceeds the supported string size"
-            )
-            outputCapacity = capacity
-        } else {
-            outputCapacity = sourceByteCount
-        }
-
-        var result = ""
-        result.reserveCapacity(outputCapacity)
-        var unmatchedStart = value.startIndex
-        var search = value[value.startIndex...]
-        while let range = firstRange(of: pattern, in: search) {
-            result.append(contentsOf: value[unmatchedStart..<range.lowerBound])
-            result.append(replacement)
-            unmatchedStart = range.upperBound
-            search = value[range.upperBound...]
-        }
-        result.append(contentsOf: value[unmatchedStart...])
-        return result
-    }
-
-    private static func occurrenceCount(
-        of pattern: String,
-        in value: String
-    ) -> Int {
-        var count = 0
-        var search = value[value.startIndex...]
-        while let range = firstRange(of: pattern, in: search) {
-            count += 1
-            search = value[range.upperBound...]
-        }
-        return count
-    }
-
     public static func isEqualIgnoringASCIICase(
         _ left: String,
         _ right: String

@@ -17,31 +17,6 @@ struct UTF8TextTests {
         #expect(range.map { borrowed[$0] } == "/")
     }
 
-    @Test("Replacement handles adjacent matches with one output value")
-    func replacement() {
-        #expect(
-            UTF8Text.replacingOccurrences(
-                in: "a....b",
-                of: "..",
-                with: "separator"
-            ) == "aseparatorseparatorb"
-        )
-        #expect(
-            UTF8Text.replacingOccurrences(
-                in: "field.nested.value",
-                of: ".",
-                with: "_"
-            ) == "field_nested_value"
-        )
-        #expect(
-            UTF8Text.replacingOccurrences(
-                in: "é",
-                of: "e\u{301}",
-                with: "x"
-            ) == "é"
-        )
-    }
-
     @Test("Empty search starts at the borrowed view boundary")
     func emptyPattern() {
         let value = "prefix-value"
