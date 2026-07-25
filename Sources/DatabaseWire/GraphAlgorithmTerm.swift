@@ -31,5 +31,18 @@ extension GraphAlgorithmOperation {
                 throw .invalidValueTag(tag)
             }
         }
+
+        static func validateWireRepresentation(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            switch try reader.readUInt8() {
+            case 1:
+                _ = try reader.readValidatedUTF8Bytes()
+            case 2:
+                try reader.validateCanonicalRDFTerm(role: .term)
+            case let tag:
+                throw .invalidValueTag(tag)
+            }
+        }
     }
 }

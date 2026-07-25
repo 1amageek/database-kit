@@ -155,11 +155,13 @@ struct TypedOperationWireTests {
             ),
             .cycles(
                 .init(
-                    cycles: [[
-                        .identifier("a"),
-                        .identifier("b"),
-                        .identifier("a"),
-                    ]],
+                    cycles: [
+                        .init(terms: [
+                            .identifier("a"),
+                            .identifier("b"),
+                            .identifier("a"),
+                        ]),
+                    ],
                     backEdges: [
                         .init(
                             source: .identifier("b"),
@@ -172,7 +174,12 @@ struct TypedOperationWireTests {
             ),
             .components(
                 .init(
-                    components: [[.identifier("a"), .identifier("b")]],
+                    components: [
+                        .init(terms: [
+                            .identifier("a"),
+                            .identifier("b"),
+                        ]),
+                    ],
                     nodesExplored: 2,
                     progress: .complete
                 )
@@ -186,7 +193,9 @@ struct TypedOperationWireTests {
                 )
             ),
         ]
-        for response in responses { try expectRoundTrip(response) }
+        for response in responses {
+            try expectCanonicalRoundTrip(response)
+        }
     }
 
     @Test("ontology requests and responses retain RDF structure")
@@ -1106,5 +1115,13 @@ struct TypedOperationWireTests {
     ) throws where Value: WireValue & Equatable {
         let encoded = try EnvelopeWireFormat.encode(value)
         #expect(try EnvelopeWireFormat.decode(Value.self, from: encoded) == value)
+    }
+
+    private func expectCanonicalRoundTrip<Value>(
+        _ value: Value
+    ) throws where Value: WireValue {
+        let encoded = try EnvelopeWireFormat.encode(value)
+        let decoded = try EnvelopeWireFormat.decode(Value.self, from: encoded)
+        #expect(try EnvelopeWireFormat.encode(decoded) == encoded)
     }
 }

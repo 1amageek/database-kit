@@ -400,11 +400,15 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct PathResult: WireValue, Hashable {
+    public struct PathResult: WireValue {
+        private let nodeElements: RetainedResultElements<Term>
+        private let edgeLabelElements: RetainedResultElements<Term>
+        private let weightElements: RetainedResultElements<Double>
+
         public let found: Bool
-        public let nodes: [Term]
-        public let edgeLabels: [Term]
-        public let weights: [Double]
+        public var nodeCount: Int { nodeElements.count }
+        public var edgeLabelCount: Int { edgeLabelElements.count }
+        public var weightCount: Int { weightElements.count }
         public let totalWeight: Double?
         public let nodesExplored: UInt64
         public let durationNanoseconds: UInt64
@@ -421,13 +425,58 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             progress: Progress
         ) {
             self.found = found
-            self.nodes = nodes
-            self.edgeLabels = edgeLabels
-            self.weights = weights
+            self.nodeElements = RetainedResultElements(nodes)
+            self.edgeLabelElements = RetainedResultElements(edgeLabels)
+            self.weightElements = RetainedResultElements(weights)
             self.totalWeight = totalWeight
             self.nodesExplored = nodesExplored
             self.durationNanoseconds = durationNanoseconds
             self.progress = progress
+        }
+
+        public func makeNodeIterator() -> ResultIterator<Term> {
+            nodeElements.makeIterator(decodeElement: Term.init(from:))
+        }
+
+        public func makeEdgeLabelIterator() -> ResultIterator<Term> {
+            edgeLabelElements.makeIterator(decodeElement: Term.init(from:))
+        }
+
+        public func makeWeightIterator() -> ResultIterator<Double> {
+            weightElements.makeIterator(
+                decodeElement: { reader throws(DatabaseWireError) in
+                    try reader.readDouble()
+                }
+            )
+        }
+
+        public func materializedNodes(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [Term] {
+            try nodeElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: Term.init(from:)
+            )
+        }
+
+        public func materializedEdgeLabels(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [Term] {
+            try edgeLabelElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: Term.init(from:)
+            )
+        }
+
+        public func materializedWeights(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [Double] {
+            try weightElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: { reader throws(DatabaseWireError) in
+                    try reader.readDouble()
+                }
+            )
         }
 
         func encode(
@@ -435,10 +484,22 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         ) throws(DatabaseWireError) {
             try validate()
             writer.writeBool(found)
-            try Self.encodeTerms(nodes, into: &writer)
-            try Self.encodeTerms(edgeLabels, into: &writer)
-            try writer.writeCount(weights.count)
-            for weight in weights { writer.writeDouble(weight) }
+            try Self.encodeTerms(nodeElements, into: &writer)
+            try Self.encodeTerms(edgeLabelElements, into: &writer)
+            try weightElements.encode(
+                into: &writer,
+                encodeElement: {
+                    (
+                        weight: Double,
+                        writer: inout DatabaseWireWriter
+                    ) throws(DatabaseWireError) in
+                    writer.writeDouble(weight)
+                },
+                validateElement: {
+                    reader throws(DatabaseWireError) in
+                    _ = try reader.readDouble()
+                }
+            )
             writer.writeBool(totalWeight != nil)
             if let totalWeight { writer.writeDouble(totalWeight) }
             writer.writeUInt64(nodesExplored)
@@ -449,42 +510,44 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let found = try reader.readBool()
-            let nodes = try Self.decodeTerms(from: &reader)
-            let edgeLabels = try Self.decodeTerms(from: &reader)
-            let weightCount = try reader.readCount()
-            var weights: [Double] = []
-            weights.reserveCapacity(weightCount)
-            for _ in 0..<weightCount { weights.append(try reader.readDouble()) }
-            self.init(
-                found: found,
-                nodes: nodes,
-                edgeLabels: edgeLabels,
-                weights: weights,
-                totalWeight: try reader.readBool() ? try reader.readDouble() : nil,
-                nodesExplored: try reader.readUInt64(),
-                durationNanoseconds: try reader.readUInt64(),
-                progress: try Progress(from: &reader)
+            self.found = try reader.readBool()
+            self.nodeElements = try Self.decodeTerms(from: &reader)
+            self.edgeLabelElements = try Self.decodeTerms(from: &reader)
+            self.weightElements = try RetainedResultElements(
+                from: &reader,
+                validateElement: {
+                    reader throws(DatabaseWireError) in
+                    _ = try reader.readDouble()
+                }
             )
+            self.totalWeight =
+                try reader.readBool() ? try reader.readDouble() : nil
+            self.nodesExplored = try reader.readUInt64()
+            self.durationNanoseconds = try reader.readUInt64()
+            self.progress = try Progress(from: &reader)
             try validate()
         }
 
         private func validate() throws(DatabaseWireError) {
-            guard found ? !nodes.isEmpty : nodes.isEmpty else {
+            guard found ? nodeCount > 0 : nodeCount == 0 else {
                 throw .invalidGraphResult
             }
             guard !found || progress.algorithmComplete else {
                 throw .invalidGraphResult
             }
-            guard edgeLabels.isEmpty || edgeLabels.count + 1 == nodes.count else {
+            guard edgeLabelCount == 0 || edgeLabelCount + 1 == nodeCount else {
                 throw .invalidGraphResult
             }
-            guard weights.isEmpty || weights.count + 1 == nodes.count else {
+            guard weightCount == 0 || weightCount + 1 == nodeCount else {
                 throw .invalidGraphResult
             }
             guard totalWeight == nil || found else {
                 throw .invalidGraphResult
             }
+        }
+
+        var retainedEncodedNodes: ByteString? {
+            nodeElements.retainedBytes
         }
     }
 
@@ -512,10 +575,19 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
                 score: try reader.readDouble()
             )
         }
+
+        static func validateWireRepresentation(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            try Term.validateWireRepresentation(from: &reader)
+            _ = try reader.readDouble()
+        }
     }
 
-    public struct RankingPage: WireValue, Hashable {
-        public let scores: [Score]
+    public struct RankingPage: WireValue {
+        private let scoreElements: RetainedResultElements<Score>
+
+        public var scoreCount: Int { scoreElements.count }
         public let iterations: UInt32
         public let convergenceDelta: Double
         public let progress: Progress
@@ -526,17 +598,39 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             convergenceDelta: Double,
             progress: Progress
         ) {
-            self.scores = scores
+            self.scoreElements = RetainedResultElements(scores)
             self.iterations = iterations
             self.convergenceDelta = convergenceDelta
             self.progress = progress
         }
 
+        public func makeScoreIterator() -> ResultIterator<Score> {
+            scoreElements.makeIterator(decodeElement: Score.init(from:))
+        }
+
+        public func materializedScores(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [Score] {
+            try scoreElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: Score.init(from:)
+            )
+        }
+
         func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
-            try writer.writeCount(scores.count)
-            for score in scores { try score.encode(into: &writer) }
+            try scoreElements.encode(
+                into: &writer,
+                encodeElement: {
+                    (
+                        score: Score,
+                        writer: inout DatabaseWireWriter
+                    ) throws(DatabaseWireError) in
+                    try score.encode(into: &writer)
+                },
+                validateElement: Score.validateWireRepresentation(from:)
+            )
             writer.writeUInt32(iterations)
             writer.writeDouble(convergenceDelta)
             try progress.encode(into: &writer)
@@ -545,16 +639,17 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let count = try reader.readCount()
-            var scores: [Score] = []
-            scores.reserveCapacity(count)
-            for _ in 0..<count { scores.append(try Score(from: &reader)) }
-            self.init(
-                scores: scores,
-                iterations: try reader.readUInt32(),
-                convergenceDelta: try reader.readDouble(),
-                progress: try Progress(from: &reader)
+            self.scoreElements = try RetainedResultElements(
+                from: &reader,
+                validateElement: Score.validateWireRepresentation(from:)
             )
+            self.iterations = try reader.readUInt32()
+            self.convergenceDelta = try reader.readDouble()
+            self.progress = try Progress(from: &reader)
+        }
+
+        var retainedEncodedScores: ByteString? {
+            scoreElements.retainedBytes
         }
     }
 
@@ -582,10 +677,20 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
                 community: try Term(from: &reader)
             )
         }
+
+        static func validateWireRepresentation(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            try Term.validateWireRepresentation(from: &reader)
+            try Term.validateWireRepresentation(from: &reader)
+        }
     }
 
-    public struct CommunityPage: WireValue, Hashable {
-        public let assignments: [CommunityAssignment]
+    public struct CommunityPage: WireValue {
+        private let assignmentElements:
+            RetainedResultElements<CommunityAssignment>
+
+        public var assignmentCount: Int { assignmentElements.count }
         public let iterations: UInt32
         public let modularity: Double?
         public let progress: Progress
@@ -596,17 +701,43 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             modularity: Double? = nil,
             progress: Progress
         ) {
-            self.assignments = assignments
+            self.assignmentElements = RetainedResultElements(assignments)
             self.iterations = iterations
             self.modularity = modularity
             self.progress = progress
         }
 
+        public func makeAssignmentIterator()
+            -> ResultIterator<CommunityAssignment> {
+            assignmentElements.makeIterator(
+                decodeElement: CommunityAssignment.init(from:)
+            )
+        }
+
+        public func materializedAssignments(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [CommunityAssignment] {
+            try assignmentElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: CommunityAssignment.init(from:)
+            )
+        }
+
         func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
-            try writer.writeCount(assignments.count)
-            for assignment in assignments { try assignment.encode(into: &writer) }
+            try assignmentElements.encode(
+                into: &writer,
+                encodeElement: {
+                    (
+                        assignment: CommunityAssignment,
+                        writer: inout DatabaseWireWriter
+                    ) throws(DatabaseWireError) in
+                    try assignment.encode(into: &writer)
+                },
+                validateElement:
+                    CommunityAssignment.validateWireRepresentation(from:)
+            )
             writer.writeUInt32(iterations)
             writer.writeBool(modularity != nil)
             if let modularity { writer.writeDouble(modularity) }
@@ -616,20 +747,19 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let count = try reader.readCount()
-            var assignments: [CommunityAssignment] = []
-            assignments.reserveCapacity(count)
-            for _ in 0..<count {
-                assignments.append(try CommunityAssignment(from: &reader))
-            }
-            let iterations = try reader.readUInt32()
-            let modularity = try reader.readBool() ? try reader.readDouble() : nil
-            self.init(
-                assignments: assignments,
-                iterations: iterations,
-                modularity: modularity,
-                progress: try Progress(from: &reader)
+            self.assignmentElements = try RetainedResultElements(
+                from: &reader,
+                validateElement:
+                    CommunityAssignment.validateWireRepresentation(from:)
             )
+            self.iterations = try reader.readUInt32()
+            self.modularity =
+                try reader.readBool() ? try reader.readDouble() : nil
+            self.progress = try Progress(from: &reader)
+        }
+
+        var retainedEncodedAssignments: ByteString? {
+            assignmentElements.retainedBytes
         }
     }
 
@@ -657,33 +787,138 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
                 target: try Term(from: &reader)
             )
         }
+
+        static func validateWireRepresentation(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            try Term.validateWireRepresentation(from: &reader)
+            try Term.validateWireRepresentation(from: &reader)
+        }
     }
 
-    public struct CyclePage: WireValue, Hashable {
-        public let cycles: [[Term]]
-        public let backEdges: [DirectedEdge]
+    public struct Cycle: WireValue {
+        private let termElements: RetainedResultElements<Term>
+
+        public var termCount: Int { termElements.count }
+
+        public init(terms: [Term]) {
+            self.termElements = RetainedResultElements(terms)
+        }
+
+        public func makeTermIterator() -> ResultIterator<Term> {
+            termElements.makeIterator(decodeElement: Term.init(from:))
+        }
+
+        public func materializedTerms(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [Term] {
+            try termElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: Term.init(from:)
+            )
+        }
+
+        func encode(
+            into writer: inout DatabaseWireWriter
+        ) throws(DatabaseWireError) {
+            try PathResult.encodeTerms(termElements, into: &writer)
+        }
+
+        init(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            self.termElements = try PathResult.decodeTerms(from: &reader)
+        }
+
+        static func validateWireRepresentation(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            let count = try reader.readCount()
+            for _ in 0..<count {
+                try Term.validateWireRepresentation(from: &reader)
+            }
+        }
+
+        var retainedEncodedTerms: ByteString? {
+            termElements.retainedBytes
+        }
+    }
+
+    public struct CyclePage: WireValue {
+        private let cycleElements: RetainedResultElements<Cycle>
+        private let backEdgeElements: RetainedResultElements<DirectedEdge>
+
+        public var cycleCount: Int { cycleElements.count }
+        public var backEdgeCount: Int { backEdgeElements.count }
         public let nodesExplored: UInt64
         public let progress: Progress
 
         public init(
-            cycles: [[Term]],
+            cycles: [Cycle],
             backEdges: [DirectedEdge],
             nodesExplored: UInt64,
             progress: Progress
         ) {
-            self.cycles = cycles
-            self.backEdges = backEdges
+            self.cycleElements = RetainedResultElements(cycles)
+            self.backEdgeElements = RetainedResultElements(backEdges)
             self.nodesExplored = nodesExplored
             self.progress = progress
+        }
+
+        public func makeCycleIterator() -> ResultIterator<Cycle> {
+            cycleElements.makeIterator(decodeElement: Cycle.init(from:))
+        }
+
+        public func makeBackEdgeIterator() -> ResultIterator<DirectedEdge> {
+            backEdgeElements.makeIterator(
+                decodeElement: DirectedEdge.init(from:)
+            )
+        }
+
+        public func materializedCycles(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [Cycle] {
+            try cycleElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: Cycle.init(from:)
+            )
+        }
+
+        public func materializedBackEdges(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [DirectedEdge] {
+            try backEdgeElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: DirectedEdge.init(from:)
+            )
         }
 
         func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
-            try writer.writeCount(cycles.count)
-            for cycle in cycles { try PathResult.encodeTerms(cycle, into: &writer) }
-            try writer.writeCount(backEdges.count)
-            for edge in backEdges { try edge.encode(into: &writer) }
+            try cycleElements.encode(
+                into: &writer,
+                encodeElement: {
+                    (
+                        cycle: Cycle,
+                        writer: inout DatabaseWireWriter
+                    ) throws(DatabaseWireError) in
+                    try cycle.encode(into: &writer)
+                },
+                validateElement: Cycle.validateWireRepresentation(from:)
+            )
+            try backEdgeElements.encode(
+                into: &writer,
+                encodeElement: {
+                    (
+                        edge: DirectedEdge,
+                        writer: inout DatabaseWireWriter
+                    ) throws(DatabaseWireError) in
+                    try edge.encode(into: &writer)
+                },
+                validateElement:
+                    DirectedEdge.validateWireRepresentation(from:)
+            )
             writer.writeUInt64(nodesExplored)
             try progress.encode(into: &writer)
         }
@@ -691,49 +926,112 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let cycleCount = try reader.readCount()
-            var cycles: [[Term]] = []
-            cycles.reserveCapacity(cycleCount)
-            for _ in 0..<cycleCount {
-                cycles.append(try PathResult.decodeTerms(from: &reader))
-            }
-            let edgeCount = try reader.readCount()
-            var backEdges: [DirectedEdge] = []
-            backEdges.reserveCapacity(edgeCount)
-            for _ in 0..<edgeCount {
-                backEdges.append(try DirectedEdge(from: &reader))
-            }
-            self.init(
-                cycles: cycles,
-                backEdges: backEdges,
-                nodesExplored: try reader.readUInt64(),
-                progress: try Progress(from: &reader)
+            self.cycleElements = try RetainedResultElements(
+                from: &reader,
+                validateElement: Cycle.validateWireRepresentation(from:)
             )
+            self.backEdgeElements = try RetainedResultElements(
+                from: &reader,
+                validateElement:
+                    DirectedEdge.validateWireRepresentation(from:)
+            )
+            self.nodesExplored = try reader.readUInt64()
+            self.progress = try Progress(from: &reader)
+        }
+
+        var retainedEncodedCycles: ByteString? {
+            cycleElements.retainedBytes
         }
     }
 
-    public struct ComponentPage: WireValue, Hashable {
-        public let components: [[Term]]
+    public struct Component: WireValue {
+        private let termElements: RetainedResultElements<Term>
+
+        public var termCount: Int { termElements.count }
+
+        public init(terms: [Term]) {
+            self.termElements = RetainedResultElements(terms)
+        }
+
+        public func makeTermIterator() -> ResultIterator<Term> {
+            termElements.makeIterator(decodeElement: Term.init(from:))
+        }
+
+        public func materializedTerms(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [Term] {
+            try termElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: Term.init(from:)
+            )
+        }
+
+        func encode(
+            into writer: inout DatabaseWireWriter
+        ) throws(DatabaseWireError) {
+            try PathResult.encodeTerms(termElements, into: &writer)
+        }
+
+        init(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            self.termElements = try PathResult.decodeTerms(from: &reader)
+        }
+
+        static func validateWireRepresentation(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            try Cycle.validateWireRepresentation(from: &reader)
+        }
+    }
+
+    public struct ComponentPage: WireValue {
+        private let componentElements: RetainedResultElements<Component>
+
+        public var componentCount: Int { componentElements.count }
         public let nodesExplored: UInt64
         public let progress: Progress
 
         public init(
-            components: [[Term]],
+            components: [Component],
             nodesExplored: UInt64,
             progress: Progress
         ) {
-            self.components = components
+            self.componentElements = RetainedResultElements(components)
             self.nodesExplored = nodesExplored
             self.progress = progress
+        }
+
+        public func makeComponentIterator() -> ResultIterator<Component> {
+            componentElements.makeIterator(
+                decodeElement: Component.init(from:)
+            )
+        }
+
+        public func materializedComponents(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [Component] {
+            try componentElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: Component.init(from:)
+            )
         }
 
         func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
-            try writer.writeCount(components.count)
-            for component in components {
-                try PathResult.encodeTerms(component, into: &writer)
-            }
+            try componentElements.encode(
+                into: &writer,
+                encodeElement: {
+                    (
+                        component: Component,
+                        writer: inout DatabaseWireWriter
+                    ) throws(DatabaseWireError) in
+                    try component.encode(into: &writer)
+                },
+                validateElement:
+                    Component.validateWireRepresentation(from:)
+            )
             writer.writeUInt64(nodesExplored)
             try progress.encode(into: &writer)
         }
@@ -741,23 +1039,22 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let count = try reader.readCount()
-            var components: [[Term]] = []
-            components.reserveCapacity(count)
-            for _ in 0..<count {
-                components.append(try PathResult.decodeTerms(from: &reader))
-            }
-            self.init(
-                components: components,
-                nodesExplored: try reader.readUInt64(),
-                progress: try Progress(from: &reader)
+            self.componentElements = try RetainedResultElements(
+                from: &reader,
+                validateElement:
+                    Component.validateWireRepresentation(from:)
             )
+            self.nodesExplored = try reader.readUInt64()
+            self.progress = try Progress(from: &reader)
         }
     }
 
-    public struct TopologicalResult: WireValue, Hashable {
-        public let order: [Term]?
-        public let cyclicNodes: [Term]
+    public struct TopologicalResult: WireValue {
+        private let orderElements: RetainedResultElements<Term>?
+        private let cyclicNodeElements: RetainedResultElements<Term>
+
+        public var orderCount: Int? { orderElements?.count }
+        public var cyclicNodeCount: Int { cyclicNodeElements.count }
         public let totalNodes: UInt64
         public let progress: Progress
 
@@ -767,18 +1064,49 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
             totalNodes: UInt64,
             progress: Progress
         ) {
-            self.order = order
-            self.cyclicNodes = cyclicNodes
+            self.orderElements = order.map(RetainedResultElements.init)
+            self.cyclicNodeElements = RetainedResultElements(cyclicNodes)
             self.totalNodes = totalNodes
             self.progress = progress
+        }
+
+        public func makeOrderIterator() -> ResultIterator<Term>? {
+            orderElements?.makeIterator(decodeElement: Term.init(from:))
+        }
+
+        public func makeCyclicNodeIterator() -> ResultIterator<Term> {
+            cyclicNodeElements.makeIterator(decodeElement: Term.init(from:))
+        }
+
+        public func materializedOrder(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [Term]? {
+            guard let orderElements else {
+                return nil
+            }
+            return try orderElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: Term.init(from:)
+            )
+        }
+
+        public func materializedCyclicNodes(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [Term] {
+            try cyclicNodeElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: Term.init(from:)
+            )
         }
 
         func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
-            writer.writeBool(order != nil)
-            if let order { try PathResult.encodeTerms(order, into: &writer) }
-            try PathResult.encodeTerms(cyclicNodes, into: &writer)
+            writer.writeBool(orderElements != nil)
+            if let orderElements {
+                try PathResult.encodeTerms(orderElements, into: &writer)
+            }
+            try PathResult.encodeTerms(cyclicNodeElements, into: &writer)
             writer.writeUInt64(totalNodes)
             try progress.encode(into: &writer)
         }
@@ -786,19 +1114,17 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let order = try reader.readBool()
+            self.orderElements = try reader.readBool()
                 ? try PathResult.decodeTerms(from: &reader)
                 : nil
-            self.init(
-                order: order,
-                cyclicNodes: try PathResult.decodeTerms(from: &reader),
-                totalNodes: try reader.readUInt64(),
-                progress: try Progress(from: &reader)
-            )
+            self.cyclicNodeElements =
+                try PathResult.decodeTerms(from: &reader)
+            self.totalNodes = try reader.readUInt64()
+            self.progress = try Progress(from: &reader)
         }
     }
 
-    public enum Response: WireValue, Hashable {
+    public enum Response: WireValue {
         case path(PathResult)
         case ranking(RankingPage)
         case communities(CommunityPage)
@@ -849,22 +1175,33 @@ public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {
 
 private extension GraphAlgorithmOperation.PathResult {
     static func encodeTerms(
-        _ values: [GraphAlgorithmOperation.Term],
+        _ values: RetainedResultElements<GraphAlgorithmOperation.Term>,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
-        try writer.writeCount(values.count)
-        for value in values { try value.encode(into: &writer) }
+        try values.encode(
+            into: &writer,
+            encodeElement: {
+                (
+                    value: GraphAlgorithmOperation.Term,
+                    writer: inout DatabaseWireWriter
+                ) throws(DatabaseWireError) in
+                try value.encode(into: &writer)
+            },
+            validateElement:
+                GraphAlgorithmOperation.Term
+                    .validateWireRepresentation(from:)
+        )
     }
 
     static func decodeTerms(
         from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> [GraphAlgorithmOperation.Term] {
-        let count = try reader.readCount()
-        var values: [GraphAlgorithmOperation.Term] = []
-        values.reserveCapacity(count)
-        for _ in 0..<count {
-            values.append(try GraphAlgorithmOperation.Term(from: &reader))
-        }
-        return values
+    ) throws(DatabaseWireError)
+        -> RetainedResultElements<GraphAlgorithmOperation.Term> {
+        try RetainedResultElements(
+            from: &reader,
+            validateElement:
+                GraphAlgorithmOperation.Term
+                    .validateWireRepresentation(from:)
+        )
     }
 }
