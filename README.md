@@ -200,14 +200,17 @@ to inherit from `Polymorphable`.
 attached macro on a protocol to add protocol inheritance, so the protocol must
 explicitly write `: Polymorphable`.
 
-Swift 6.4 does not type-check freestanding macros in every protocol-body
-configuration. `@Polymorphable` still owns the generated metadata contract;
-applications must not recreate that metadata with string field names.
+Swift 6.4 cannot form a `KeyPath<Self, Value>` while the protocol containing
+the declaration is still being defined. Protocol-level indexes therefore use
+logical property names with the dedicated `#PolymorphicIndex` macro.
+`@Polymorphable` validates every name against a declared protocol property at
+compile time. `Schema` then resolves the logical property to each concrete
+member's generated `FieldIdentity` and validates its canonical field type.
 
-Polymorphic indexes use Swift 6.4 KeyPath syntax at the macro boundary, not
-developer-written string field names. The macro resolves each KeyPath to a
-generated typed field. Runtime index maintenance uses canonical descriptors
-materialized for the actual concrete member type and stores no runtime KeyPath.
+This string boundary is limited to protocol source declarations. Concrete
+models continue to use KeyPath syntax with `#Index`, and runtime index
+maintenance receives only concrete field identities. It performs neither
+KeyPath retention nor string-to-field discovery.
 
 See [Polymorphic Persistence Design](Docs/POLYMORPHIC_DESIGN.md) for the full
 design and migration plan.

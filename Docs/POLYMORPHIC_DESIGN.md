@@ -8,8 +8,9 @@ as `swift-memory`.
 
 - A polymorphic group is declared once as a Swift protocol.
 - Concrete models are persisted by applying `@Persistable` to structs.
-- Developers do not write string field names for indexes.
-- Shared polymorphic indexes remain type-safe at the declaration site.
+- Protocol index names are checked against declared protocol properties by
+  `@Polymorphable`.
+- Concrete model indexes retain compiler-checked KeyPath declarations.
 - Runtime index maintenance uses the concrete member type, not the first member
   registered in the schema.
 
@@ -24,11 +25,14 @@ public protocol Entity: Polymorphable {
 
     var label: String { get }
     var entityType: String { get }
-    var embedding: [Float] { get set }
+    var embedding: Vector { get set }
     var created: Timestamp { get set }
     var updated: Timestamp { get set }
 
-    #Index(VectorIndexKind<Self>(embedding: \Self.embedding, dimensions: 256))
+    #PolymorphicIndex(
+        .vector(dimensions: 256),
+        embedding: "embedding"
+    )
 }
 
 @Persistable
@@ -37,7 +41,7 @@ public struct Person: Entity {
 
     public var id: String
     public var name: String
-    public var embedding: [Float]
+    public var embedding: Vector
     public var created: Timestamp
     public var updated: Timestamp
 
@@ -52,7 +56,7 @@ public struct Organization: Entity {
     public var id: String
     public var name: String
     public var domain: String?
-    public var embedding: [Float]
+    public var embedding: Vector
     public var created: Timestamp
     public var updated: Timestamp
 
@@ -145,27 +149,37 @@ not change the metadata contract. Descriptors are always materialized through
 
 ## Index Declaration Rule
 
-Developer-facing polymorphic index declarations use Swift 6.4 KeyPath syntax
-at the macro boundary. String field names are an internal metadata
-representation only.
+Developer-facing polymorphic index declarations use logical protocol-property
+names through `#PolymorphicIndex`.
 
 Accepted shape:
 
 ```swift
-#Index(VectorIndexKind<Self>(embedding: \Self.embedding, dimensions: 256))
+#PolymorphicIndex(
+    .vector(dimensions: 256),
+    embedding: "embedding"
+)
 ```
 
-Rejected developer-facing shape:
+Concrete `@Persistable` models use the separate KeyPath-based declaration:
 
 ```swift
-VectorIndexKind(fieldNames: ["embedding"], dimensions: 256)
+#Index(
+    .vector(dimensions: 256),
+    embedding: \Person.embedding
+)
 ```
 
-The reason is type safety. KeyPath syntax lets the compiler and macro validate
-that the referenced field exists on the protocol or concrete model. The macro
-then resolves it to a generated `Field<Model, Value>`. String field names allow
-typos and drift, while retaining a runtime KeyPath is incompatible with the
-Embedded contract.
+Swift 6.4 cannot form `KeyPath<Self, Value>` while the protocol containing the
+declaration is still being defined. The logical name is nevertheless a checked
+source contract: `@Polymorphable` rejects a name that does not identify a
+declared protocol property. When a concrete model enters a `Schema`, the schema
+resolves the logical name to that model's generated `FieldIdentity` and
+validates the canonical field type required by the index definition.
+
+No runtime execution path discovers fields from strings. Logical names are
+used only to join a protocol declaration to a concrete static schema during
+schema construction.
 
 ## Runtime Descriptor Model
 
@@ -228,9 +242,8 @@ redeclare it. QueryIR and canonical wire-safe schema metadata remain owned by
 `database-kit`.
 
 Downstream packages such as `swift-memory` should declare domain protocols and
-models using this API. They should not work around polymorphic indexes by
-declaring string field names or by manually sharing one concrete generated
-field across different member types.
+models using this API. They must not recreate generated polymorphic metadata or
+manually share one concrete generated field across different member types.
 
 ## Required Invariants
 
@@ -241,8 +254,8 @@ field across different member types.
 - Runtime writes must select descriptors by concrete member type.
 - A failure to resolve a protocol field for a concrete member is a macro or
   schema-construction error, not a runtime cast or fallback path.
-- String field names may exist in serialized metadata, but they are not the
-  developer-facing API for declaring indexes.
+- Protocol source declarations use checked logical property names;
+  concrete-model declarations use KeyPath syntax.
 - Runtime descriptors contain no `KeyPath`, `PartialKeyPath`, `AnyKeyPath`, or
   `Any.Type`.
 
@@ -253,8 +266,8 @@ field across different member types.
 1. `Polymorphable` inherits from `Persistable`.
 2. `@Polymorphable` requires explicit `: Polymorphable` inheritance.
 3. `Schema` stores descriptors by group identifier and concrete member type.
-4. Macro expansion consumes protocol-root KeyPath syntax and emits generated
-   fields rooted at each concrete member.
+4. Macro expansion validates protocol property names, and schema construction
+   resolves them to generated fields rooted at each concrete member.
 5. Regression tests cover two concrete members, verify that each receives its
    own typed descriptor, and inspect Embedded expansion for retained runtime
    KeyPaths.
