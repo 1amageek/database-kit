@@ -9,12 +9,7 @@ enum QueryIRLabelExpressionWireCodec {
     ) throws(DatabaseWireError) {
         var encodingSteps: [EncodingStep] = [.expression(expression)]
         var openNestedValueCount = 0
-        defer {
-            while openNestedValueCount > 0 {
-                writer.endNestedValue()
-                openNestedValueCount -= 1
-            }
-        }
+        defer { writer.abandonNestedValues(openNestedValueCount) }
 
         while let encodingStep = encodingSteps.popLast() {
             switch consume encodingStep {
@@ -35,7 +30,7 @@ enum QueryIRLabelExpressionWireCodec {
                 guard openNestedValueCount > 0 else {
                     throw .invalidQueryIRWireState
                 }
-                writer.endNestedValue()
+                try writer.endNestedValue()
                 openNestedValueCount -= 1
             }
         }
@@ -50,12 +45,7 @@ enum QueryIRLabelExpressionWireCodec {
     ) throws(DatabaseWireError) -> LabelExpression {
         var frames: [CollectionFrame] = []
         var openNestedValueCount = 0
-        defer {
-            while openNestedValueCount > 0 {
-                reader.endNestedValue()
-                openNestedValueCount -= 1
-            }
-        }
+        defer { reader.abandonNestedValues(openNestedValueCount) }
 
         while true {
             try reader.beginNestedValue()
@@ -76,7 +66,7 @@ enum QueryIRLabelExpressionWireCodec {
                 tag: tag,
                 from: &reader
             )
-            reader.endNestedValue()
+            try reader.endNestedValue()
             openNestedValueCount -= 1
 
             while true {
@@ -95,7 +85,7 @@ enum QueryIRLabelExpressionWireCodec {
                 }
 
                 let frame = frames.removeLast()
-                reader.endNestedValue()
+                try reader.endNestedValue()
                 openNestedValueCount -= 1
                 completed = try frame.assemble()
             }

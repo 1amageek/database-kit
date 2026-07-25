@@ -106,12 +106,7 @@ private extension FieldValueWireCodec {
         var nextNode: EncodingNode? = root
         var openValueCount = 0
 
-        defer {
-            while openValueCount > 0 {
-                writer.endNestedValue()
-                openValueCount -= 1
-            }
-        }
+        defer { writer.abandonNestedValues(openValueCount) }
 
         while nextNode != nil || !frames.isEmpty {
             if let node = nextNode {
@@ -235,7 +230,7 @@ private extension FieldValueWireCodec {
                         try writer.writeCanonicalRDFTerm(term)
                     }
 
-                    writer.endNestedValue()
+                    try writer.endNestedValue()
                     openValueCount -= 1
 
                 case .objectField(let field):
@@ -297,7 +292,7 @@ private extension FieldValueWireCodec {
                         )
                         continue
                     }
-                    writer.endNestedValue()
+                    try writer.endNestedValue()
                     openValueCount -= 1
 
                 case .reference(let reference, let closesValue):
@@ -322,7 +317,7 @@ private extension FieldValueWireCodec {
             switch frames.removeLast() {
             case .array(let values, let nextIndex):
                 guard nextIndex < values.count else {
-                    writer.endNestedValue()
+                    try writer.endNestedValue()
                     openValueCount -= 1
                     continue
                 }
@@ -331,7 +326,7 @@ private extension FieldValueWireCodec {
 
             case .object(let fields, let nextIndex):
                 guard nextIndex < fields.count else {
-                    writer.endNestedValue()
+                    try writer.endNestedValue()
                     openValueCount -= 1
                     continue
                 }
@@ -340,7 +335,7 @@ private extension FieldValueWireCodec {
 
             case .identifierComposite(let components, let nextIndex):
                 guard nextIndex < components.count else {
-                    writer.endNestedValue()
+                    try writer.endNestedValue()
                     openValueCount -= 1
                     continue
                 }
@@ -372,7 +367,7 @@ private extension FieldValueWireCodec {
             ):
                 guard nextIndex < fields.count else {
                     if closesValue {
-                        writer.endNestedValue()
+                        try writer.endNestedValue()
                         openValueCount -= 1
                     }
                     continue
@@ -431,12 +426,7 @@ private extension FieldValueWireCodec {
         var completed: DecodedNode?
         var openValueCount = 0
 
-        defer {
-            while openValueCount > 0 {
-                reader.endNestedValue()
-                openValueCount -= 1
-            }
-        }
+        defer { reader.abandonNestedValues(openValueCount) }
 
         while true {
             if let request = nextRequest {
@@ -543,7 +533,7 @@ private extension FieldValueWireCodec {
                         let count = try reader.readCount()
                         guard count > 0 else {
                             completed = .value(.array([]))
-                            reader.endNestedValue()
+                            try reader.endNestedValue()
                             openValueCount -= 1
                             continue
                         }
@@ -556,7 +546,7 @@ private extension FieldValueWireCodec {
                         let count = try reader.readCount()
                         guard count > 0 else {
                             completed = .value(.object(FieldObject()))
-                            reader.endNestedValue()
+                            try reader.endNestedValue()
                             openValueCount -= 1
                             continue
                         }
@@ -579,7 +569,7 @@ private extension FieldValueWireCodec {
                         throw .invalidValueTag(tag)
                     }
 
-                    reader.endNestedValue()
+                    try reader.endNestedValue()
                     openValueCount -= 1
 
                 case .objectField:
@@ -642,7 +632,7 @@ private extension FieldValueWireCodec {
                     case let tag:
                         throw .invalidReferenceIdentifierTag(tag)
                     }
-                    reader.endNestedValue()
+                    try reader.endNestedValue()
                     openValueCount -= 1
 
                 case .reference:
@@ -672,7 +662,7 @@ private extension FieldValueWireCodec {
             case .array(var values, let remaining):
                 values.append(try takeValue(consume node))
                 if remaining == 1 {
-                    reader.endNestedValue()
+                    try reader.endNestedValue()
                     openValueCount -= 1
                     completed = .value(.array(consume values))
                 } else {
@@ -689,7 +679,7 @@ private extension FieldValueWireCodec {
                 fields.append(try takeFieldEntry(consume node))
                 if remaining == 1 {
                     let object = try canonicalObject(consume fields)
-                    reader.endNestedValue()
+                    try reader.endNestedValue()
                     openValueCount -= 1
                     completed = .value(.object(object))
                 } else {
@@ -704,14 +694,14 @@ private extension FieldValueWireCodec {
 
             case .valueReference:
                 let reference = try takeReference(consume node)
-                reader.endNestedValue()
+                try reader.endNestedValue()
                 openValueCount -= 1
                 completed = .value(.reference(reference))
 
             case .identifierComposite(var values, let remaining):
                 values.append(try takeIdentifier(consume node))
                 if remaining == 1 {
-                    reader.endNestedValue()
+                    try reader.endNestedValue()
                     openValueCount -= 1
                     completed = .identifier(.composite(consume values))
                 } else {

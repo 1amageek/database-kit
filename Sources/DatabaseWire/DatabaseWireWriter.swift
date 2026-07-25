@@ -368,9 +368,16 @@ struct DatabaseWireWriter {
     public mutating func withNestedValue<Result>(
         _ body: (inout DatabaseWireWriter) throws(DatabaseWireError) -> Result
     ) throws(DatabaseWireError) -> Result {
+        let enclosingDepth = nestingDepth
         try beginNestedValue()
-        defer { endNestedValue() }
-        return try body(&self)
+        do {
+            let result = try body(&self)
+            try endNestedValue()
+            return result
+        } catch let error {
+            nestingDepth = enclosingDepth
+            throw error
+        }
     }
 
     mutating func beginNestedValue() throws(DatabaseWireError) {
@@ -387,9 +394,24 @@ struct DatabaseWireWriter {
         nestingDepth = nextDepth
     }
 
-    mutating func endNestedValue() {
-        precondition(nestingDepth > 0, "Unbalanced database wire nesting")
+    mutating func endNestedValue() throws(DatabaseWireError) {
+        guard nestingDepth > 0 else {
+            throw .invalidNestingState
+        }
         nestingDepth -= 1
+    }
+
+    /// Restores writer state while propagating an already selected encode
+    /// failure. This cleanup path never converts invalid output into success.
+    mutating func abandonNestedValues(_ count: Int) {
+        guard count > 0 else {
+            return
+        }
+        if count >= nestingDepth {
+            nestingDepth = 0
+        } else {
+            nestingDepth -= count
+        }
     }
 
     public mutating func registerObjects(

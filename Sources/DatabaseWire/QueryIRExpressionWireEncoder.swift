@@ -116,7 +116,7 @@ private extension QueryIRExpressionWireEncoder {
             try begin(expression, writer: &writer, encodingSteps: &encodingSteps)
 
         case .endNestedValue:
-            writer.endNestedValue()
+            try writer.endNestedValue()
 
         case .literal(let literal):
             try QueryIRWireFormat.encodeLiteral(literal, into: &writer)

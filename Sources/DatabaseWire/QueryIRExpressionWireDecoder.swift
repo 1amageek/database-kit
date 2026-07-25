@@ -370,7 +370,7 @@ private extension QueryIRExpressionWireDecoder {
                 try beginGraphPattern(reader: &reader, decodingSteps: &decodingSteps)
 
             case .endNestedValue:
-                reader.endNestedValue()
+                try reader.endNestedValue()
 
             case .assembleUnary(let kind):
                 let value = try popExpression()
@@ -1595,7 +1595,7 @@ private extension QueryIRExpressionWireDecoder {
                 expressions.append(
                     .literal(try QueryIRWireFormat.decodeLiteral(from: &reader))
                 )
-                reader.endNestedValue()
+                try reader.endNestedValue()
             case 1:
                 expressions.append(
                     .column(
@@ -1605,7 +1605,7 @@ private extension QueryIRExpressionWireDecoder {
                         )
                     )
                 )
-                reader.endNestedValue()
+                try reader.endNestedValue()
             case 2:
                 expressions.append(
                     .variable(
@@ -1614,7 +1614,7 @@ private extension QueryIRExpressionWireDecoder {
                         )
                     )
                 )
-                reader.endNestedValue()
+                try reader.endNestedValue()
             case 3: enqueueBinaryExpressionDecodingSteps(.add, decodingSteps: &decodingSteps)
             case 4: enqueueBinaryExpressionDecodingSteps(.subtract, decodingSteps: &decodingSteps)
             case 5: enqueueBinaryExpressionDecodingSteps(.multiply, decodingSteps: &decodingSteps)
@@ -1640,7 +1640,7 @@ private extension QueryIRExpressionWireDecoder {
                         )
                     )
                 )
-                reader.endNestedValue()
+                try reader.endNestedValue()
             case 21:
                 decodingSteps.append(.endNestedValue)
                 decodingSteps.append(.likeTail)
@@ -1725,7 +1725,7 @@ private extension QueryIRExpressionWireDecoder {
                 case let referenceTag:
                     throw .invalidParameterReference(referenceTag)
                 }
-                reader.endNestedValue()
+                try reader.endNestedValue()
             default:
                 throw .invalidValueTag(tag)
             }

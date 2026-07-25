@@ -9,12 +9,7 @@ enum QueryIRSPARQLTermWireCodec {
     ) throws(DatabaseWireError) {
         var encodingSteps: [EncodingStep] = [.term(term)]
         var openNestedValueCount = 0
-        defer {
-            while openNestedValueCount > 0 {
-                writer.endNestedValue()
-                openNestedValueCount -= 1
-            }
-        }
+        defer { writer.abandonNestedValues(openNestedValueCount) }
 
         while let encodingStep = encodingSteps.popLast() {
             switch consume encodingStep {
@@ -43,7 +38,7 @@ enum QueryIRSPARQLTermWireCodec {
                 guard openNestedValueCount > 0 else {
                     throw .invalidQueryIRWireState
                 }
-                writer.endNestedValue()
+                try writer.endNestedValue()
                 openNestedValueCount -= 1
             }
         }
@@ -58,12 +53,7 @@ enum QueryIRSPARQLTermWireCodec {
     ) throws(DatabaseWireError) -> SPARQLTerm {
         var frames: [AssemblyFrame] = []
         var openNestedValueCount = 0
-        defer {
-            while openNestedValueCount > 0 {
-                reader.endNestedValue()
-                openNestedValueCount -= 1
-            }
-        }
+        defer { reader.abandonNestedValues(openNestedValueCount) }
 
         while true {
             try reader.beginNestedValue()
@@ -81,7 +71,7 @@ enum QueryIRSPARQLTermWireCodec {
             }
 
             var completed = try decodeScalar(tag: tag, from: &reader)
-            reader.endNestedValue()
+            try reader.endNestedValue()
             openNestedValueCount -= 1
 
             while !frames.isEmpty {
@@ -90,7 +80,7 @@ enum QueryIRSPARQLTermWireCodec {
                     frames.append(frame)
                     break
                 }
-                reader.endNestedValue()
+                try reader.endNestedValue()
                 openNestedValueCount -= 1
                 completed = assembled
             }

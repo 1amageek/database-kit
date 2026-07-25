@@ -9,12 +9,7 @@ enum QueryIRDataTypeWireCodec {
     ) throws(DatabaseWireError) {
         var encodingSteps: [EncodingStep] = [.dataType(type)]
         var openNestedValueCount = 0
-        defer {
-            while openNestedValueCount > 0 {
-                writer.endNestedValue()
-                openNestedValueCount -= 1
-            }
-        }
+        defer { writer.abandonNestedValues(openNestedValueCount) }
 
         while let encodingStep = encodingSteps.popLast() {
             switch consume encodingStep {
@@ -28,7 +23,7 @@ enum QueryIRDataTypeWireCodec {
                 guard openNestedValueCount > 0 else {
                     throw .invalidQueryIRWireState
                 }
-                writer.endNestedValue()
+                try writer.endNestedValue()
                 openNestedValueCount -= 1
             }
         }
@@ -43,12 +38,7 @@ enum QueryIRDataTypeWireCodec {
     ) throws(DatabaseWireError) -> DataType {
         var frames: [AssemblyFrame] = []
         var openNestedValueCount = 0
-        defer {
-            while openNestedValueCount > 0 {
-                reader.endNestedValue()
-                openNestedValueCount -= 1
-            }
-        }
+        defer { reader.abandonNestedValues(openNestedValueCount) }
 
         while true {
             try reader.beginNestedValue()
@@ -60,7 +50,7 @@ enum QueryIRDataTypeWireCodec {
             }
 
             var completed = try decodeScalar(tag: tag, from: &reader)
-            reader.endNestedValue()
+            try reader.endNestedValue()
             openNestedValueCount -= 1
 
             while let frame = frames.popLast() {
@@ -68,7 +58,7 @@ enum QueryIRDataTypeWireCodec {
                 case .array:
                     completed = .array(completed)
                 }
-                reader.endNestedValue()
+                try reader.endNestedValue()
                 openNestedValueCount -= 1
             }
             return completed

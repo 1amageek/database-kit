@@ -9,12 +9,7 @@ enum QueryIRPropertyPathWireCodec {
     ) throws(DatabaseWireError) {
         var encodingSteps: [EncodingStep] = [.path(path)]
         var openNestedValueCount = 0
-        defer {
-            while openNestedValueCount > 0 {
-                writer.endNestedValue()
-                openNestedValueCount -= 1
-            }
-        }
+        defer { writer.abandonNestedValues(openNestedValueCount) }
 
         while let encodingStep = encodingSteps.popLast() {
             switch consume encodingStep {
@@ -50,7 +45,7 @@ enum QueryIRPropertyPathWireCodec {
                 guard openNestedValueCount > 0 else {
                     throw .invalidQueryIRWireState
                 }
-                writer.endNestedValue()
+                try writer.endNestedValue()
                 openNestedValueCount -= 1
             }
         }
@@ -65,12 +60,7 @@ enum QueryIRPropertyPathWireCodec {
     ) throws(DatabaseWireError) -> PropertyPath {
         var frames: [AssemblyFrame] = []
         var openNestedValueCount = 0
-        defer {
-            while openNestedValueCount > 0 {
-                reader.endNestedValue()
-                openNestedValueCount -= 1
-            }
-        }
+        defer { reader.abandonNestedValues(openNestedValueCount) }
 
         while true {
             try reader.beginNestedValue()
@@ -103,7 +93,7 @@ enum QueryIRPropertyPathWireCodec {
             }
 
             var completed = try decodeScalar(tag: tag, from: &reader)
-            reader.endNestedValue()
+            try reader.endNestedValue()
             openNestedValueCount -= 1
 
             var needsNextChild = false
@@ -111,7 +101,7 @@ enum QueryIRPropertyPathWireCodec {
                 switch consume frame {
                 case .unary(let kind):
                     completed = kind.build(completed)
-                    reader.endNestedValue()
+                    try reader.endNestedValue()
                     openNestedValueCount -= 1
 
                 case .binary(let kind, .none):
@@ -120,7 +110,7 @@ enum QueryIRPropertyPathWireCodec {
 
                 case .binary(let kind, .some(let lhs)):
                     completed = kind.build(lhs: lhs, rhs: completed)
-                    reader.endNestedValue()
+                    try reader.endNestedValue()
                     openNestedValueCount -= 1
 
                 case .range:
@@ -137,7 +127,7 @@ enum QueryIRPropertyPathWireCodec {
                             maximum: maximum
                         )
                     )
-                    reader.endNestedValue()
+                    try reader.endNestedValue()
                     openNestedValueCount -= 1
                 }
                 if needsNextChild { break }

@@ -7,12 +7,7 @@ extension SHACLPath: WireValue {
     ) throws(DatabaseWireError) {
         var pending: [EncodingStep] = [.path(self)]
         var openNestedValueCount = 0
-        defer {
-            while openNestedValueCount > 0 {
-                writer.endNestedValue()
-                openNestedValueCount -= 1
-            }
-        }
+        defer { writer.abandonNestedValues(openNestedValueCount) }
 
         while let step = pending.popLast() {
             switch step {
@@ -55,7 +50,7 @@ extension SHACLPath: WireValue {
                 guard openNestedValueCount > 0 else {
                     throw .invalidSHACLPathWireState
                 }
-                writer.endNestedValue()
+                try writer.endNestedValue()
                 openNestedValueCount -= 1
             }
         }
@@ -66,12 +61,7 @@ extension SHACLPath: WireValue {
     ) throws(DatabaseWireError) {
         var frames: [DecodingFrame] = []
         var openNestedValueCount = 0
-        defer {
-            while openNestedValueCount > 0 {
-                reader.endNestedValue()
-                openNestedValueCount -= 1
-            }
-        }
+        defer { reader.abandonNestedValues(openNestedValueCount) }
 
         while true {
             try reader.beginNestedValue()
@@ -88,7 +78,7 @@ extension SHACLPath: WireValue {
                     throw .invalidRDFPredicateIRI(rawIRI)
                 }
                 var completed = SHACLPath.predicate(predicate)
-                reader.endNestedValue()
+                try reader.endNestedValue()
                 openNestedValueCount -= 1
                 if let root = try Self.finish(
                     completed: &completed,
@@ -156,7 +146,7 @@ private extension SHACLPath {
                 default:
                     throw .invalidSHACLPathWireState
                 }
-                reader.endNestedValue()
+                try reader.endNestedValue()
                 openNestedValueCount -= 1
 
             case .list(let tag, let count, var elements):
@@ -184,7 +174,7 @@ private extension SHACLPath {
                 default:
                     throw .invalidSHACLPathWireState
                 }
-                reader.endNestedValue()
+                try reader.endNestedValue()
                 openNestedValueCount -= 1
             }
         }
