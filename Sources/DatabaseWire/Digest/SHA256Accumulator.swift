@@ -40,12 +40,17 @@ public struct SHA256Accumulator: Sendable {
                 guard copiedCount > 0 else {
                     return
                 }
-                destination.baseAddress!
-                    .advanced(by: pendingCount)
-                    .copyMemory(
-                        from: source.baseAddress!.advanced(by: sourceOffset),
-                        byteCount: copiedCount
-                    )
+                let pendingBytes = UnsafeMutableRawBufferPointer(
+                    rebasing: destination[
+                        pendingCount..<(pendingCount + copiedCount)
+                    ]
+                )
+                let sourceBytes = UnsafeRawBufferPointer(
+                    rebasing: source[
+                        sourceOffset..<(sourceOffset + copiedCount)
+                    ]
+                )
+                pendingBytes.copyMemory(from: sourceBytes)
             }
             pendingCount += copiedCount
             sourceOffset += copiedCount
@@ -57,8 +62,7 @@ public struct SHA256Accumulator: Sendable {
 
         while source.count - sourceOffset >= 64 {
             let block = UnsafeRawBufferPointer(
-                start: source.baseAddress!.advanced(by: sourceOffset),
-                count: 64
+                rebasing: source[sourceOffset..<(sourceOffset + 64)]
             )
             state = Self.state(afterCompressing: block, from: state)
             sourceOffset += 64
@@ -69,10 +73,13 @@ public struct SHA256Accumulator: Sendable {
             return
         }
         withUnsafeMutableBytes(of: &pending) { destination in
-            destination.baseAddress!.copyMemory(
-                from: source.baseAddress!.advanced(by: sourceOffset),
-                byteCount: remainingCount
+            let pendingBytes = UnsafeMutableRawBufferPointer(
+                rebasing: destination[0..<remainingCount]
             )
+            let sourceBytes = UnsafeRawBufferPointer(
+                rebasing: source[sourceOffset..<source.count]
+            )
+            pendingBytes.copyMemory(from: sourceBytes)
         }
         pendingCount = remainingCount
     }
