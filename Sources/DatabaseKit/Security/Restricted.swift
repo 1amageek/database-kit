@@ -3,21 +3,6 @@ import DatabaseTypes
 // Core - Property wrapper for field-level access control
 
 
-/// Protocol to identify Restricted property wrappers at runtime
-public protocol RestrictedProtocol: Sendable {
-    /// Read access level
-    var readAccess: FieldAccessLevel { get }
-
-    /// Write access level
-    var writeAccess: FieldAccessLevel { get }
-
-    /// The underlying value as Any
-    var anyValue: Any { get }
-
-    /// The value type
-    static var valueType: Any.Type { get }
-}
-
 /// Property wrapper for field-level access control
 ///
 /// Restricts read and/or write access to a field based on authentication context.
@@ -51,7 +36,7 @@ public protocol RestrictedProtocol: Sendable {
 /// - Use `DatabaseContext.fetchSecure()` to automatically mask restricted fields
 /// - Use `DatabaseContext.saveSecure()` to validate write permissions
 @propertyWrapper
-public struct Restricted<Value: Sendable>: Sendable, RestrictedProtocol {
+public struct Restricted<Value: Sendable>: Sendable {
     private var value: Value
 
     /// Read access level
@@ -87,11 +72,6 @@ public struct Restricted<Value: Sendable>: Sendable, RestrictedProtocol {
         self.writeAccess = write
     }
 
-    // MARK: - RestrictedProtocol
-
-    public var anyValue: Any { value }
-
-    public static var valueType: Any.Type { Value.self }
 }
 
 // MARK: - Equatable

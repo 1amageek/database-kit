@@ -110,20 +110,6 @@ struct RestrictedPropertyWrapperTests {
         #expect(restricted.writeAccess == .public)
     }
 
-    @Test("Restricted conforms to RestrictedProtocol")
-    func restrictedConformsToProtocol() {
-        let restricted: any RestrictedProtocol = Restricted(
-            wrappedValue: "secret",
-            read: .authenticated,
-            write: .roles(["admin"])
-        )
-
-        #expect(restricted.readAccess == .authenticated)
-        #expect(restricted.writeAccess == .roles(["admin"]))
-        #expect(restricted.anyValue as? String == "secret")
-        #expect(Restricted<String>.valueType is String.Type)
-    }
-
     @Test("Restricted Equatable")
     func restrictedEquatable() {
         let r1 = Restricted(wrappedValue: 100, read: .authenticated, write: .public)
