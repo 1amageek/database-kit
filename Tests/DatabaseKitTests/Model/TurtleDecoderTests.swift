@@ -514,6 +514,46 @@ struct TurtleDecoderTests {
         }
     }
 
+    @Test("Invalid language tags preserve the Turtle failure boundary")
+    func invalidLanguageTagIsRejected() {
+        let turtle = standardPrefixes + """
+        ex:label rdfs:label "value"@ .
+        """
+
+        do {
+            _ = try TurtleDecoder().decode(from: turtle)
+            Issue.record("Expected invalidLanguageTag")
+        } catch TurtleDecodingError.invalidLanguageTag(let tag, _) {
+            #expect(tag.isEmpty)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("Invalid datasets preserve the Turtle failure boundary")
+    func invalidDatasetIsRejected() {
+        let dataset = RDFDataset(quads: [
+            RDFQuad(
+                subject: Self.subject("urn:subject"),
+                predicate: Self.predicate("urn:predicate"),
+                object: Self.nestedTerm(depth: 40)
+            )
+        ])
+
+        do {
+            _ = try TurtleDecoder().decode(
+                from: dataset,
+                fallbackIRI: "urn:fallback"
+            )
+            Issue.record("Expected invalidDataset")
+        } catch TurtleDecodingError.invalidDataset(
+            .maximumDepthExceeded
+        ) {
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
     @Test("Literal class expression is rejected")
     func literalClassExpressionIsRejected() {
         let turtle = standardPrefixes + """
@@ -600,5 +640,33 @@ struct TurtleDecoderTests {
         } catch {
             Issue.record("Unexpected error: \(error)")
         }
+    }
+
+    private static func subject(_ rawValue: String) -> RDFSubject {
+        do {
+            return .iri(try RDFIRI(rawValue))
+        } catch {
+            preconditionFailure("Invalid subject fixture: \(rawValue)")
+        }
+    }
+
+    private static func predicate(_ rawValue: String) -> RDFPredicateIRI {
+        do {
+            return try RDFPredicateIRI(rawValue)
+        } catch {
+            preconditionFailure("Invalid predicate fixture: \(rawValue)")
+        }
+    }
+
+    private static func nestedTerm(depth: Int) -> RDFTerm {
+        var term = Self.subject("urn:leaf").term
+        for _ in 0..<depth {
+            term = .tripleTerm(
+                subject: Self.subject("urn:nested-subject"),
+                predicate: Self.predicate("urn:nested-predicate"),
+                object: term
+            )
+        }
+        return term
     }
 }

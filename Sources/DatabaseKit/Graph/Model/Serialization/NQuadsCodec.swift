@@ -5,7 +5,9 @@ import DatabaseTypes
 public struct NQuadsDecoder: Sendable {
     public init() {}
 
-    public func decode(from input: String) throws -> RDFDataset {
+    public func decode(
+        from input: String
+    ) throws(RDFSyntaxError) -> RDFDataset {
         var quads: [RDFQuad] = []
         let lines = input.split(separator: "\n", omittingEmptySubsequences: false)
         for (offset, rawLine) in lines.enumerated() {
@@ -15,7 +17,11 @@ public struct NQuadsDecoder: Sendable {
 
             var parser = NQuadsLineParser(input: line, line: lineNumber)
             let quad = try parser.parseQuad()
-            try quad.validate()
+            do {
+                try quad.validate()
+            } catch let error {
+                throw .invalidDataset(error)
+            }
             quads.append(quad)
         }
         return RDFDataset(quads: quads)
@@ -80,7 +86,9 @@ public struct NQuadsDecoder: Sendable {
 public struct NQuadsEncoder: Sendable {
     public init() {}
 
-    public func encode(_ dataset: RDFDataset) throws -> String {
+    public func encode(
+        _ dataset: RDFDataset
+    ) throws(RDFTermCodecError) -> String {
         try dataset.validate()
         let lines = dataset.quads
             .map(formatQuad(_:))
@@ -112,7 +120,7 @@ private struct NQuadsLineParser {
         self.index = input.startIndex
     }
 
-    mutating func parseQuad() throws -> RDFQuad {
+    mutating func parseQuad() throws(RDFSyntaxError) -> RDFQuad {
         skipWhitespace()
         let subject = try parseTerm()
         skipWhitespace()
@@ -163,29 +171,35 @@ private struct NQuadsLineParser {
         }
     }
 
-    private mutating func parseTerm() throws -> RDFTerm {
+    private mutating func parseTerm() throws(RDFSyntaxError) -> RDFTerm {
         guard !isAtEnd else {
             throw RDFSyntaxError.unexpectedEndOfInput(expected: "RDF term")
         }
 
         if peek() == "<" {
-            return try .iri(validating: parseIRI())
+            let rawValue = try parseIRI()
+            return try validatedIRI(rawValue)
         }
         if peek() == "\"" {
             return .literal(try parseLiteral())
         }
         if input[index...].hasPrefix("_:") {
-            return try .blankNode(identifier: parseBlankNode())
+            let identifier = try parseBlankNode()
+            do {
+                return try .blankNode(identifier: identifier)
+            } catch {
+                throw .invalidTerm("_:\(identifier)", line: line)
+            }
         }
 
         let token = readBareToken()
         guard !token.isEmpty else {
             throw RDFSyntaxError.invalidTerm(currentDescription, line: line)
         }
-        return try .iri(validating: token)
+        return try validatedIRI(token)
     }
 
-    private mutating func parseIRI() throws -> String {
+    private mutating func parseIRI() throws(RDFSyntaxError) -> String {
         advance()
         var value = ""
         var escaped = false
@@ -210,7 +224,8 @@ private struct NQuadsLineParser {
         throw RDFSyntaxError.invalidIRI(value, line: line)
     }
 
-    private mutating func parseBlankNode() throws -> String {
+    private mutating func parseBlankNode()
+        throws(RDFSyntaxError) -> String {
         advance()
         advance()
         let id = readBareToken()
@@ -220,7 +235,8 @@ private struct NQuadsLineParser {
         return id
     }
 
-    private mutating func parseLiteral() throws -> RDFLiteral {
+    private mutating func parseLiteral()
+        throws(RDFSyntaxError) -> RDFLiteral {
         advance()
         var value = ""
         var escaped = false
@@ -245,14 +261,20 @@ private struct NQuadsLineParser {
         throw RDFSyntaxError.unterminatedString(line: line)
     }
 
-    private mutating func parseLiteralSuffix(lexicalForm: String) throws -> RDFLiteral {
+    private mutating func parseLiteralSuffix(
+        lexicalForm: String
+    ) throws(RDFSyntaxError) -> RDFLiteral {
         if input[index...].hasPrefix("@") {
             advance()
             let language = readBareToken()
             guard !language.isEmpty else {
                 throw RDFSyntaxError.invalidTerm("@", line: line)
             }
-            return try .langString(lexicalForm, language: language)
+            do {
+                return try .langString(lexicalForm, language: language)
+            } catch {
+                throw .invalidTerm("@\(language)", line: line)
+            }
         }
 
         if input[index...].hasPrefix("^^") {
@@ -267,10 +289,24 @@ private struct NQuadsLineParser {
             guard !datatype.isEmpty else {
                 throw RDFSyntaxError.invalidTerm("^^", line: line)
             }
-            return try .typed(lexicalForm, datatype: datatype)
+            do {
+                return try .typed(lexicalForm, datatype: datatype)
+            } catch {
+                throw .invalidIRI(datatype, line: line)
+            }
         }
 
         return .string(lexicalForm)
+    }
+
+    private func validatedIRI(
+        _ rawValue: String
+    ) throws(RDFSyntaxError) -> RDFTerm {
+        do {
+            return try .iri(validating: rawValue)
+        } catch {
+            throw .invalidIRI(rawValue, line: line)
+        }
     }
 
     private mutating func readBareToken() -> String {

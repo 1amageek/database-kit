@@ -26,15 +26,19 @@ public struct PolymorphicGroup: Sendable, Equatable, Hashable {
         self.memberTypeNames = memberTypeNames.sorted()
     }
 
-    public func resolvedDirectoryPath() throws -> [String] {
-        try directoryComponents.map { component in
+    public func resolvedDirectoryPath()
+        throws(DirectoryPathError) -> [String] {
+        var path: [String] = []
+        path.reserveCapacity(directoryComponents.count)
+        for component in directoryComponents {
             switch component {
             case .staticPath(let value):
-                return value
+                path.append(value)
             case .dynamicField(let fieldName):
                 throw DirectoryPathError.missingFields([fieldName])
             }
         }
+        return path
     }
 
     static func extractDirectoryComponents(

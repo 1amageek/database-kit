@@ -11,6 +11,7 @@ public enum RDFSyntaxError: Error, Sendable, Equatable, CustomStringConvertible 
     case undefinedPrefix(String, line: Int)
     case invalidTerm(String, line: Int)
     case invalidQuad(String, line: Int)
+    case invalidDataset(RDFTermCodecError)
 
     public var description: String {
         switch self {
@@ -28,6 +29,8 @@ public enum RDFSyntaxError: Error, Sendable, Equatable, CustomStringConvertible 
             return "Invalid RDF term '\(term)' at line \(line)"
         case .invalidQuad(let reason, let line):
             return "Invalid RDF quad at line \(line): \(reason)"
+        case .invalidDataset(let error):
+            return "RDF dataset contains an invalid canonical term: \(error)"
         }
     }
 }

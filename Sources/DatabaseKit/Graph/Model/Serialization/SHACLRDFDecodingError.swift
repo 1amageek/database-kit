@@ -1,5 +1,7 @@
 import DatabaseTypes
 public enum SHACLRDFDecodingError: Error, Sendable, Equatable, CustomStringConvertible {
+    case invalidDataset(RDFTermCodecError)
+    case invalidPath(SHACLPathError)
     case missingProperty(subject: String, predicate: String)
     case invalidIRI(String)
     case invalidLiteral(String)
@@ -17,6 +19,10 @@ public enum SHACLRDFDecodingError: Error, Sendable, Equatable, CustomStringConve
 
     public var description: String {
         switch self {
+        case .invalidDataset(let error):
+            return "RDF dataset contains an invalid canonical term: \(error)"
+        case .invalidPath(let error):
+            return "Invalid SHACL path: \(error)"
         case .missingProperty(let subject, let predicate):
             return "Missing SHACL property \(predicate) on \(subject)"
         case .invalidIRI(let value):

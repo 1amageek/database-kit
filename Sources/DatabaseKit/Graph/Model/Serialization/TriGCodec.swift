@@ -6,12 +6,18 @@ import DatabaseTypes
 public struct TriGDecoder: Sendable {
     public init() {}
 
-    public func decode(from input: String) throws -> RDFDataset {
+    public func decode(
+        from input: String
+    ) throws(RDFSyntaxError) -> RDFDataset {
         let tokenizer = TriGTokenizer(input: input)
         let tokens = try tokenizer.tokenize()
         var parser = TriGParser(tokens: tokens)
         let dataset = try parser.parse()
-        try dataset.validate()
+        do {
+            try dataset.validate()
+        } catch let error {
+            throw .invalidDataset(error)
+        }
         return dataset
     }
 }
@@ -19,7 +25,9 @@ public struct TriGDecoder: Sendable {
 public struct TriGEncoder: Sendable {
     public init() {}
 
-    public func encode(_ dataset: RDFDataset) throws -> String {
+    public func encode(
+        _ dataset: RDFDataset
+    ) throws(RDFTermCodecError) -> String {
         try dataset.validate()
 
         var lines: [String] = []
@@ -109,7 +117,7 @@ private final class TriGTokenizer {
         self.index = input.startIndex
     }
 
-    func tokenize() throws -> [TriGToken] {
+    func tokenize() throws(RDFSyntaxError) -> [TriGToken] {
         var tokens: [TriGToken] = []
         while index < input.endIndex {
             skipWhitespaceAndComments()
@@ -194,7 +202,7 @@ private final class TriGTokenizer {
         return tokens
     }
 
-    private func readIRI() throws -> TriGToken {
+    private func readIRI() throws(RDFSyntaxError) -> TriGToken {
         advance()
         var result = ""
         var escaped = false
@@ -220,7 +228,7 @@ private final class TriGTokenizer {
         throw RDFSyntaxError.invalidIRI(result, line: line)
     }
 
-    private func readStringLiteral(quote: Character) throws -> TriGToken {
+    private func readStringLiteral(quote: Character) throws(RDFSyntaxError) -> TriGToken {
         advance()
         var result = ""
         var escaped = false
@@ -377,14 +385,14 @@ private struct TriGParser {
     var quads: [RDFQuad] = []
     var blankNodeCounter = 0
 
-    mutating func parse() throws -> RDFDataset {
+    mutating func parse() throws(RDFSyntaxError) -> RDFDataset {
         while !isAtEnd {
             try parseStatement(graph: nil)
         }
         return RDFDataset(baseIRI: baseIRI, prefixes: prefixes, quads: quads)
     }
 
-    private mutating func parseStatement(graph: RDFTerm?) throws {
+    private mutating func parseStatement(graph: RDFTerm?) throws(RDFSyntaxError) {
         switch current {
         case .prefixDecl:
             try parsePrefixDirective()
@@ -408,7 +416,7 @@ private struct TriGParser {
         }
     }
 
-    private mutating func parsePrefixDirective() throws {
+    private mutating func parsePrefixDirective() throws(RDFSyntaxError) {
         advance()
         guard case .prefixedName(let name) = current else {
             throw unexpected("prefix name")
@@ -423,7 +431,7 @@ private struct TriGParser {
         prefixes[prefix] = namespace
     }
 
-    private mutating func parseSPARQLPrefix() throws {
+    private mutating func parseSPARQLPrefix() throws(RDFSyntaxError) {
         advance()
         guard case .prefixedName(let name) = current else {
             throw unexpected("prefix name")
@@ -437,7 +445,7 @@ private struct TriGParser {
         prefixes[prefix] = namespace
     }
 
-    private mutating func parseBaseDirective() throws {
+    private mutating func parseBaseDirective() throws(RDFSyntaxError) {
         advance()
         guard case .iri(let base) = current else {
             throw unexpected("IRI")
@@ -447,7 +455,7 @@ private struct TriGParser {
         baseIRI = base
     }
 
-    private mutating func parseSPARQLBase() throws {
+    private mutating func parseSPARQLBase() throws(RDFSyntaxError) {
         advance()
         guard case .iri(let base) = current else {
             throw unexpected("IRI")
@@ -456,20 +464,20 @@ private struct TriGParser {
         baseIRI = base
     }
 
-    private mutating func parseGraphBlock() throws {
+    private mutating func parseGraphBlock() throws(RDFSyntaxError) {
         advance()
         let graph = try parseGraphName()
         try expect(.openBrace)
         try parseGraphContent(graph: graph)
     }
 
-    private mutating func parseGraphBlockWithoutKeyword() throws {
+    private mutating func parseGraphBlockWithoutKeyword() throws(RDFSyntaxError) {
         let graph = try parseGraphName()
         try expect(.openBrace)
         try parseGraphContent(graph: graph)
     }
 
-    private mutating func parseGraphContent(graph: RDFTerm) throws {
+    private mutating func parseGraphContent(graph: RDFTerm) throws(RDFSyntaxError) {
         while true {
             if case .closeBrace = current {
                 advance()
@@ -483,12 +491,12 @@ private struct TriGParser {
         }
     }
 
-    private mutating func parseTriples(graph: RDFTerm?) throws {
+    private mutating func parseTriples(graph: RDFTerm?) throws(RDFSyntaxError) {
         let subject = try parseSubject(graph: graph)
         try parsePredicateObjectList(subject: subject, graph: graph)
     }
 
-    private mutating func parsePredicateObjectList(subject: RDFTerm, graph: RDFTerm?) throws {
+    private mutating func parsePredicateObjectList(subject: RDFTerm, graph: RDFTerm?) throws(RDFSyntaxError) {
         try parseVerbObjectList(subject: subject, graph: graph)
         while case .semicolon = current {
             advance()
@@ -500,32 +508,42 @@ private struct TriGParser {
         }
     }
 
-    private mutating func parseVerbObjectList(subject: RDFTerm, graph: RDFTerm?) throws {
+    private mutating func parseVerbObjectList(subject: RDFTerm, graph: RDFTerm?) throws(RDFSyntaxError) {
         let predicate = try parsePredicate()
         try parseObjectList(subject: subject, predicate: predicate, graph: graph)
     }
 
-    private mutating func parseObjectList(subject: RDFTerm, predicate: RDFTerm, graph: RDFTerm?) throws {
+    private mutating func parseObjectList(subject: RDFTerm, predicate: RDFTerm, graph: RDFTerm?) throws(RDFSyntaxError) {
         let object = try parseObject(graph: graph)
-        quads.append(try RDFQuad(validatingSubject: subject, predicate: predicate, object: object, graph: graph))
+        try appendQuad(
+            subject: subject,
+            predicate: predicate,
+            object: object,
+            graph: graph
+        )
         while case .comma = current {
             advance()
             let object = try parseObject(graph: graph)
-            quads.append(try RDFQuad(validatingSubject: subject, predicate: predicate, object: object, graph: graph))
+            try appendQuad(
+                subject: subject,
+                predicate: predicate,
+                object: object,
+                graph: graph
+            )
         }
     }
 
-    private mutating func parseSubject(graph: RDFTerm?) throws -> RDFTerm {
+    private mutating func parseSubject(graph: RDFTerm?) throws(RDFSyntaxError) -> RDFTerm {
         switch current {
         case .iri(let iri):
             advance()
-            return try .iri(validating: resolveIRI(iri))
+            return try validatedIRI(resolveIRI(iri))
         case .prefixedName(let name):
             advance()
-            return try .iri(validating: expandPrefixed(name))
+            return try validatedIRI(expandPrefixed(name))
         case .blankNode(let label):
             advance()
-            return try .blankNode(identifier: label)
+            return try validatedBlankNode(label)
         case .openBracket:
             return try parseBlankNodePropertyList(graph: graph)
         case .openParen:
@@ -535,36 +553,35 @@ private struct TriGParser {
         }
     }
 
-    private mutating func parsePredicate() throws -> RDFTerm {
+    private mutating func parsePredicate() throws(RDFSyntaxError) -> RDFTerm {
         switch current {
         case .a:
             advance()
-            return try .iri(
-                validating:
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+            return try validatedIRI(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
             )
         case .iri(let iri):
             advance()
-            return try .iri(validating: resolveIRI(iri))
+            return try validatedIRI(resolveIRI(iri))
         case .prefixedName(let name):
             advance()
-            return try .iri(validating: expandPrefixed(name))
+            return try validatedIRI(expandPrefixed(name))
         default:
             throw unexpected("predicate")
         }
     }
 
-    private mutating func parseObject(graph: RDFTerm?) throws -> RDFTerm {
+    private mutating func parseObject(graph: RDFTerm?) throws(RDFSyntaxError) -> RDFTerm {
         switch current {
         case .iri(let iri):
             advance()
-            return try .iri(validating: resolveIRI(iri))
+            return try validatedIRI(resolveIRI(iri))
         case .prefixedName(let name):
             advance()
-            return try .iri(validating: expandPrefixed(name))
+            return try validatedIRI(expandPrefixed(name))
         case .blankNode(let label):
             advance()
-            return try .blankNode(identifier: label)
+            return try validatedBlankNode(label)
         case .openBracket:
             return try parseBlankNodePropertyList(graph: graph)
         case .openParen:
@@ -592,16 +609,15 @@ private struct TriGParser {
             return .literal(.boolean(value == "true"))
         case .a:
             advance()
-            return try .iri(
-                validating:
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+            return try validatedIRI(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
             )
         default:
             throw unexpected("object")
         }
     }
 
-    private mutating func parseLiteralRest(lexicalForm: String) throws -> RDFTerm {
+    private mutating func parseLiteralRest(lexicalForm: String) throws(RDFSyntaxError) -> RDFTerm {
         if case .hatHat = current {
             advance()
             let datatype: String
@@ -615,16 +631,28 @@ private struct TriGParser {
             default:
                 throw unexpected("datatype IRI")
             }
-            return .literal(try .typed(lexicalForm, datatype: datatype))
+            do {
+                return .literal(
+                    try .typed(lexicalForm, datatype: datatype)
+                )
+            } catch {
+                throw .invalidIRI(datatype, line: currentLine)
+            }
         }
         if case .langTag(let language) = current {
             advance()
-            return .literal(try .langString(lexicalForm, language: language))
+            do {
+                return .literal(
+                    try .langString(lexicalForm, language: language)
+                )
+            } catch {
+                throw .invalidTerm("@\(language)", line: currentLine)
+            }
         }
         return .literal(.string(lexicalForm))
     }
 
-    private mutating func parseBlankNodePropertyList(graph: RDFTerm?) throws -> RDFTerm {
+    private mutating func parseBlankNodePropertyList(graph: RDFTerm?) throws(RDFSyntaxError) -> RDFTerm {
         advance()
         let blank = try freshBlankNode()
         if case .closeBracket = current {
@@ -636,7 +664,7 @@ private struct TriGParser {
         return blank
     }
 
-    private mutating func parseCollection(graph: RDFTerm?) throws -> RDFTerm {
+    private mutating func parseCollection(graph: RDFTerm?) throws(RDFSyntaxError) -> RDFTerm {
         advance()
         var items: [RDFTerm] = []
         while true {
@@ -648,23 +676,19 @@ private struct TriGParser {
         }
 
         if items.isEmpty {
-            return try .iri(
-                validating:
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
+            return try validatedIRI(
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
             )
         }
 
-        let rdfFirst = try RDFTerm.iri(
-            validating:
-                "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
+        let rdfFirst = try validatedIRI(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
         )
-        let rdfRest = try RDFTerm.iri(
-            validating:
-                "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"
+        let rdfRest = try validatedIRI(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"
         )
-        let rdfNil = try RDFTerm.iri(
-            validating:
-                "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
+        let rdfNil = try validatedIRI(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
         )
 
         var head: RDFTerm?
@@ -672,35 +696,50 @@ private struct TriGParser {
         for item in items {
             let node = try freshBlankNode()
             if head == nil { head = node }
-            quads.append(try RDFQuad(validatingSubject: node, predicate: rdfFirst, object: item, graph: graph))
+            try appendQuad(
+                subject: node,
+                predicate: rdfFirst,
+                object: item,
+                graph: graph
+            )
             if let previous {
-                quads.append(try RDFQuad(validatingSubject: previous, predicate: rdfRest, object: node, graph: graph))
+                try appendQuad(
+                    subject: previous,
+                    predicate: rdfRest,
+                    object: node,
+                    graph: graph
+                )
             }
             previous = node
         }
         if let previous {
-            quads.append(try RDFQuad(validatingSubject: previous, predicate: rdfRest, object: rdfNil, graph: graph))
+            try appendQuad(
+                subject: previous,
+                predicate: rdfRest,
+                object: rdfNil,
+                graph: graph
+            )
         }
         return head ?? rdfNil
     }
 
-    private mutating func parseGraphName() throws -> RDFTerm {
+    private mutating func parseGraphName() throws(RDFSyntaxError) -> RDFTerm {
         switch current {
         case .iri(let iri):
             advance()
-            return try .iri(validating: resolveIRI(iri))
+            return try validatedIRI(resolveIRI(iri))
         case .prefixedName(let name):
             advance()
-            return try .iri(validating: expandPrefixed(name))
+            return try validatedIRI(expandPrefixed(name))
         case .blankNode(let label):
             advance()
-            return try .blankNode(identifier: label)
+            return try validatedBlankNode(label)
         default:
             throw unexpected("graph name")
         }
     }
 
-    private func expandPrefixed(_ name: String) throws -> String {
+    private func expandPrefixed(_ name: String) throws(RDFSyntaxError) -> String {
         guard let colonIndex = name.firstIndex(of: ":") else {
             return name
         }
@@ -722,9 +761,52 @@ private struct TriGParser {
     }
 
     private mutating func freshBlankNode()
-        throws(RDFBlankNodeIdentifierError) -> RDFTerm {
+        throws(RDFSyntaxError) -> RDFTerm {
         blankNodeCounter += 1
-        return try .blankNode(identifier: "_b\(blankNodeCounter)")
+        return try validatedBlankNode("_b\(blankNodeCounter)")
+    }
+
+    private func validatedIRI(
+        _ rawValue: String
+    ) throws(RDFSyntaxError) -> RDFTerm {
+        do {
+            return try .iri(validating: rawValue)
+        } catch {
+            throw .invalidIRI(rawValue, line: currentLine)
+        }
+    }
+
+    private func validatedBlankNode(
+        _ identifier: String
+    ) throws(RDFSyntaxError) -> RDFTerm {
+        do {
+            return try .blankNode(identifier: identifier)
+        } catch {
+            throw .invalidTerm("_:\(identifier)", line: currentLine)
+        }
+    }
+
+    private mutating func appendQuad(
+        subject: RDFTerm,
+        predicate: RDFTerm,
+        object: RDFTerm,
+        graph: RDFTerm?
+    ) throws(RDFSyntaxError) {
+        do {
+            quads.append(
+                try RDFQuad(
+                    validatingSubject: subject,
+                    predicate: predicate,
+                    object: object,
+                    graph: graph
+                )
+            )
+        } catch {
+            throw .invalidQuad(
+                "subject, predicate, or graph term has an invalid RDF role",
+                line: currentLine
+            )
+        }
     }
 
     private var startsGraphBlock: Bool {
@@ -756,7 +838,7 @@ private struct TriGParser {
         pos += 1
     }
 
-    private mutating func expect(_ expected: TriGToken) throws {
+    private mutating func expect(_ expected: TriGToken) throws(RDFSyntaxError) {
         if tokenMatches(current, expected) {
             advance()
         } else {

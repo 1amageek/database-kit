@@ -38,14 +38,18 @@ public struct RDFQuad: Sendable, Hashable {
         predicate: RDFTerm,
         object: RDFTerm,
         graph: RDFTerm? = nil
-    ) throws {
+    ) throws(RDFDatasetValidationError) {
         self.subject = try RDFSubject(validating: subject)
         self.predicate = try RDFPredicateIRI(validating: predicate)
         self.object = object
-        self.graph = try graph.map(RDFGraphName.init)
+        if let graph {
+            self.graph = try RDFGraphName(graph)
+        } else {
+            self.graph = nil
+        }
     }
 
-    public func validate() throws {
+    public func validate() throws(RDFTermCodecError) {
         try RDFTermCodec.validate(object, role: .object)
     }
 
@@ -75,7 +79,7 @@ public struct RDFTriple: Sendable, Hashable {
         validatingSubject subject: RDFTerm,
         predicate: RDFTerm,
         object: RDFTerm
-    ) throws {
+    ) throws(RDFDatasetValidationError) {
         self.subject = try RDFSubject(validating: subject)
         self.predicate = try RDFPredicateIRI(validating: predicate)
         self.object = object
@@ -103,7 +107,7 @@ public struct RDFDataset: Sendable, Hashable {
         quads.filter { $0.graph == nil }.map { $0.triple }
     }
 
-    public func validate() throws {
+    public func validate() throws(RDFTermCodecError) {
         for quad in quads {
             try quad.validate()
         }
@@ -128,7 +132,9 @@ public enum RDFDatasetValidationError: Error, Sendable, Equatable, CustomStringC
 }
 
 private extension RDFSubject {
-    init(validating term: RDFTerm) throws {
+    init(
+        validating term: RDFTerm
+    ) throws(RDFDatasetValidationError) {
         switch term {
         case .iri(let iri):
             self = .iri(iri)
@@ -141,7 +147,9 @@ private extension RDFSubject {
 }
 
 private extension RDFPredicateIRI {
-    init(validating term: RDFTerm) throws {
+    init(
+        validating term: RDFTerm
+    ) throws(RDFDatasetValidationError) {
         guard case .iri(let iri) = term else {
             throw RDFDatasetValidationError.invalidPredicate(term)
         }

@@ -3,6 +3,7 @@ public enum OWLProjectionError: Error, Sendable, Equatable, CustomStringConverti
     case invalidIndividualIRIBase(String)
     case invalidIndividualIRI(String)
     case dataPropertyRequiresLiteral
+    case invalidDateTime(XSDDateTimeError)
 
     public var description: String {
         switch self {
@@ -12,6 +13,8 @@ public enum OWLProjectionError: Error, Sendable, Equatable, CustomStringConverti
             return "OWL individual IRI is invalid: '\(value)'"
         case .dataPropertyRequiresLiteral:
             return "OWL data property values must be RDF literals"
+        case .invalidDateTime(let error):
+            return "OWL dateTime projection failed: \(error)"
         }
     }
 }

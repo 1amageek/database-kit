@@ -64,7 +64,7 @@ extension RDFTerm {
     public static func langString(
         _ value: String,
         language: String
-    ) throws -> RDFTerm {
+    ) throws(RDFLanguageTagError) -> RDFTerm {
         .langString(value, language: try RDFLanguageTag(language))
     }
 }

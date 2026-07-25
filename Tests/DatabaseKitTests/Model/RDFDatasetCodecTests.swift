@@ -227,6 +227,24 @@ struct RDFDatasetCodecTests {
         #expect(encoded.contains("ex:doc {"))
         #expect(Set(decoded.quads) == Set(dataset.quads))
     }
+
+    @Test("RDF text encoders reject datasets beyond the canonical depth")
+    func encodersRejectExcessiveTermDepth() {
+        let dataset = RDFDataset(quads: [
+            RDFQuad(
+                subject: fixtureSubjectIRI("urn:subject"),
+                predicate: fixturePredicateIRI("urn:predicate"),
+                object: fixtureNestedTerm(depth: 40)
+            )
+        ])
+
+        #expect(throws: RDFTermCodecError.self) {
+            _ = try NQuadsEncoder().encode(dataset)
+        }
+        #expect(throws: RDFTermCodecError.self) {
+            _ = try TriGEncoder().encode(dataset)
+        }
+    }
 }
 
 private func fixtureIRI(_ rawValue: String) -> RDFTerm {
@@ -267,6 +285,18 @@ private func fixtureBlankNode(_ rawValue: String) -> RDFTerm {
     } catch {
         preconditionFailure("Invalid blank-node fixture: \(rawValue)")
     }
+}
+
+private func fixtureNestedTerm(depth: Int) -> RDFTerm {
+    var term = fixtureIRI("urn:leaf")
+    for _ in 0..<depth {
+        term = .tripleTerm(
+            subject: fixtureSubjectIRI("urn:nested-subject"),
+            predicate: fixturePredicateIRI("urn:nested-predicate"),
+            object: term
+        )
+    }
+    return term
 }
 
 private func fixtureSubjectBlankNode(_ rawValue: String) -> RDFSubject {

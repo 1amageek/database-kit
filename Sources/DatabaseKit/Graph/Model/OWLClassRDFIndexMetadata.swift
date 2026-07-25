@@ -7,7 +7,7 @@ public struct OWLClassRDFIndexMetadata: Sendable, Hashable {
 
     public init(
         canonical kind: IndexKindMetadata
-    ) throws {
+    ) throws(IndexKindMetadataError) {
         try kind.validateIdentity(
             identifier: "owl_class_rdf",
             subspaceStructure: .hierarchical

@@ -24,7 +24,7 @@ public struct TurtleDecoder: Sendable {
     /// - Parameter turtle: Turtle format string
     /// - Returns: Decoded OWLOntology
     /// - Throws: TurtleDecodingError
-    public func decode(from turtle: String) throws -> OWLOntology {
+    public func decode(from turtle: String) throws(TurtleDecodingError) -> OWLOntology {
         let tokenizer = TurtleTokenizer(input: turtle)
         let tokens = try tokenizer.tokenize()
         let parser = TurtleParser(tokens: tokens)
@@ -42,13 +42,21 @@ public struct TurtleDecoder: Sendable {
     public func decode(
         from dataset: RDFDataset,
         fallbackIRI: String
-    ) throws -> OWLOntology {
-        try dataset.validate()
-        let triples = try dataset.quads.map { quad in
-            ParsedRDFTriple(
-                subject: try RDFNode(quad.subject.term),
-                predicate: try RDFNode(quad.predicate.term),
-                object: try RDFNode(quad.object)
+    ) throws(TurtleDecodingError) -> OWLOntology {
+        do {
+            try dataset.validate()
+        } catch let error {
+            throw .invalidDataset(error)
+        }
+        var triples: [ParsedRDFTriple] = []
+        triples.reserveCapacity(dataset.quads.count)
+        for quad in dataset.quads {
+            triples.append(
+                ParsedRDFTriple(
+                    subject: try RDFNode(quad.subject.term),
+                    predicate: try RDFNode(quad.predicate.term),
+                    object: try RDFNode(quad.object)
+                )
             )
         }
         let decoded = try OWLBuilder(
@@ -80,6 +88,8 @@ public enum TurtleDecodingError: Error, Sendable, Equatable {
     case unterminatedString(line: Int)
     case undefinedPrefix(String, line: Int)
     case invalidIRI(String, line: Int)
+    case invalidLanguageTag(String, line: Int)
+    case invalidDataset(RDFTermCodecError)
     case unsupportedRDFTerm(String)
     case invalidClassExpression(String)
     case invalidDataRange(String)
@@ -129,7 +139,7 @@ private final class TurtleTokenizer {
         self.index = input.startIndex
     }
 
-    func tokenize() throws -> [TurtleToken] {
+    func tokenize() throws(TurtleDecodingError) -> [TurtleToken] {
         var tokens: [TurtleToken] = []
         while index < input.endIndex {
             skipWhitespaceAndComments()
@@ -220,7 +230,7 @@ private final class TurtleTokenizer {
 
     // MARK: - Read Helpers
 
-    private func readIRI() throws -> TurtleToken {
+    private func readIRI() throws(TurtleDecodingError) -> TurtleToken {
         advance() // skip <
         var result = ""
         while index < input.endIndex && input[index] != ">" {
@@ -235,7 +245,7 @@ private final class TurtleTokenizer {
         return .iri(result)
     }
 
-    private func readStringLiteral() throws -> TurtleToken {
+    private func readStringLiteral() throws(TurtleDecodingError) -> TurtleToken {
         advance() // skip first "
         // Check for long string """
         if index < input.endIndex && input[index] == "\"" {
@@ -253,7 +263,7 @@ private final class TurtleTokenizer {
         return try readShortString()
     }
 
-    private func readShortString() throws -> TurtleToken {
+    private func readShortString() throws(TurtleDecodingError) -> TurtleToken {
         var result = ""
         while index < input.endIndex {
             let ch = input[index]
@@ -277,7 +287,7 @@ private final class TurtleTokenizer {
         throw TurtleDecodingError.unterminatedString(line: line)
     }
 
-    private func readLongString() throws -> TurtleToken {
+    private func readLongString() throws(TurtleDecodingError) -> TurtleToken {
         var result = ""
         while index < input.endIndex {
             let ch = input[index]
@@ -303,7 +313,7 @@ private final class TurtleTokenizer {
         throw TurtleDecodingError.unterminatedString(line: line)
     }
 
-    private func readSingleQuotedStringLiteral() throws -> TurtleToken {
+    private func readSingleQuotedStringLiteral() throws(TurtleDecodingError) -> TurtleToken {
         advance() // skip first '
         if index < input.endIndex && input[index] == "'" {
             let next = peek(offset: 1)
@@ -338,7 +348,7 @@ private final class TurtleTokenizer {
         throw TurtleDecodingError.unterminatedString(line: line)
     }
 
-    private func readLongSingleQuotedString() throws -> TurtleToken {
+    private func readLongSingleQuotedString() throws(TurtleDecodingError) -> TurtleToken {
         var result = ""
         while index < input.endIndex {
             let ch = input[index]
@@ -364,7 +374,7 @@ private final class TurtleTokenizer {
         throw TurtleDecodingError.unterminatedString(line: line)
     }
 
-    private func readNumericLiteral() throws -> TurtleToken {
+    private func readNumericLiteral() throws(TurtleDecodingError) -> TurtleToken {
         var result = ""
         var hasDecimalPoint = false
         var hasExponent = false
@@ -584,7 +594,7 @@ private final class TurtleParser {
         self.tokens = tokens
     }
 
-    func parse() throws -> ([String: String], [ParsedRDFTriple]) {
+    func parse() throws(TurtleDecodingError) -> ([String: String], [ParsedRDFTriple]) {
         while !isAtEnd {
             try parseStatement()
         }
@@ -593,7 +603,7 @@ private final class TurtleParser {
 
     // MARK: - Statement Parsing
 
-    private func parseStatement() throws {
+    private func parseStatement() throws(TurtleDecodingError) {
         switch current {
         case .prefixDecl:
             try parsePrefixDirective()
@@ -610,7 +620,7 @@ private final class TurtleParser {
         }
     }
 
-    private func parsePrefixDirective() throws {
+    private func parsePrefixDirective() throws(TurtleDecodingError) {
         advance() // @prefix
         guard case .prefixedName(let name) = current else {
             throw TurtleDecodingError.unexpectedToken(expected: "prefix name", found: tokenDescription(current), line: currentLine)
@@ -625,7 +635,7 @@ private final class TurtleParser {
         prefixes[prefix] = namespace
     }
 
-    private func parseSPARQLPrefix() throws {
+    private func parseSPARQLPrefix() throws(TurtleDecodingError) {
         advance() // PREFIX
         guard case .prefixedName(let name) = current else {
             throw TurtleDecodingError.unexpectedToken(expected: "prefix name", found: tokenDescription(current), line: currentLine)
@@ -640,7 +650,7 @@ private final class TurtleParser {
         prefixes[prefix] = namespace
     }
 
-    private func parseBaseDirective() throws {
+    private func parseBaseDirective() throws(TurtleDecodingError) {
         advance() // @base
         guard case .iri(let base) = current else {
             throw TurtleDecodingError.unexpectedToken(expected: "IRI", found: tokenDescription(current), line: currentLine)
@@ -650,7 +660,7 @@ private final class TurtleParser {
         baseIRI = base
     }
 
-    private func parseSPARQLBase() throws {
+    private func parseSPARQLBase() throws(TurtleDecodingError) {
         advance() // BASE
         guard case .iri(let base) = current else {
             throw TurtleDecodingError.unexpectedToken(expected: "IRI", found: tokenDescription(current), line: currentLine)
@@ -661,13 +671,13 @@ private final class TurtleParser {
 
     // MARK: - Triple Parsing
 
-    private func parseTriples() throws {
+    private func parseTriples() throws(TurtleDecodingError) {
         let subject = try parseSubject()
         try parsePredicateObjectList(subject: subject)
         try expect(.dot)
     }
 
-    private func parseSubject() throws -> RDFNode {
+    private func parseSubject() throws(TurtleDecodingError) -> RDFNode {
         switch current {
         case .iri(let iri):
             advance()
@@ -691,7 +701,7 @@ private final class TurtleParser {
         }
     }
 
-    private func parsePredicateObjectList(subject: RDFNode) throws {
+    private func parsePredicateObjectList(subject: RDFNode) throws(TurtleDecodingError) {
         try parseVerbObjectList(subject: subject)
         while case .semicolon = current {
             advance() // ;
@@ -703,12 +713,12 @@ private final class TurtleParser {
         }
     }
 
-    private func parseVerbObjectList(subject: RDFNode) throws {
+    private func parseVerbObjectList(subject: RDFNode) throws(TurtleDecodingError) {
         let predicate = try parsePredicate()
         try parseObjectList(subject: subject, predicate: predicate)
     }
 
-    private func parsePredicate() throws -> RDFNode {
+    private func parsePredicate() throws(TurtleDecodingError) -> RDFNode {
         switch current {
         case .a:
             advance()
@@ -728,7 +738,7 @@ private final class TurtleParser {
         }
     }
 
-    private func parseObjectList(subject: RDFNode, predicate: RDFNode) throws {
+    private func parseObjectList(subject: RDFNode, predicate: RDFNode) throws(TurtleDecodingError) {
         let obj = try parseObject()
         triples.append(ParsedRDFTriple(subject: subject, predicate: predicate, object: obj))
         while case .comma = current {
@@ -738,7 +748,7 @@ private final class TurtleParser {
         }
     }
 
-    private func parseObject() throws -> RDFNode {
+    private func parseObject() throws(TurtleDecodingError) -> RDFNode {
         switch current {
         case .iri(let iri):
             advance()
@@ -800,7 +810,7 @@ private final class TurtleParser {
         }
     }
 
-    private func parseLiteralRest(lexicalForm: String) throws -> RDFNode {
+    private func parseLiteralRest(lexicalForm: String) throws(TurtleDecodingError) -> RDFNode {
         if case .hatHat = current {
             advance() // ^^
             let datatypeIRI: String
@@ -818,10 +828,28 @@ private final class TurtleParser {
                     line: currentLine
                 )
             }
-            return .literal(try RDFLiteral.typed(lexicalForm, datatype: datatypeIRI))
+            do {
+                return .literal(
+                    try RDFLiteral.typed(
+                        lexicalForm,
+                        datatype: datatypeIRI
+                    )
+                )
+            } catch {
+                throw .invalidIRI(datatypeIRI, line: currentLine)
+            }
         } else if case .langTag(let lang) = current {
             advance()
-            return .literal(try RDFLiteral.langString(lexicalForm, language: lang))
+            do {
+                return .literal(
+                    try RDFLiteral.langString(
+                        lexicalForm,
+                        language: lang
+                    )
+                )
+            } catch {
+                throw .invalidLanguageTag(lang, line: currentLine)
+            }
         } else {
             return .literal(RDFLiteral.string(lexicalForm))
         }
@@ -829,7 +857,7 @@ private final class TurtleParser {
 
     // MARK: - Blank Node Property List
 
-    private func parseBlankNodePropertyList() throws -> RDFNode {
+    private func parseBlankNodePropertyList() throws(TurtleDecodingError) -> RDFNode {
         advance() // [
         let bnode = freshBlankNode()
         // Handle empty blank node []
@@ -844,7 +872,7 @@ private final class TurtleParser {
 
     // MARK: - Collection
 
-    private func parseCollection() throws -> RDFNode {
+    private func parseCollection() throws(TurtleDecodingError) -> RDFNode {
         advance() // (
         var items: [RDFNode] = []
         while true {
@@ -884,7 +912,7 @@ private final class TurtleParser {
 
     // MARK: - Helpers
 
-    private func expandPrefixed(_ name: String) throws -> String {
+    private func expandPrefixed(_ name: String) throws(TurtleDecodingError) -> String {
         guard let colonIdx = name.firstIndex(of: ":") else {
             return name
         }
@@ -926,7 +954,7 @@ private final class TurtleParser {
         pos += 1
     }
 
-    private func expect(_ expected: TurtleToken) throws {
+    private func expect(_ expected: TurtleToken) throws(TurtleDecodingError) {
         if tokenMatches(current, expected) {
             advance()
         } else {
@@ -994,7 +1022,7 @@ private enum RDFNode: Hashable {
     case literal(RDFLiteral)
     case blankNode(String)
 
-    init(_ term: RDFTerm) throws {
+    init(_ term: RDFTerm) throws(TurtleDecodingError) {
         switch term {
         case .iri(let value):
             self = .iri(value.rawValue)

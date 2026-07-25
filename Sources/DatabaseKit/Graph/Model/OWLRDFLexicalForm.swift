@@ -8,7 +8,9 @@ public enum OWLRDFLexicalForm {
         return String(value)
     }
 
-    public static func dateTime(_ value: Timestamp) throws -> String {
+    public static func dateTime(
+        _ value: Timestamp
+    ) throws(XSDDateTimeError) -> String {
         try XSDDateTimeCodec.format(timestamp: value)
     }
 

@@ -16,7 +16,7 @@ public struct RDFGraphName: Sendable, Hashable, Comparable {
         self.subject = subject
     }
 
-    public init(_ term: RDFTerm) throws {
+    public init(_ term: RDFTerm) throws(RDFDatasetValidationError) {
         switch term {
         case .iri(let iri):
             self.subject = .iri(iri)
@@ -27,11 +27,13 @@ public struct RDFGraphName: Sendable, Hashable, Comparable {
         }
     }
 
-    public init(iri: String) throws {
+    public init(iri: String) throws(RDFIRIError) {
         self.init(RDFSubject.iri(try RDFIRI(iri)))
     }
 
-    public init(blankNodeIdentifier: String) throws {
+    public init(
+        blankNodeIdentifier: String
+    ) throws(RDFBlankNodeIdentifierError) {
         self.init(
             RDFSubject.blankNode(
                 try RDFBlankNodeIdentifier(blankNodeIdentifier)

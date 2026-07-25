@@ -1,11 +1,12 @@
 import DatabaseTypes
 
 public protocol OWLDataPropertyValue: Sendable {
-    func owlDataPropertyTerms() throws -> [RDFTerm]
+    func owlDataPropertyTerms() throws(OWLProjectionError) -> [RDFTerm]
 }
 
 extension Optional: OWLDataPropertyValue where Wrapped: OWLDataPropertyValue {
-    public func owlDataPropertyTerms() throws -> [RDFTerm] {
+    public func owlDataPropertyTerms()
+        throws(OWLProjectionError) -> [RDFTerm] {
         switch self {
         case .none: return []
         case .some(let value): return try value.owlDataPropertyTerms()
@@ -14,7 +15,12 @@ extension Optional: OWLDataPropertyValue where Wrapped: OWLDataPropertyValue {
 }
 
 extension Array: OWLDataPropertyValue where Element: OWLDataPropertyValue {
-    public func owlDataPropertyTerms() throws -> [RDFTerm] {
-        try flatMap { try $0.owlDataPropertyTerms() }
+    public func owlDataPropertyTerms()
+        throws(OWLProjectionError) -> [RDFTerm] {
+        var terms: [RDFTerm] = []
+        for element in self {
+            terms.append(contentsOf: try element.owlDataPropertyTerms())
+        }
+        return terms
     }
 }

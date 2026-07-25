@@ -124,18 +124,23 @@ public final class Schema: Sendable {
         /// - Parameter partitionValues: Mapping of field names to partition values
         /// - Throws: DirectoryPathError.missingFields if a dynamic field has no value
         /// - Returns: Resolved directory path as string array
-        public func resolvedDirectoryPath(partitionValues: [String: String] = [:]) throws -> [String] {
-            try directoryComponents.map { component in
+        public func resolvedDirectoryPath(
+            partitionValues: [String: String] = [:]
+        ) throws(DirectoryPathError) -> [String] {
+            var path: [String] = []
+            path.reserveCapacity(directoryComponents.count)
+            for component in directoryComponents {
                 switch component {
                 case .staticPath(let value):
-                    return value
+                    path.append(value)
                 case .dynamicField(let fieldName):
                     guard let value = partitionValues[fieldName] else {
                         throw DirectoryPathError.missingFields([fieldName])
                     }
-                    return value
+                    path.append(value)
                 }
             }
+            return path
         }
 
         // MARK: - Init: from a statically known model

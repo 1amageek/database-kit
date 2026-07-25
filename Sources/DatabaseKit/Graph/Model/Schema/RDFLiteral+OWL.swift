@@ -65,7 +65,7 @@ extension RDFLiteral {
     /// Create a canonical UTC XSD dateTime literal.
     public static func dateTime(
         _ value: Timestamp
-    ) throws -> RDFLiteral {
+    ) throws(XSDDateTimeError) -> RDFLiteral {
         RDFLiteral(
             lexicalForm: try XSDDateTimeCodec.format(timestamp: value),
             datatype: XSDDatatype.dateTime.typedLiteralDatatype
@@ -86,7 +86,7 @@ extension RDFLiteral {
     public static func langString(
         _ value: String,
         language: String
-    ) throws -> RDFLiteral {
+    ) throws(RDFLanguageTagError) -> RDFLiteral {
         RDFLiteral(
             lexicalForm: value,
             language: try RDFLanguageTag(language)
@@ -104,7 +104,7 @@ extension RDFLiteral {
     public static func typed(
         _ value: String,
         datatype: String
-    ) throws -> RDFLiteral {
+    ) throws(RDFTypedLiteralDatatypeError) -> RDFLiteral {
         RDFLiteral(
             lexicalForm: value,
             datatype: try RDFTypedLiteralDatatype(datatype)

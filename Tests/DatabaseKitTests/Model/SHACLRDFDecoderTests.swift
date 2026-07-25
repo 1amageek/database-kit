@@ -1,6 +1,5 @@
 import DatabaseKit
 import DatabaseTypes
-import DatabaseKit
 import Testing
 
 @Suite("SHACL RDF decoder")
@@ -98,6 +97,60 @@ struct SHACLRDFDecoderTests {
         }
     }
 
+    @Test("underspecified compound paths are rejected as path failures")
+    func underspecifiedCompoundPathsAreRejected() {
+        let propertyShape = Self.iri("urn:InvalidPathShape")
+        let pathHead = Self.blankNode("path-head")
+        let dataset = RDFDataset(quads: [
+            Self.quad(
+                propertyShape,
+                Self.rdfType,
+                Self.iri(Self.shPropertyShape)
+            ),
+            Self.quad(propertyShape, Self.shPath, pathHead),
+            Self.quad(pathHead, Self.rdfFirst, Self.iri("urn:only-member")),
+            Self.quad(pathHead, Self.rdfRest, Self.iri(Self.rdfNil))
+        ])
+
+        do {
+            _ = try SHACLRDFDecoder().decode(
+                from: dataset,
+                graphIRI: "urn:invalid-path"
+            )
+            Issue.record("Expected invalidPath")
+        } catch SHACLRDFDecodingError.invalidPath(
+            .insufficientMembers(actual: 1)
+        ) {
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test("invalid datasets preserve the SHACL failure boundary")
+    func invalidDatasetsAreRejected() {
+        let shape = Self.iri("urn:InvalidDatasetShape")
+        let dataset = RDFDataset(quads: [
+            Self.quad(
+                shape,
+                Self.rdfType,
+                Self.nestedTerm(depth: 40)
+            )
+        ])
+
+        do {
+            _ = try SHACLRDFDecoder().decode(
+                from: dataset,
+                graphIRI: "urn:invalid-dataset"
+            )
+            Issue.record("Expected invalidDataset")
+        } catch SHACLRDFDecodingError.invalidDataset(
+            .maximumDepthExceeded
+        ) {
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
     private static func quad(
         _ subject: RDFTerm,
         _ predicate: String,
@@ -148,6 +201,36 @@ struct SHACLRDFDecoderTests {
             return try .blankNode(identifier: rawValue)
         } catch {
             preconditionFailure("Invalid blank-node fixture: \(rawValue)")
+        }
+    }
+
+    private static func nestedTerm(depth: Int) -> RDFTerm {
+        var term = iri("urn:leaf")
+        for _ in 0..<depth {
+            term = .tripleTerm(
+                subject: subject("urn:nested-subject"),
+                predicate: predicateValue("urn:nested-predicate"),
+                object: term
+            )
+        }
+        return term
+    }
+
+    private static func subject(_ rawValue: String) -> RDFSubject {
+        do {
+            return .iri(try RDFIRI(rawValue))
+        } catch {
+            preconditionFailure("Invalid subject fixture: \(rawValue)")
+        }
+    }
+
+    private static func predicateValue(
+        _ rawValue: String
+    ) -> RDFPredicateIRI {
+        do {
+            return try RDFPredicateIRI(rawValue)
+        } catch {
+            preconditionFailure("Invalid predicate fixture: \(rawValue)")
         }
     }
 
