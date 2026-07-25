@@ -192,7 +192,7 @@ extension GraphPattern {
         case .service(let endpoint, let pattern, let silent):
             let silentStr = silent ? "SILENT " : ""
             return """
-            \(indent)SERVICE \(silentStr)<\(endpoint)> {
+            \(indent)SERVICE \(silentStr)\(SPARQLEscape.iri(endpoint)) {
             \(pattern.toSPARQL(prefixes: prefixes, indent: indent + "  "))
             \(indent)}
             """
@@ -508,8 +508,12 @@ extension SelectQuery {
         var result = ""
 
         // Prefixes
-        for (prefix, iri) in prefixes {
-            result += "PREFIX \(prefix): <\(iri)>\n"
+        for prefix in prefixes.keys.sorted() {
+            guard SPARQLEscape.prefixOrNil(prefix) != nil,
+                  let iri = prefixes[prefix] else {
+                continue
+            }
+            result += "PREFIX \(prefix): \(SPARQLEscape.iri(iri))\n"
         }
 
         // SELECT clause

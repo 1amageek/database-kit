@@ -318,14 +318,13 @@ extension PropertyPath {
     public func toSPARQL(prefixes: [String: String] = [:]) -> String {
         switch self {
         case .iri(let iri):
-            // Try to use prefix
-            for (prefix, base) in prefixes {
-                if iri.rawValue.hasPrefix(base) {
-                    let local = String(iri.rawValue.dropFirst(base.count))
-                    return "\(prefix):\(local)"
-                }
+            if let prefixedName = SPARQLEscape.prefixedName(
+                for: iri.rawValue,
+                prefixes: prefixes
+            ) {
+                return prefixedName
             }
-            return "<\(iri.rawValue)>"
+            return SPARQLEscape.iri(iri.rawValue)
 
         case .inverse(let path):
             return "^\(path.toSPARQL(prefixes: prefixes))"
@@ -378,12 +377,12 @@ extension PropertyPath {
         _ iri: RDFPredicateIRI,
         prefixes: [String: String]
     ) -> String {
-        for (prefix, base) in prefixes {
-            if iri.rawValue.hasPrefix(base) {
-                let local = String(iri.rawValue.dropFirst(base.count))
-                return "\(prefix):\(local)"
-            }
+        if let prefixedName = SPARQLEscape.prefixedName(
+            for: iri.rawValue,
+            prefixes: prefixes
+        ) {
+            return prefixedName
         }
-        return "<\(iri.rawValue)>"
+        return SPARQLEscape.iri(iri.rawValue)
     }
 }

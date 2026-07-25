@@ -826,7 +826,7 @@ extension DataSource {
 
         case .service(let endpoint, let pattern, let silent):
             let silentStr = silent ? "SILENT " : ""
-            return "/* SERVICE \(silentStr)<\(endpoint)> */ \(pattern.toSPARQL())"
+            return "/* SERVICE \(silentStr)\(SPARQLEscape.iri(endpoint)) */ \(pattern.toSPARQL())"
 
         case .values(let rows, let columnNames):
             var sql = "(VALUES "

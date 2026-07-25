@@ -137,30 +137,19 @@ extension SPARQLTerm {
             return "?\(name)"
 
         case .iri(let iri):
-            // Try to abbreviate with prefix
-            for (prefix, base) in prefixes {
-                if iri.hasPrefix(base) {
-                    let local = String(iri.dropFirst(base.count))
-                    // Validate NCName for both prefix and local
-                    if SPARQLEscape.ncNameOrNil(prefix) != nil,
-                       local.isEmpty || SPARQLEscape.ncNameOrNil(local) != nil {
-                        return "\(prefix):\(local)"
-                    }
-                }
+            if let prefixedName = SPARQLEscape.prefixedName(
+                for: iri,
+                prefixes: prefixes
+            ) {
+                return prefixedName
             }
-            // Fall back to full IRI with proper escaping
             return SPARQLEscape.iri(iri)
 
         case .literal(let lit):
             return lit.toSPARQL()
 
         case .blankNode(let id):
-            // Validate blank node ID
-            if SPARQLEscape.ncNameOrNil(id) != nil {
-                return "_:\(id)"
-            }
-            // Generate safe blank node ID
-            return "_:b\(abs(id.hashValue))"
+            return "_:\(SPARQLEscape.blankNodeLabel(id))"
 
         case .tripleTerm(let s, let p, let o):
             return "<< \(s.toSPARQL(prefixes: prefixes)) \(p.toSPARQL(prefixes: prefixes)) \(o.toSPARQL(prefixes: prefixes)) >>"
@@ -202,12 +191,9 @@ extension Literal {
         case .iri(let v):
             return SPARQLEscape.iri(v)
         case .blankNode(let v):
-            if SPARQLEscape.ncNameOrNil(v) != nil {
-                return "_:\(v)"
-            }
-            return "_:b\(abs(v.hashValue))"
+            return "_:\(SPARQLEscape.blankNodeLabel(v))"
         case .typedLiteral(let value, let datatype):
-            return "\(SPARQLEscape.string(value))^^<\(datatype)>"
+            return "\(SPARQLEscape.string(value))^^\(SPARQLEscape.iri(datatype))"
         case .langLiteral(let value, let language):
             return "\(SPARQLEscape.string(value))@\(language)"
         case .dirLangLiteral(let value, let language, let direction):
@@ -222,15 +208,7 @@ extension Literal {
         case .iri(let value):
             return SPARQLEscape.iri(value.rawValue)
         case .blankNode(let identifier):
-            let rawIdentifier = identifier.rawValue
-            if SPARQLEscape.ncNameOrNil(rawIdentifier) != nil {
-                return "_:\(rawIdentifier)"
-            }
-            var hash = UInt64(14_695_981_039_346_656_037)
-            for byte in rawIdentifier.utf8 {
-                hash = (hash ^ UInt64(byte)) &* 1_099_511_628_211
-            }
-            return "_:b\(hash)"
+            return "_:\(SPARQLEscape.blankNodeLabel(identifier.rawValue))"
         case .literal(let literal):
             let lexical = SPARQLEscape.string(literal.lexicalForm)
             if let language = literal.languageTag {
@@ -239,7 +217,7 @@ extension Literal {
                 }
                 return "\(lexical)@\(language.rawValue)"
             }
-            return "\(lexical)^^<\(literal.datatypeIRI.rawValue)>"
+            return "\(lexical)^^\(SPARQLEscape.iri(literal.datatypeIRI.rawValue))"
         case .tripleTerm(let subject, let predicate, let object):
             return "<<( \(rdfTermSPARQL(subject.term)) \(rdfTermSPARQL(predicate.term)) \(rdfTermSPARQL(object)) )>>"
         }
