@@ -212,7 +212,7 @@ design and migration plan.
 ```swift
 @Persistable
 struct Order {
-    #Directory<Order>("tenants", Field(\.accountID), "orders", layer: .partition)
+    #Directory<Order>("tenants", \Order.accountID, "orders", layer: .partition)
 
     var orderID: Int64
     var accountID: String  // Partition key
@@ -225,8 +225,8 @@ struct Order {
 @Persistable
 struct Message {
     #Directory<Message>(
-        "tenants", Field(\.accountID),
-        "channels", Field(\.channelID),
+        "tenants", \Message.accountID,
+        "channels", \Message.channelID,
         "messages",
         layer: .partition
     )

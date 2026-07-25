@@ -95,6 +95,19 @@ struct ModelMacroTests {
         #expect(FieldNumberUser.fieldNumber(for: "nonexistent") == nil)
     }
 
+    @Test("generated fields carry typed canonical schema identity")
+    func generatedTypedFields() {
+        let email: Field<FieldNumberUser, String> = FieldNumberUser.fields.email
+        let resolved: Field<FieldNumberUser, String> = #field(
+            \FieldNumberUser.email
+        )
+
+        #expect(email == resolved)
+        #expect(email.identity == FieldIdentity(name: "email", number: 2))
+        #expect(email.type == .string)
+        #expect(email.schema == FieldNumberUser.fieldSchemas[1])
+    }
+
     /// Test @Persistable with different IndexKinds
     @Test("@Persistable with different IndexKind types")
     func modelWithDifferentIndexKinds() throws {

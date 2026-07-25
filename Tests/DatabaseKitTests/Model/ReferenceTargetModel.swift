@@ -6,7 +6,7 @@ struct ReferenceTargetModel {
     var id: String = "fixture-id"
     #Directory<ReferenceTargetModel>(
         "targets",
-        Field<ReferenceTargetModel>(\.tenantID)
+        \ReferenceTargetModel.tenantID
     )
 
     var tenantID: String

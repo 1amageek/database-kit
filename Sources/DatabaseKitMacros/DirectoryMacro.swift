@@ -13,7 +13,7 @@ import SwiftDiagnostics
 ///
 /// **Path Elements**: The path is an array where each element can be:
 /// - String literal: `"app"`, `"tenants"`, `"users"` (static path segments)
-/// - Field expression: `Field(\.accountID)`, `Field(\.channelID)` (dynamic partition keys)
+/// - Key path: `\Order.accountID`, `\Order.channelID` (dynamic partition keys)
 ///
 /// **Layer**: The layer parameter specifies the directory type:
 /// - `.default` (default): Default directory
@@ -37,13 +37,13 @@ import SwiftDiagnostics
 /// @Persistable
 /// struct Order {
 ///     #Directory<Order>(
-///         ["tenants", Field(\.accountID), "orders"],
+///         ["tenants", \Order.accountID, "orders"],
 ///         layer: .partition
 ///     )
 ///     #PrimaryKey<Order>([\.orderID])
 ///
 ///     var orderID: Int64
-///     var accountID: String  // Corresponds to Field(\.accountID)
+///     var accountID: String
 /// }
 /// ```
 ///
@@ -52,7 +52,7 @@ import SwiftDiagnostics
 /// @Persistable
 /// struct Message {
 ///     #Directory<Message>(
-///         ["tenants", Field(\.accountID), "channels", Field(\.channelID), "messages"],
+///         ["tenants", \Message.accountID, "channels", \Message.channelID, "messages"],
 ///         layer: .partition
 ///     )
 ///     #PrimaryKey<Message>([\.messageID])
@@ -80,7 +80,7 @@ import SwiftDiagnostics
 ///
 /// **Validation**:
 /// - Generic type parameter `<T>` is required
-/// - Path elements must be string literals or Field(\.propertyName) expressions
+/// - Path elements must be string literals or stored-property key paths
 /// - Field properties must exist in the struct and match the generic type parameter
 /// - If `layer: .partition`, at least one Field is required in the path
 public struct DirectoryMacro: DeclarationMacro {
@@ -125,56 +125,20 @@ public struct DirectoryMacro: DeclarationMacro {
                 continue
             }
 
-            // Check if it's a Field(...) function call
-            if let functionCall = expr.as(FunctionCallExprSyntax.self),
-               let memberAccess = functionCall.calledExpression.as(MemberAccessExprSyntax.self),
-               memberAccess.declName.baseName.text == "Field" || memberAccess.base == nil {
-                // This is Field(\.propertyName) - extract the KeyPath from arguments
-                if let firstArg = functionCall.arguments.first,
-                   let keyPathExpr = firstArg.expression.as(KeyPathExprSyntax.self),
-                   let component = keyPathExpr.components.first,
-                   let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
-                    let fieldName = property.declName.baseName.text
-                    fieldProperties.append(fieldName)
-                    continue
-                }
-            }
-
-            // Also support direct Field function call (without member access)
-            if let functionCall = expr.as(FunctionCallExprSyntax.self),
-               let identExpr = functionCall.calledExpression.as(DeclReferenceExprSyntax.self),
-               identExpr.baseName.text == "Field" {
-                // This is Field(\.propertyName) - extract the KeyPath from arguments
-                if let firstArg = functionCall.arguments.first,
-                   let keyPathExpr = firstArg.expression.as(KeyPathExprSyntax.self),
-                   let component = keyPathExpr.components.first,
-                   let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
-                    let fieldName = property.declName.baseName.text
-                    fieldProperties.append(fieldName)
-                    continue
-                }
-            }
-
-            // Support generic Field<Type>(\.property) call
-            if let functionCall = expr.as(FunctionCallExprSyntax.self),
-               let genericExpr = functionCall.calledExpression.as(GenericSpecializationExprSyntax.self),
-               let identExpr = genericExpr.expression.as(DeclReferenceExprSyntax.self),
-               identExpr.baseName.text == "Field" {
-                if let firstArg = functionCall.arguments.first,
-                   let keyPathExpr = firstArg.expression.as(KeyPathExprSyntax.self),
-                   let component = keyPathExpr.components.first,
-                   let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
-                    let fieldName = property.declName.baseName.text
-                    fieldProperties.append(fieldName)
-                    continue
-                }
+            if let keyPath = expr.as(KeyPathExprSyntax.self),
+               let component = keyPath.components.last,
+               let property = component.component.as(
+                   KeyPathPropertyComponentSyntax.self
+               ) {
+                fieldProperties.append(property.declName.baseName.text)
+                continue
             }
 
             // Invalid element type
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(expr),
-                    message: MacroExpansionErrorMessage("Path elements must be string literals (\"literal\") or Field(\\.propertyName) expressions")
+                    message: MacroExpansionErrorMessage("Path elements must be string literals or stored-property key paths")
                 )
             ])
         }
@@ -189,7 +153,7 @@ public struct DirectoryMacro: DeclarationMacro {
                     throw DiagnosticsError(diagnostics: [
                         Diagnostic(
                             node: Syntax(layerExpr),
-                            message: MacroExpansionErrorMessage("layer: .partition requires at least one Field in the path (e.g., Field(\\.accountID))")
+                            message: MacroExpansionErrorMessage("layer: .partition requires at least one stored-property key path")
                         )
                     ])
                 }

@@ -29,7 +29,7 @@ struct DirectoryMacroE2ETests {
         ])
     }
 
-    @Test("#Directory dynamic Field path participates in schema construction")
+    @Test("#Directory dynamic field path participates in schema construction")
     func dynamicDirectoryParticipatesInSchemaConstruction() throws {
         #expect(PartitionedDirectoryRecord.directoryLayer == .partition)
         #expect(PartitionedDirectoryRecord.hasDynamicDirectory == true)
@@ -74,7 +74,7 @@ private struct PartitionedDirectoryRecord {
     var id: String = "fixture-id"
     #Directory<PartitionedDirectoryRecord>(
         "tenants",
-        Field<PartitionedDirectoryRecord>(\.tenantID),
+        \PartitionedDirectoryRecord.tenantID,
         "partitioned-records",
         layer: .partition
     )

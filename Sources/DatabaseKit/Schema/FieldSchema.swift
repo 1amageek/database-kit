@@ -48,7 +48,7 @@ public struct FieldSchema: Sendable, Equatable, Hashable {
 ///
 /// Maps Swift types to the canonical persisted value categories.
 /// Used by model adapters to interpret values without a concrete property key path.
-public enum FieldSchemaType: String, Sendable, Equatable {
+public enum FieldSchemaType: String, Sendable, Equatable, Hashable {
     case bool
     case int8
     case int16

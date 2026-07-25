@@ -144,7 +144,7 @@ public protocol Persistable: Sendable {
     /// #Directory<User>("app", "users")
     /// // → [.staticPath("app"), .staticPath("users")]
     ///
-    /// #Directory<Order>("tenants", Field(\.tenantID), "orders")
+    /// #Directory<Order>("tenants", \Order.tenantID, "orders")
     /// // → [.staticPath("tenants"), .dynamicField("tenantID"), .staticPath("orders")]
     /// ```
     ///
@@ -160,7 +160,7 @@ public protocol Persistable: Sendable {
     /// #Directory<User>("app", "users")
     /// // → .default
     ///
-    /// #Directory<Order>("tenants", Field(\.tenantID), "orders", layer: .partition)
+    /// #Directory<Order>("tenants", \Order.tenantID, "orders", layer: .partition)
     /// // → .partition
     /// ```
     ///

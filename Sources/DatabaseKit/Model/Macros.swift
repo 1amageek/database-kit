@@ -40,7 +40,7 @@ import DatabaseTypes
 /// - `static func fieldNumber(for fieldName: String) -> Int?`
 /// - `static func enumMetadata(for fieldName: String) -> EnumMetadata?`
 /// - `init(...)`
-@attached(member, names: named(persistableType), named(allFields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), arbitrary)
+@attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), arbitrary)
 @attached(extension, conformances: Persistable, Sendable)
 public macro Persistable() = #externalMacro(module: "DatabaseKitMacros", type: "PersistableMacro")
 
@@ -55,9 +55,21 @@ public macro Persistable() = #externalMacro(module: "DatabaseKitMacros", type: "
 /// }
 /// // persistableType = "User"
 /// ```
-@attached(member, names: named(persistableType), named(allFields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), arbitrary)
+@attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(subscript), named(init), named(fieldName), arbitrary)
 @attached(extension, conformances: Persistable, Sendable)
 public macro Persistable(type: String) = #externalMacro(module: "DatabaseKitMacros", type: "PersistableMacro")
+
+/// Resolves a stored-property key path to its generated typed field.
+///
+/// The key path is consumed by the compiler plugin. The expanded program stores
+/// only the field's stable schema identity.
+@freestanding(expression)
+public macro `field`<Root, Value>(
+    _ keyPath: KeyPath<Root, Value>
+) -> Field<Root, Value> = #externalMacro(
+    module: "DatabaseKitMacros",
+    type: "FieldExpressionMacro"
+)
 
 /// #Index macro declaration
 ///
@@ -144,7 +156,7 @@ public macro Index(
 /// **Usage**:
 /// ```swift
 /// #Directory<User>("app", "users")
-/// #Directory<Order>("tenants", Field(\.tenantID), "orders", layer: .partition)
+/// #Directory<Order>("tenants", \Order.tenantID, "orders", layer: .partition)
 /// ```
 ///
 /// This macro validates and emits directory metadata. The database runtime
@@ -162,9 +174,6 @@ public enum DirectoryLayer: String, Sendable, Hashable {
     /// Multi-tenant partition (requires at least one Field in path)
     case partition = "partition"
 }
-
-// Field<Root> is a typed macro-input marker. The macro emits canonical
-// DirectoryPathComponent values for runtime consumption.
 
 // MARK: - @Polymorphable Macro
 

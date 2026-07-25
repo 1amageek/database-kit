@@ -526,27 +526,17 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                         continue
                     }
 
-                    // Check if it's Field(\.propertyName) or Field<T>(\.propertyName)
-                    if let functionCall = expr.as(FunctionCallExprSyntax.self) {
-                        let calledBaseName: String?
-                        if let identExpr = functionCall.calledExpression.as(DeclReferenceExprSyntax.self) {
-                            calledBaseName = identExpr.baseName.text
-                        } else if let genericExpr = functionCall.calledExpression.as(GenericSpecializationExprSyntax.self),
-                                  let identExpr = genericExpr.expression.as(DeclReferenceExprSyntax.self) {
-                            calledBaseName = identExpr.baseName.text
-                        } else {
-                            calledBaseName = nil
-                        }
-                        if calledBaseName == "Field" {
-                            if let firstArg = functionCall.arguments.first,
-                               let keyPathExpr = firstArg.expression.as(KeyPathExprSyntax.self),
-                               let component = keyPathExpr.components.first,
-                               let property = component.component.as(KeyPathPropertyComponentSyntax.self) {
-                                let fieldName = property.declName.baseName.text
-                                directoryPathComponents.append(".dynamicField(fieldName: \"\(fieldName)\")")
-                            }
-                        }
+                    if let keyPath = expr.as(KeyPathExprSyntax.self),
+                       let component = keyPath.components.last,
+                       let property = component.component.as(
+                           KeyPathPropertyComponentSyntax.self
+                       ) {
+                        directoryPathComponents.append(
+                            ".dynamicField(fieldName: \"\(property.declName.baseName.text)\")"
+                        )
+                        continue
                     }
+
                 }
                 // Only process the first #Directory declaration
                 break
@@ -830,6 +820,50 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             public static var fieldSchemas: [FieldSchema] { \(raw: fieldSchemasArray) }
             """
         decls.append(fieldSchemasDecl)
+
+        var typedFieldEntries: [String] = []
+        var typedFieldIndex = 0
+        for fieldInfo in fieldInfos where !fieldInfo.isTransient {
+            typedFieldIndex += 1
+            let fieldType = fieldInfo.type.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            var (schemaType, isOptional, isArray) = mapToFieldSchemaType(
+                fieldInfo.type
+            )
+            let relationship = relationships.first {
+                $0.propertyName == fieldInfo.name
+            }
+            let referenceTarget: String
+            if let relationship {
+                schemaType = "reference"
+                referenceTarget = ", referenceTargetEntity: \(relationship.relatedTypeName).persistableType"
+            } else {
+                referenceTarget = ""
+            }
+            typedFieldEntries.append(
+                """
+                public static let \(fieldInfo.name) = Field<\(structName), \(fieldType)>(
+                    identity: FieldIdentity(name: "\(fieldInfo.name)", number: \(typedFieldIndex)),
+                    type: .\(schemaType),
+                    isOptional: \(isOptional),
+                    isArray: \(isArray)\(referenceTarget)
+                )
+                """
+            )
+        }
+        let typedFieldsBody = typedFieldEntries.joined(separator: "\n\n        ")
+        let typedFieldsDecl: DeclSyntax = """
+            public enum Fields {
+                \(raw: typedFieldsBody)
+            }
+            """
+        decls.append(typedFieldsDecl)
+
+        let fieldsNamespaceDecl: DeclSyntax = """
+            public static var fields: Fields.Type { Fields.self }
+            """
+        decls.append(fieldsNamespaceDecl)
 
         let recordDecodeAssignments = fieldInfos
             .map { fieldInfo in
@@ -1476,6 +1510,7 @@ struct DatabaseDeclarationPlugin: CompilerPlugin {
         OWLDataPropertyMacro.self,
         OWLClassMacro.self,
         OWLObjectPropertyMacro.self,
+        FieldExpressionMacro.self,
     ]
 }
 
