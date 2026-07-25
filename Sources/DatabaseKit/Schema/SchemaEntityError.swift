@@ -15,6 +15,11 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
     case emptyDirectoryPathComponent(position: Int)
     case unknownDirectoryField(String)
     case partitionDirectoryRequiresDynamicField
+    case invalidIndexEntity(
+        indexName: String,
+        expected: String,
+        actual: String
+    )
     case emptyIndexName
     case duplicateIndexName(String)
     case emptyIndexKindIdentifier(indexName: String)
@@ -80,6 +85,8 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Directory path references unknown field '\(fieldName)'."
         case .partitionDirectoryRequiresDynamicField:
             return "A partition directory requires at least one dynamic field."
+        case .invalidIndexEntity(let indexName, let expected, let actual):
+            return "Index '\(indexName)' belongs to entity '\(actual)', expected '\(expected)'."
         case .emptyIndexName:
             return "Index name must not be empty."
         case .duplicateIndexName(let indexName):

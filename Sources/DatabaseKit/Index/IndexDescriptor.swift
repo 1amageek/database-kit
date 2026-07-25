@@ -27,6 +27,9 @@ import DatabaseTypes
 /// }
 /// ```
 public struct IndexDescriptor: Descriptor, Sendable {
+    /// Canonical persisted entity name whose fields this index describes.
+    public let entityName: String
+
     /// Index name (unique identifier)
     ///
     /// **Naming convention**: "{EntityType}_{field1}_{field2}_..."
@@ -143,6 +146,7 @@ public struct IndexDescriptor: Descriptor, Sendable {
             )
         }
 
+        self.entityName = Kind.Model.persistableType
         self.name = name
         self.fieldNames = kind.fieldNames
         self.kind = IndexKindMetadata(kind)
@@ -198,6 +202,7 @@ public struct IndexDescriptor: Descriptor, Sendable {
         }
 
         do {
+            self.entityName = Model.persistableType
             self.name = name
             self.kind = try definition.kindMetadata(
                 fields: fields.map { $0.metadata },
@@ -215,6 +220,7 @@ public struct IndexDescriptor: Descriptor, Sendable {
     }
 
     package init(validatedMetadata metadata: IndexDescriptorMetadata) {
+        self.entityName = metadata.entityName
         self.name = metadata.name
         self.kind = metadata.kind
         self.commonOptions = metadata.commonOptions
@@ -295,7 +301,8 @@ extension IndexDescriptor: Hashable {
 extension IndexDescriptor: CustomStringConvertible {
     public var description: String {
         var parts = [
-            "IndexDescriptor(name: \(name)",
+            "IndexDescriptor(entity: \(entityName)",
+            "name: \(name)",
             "kind: \(kind.identifier)",
             "fields: [\(fieldNames.joined(separator: ", "))]"
         ]

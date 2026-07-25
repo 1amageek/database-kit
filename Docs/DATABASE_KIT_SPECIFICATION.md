@@ -277,6 +277,13 @@ Generated code must depend on public semantic contracts. It must not introduce
 a second DTO, implicit string-based schema, global registry, or runtime
 execution behavior.
 
+An index declaration is compiled into metadata that includes its canonical
+persisted entity name. This ownership survives conversion from
+`IndexDescriptor` to `IndexDescriptorMetadata`. `Schema.Entity` validates the
+owner before publishing the catalog, including metadata decoded from Wire or
+constructed manually. Matching field names alone never authorize attaching an
+index declared for another entity.
+
 ## Public Product Surface
 
 `database-kit` publishes three library products:

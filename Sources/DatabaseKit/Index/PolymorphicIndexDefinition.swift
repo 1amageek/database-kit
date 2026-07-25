@@ -25,6 +25,7 @@ public struct PolymorphicIndexDefinition: Sendable, Hashable {
     }
 
     package func descriptor(
+        entityName: String,
         fieldSchemas: [FieldSchema]
     ) throws(IndexDeclarationError) -> IndexDescriptor {
         var schemasByName: [String: FieldSchema] = [:]
@@ -76,6 +77,7 @@ public struct PolymorphicIndexDefinition: Sendable, Hashable {
             )
             return IndexDescriptor(
                 validatedMetadata: IndexDescriptorMetadata(
+                    entityName: entityName,
                     name: name,
                     kind: kind,
                     commonOptions: commonOptions,

@@ -9,6 +9,9 @@ import DatabaseTypes
 /// - `storedFieldNames`: Fields copied into the index value
 public struct IndexDescriptorMetadata: Sendable, Hashable {
 
+    /// Canonical persisted entity name whose fields this index describes.
+    public let entityName: String
+
     /// Index name (unique identifier)
     public let name: String
 
@@ -24,6 +27,7 @@ public struct IndexDescriptorMetadata: Sendable, Hashable {
     // MARK: - Index Descriptor Metadata
 
     public init(_ descriptor: IndexDescriptor) {
+        self.entityName = descriptor.entityName
         self.name = descriptor.name
         self.kind = descriptor.kind
         self.commonOptions = descriptor.commonOptions
@@ -33,11 +37,13 @@ public struct IndexDescriptorMetadata: Sendable, Hashable {
     // MARK: - Stored Metadata
 
     public init(
+        entityName: String,
         name: String,
         kind: IndexKindMetadata,
         commonOptions: CommonIndexOptions = .init(),
         storedFieldNames: [String] = []
     ) {
+        self.entityName = entityName
         self.name = name
         self.kind = kind
         self.commonOptions = commonOptions

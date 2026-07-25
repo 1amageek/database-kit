@@ -329,6 +329,13 @@ public final class Schema: Sendable {
 
             var indexNames = Set<String>()
             for index in indexes {
+                guard index.entityName == name else {
+                    throw .invalidIndexEntity(
+                        indexName: index.name,
+                        expected: name,
+                        actual: index.entityName
+                    )
+                }
                 guard !index.name.isEmpty else {
                     throw .emptyIndexName
                 }
@@ -755,6 +762,7 @@ public final class Schema: Sendable {
                     do {
                         descriptors.append(
                             try definition.descriptor(
+                                entityName: entity.name,
                                 fieldSchemas: entity.fields
                             )
                         )

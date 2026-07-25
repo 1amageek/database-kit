@@ -251,13 +251,25 @@ struct SchemaValidationTests {
             name: "FirstIndexedEntity",
             identifierType: .string,
             fields: SchemaValidationEntity.fieldSchemas,
-            indexes: [IndexDescriptorMetadata(first)]
+            indexes: [
+                IndexDescriptorMetadata(
+                    entityName: "FirstIndexedEntity",
+                    name: first.name,
+                    kind: first.kind
+                )
+            ]
         )
         let secondEntity = try Schema.Entity(
             name: "SecondIndexedEntity",
             identifierType: .string,
             fields: SchemaValidationEntity.fieldSchemas,
-            indexes: [IndexDescriptorMetadata(second)]
+            indexes: [
+                IndexDescriptorMetadata(
+                    entityName: "SecondIndexedEntity",
+                    name: second.name,
+                    kind: second.kind
+                )
+            ]
         )
 
         #expect(
@@ -269,6 +281,31 @@ struct SchemaValidationTests {
         ) {
             try Schema(
                 entities: [firstEntity, secondEntity]
+            )
+        }
+    }
+
+    @Test("Index metadata must belong to its containing entity")
+    func indexMetadataMustBelongToContainingEntity() throws {
+        let descriptor = try IndexDescriptor(
+            name: "owned_index",
+            definition: .scalar,
+            fields: [SchemaValidationEntity.fields.first.ascending]
+        )
+
+        #expect(descriptor.entityName == "SchemaValidationEntity")
+        #expect(
+            throws: SchemaEntityError.invalidIndexEntity(
+                indexName: "owned_index",
+                expected: "DifferentEntity",
+                actual: "SchemaValidationEntity"
+            )
+        ) {
+            try Schema.Entity(
+                name: "DifferentEntity",
+                identifierType: .string,
+                fields: SchemaValidationEntity.fieldSchemas,
+                indexes: [IndexDescriptorMetadata(descriptor)]
             )
         }
     }
