@@ -538,7 +538,7 @@ public final class Schema: Sendable {
 
     /// All concrete entity index descriptors in declaration order.
     public var indexDescriptors: [IndexDescriptor] {
-        entities.flatMap(\.indexDescriptors)
+        entities.flatMap { $0.indexDescriptors }
     }
 
     /// Indexes by name for quick lookup
@@ -737,7 +737,7 @@ public final class Schema: Sendable {
                 }
             }
 
-            let memberTypeNames = sortedMembers.map(\.name)
+            let memberTypeNames = sortedMembers.map { $0.name }
             let allMemberNames = Set(memberTypeNames)
             var descriptorsByMemberName: [String: [IndexDescriptor]] = [:]
             var logicalIndexByName: [String: PolymorphicIndexMetadata] = [:]

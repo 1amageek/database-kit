@@ -11,7 +11,7 @@ public struct PolymorphicIndexMetadata: Sendable, Hashable {
     public let storedFieldNames: [String]
 
     public var fieldNames: [String] {
-        fields.map(\.name)
+        fields.map { $0.name }
     }
 
     package init(

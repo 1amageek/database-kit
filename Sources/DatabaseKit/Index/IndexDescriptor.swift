@@ -200,12 +200,12 @@ public struct IndexDescriptor: Descriptor, Sendable {
         do {
             self.name = name
             self.kind = try definition.kindMetadata(
-                fields: fields.map(\.metadata),
+                fields: fields.map { $0.metadata },
                 schemas: resolvedSchemas
             )
             self.commonOptions = commonOptions
-            self.fieldNames = fields.map(\.name)
-            self.storedFieldNames = storedFields.map(\.name)
+            self.fieldNames = fields.map { $0.name }
+            self.storedFieldNames = storedFields.map { $0.name }
         } catch let validationError {
             throw IndexDeclarationError(
                 indexName: name,
