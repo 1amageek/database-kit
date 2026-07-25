@@ -166,58 +166,6 @@ extension OWLDataRange {
         }
     }
 
-    /// Check if a literal could potentially belong to this range
-    /// (Does not validate facet constraints)
-    public func couldContain(_ literal: RDFLiteral) -> Bool {
-        switch self {
-        case .datatype(let dt):
-            return literal.datatypeIRI.rawValue == dt
-                || isSubtypeOf(literal.datatypeIRI.rawValue, dt)
-
-        case .dataIntersectionOf(let ranges):
-            return ranges.allSatisfy { $0.couldContain(literal) }
-
-        case .dataUnionOf(let ranges):
-            return ranges.contains { $0.couldContain(literal) }
-
-        case .dataComplementOf(let range):
-            return !range.couldContain(literal)
-
-        case .dataOneOf(let literals):
-            return literals.contains(literal)
-
-        case .datatypeRestriction(let dt, _):
-            return literal.datatypeIRI.rawValue == dt
-                || isSubtypeOf(literal.datatypeIRI.rawValue, dt)
-        }
-    }
-
-    /// Check if one XSD type is a subtype of another
-    private func isSubtypeOf(_ sub: String, _ sup: String) -> Bool {
-        // XSD type hierarchy (simplified)
-        let hierarchy: [String: [String]] = [
-            XSDDatatype.integer.iri.rawValue: [XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.long.iri.rawValue: [XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.int.iri.rawValue: [XSDDatatype.long.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.short.iri.rawValue: [XSDDatatype.int.iri.rawValue, XSDDatatype.long.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.byte.iri.rawValue: [XSDDatatype.short.iri.rawValue, XSDDatatype.int.iri.rawValue, XSDDatatype.long.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.nonNegativeInteger.iri.rawValue: [XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.positiveInteger.iri.rawValue: [XSDDatatype.nonNegativeInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.unsignedLong.iri.rawValue: [XSDDatatype.nonNegativeInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.unsignedInt.iri.rawValue: [XSDDatatype.unsignedLong.iri.rawValue, XSDDatatype.nonNegativeInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.unsignedShort.iri.rawValue: [XSDDatatype.unsignedInt.iri.rawValue, XSDDatatype.unsignedLong.iri.rawValue, XSDDatatype.nonNegativeInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.unsignedByte.iri.rawValue: [XSDDatatype.unsignedShort.iri.rawValue, XSDDatatype.unsignedInt.iri.rawValue, XSDDatatype.unsignedLong.iri.rawValue, XSDDatatype.nonNegativeInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.nonPositiveInteger.iri.rawValue: [XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.negativeInteger.iri.rawValue: [XSDDatatype.nonPositiveInteger.iri.rawValue, XSDDatatype.integer.iri.rawValue, XSDDatatype.decimal.iri.rawValue],
-            XSDDatatype.normalizedString.iri.rawValue: [XSDDatatype.string.iri.rawValue],
-            XSDDatatype.token.iri.rawValue: [XSDDatatype.normalizedString.iri.rawValue, XSDDatatype.string.iri.rawValue],
-            XSDDatatype.language.iri.rawValue: [XSDDatatype.token.iri.rawValue, XSDDatatype.normalizedString.iri.rawValue, XSDDatatype.string.iri.rawValue],
-            XSDDatatype.nmtoken.iri.rawValue: [XSDDatatype.token.iri.rawValue, XSDDatatype.normalizedString.iri.rawValue, XSDDatatype.string.iri.rawValue],
-            XSDDatatype.name.iri.rawValue: [XSDDatatype.token.iri.rawValue, XSDDatatype.normalizedString.iri.rawValue, XSDDatatype.string.iri.rawValue],
-            XSDDatatype.ncname.iri.rawValue: [XSDDatatype.name.iri.rawValue, XSDDatatype.token.iri.rawValue, XSDDatatype.normalizedString.iri.rawValue, XSDDatatype.string.iri.rawValue],
-        ]
-        return hierarchy[sub]?.contains(sup) ?? false
-    }
 }
 
 // MARK: - CustomStringConvertible

@@ -202,25 +202,6 @@ extension PropertyPath {
         maxLength == nil
     }
 
-    /// Complexity estimate for query optimization
-    public var complexity: Int {
-        switch self {
-        case .iri, .negatedPropertySet:
-            return 1
-        case .inverse(let path):
-            return path.complexity
-        case .sequence(let left, let right):
-            return left.complexity + right.complexity
-        case .alternative(let left, let right):
-            return left.complexity + right.complexity
-        case .zeroOrMore(let path), .oneOrMore(let path):
-            return path.complexity * 10  // High complexity for unbounded
-        case .zeroOrOne(let path):
-            return path.complexity * 2
-        case .range(let path, let bounds):
-            return path.complexity * (bounds.maximum ?? 10)
-        }
-    }
 }
 
 // MARK: - PropertyPath Transformations

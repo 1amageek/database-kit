@@ -127,6 +127,13 @@ typed construction failure instead of storing an invalid descriptor. Runtime
 maintainers may therefore rely on a schema containing only type-compatible,
 configuration-valid declarations.
 
+An index declaration describes database meaning that is stable across
+deployments. Runtime algorithm selection, memory budgets, maintainer
+construction, physical subspaces, and other environment-dependent index
+configuration belong to `database-framework`. `DatabaseKit` does not publish a
+runtime `IndexConfiguration` protocol or retain heterogeneous runtime
+configuration values.
+
 ## Query Boundary
 
 The query declarations in `DatabaseKit` represent SQL, SQL/PGQ, and SPARQL

@@ -140,6 +140,13 @@ This includes:
 | Graph | RDF dataset meaning, graph names, ontology declarations, and SHACL shapes |
 | Validation | intrinsic structural and semantic validation of declarations |
 
+Index declarations contain the logical fields, kind, and parameters required
+to preserve database meaning. Deployment-specific algorithm selection, memory
+budgets, physical subspaces, maintainer construction, and runtime index
+configuration are execution concerns owned by `database-framework`.
+Query-cost and graph-pattern complexity estimates are likewise planner output,
+not properties of the semantic QueryIR.
+
 ### Model and document adaptation
 
 `Persistable` is the single application-model contract. It applies equally to

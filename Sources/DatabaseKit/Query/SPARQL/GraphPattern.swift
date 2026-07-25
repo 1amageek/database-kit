@@ -125,58 +125,6 @@ extension GraphPattern {
         }
     }
 
-    /// Complexity estimate for query optimization
-    public var complexity: Int {
-        switch self {
-        case .basic(let pattern):
-            return pattern.elements.reduce(into: 0) { complexity, element in
-                switch element {
-                case .triple:
-                    complexity += 1
-                case .propertyPath(let pathPattern):
-                    complexity += pathPattern.path.complexity
-                }
-            }
-
-        case .join(let left, let right):
-            return left.complexity * right.complexity
-
-        case .optional(let left, let right):
-            return left.complexity + right.complexity
-
-        case .union(let left, let right):
-            return left.complexity + right.complexity
-
-        case .filter(let pattern, _):
-            return pattern.complexity
-
-        case .minus(let left, let right):
-            return left.complexity + right.complexity
-
-        case .graph(_, let pattern):
-            return pattern.complexity
-
-        case .service(_, let pattern, _):
-            return pattern.complexity * 10  // Network overhead
-
-        case .bind(let pattern, _, _):
-            return pattern.complexity
-
-        case .values(_, let bindings):
-            return bindings.count
-
-        case .subquery(_):
-            // Simplified: just count source complexity
-            return 10
-
-        case .groupBy(let pattern, _, _):
-            return pattern.complexity * 2
-
-        case .lateral(let left, let right):
-            // LATERAL is a correlated join — LHS * RHS per row
-            return left.complexity * right.complexity
-        }
-    }
 }
 
 // MARK: - SPARQL Serialization

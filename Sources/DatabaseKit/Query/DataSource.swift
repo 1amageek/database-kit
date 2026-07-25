@@ -434,7 +434,7 @@ public enum PathMode: Sendable, Equatable, Hashable {
     case shortestK(Int)
 }
 
-/// Placeholder for GraphPattern (defined in SPARQL/GraphPattern.swift)
+/// A composable SPARQL graph-pattern declaration.
 public indirect enum GraphPattern: Sendable, Equatable, Hashable {
     case basic(BasicGraphPattern)
     case join(GraphPattern, GraphPattern)
@@ -451,7 +451,7 @@ public indirect enum GraphPattern: Sendable, Equatable, Hashable {
     case lateral(GraphPattern, GraphPattern)
 }
 
-/// Placeholder for TriplePattern (defined in SPARQL/TriplePattern.swift)
+/// One SPARQL subject-predicate-object pattern.
 public struct TriplePattern: Sendable, Equatable, Hashable {
     public let subject: SPARQLTerm
     public let predicate: SPARQLTerm
