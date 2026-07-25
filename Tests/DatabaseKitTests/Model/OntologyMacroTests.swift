@@ -45,6 +45,19 @@ struct OntDepartment {
     var name: String
 }
 
+@Persistable
+@OWLClass(
+    "https://example.org/onto#NamedEntity",
+    individualIRIBase: "https://example.org/individual/",
+    graph: "https://example.org/graph/entities"
+)
+struct OntNamedGraphEntity {
+    var id: String = "fixture-id"
+
+    @OWLDataProperty("https://example.org/onto#name")
+    var name: String
+}
+
 // --- Contract 3: Record feature coexistence ---
 @Persistable
 @OWLClass(
@@ -216,6 +229,53 @@ struct OntologyMacroTests {
     func ontologyClassIRI() {
         #expect(OntEmployee.ontologyClassIRI == "https://example.org/onto#Employee")
         #expect(OntDepartment.ontologyClassIRI == "https://example.org/onto#Department")
+    }
+
+    @Test("generated OWL projection emits canonical quads in its named graph")
+    func generatedOntologyProjection() throws {
+        let entity = OntNamedGraphEntity(name: "Alice")
+        let subject = try entity.ontologySubject()
+        let graph = try RDFGraphName(
+            iri: "https://example.org/graph/entities"
+        )
+        let quads = try entity.ontologyQuads()
+
+        #expect(
+            subject
+                == Self.subject(
+                    "https://example.org/individual/OntNamedGraphEntity/fixture-id"
+                )
+        )
+        #expect(quads.count == 2)
+        #expect(quads.allSatisfy { $0.subject == subject })
+        #expect(quads.allSatisfy { $0.graph == graph })
+        #expect(
+            quads.contains {
+                $0.predicate.rawValue
+                    == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+                    && $0.object
+                    == Self.term("https://example.org/onto#NamedEntity")
+            }
+        )
+        #expect(
+            quads.contains {
+                $0.predicate.rawValue
+                    == "https://example.org/onto#name"
+                    && $0.object == .literal(.string("Alice"))
+            }
+        )
+    }
+
+    private static func subject(_ rawValue: String) -> RDFSubject {
+        do {
+            return .iri(try RDFIRI(rawValue))
+        } catch {
+            preconditionFailure("Invalid subject fixture: \(rawValue)")
+        }
+    }
+
+    private static func term(_ rawValue: String) -> RDFTerm {
+        subject(rawValue).term
     }
 
     // -- Contract 2: DataProperty descriptor --

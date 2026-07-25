@@ -10,8 +10,8 @@ public protocol OWLClassEntity: Persistable {
     static var ontologyIndividualIRIBase: String { get }
     static var ontologyGraph: RDFGraphName? { get }
 
-    func ontologySubject() throws -> RDFSubject
-    func ontologyQuads() throws -> [RDFQuad]
+    func ontologySubject() throws(OWLProjectionError) -> RDFSubject
+    func ontologyQuads() throws(OWLProjectionError) -> [RDFQuad]
 
     /// OWL RDF index descriptors without dynamic type recovery.
     static var _owlRDFIndexDescriptors: [IndexDescriptor] {

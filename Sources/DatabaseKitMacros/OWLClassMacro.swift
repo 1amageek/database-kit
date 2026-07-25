@@ -266,7 +266,7 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
         decls.append(ontologyGraphDecl)
 
         let subjectDecl: DeclSyntax = """
-            public func ontologySubject() throws -> RDFSubject {
+            public func ontologySubject() throws(OWLProjectionError) -> RDFSubject {
                 try OWLIndividualIRIBuilder.subject(
                     baseIRI: Self.ontologyIndividualIRIBase,
                     persistableType: Self.persistableType,
@@ -277,7 +277,7 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
         decls.append(subjectDecl)
 
         var projectionStatements: [String] = []
-        for property in ontologyProperties {
+        for (propertyIndex, property) in ontologyProperties.enumerated() {
             let objectsExpression: String
             if let targetTypeName = property.targetTypeName {
                 objectsExpression = """
@@ -294,12 +294,21 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
             projectionStatements.append(
                 """
                 for object in \(objectsExpression) {
+                            let predicate\(propertyIndex): RDFPredicateIRI
+                            do {
+                                predicate\(propertyIndex) = try RDFPredicateIRI(
+                                    "\(property.iri)"
+                                )
+                            } catch let error {
+                                throw .invalidPropertyIRI(
+                                    "\(property.iri)",
+                                    error
+                                )
+                            }
                             quads.append(
                                 RDFQuad(
                                     subject: subject,
-                                    predicate: try RDFPredicateIRI(
-                                        "\(property.iri)"
-                                    ),
+                                    predicate: predicate\(propertyIndex),
                                     object: object,
                                     graph: Self.ontologyGraph
                                 )
@@ -312,15 +321,33 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
         let projectionBody = projectionStatements.joined(separator: "\n        ")
         let quadsBinding = ontologyProperties.isEmpty ? "let" : "var"
         let quadsDecl: DeclSyntax = """
-            public func ontologyQuads() throws -> [RDFQuad] {
+            public func ontologyQuads() throws(OWLProjectionError) -> [RDFQuad] {
                 let subject = try ontologySubject()
+                let rdfType: RDFPredicateIRI
+                do {
+                    rdfType = try OWLRDFVocabulary.rdfType
+                } catch let error {
+                    throw .invalidVocabularyIRI(
+                        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                        error
+                    )
+                }
+                let classTerm: RDFTerm
+                do {
+                    classTerm = try .iri(
+                        validating: Self.ontologyClassIRI
+                    )
+                } catch let error {
+                    throw .invalidClassIRI(
+                        Self.ontologyClassIRI,
+                        error
+                    )
+                }
                 \(raw: quadsBinding) quads = [
                     RDFQuad(
                         subject: subject,
-                        predicate: try OWLRDFVocabulary.rdfType,
-                        object: try .iri(
-                            validating: Self.ontologyClassIRI
-                        ),
+                        predicate: rdfType,
+                        object: classTerm,
                         graph: Self.ontologyGraph
                     )
                 ]
