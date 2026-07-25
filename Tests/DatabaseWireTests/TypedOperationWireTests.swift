@@ -370,7 +370,7 @@ struct TypedOperationWireTests {
                 MaintenanceExecuteOperation.Request(invocation: invocation)
             )
         }
-        try expectRoundTrip(
+        try expectCanonicalRoundTrip(
             MaintenanceExecuteOperation.Response.migrationStatus(
                 .init(
                     currentVersion: .init(3, 0, 0),
@@ -379,7 +379,7 @@ struct TypedOperationWireTests {
                 )
             )
         )
-        try expectRoundTrip(
+        try expectCanonicalRoundTrip(
             MaintenanceExecuteOperation.Response.migrationStatus(
                 .init(
                     currentVersion: nil,
@@ -388,7 +388,7 @@ struct TypedOperationWireTests {
                 )
             )
         )
-        try expectRoundTrip(
+        try expectCanonicalRoundTrip(
             MaintenanceExecuteOperation.Response.indexStatus(
                 .init(
                     indexes: [

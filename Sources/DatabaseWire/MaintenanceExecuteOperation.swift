@@ -247,38 +247,78 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
                 detail: try reader.readOptionalString()
             )
         }
+
+        static func validateWireRepresentation(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) {
+            _ = try reader.readValidatedUTF8Bytes()
+            _ = try reader.readValidatedUTF8Bytes()
+            try FieldValueWireValidator.validateObject(from: &reader)
+            _ = try IndexState(from: &reader)
+            _ = try reader.readUInt64()
+            if try reader.readBool() {
+                _ = try reader.readValidatedUTF8Bytes()
+            }
+        }
     }
 
-    public struct IndexStatusPage: WireValue, Hashable {
-        public let indexes: [IndexStatus]
+    public struct IndexStatusPage: WireValue {
+        private let indexElements: RetainedResultElements<IndexStatus>
+
+        public var indexCount: Int { indexElements.count }
         public let continuation: ByteString?
 
         public init(indexes: [IndexStatus], continuation: ByteString? = nil) {
-            self.indexes = indexes
+            self.indexElements = RetainedResultElements(indexes)
             self.continuation = continuation
+        }
+
+        public func makeIndexIterator() -> ResultIterator<IndexStatus> {
+            indexElements.makeIterator(
+                decodeElement: IndexStatus.init(from:)
+            )
+        }
+
+        public func materializedIndexes(
+            maximumCount: Int
+        ) throws(DatabaseWireError) -> [IndexStatus] {
+            try indexElements.materialized(
+                maximumCount: maximumCount,
+                decodeElement: IndexStatus.init(from:)
+            )
         }
 
         func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
-            try writer.writeCount(indexes.count)
-            for index in indexes { try index.encode(into: &writer) }
+            try indexElements.encode(
+                into: &writer,
+                encodeElement: {
+                    (
+                        index: IndexStatus,
+                        writer: inout DatabaseWireWriter
+                    ) throws(DatabaseWireError) in
+                    try index.encode(into: &writer)
+                },
+                validateElement:
+                    IndexStatus.validateWireRepresentation(from:)
+            )
             try writer.writeOptionalBytes(continuation)
         }
 
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
-            let count = try reader.readCount()
-            var indexes: [IndexStatus] = []
-            indexes.reserveCapacity(count)
-            for _ in 0..<count {
-                indexes.append(try IndexStatus(from: &reader))
-            }
-            self.init(
-                indexes: indexes,
-                continuation: try reader.readOptionalBytes()
+            self.indexElements = try RetainedResultElements(
+                from: &reader,
+                validateElement:
+                    IndexStatus.validateWireRepresentation(from:)
             )
+            self.continuation = try reader.readOptionalBytes()
+        }
+
+        var retainedEncodedIndexes: ByteString? {
+            indexElements.retainedBytes
         }
     }
 
@@ -343,7 +383,7 @@ public enum MaintenanceExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public enum Response: WireValue, Hashable {
+    public enum Response: WireValue {
         case migrationStatus(MigrationStatus)
         case indexStatus(IndexStatusPage)
         case execution(ExecutionResult)
