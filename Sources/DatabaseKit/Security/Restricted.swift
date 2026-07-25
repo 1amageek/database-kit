@@ -5,7 +5,7 @@ import DatabaseTypes
 
 /// Property wrapper for field-level access control
 ///
-/// Restricts read and/or write access to a field based on authentication context.
+/// Declares read and write authorization for a persisted field.
 ///
 /// **Usage**:
 /// ```swift
@@ -32,28 +32,17 @@ import DatabaseTypes
 /// }
 /// ```
 ///
-/// **Evaluation**:
-/// - Use `DatabaseContext.fetchSecure()` to automatically mask restricted fields
-/// - Use `DatabaseContext.saveSecure()` to validate write permissions
+/// `@Persistable` compiles the arguments into a static `FieldAccessRule`. The
+/// wrapper stores only the field value; authorization rules are not duplicated
+/// in every model instance.
 @propertyWrapper
 public struct Restricted<Value: Sendable>: Sendable {
     private var value: Value
-
-    /// Read access level
-    public let readAccess: FieldAccessLevel
-
-    /// Write access level
-    public let writeAccess: FieldAccessLevel
 
     /// The wrapped value
     public var wrappedValue: Value {
         get { value }
         set { value = newValue }
-    }
-
-    /// The projected value (provides access to the wrapper itself)
-    public var projectedValue: Restricted<Value> {
-        self
     }
 
     /// Initialize with access levels
@@ -64,12 +53,10 @@ public struct Restricted<Value: Sendable>: Sendable {
     ///   - write: Write access level (default: .public)
     public init(
         wrappedValue: Value,
-        read: FieldAccessLevel = .public,
-        write: FieldAccessLevel = .public
+        read _: FieldAccessLevel = .public,
+        write _: FieldAccessLevel = .public
     ) {
         self.value = wrappedValue
-        self.readAccess = read
-        self.writeAccess = write
     }
 
 }
@@ -78,9 +65,7 @@ public struct Restricted<Value: Sendable>: Sendable {
 
 extension Restricted: Equatable where Value: Equatable {
     public static func == (lhs: Restricted<Value>, rhs: Restricted<Value>) -> Bool {
-        lhs.value == rhs.value &&
-        lhs.readAccess == rhs.readAccess &&
-        lhs.writeAccess == rhs.writeAccess
+        lhs.value == rhs.value
     }
 }
 
@@ -89,8 +74,6 @@ extension Restricted: Equatable where Value: Equatable {
 extension Restricted: Hashable where Value: Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(value)
-        hasher.combine(readAccess)
-        hasher.combine(writeAccess)
     }
 }
 
@@ -98,6 +81,6 @@ extension Restricted: Hashable where Value: Hashable {
 
 extension Restricted: CustomStringConvertible where Value: CustomStringConvertible {
     public var description: String {
-        "Restricted(\(value.description), read: \(readAccess), write: \(writeAccess))"
+        value.description
     }
 }

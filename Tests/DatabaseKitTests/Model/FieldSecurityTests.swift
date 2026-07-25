@@ -6,16 +6,40 @@ import Testing
 import Foundation
 @testable import DatabaseKit
 
-// MARK: - Test Auth Context
+@Persistable
+private struct RestrictedEmployee {
+    var id: String
 
-private struct TestAuth: AuthContext {
-    let userID: String
-    var roles: Set<String>
+    @Restricted(
+        read: .roles(["hr", "manager"]),
+        write: .roles(["hr"])
+    )
+    var salary: Double = 0
+}
 
-    init(userID: String, roles: Set<String> = []) {
-        self.userID = userID
-        self.roles = roles
+@Persistable
+private struct SecuredDocument: SecurityPolicy {
+    var id: String
+    var ownerIdentifier: String
+
+    static func permitsRead(
+        of resource: borrowing SecuredDocument,
+        in context: borrowing AuthorizationContext
+    ) -> Bool {
+        resource.ownerIdentifier == context.principal?.identifier
     }
+}
+
+private func authenticated(
+    _ identifier: String,
+    roles: Set<String> = []
+) -> AuthorizationContext {
+    .authenticated(
+        Principal(
+            identifier: identifier,
+            roles: roles
+        )
+    )
 }
 
 // MARK: - FieldAccessLevel Tests
@@ -28,13 +52,13 @@ struct FieldAccessLevelTests {
         let level = FieldAccessLevel.public
 
         // Unauthenticated
-        #expect(level.evaluate(auth: nil) == true)
+        #expect(level.allows(.anonymous))
 
         // Authenticated without roles
-        #expect(level.evaluate(auth: TestAuth(userID: "user1")) == true)
+        #expect(level.allows(authenticated("user1")))
 
         // Authenticated with roles
-        #expect(level.evaluate(auth: TestAuth(userID: "user1", roles: ["admin"])) == true)
+        #expect(level.allows(authenticated("user1", roles: ["admin"])))
     }
 
     @Test("Authenticated access requires auth")
@@ -42,10 +66,10 @@ struct FieldAccessLevelTests {
         let level = FieldAccessLevel.authenticated
 
         // Unauthenticated
-        #expect(level.evaluate(auth: nil) == false)
+        #expect(!level.allows(.anonymous))
 
         // Authenticated
-        #expect(level.evaluate(auth: TestAuth(userID: "user1")) == true)
+        #expect(level.allows(authenticated("user1")))
     }
 
     @Test("Role-based access checks roles")
@@ -53,17 +77,17 @@ struct FieldAccessLevelTests {
         let level = FieldAccessLevel.roles(["hr", "manager"])
 
         // Unauthenticated
-        #expect(level.evaluate(auth: nil) == false)
+        #expect(!level.allows(.anonymous))
 
         // Authenticated without required roles
-        #expect(level.evaluate(auth: TestAuth(userID: "user1", roles: ["employee"])) == false)
+        #expect(!level.allows(authenticated("user1", roles: ["employee"])))
 
         // Authenticated with one required role
-        #expect(level.evaluate(auth: TestAuth(userID: "user1", roles: ["hr"])) == true)
-        #expect(level.evaluate(auth: TestAuth(userID: "user1", roles: ["manager"])) == true)
+        #expect(level.allows(authenticated("user1", roles: ["hr"])))
+        #expect(level.allows(authenticated("user1", roles: ["manager"])))
 
         // Authenticated with multiple roles including required
-        #expect(level.evaluate(auth: TestAuth(userID: "user1", roles: ["employee", "hr"])) == true)
+        #expect(level.allows(authenticated("user1", roles: ["employee", "hr"])))
     }
 
     @Test("FieldAccessLevel equality")
@@ -81,6 +105,27 @@ struct FieldAccessLevelTests {
         #expect(FieldAccessLevel.authenticated.description == ".authenticated")
         #expect(FieldAccessLevel.roles(["admin"]).description.contains("admin"))
     }
+
+    @Test("Typed security policy receives a concrete authorization context")
+    func typedSecurityPolicy() {
+        let document = SecuredDocument(
+            id: "document-1",
+            ownerIdentifier: "owner-1"
+        )
+
+        #expect(
+            SecuredDocument.permitsRead(
+                of: document,
+                in: authenticated("owner-1")
+            )
+        )
+        #expect(
+            !SecuredDocument.permitsRead(
+                of: document,
+                in: .anonymous
+            )
+        )
+    }
 }
 
 // MARK: - Restricted Property Wrapper Tests
@@ -93,8 +138,6 @@ struct RestrictedPropertyWrapperTests {
         var restricted = Restricted(wrappedValue: 100.0, read: .roles(["hr"]), write: .roles(["admin"]))
 
         #expect(restricted.wrappedValue == 100.0)
-        #expect(restricted.readAccess == .roles(["hr"]))
-        #expect(restricted.writeAccess == .roles(["admin"]))
 
         // Can modify wrapped value
         restricted.wrappedValue = 200.0
@@ -106,8 +149,6 @@ struct RestrictedPropertyWrapperTests {
         let restricted = Restricted(wrappedValue: "test")
 
         #expect(restricted.wrappedValue == "test")
-        #expect(restricted.readAccess == .public)
-        #expect(restricted.writeAccess == .public)
     }
 
     @Test("Restricted Equatable")
@@ -119,7 +160,7 @@ struct RestrictedPropertyWrapperTests {
 
         #expect(r1 == r2)
         #expect(r1 != r3) // different value
-        #expect(r1 != r4) // different access level
+        #expect(r1 == r4) // authorization is static schema data
     }
 
     @Test("Restricted Hashable")
@@ -127,22 +168,22 @@ struct RestrictedPropertyWrapperTests {
         let r1 = Restricted(wrappedValue: "test", read: .authenticated)
         let r2 = Restricted(wrappedValue: "test", read: .public)
 
-        #expect(r1.hashValue != r2.hashValue)
+        #expect(r1.hashValue == r2.hashValue)
 
         let set: Set<Restricted<String>> = [r1, r2]
-        #expect(set.count == 2)
+        #expect(set.count == 1)
     }
 
-    @Test("Restricted projected value")
-    func restrictedProjectedValue() {
-        var restricted = Restricted(wrappedValue: "value", read: .authenticated)
+    @Test("@Restricted compiles authorization into schema")
+    func restrictedCompilesStaticRule() throws {
+        let salary = RestrictedEmployee.fields.salary.identity
+        let expected = FieldAccessRule(
+            field: salary,
+            read: .roles(["hr", "manager"]),
+            write: .roles(["hr"])
+        )
 
-        // Projected value provides access to the wrapper itself
-        let projected = restricted.projectedValue
-        #expect(projected.readAccess == .authenticated)
-
-        restricted.wrappedValue = "new"
-        #expect(restricted.wrappedValue == "new")
-        #expect(restricted.readAccess == .authenticated)
+        #expect(RestrictedEmployee.fieldAccessRules == [expected])
+        #expect(try RestrictedEmployee.schemaEntity.fieldAccessRules == [expected])
     }
 }

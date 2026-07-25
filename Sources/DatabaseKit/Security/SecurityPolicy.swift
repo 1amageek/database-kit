@@ -16,25 +16,42 @@ import DatabaseTypes
 /// **Usage**:
 /// ```swift
 /// extension Post: SecurityPolicy {
-///     static func allowGet(resource: Post, auth: (any AuthContext)?) -> Bool {
-///         resource.isPublic || resource.authorID == auth?.userID
+///     static func permitsRead(
+///         of resource: Post,
+///         in context: AuthorizationContext
+///     ) -> Bool {
+///         resource.isPublic
+///             || resource.authorID == context.principal?.identifier
 ///     }
 ///
-///     static func allowList(query: SecurityQuery<Post>, auth: (any AuthContext)?) -> Bool {
-///         auth != nil && (query.limit ?? 0) <= 100
+///     static func permitsQuery(
+///         _ query: SecurityQuery,
+///         in context: AuthorizationContext
+///     ) -> Bool {
+///         context.isAuthenticated && (query.limit ?? 0) <= 100
 ///     }
 ///
-///     static func allowCreate(newResource: Post, auth: (any AuthContext)?) -> Bool {
-///         auth != nil && newResource.authorID == auth?.userID
+///     static func permitsCreate(
+///         _ newResource: Post,
+///         in context: AuthorizationContext
+///     ) -> Bool {
+///         newResource.authorID == context.principal?.identifier
 ///     }
 ///
-///     static func allowUpdate(resource: Post, newResource: Post, auth: (any AuthContext)?) -> Bool {
-///         resource.authorID == auth?.userID
+///     static func permitsUpdate(
+///         from resource: Post,
+///         to newResource: Post,
+///         in context: AuthorizationContext
+///     ) -> Bool {
+///         resource.authorID == context.principal?.identifier
 ///             && newResource.authorID == resource.authorID
 ///     }
 ///
-///     static func allowDelete(resource: Post, auth: (any AuthContext)?) -> Bool {
-///         resource.authorID == auth?.userID
+///     static func permitsDelete(
+///         _ resource: Post,
+///         in context: AuthorizationContext
+///     ) -> Bool {
+///         resource.authorID == context.principal?.identifier
 ///     }
 /// }
 /// ```
@@ -44,9 +61,12 @@ public protocol SecurityPolicy: Persistable {
     ///
     /// - Parameters:
     ///   - resource: The document to retrieve
-    ///   - auth: Authentication context (nil = unauthenticated)
+    ///   - context: Request authorization context.
     /// - Returns: true if allowed
-    static func allowGet(resource: Self, auth: (any AuthContext)?) -> Bool
+    static func permitsRead(
+        of resource: borrowing Self,
+        in context: borrowing AuthorizationContext
+    ) -> Bool
 
     /// Permission check for query (list retrieval)
     ///
@@ -55,83 +75,46 @@ public protocol SecurityPolicy: Persistable {
     ///
     /// - Parameters:
     ///   - query: Query information (limit, offset, etc.)
-    ///   - auth: Authentication context (nil = unauthenticated)
+    ///   - context: Request authorization context.
     /// - Returns: true if allowed
-    static func allowList(query: SecurityQuery<Self>, auth: (any AuthContext)?) -> Bool
+    static func permitsQuery(
+        _ query: borrowing SecurityQuery,
+        in context: borrowing AuthorizationContext
+    ) -> Bool
 
     /// Permission check for document creation
     ///
     /// - Parameters:
     ///   - newResource: The document to create
-    ///   - auth: Authentication context (nil = unauthenticated)
+    ///   - context: Request authorization context.
     /// - Returns: true if allowed
-    static func allowCreate(newResource: Self, auth: (any AuthContext)?) -> Bool
+    static func permitsCreate(
+        _ newResource: borrowing Self,
+        in context: borrowing AuthorizationContext
+    ) -> Bool
 
     /// Permission check for document update
     ///
     /// - Parameters:
     ///   - resource: The document before update
     ///   - newResource: The document after update
-    ///   - auth: Authentication context (nil = unauthenticated)
+    ///   - context: Request authorization context.
     /// - Returns: true if allowed
-    static func allowUpdate(resource: Self, newResource: Self, auth: (any AuthContext)?) -> Bool
+    static func permitsUpdate(
+        from resource: borrowing Self,
+        to newResource: borrowing Self,
+        in context: borrowing AuthorizationContext
+    ) -> Bool
 
     /// Permission check for document deletion
     ///
     /// - Parameters:
     ///   - resource: The document to delete
-    ///   - auth: Authentication context (nil = unauthenticated)
+    ///   - context: Request authorization context.
     /// - Returns: true if allowed
-    static func allowDelete(resource: Self, auth: (any AuthContext)?) -> Bool
-
-    // MARK: - Type-erased methods (internal use)
-
-    /// Type-erased List evaluation
-    ///
-    /// Defined as a protocol requirement to allow calling from `any SecurityPolicy.Type`.
-    /// Normally you only need to implement `allowList` - this method delegates to it.
-    static func _evaluateList(
-        limit: UInt64?,
-        offset: UInt64?,
-        orderBy: [String]?,
-        auth: (any AuthContext)?
-    ) -> Bool
-
-    /// Type-erased Get evaluation
-    ///
-    /// Defined as a protocol requirement to allow calling from `any SecurityPolicy.Type`.
-    /// Casts the resource to Self and delegates to `allowGet`.
-    static func _evaluateGet(
-        resource: any Persistable,
-        auth: (any AuthContext)?
-    ) -> Bool
-
-    /// Type-erased Create evaluation
-    ///
-    /// Defined as a protocol requirement to allow calling from `any SecurityPolicy.Type`.
-    /// Casts the resource to Self and delegates to `allowCreate`.
-    static func _evaluateCreate(
-        newResource: any Persistable,
-        auth: (any AuthContext)?
-    ) -> Bool
-
-    /// Type-erased Update evaluation
-    ///
-    /// Defined as a protocol requirement to allow calling from `any SecurityPolicy.Type`.
-    /// Casts resources to Self and delegates to `allowUpdate`.
-    static func _evaluateUpdate(
-        resource: any Persistable,
-        newResource: any Persistable,
-        auth: (any AuthContext)?
-    ) -> Bool
-
-    /// Type-erased Delete evaluation
-    ///
-    /// Defined as a protocol requirement to allow calling from `any SecurityPolicy.Type`.
-    /// Casts the resource to Self and delegates to `allowDelete`.
-    static func _evaluateDelete(
-        resource: any Persistable,
-        auth: (any AuthContext)?
+    static func permitsDelete(
+        _ resource: borrowing Self,
+        in context: borrowing AuthorizationContext
     ) -> Bool
 }
 
@@ -139,72 +122,29 @@ public protocol SecurityPolicy: Persistable {
 
 public extension SecurityPolicy {
     /// Default: deny all (secure by default)
-    static func allowGet(resource: Self, auth: (any AuthContext)?) -> Bool { false }
-    static func allowList(query: SecurityQuery<Self>, auth: (any AuthContext)?) -> Bool { false }
-    static func allowCreate(newResource: Self, auth: (any AuthContext)?) -> Bool { false }
-    static func allowUpdate(resource: Self, newResource: Self, auth: (any AuthContext)?) -> Bool { false }
-    static func allowDelete(resource: Self, auth: (any AuthContext)?) -> Bool { false }
+    static func permitsRead(
+        of resource: borrowing Self,
+        in context: borrowing AuthorizationContext
+    ) -> Bool { false }
 
-    /// Default implementation of type-erased method
-    ///
-    /// Builds SecurityQuery internally and delegates to allowList.
-    static func _evaluateList(
-        limit: UInt64?,
-        offset: UInt64?,
-        orderBy: [String]?,
-        auth: (any AuthContext)?
-    ) -> Bool {
-        let query = SecurityQuery<Self>(limit: limit, offset: offset, orderBy: orderBy)
-        return allowList(query: query, auth: auth)
-    }
+    static func permitsQuery(
+        _ query: borrowing SecurityQuery,
+        in context: borrowing AuthorizationContext
+    ) -> Bool { false }
 
-    /// Default implementation of type-erased Get evaluation
-    ///
-    /// Casts the resource to Self and delegates to allowGet.
-    /// Returns false if cast fails.
-    static func _evaluateGet(
-        resource: any Persistable,
-        auth: (any AuthContext)?
-    ) -> Bool {
-        guard let typedResource = resource as? Self else { return false }
-        return allowGet(resource: typedResource, auth: auth)
-    }
+    static func permitsCreate(
+        _ newResource: borrowing Self,
+        in context: borrowing AuthorizationContext
+    ) -> Bool { false }
 
-    /// Default implementation of type-erased Create evaluation
-    ///
-    /// Casts the resource to Self and delegates to allowCreate.
-    /// Returns false if cast fails.
-    static func _evaluateCreate(
-        newResource: any Persistable,
-        auth: (any AuthContext)?
-    ) -> Bool {
-        guard let typedResource = newResource as? Self else { return false }
-        return allowCreate(newResource: typedResource, auth: auth)
-    }
+    static func permitsUpdate(
+        from resource: borrowing Self,
+        to newResource: borrowing Self,
+        in context: borrowing AuthorizationContext
+    ) -> Bool { false }
 
-    /// Default implementation of type-erased Update evaluation
-    ///
-    /// Casts resources to Self and delegates to allowUpdate.
-    /// Returns false if casts fail.
-    static func _evaluateUpdate(
-        resource: any Persistable,
-        newResource: any Persistable,
-        auth: (any AuthContext)?
-    ) -> Bool {
-        guard let typedOld = resource as? Self,
-              let typedNew = newResource as? Self else { return false }
-        return allowUpdate(resource: typedOld, newResource: typedNew, auth: auth)
-    }
-
-    /// Default implementation of type-erased Delete evaluation
-    ///
-    /// Casts the resource to Self and delegates to allowDelete.
-    /// Returns false if cast fails.
-    static func _evaluateDelete(
-        resource: any Persistable,
-        auth: (any AuthContext)?
-    ) -> Bool {
-        guard let typedResource = resource as? Self else { return false }
-        return allowDelete(resource: typedResource, auth: auth)
-    }
+    static func permitsDelete(
+        _ resource: borrowing Self,
+        in context: borrowing AuthorizationContext
+    ) -> Bool { false }
 }

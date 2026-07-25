@@ -12,13 +12,16 @@ import DatabaseTypes
 /// **Usage**:
 /// ```swift
 /// extension Post: SecurityPolicy {
-///     static func allowList(query: SecurityQuery<Post>, auth: (any AuthContext)?) -> Bool {
+///     static func permitsQuery(
+///         _ query: SecurityQuery,
+///         in context: AuthorizationContext
+///     ) -> Bool {
 ///         // Only allow queries with limit <= 100
-///         auth != nil && (query.limit ?? 0) <= 100
+///         context.isAuthenticated && (query.limit ?? 0) <= 100
 ///     }
 /// }
 /// ```
-public struct SecurityQuery<T: Persistable>: Sendable {
+public struct SecurityQuery: Sendable, Hashable {
     /// Maximum number of items to retrieve
     public let limit: UInt64?
 

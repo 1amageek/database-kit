@@ -109,6 +109,70 @@ struct SchemaValidationTests {
         #expect(entity.fieldMapByNumber == [1: first, 2: second])
     }
 
+    @Test("Field access rules require exact schema identity")
+    func fieldAccessRulesRequireExactIdentity() {
+        #expect(
+            throws: SchemaEntityError.invalidFieldAccessRule(
+                fieldName: "value",
+                fieldNumber: 2
+            )
+        ) {
+            try Schema.Entity(
+                name: "RestrictedEntity",
+                identifierType: .string,
+                fields: [
+                    FieldSchema(
+                        name: "value",
+                        fieldNumber: 1,
+                        type: .string
+                    )
+                ],
+                fieldAccessRules: [
+                    FieldAccessRule(
+                        field: FieldIdentity(
+                            name: "value",
+                            number: 2
+                        ),
+                        read: .authenticated,
+                        write: .roles(["admin"])
+                    )
+                ]
+            )
+        }
+    }
+
+    @Test("Each field has at most one access rule")
+    func fieldAccessRulesAreUnique() {
+        let field = FieldIdentity(name: "value", number: 1)
+        #expect(
+            throws: SchemaEntityError.duplicateFieldAccessRule("value")
+        ) {
+            try Schema.Entity(
+                name: "RestrictedEntity",
+                identifierType: .string,
+                fields: [
+                    FieldSchema(
+                        name: "value",
+                        fieldNumber: 1,
+                        type: .string
+                    )
+                ],
+                fieldAccessRules: [
+                    FieldAccessRule(
+                        field: field,
+                        read: .authenticated,
+                        write: .roles(["admin"])
+                    ),
+                    FieldAccessRule(
+                        field: field,
+                        read: .roles(["manager"]),
+                        write: .roles(["admin"])
+                    )
+                ]
+            )
+        }
+    }
+
     @Test("Reference targets must exist in the complete schema")
     func referenceTargetsMustExist() throws {
         let entity = try Schema.Entity(

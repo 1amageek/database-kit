@@ -47,6 +47,8 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
         fieldTarget: String,
         relationshipTarget: String
     )
+    case invalidFieldAccessRule(fieldName: String, fieldNumber: Int)
+    case duplicateFieldAccessRule(String)
     case unknownObjectPropertyField(String)
     case emptyOntologyIRI
     case emptyDataPropertyIRI
@@ -112,6 +114,10 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Relationship '\(relationship)' is attached to non-reference field '\(fieldName)'."
         case .relationshipTargetMismatch(let relationship, let fieldTarget, let relationshipTarget):
             return "Relationship '\(relationship)' targets '\(relationshipTarget)', but its field targets '\(fieldTarget)'."
+        case .invalidFieldAccessRule(let fieldName, let fieldNumber):
+            return "Field access rule references missing field '\(fieldName)' (#\(fieldNumber))."
+        case .duplicateFieldAccessRule(let fieldName):
+            return "Field '\(fieldName)' declares more than one access rule."
         case .unknownObjectPropertyField(let fieldName):
             return "Object property metadata references unknown field '\(fieldName)'."
         case .emptyOntologyIRI:

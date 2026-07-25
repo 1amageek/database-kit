@@ -89,8 +89,8 @@ a dictionary.
 
 Each concrete model compiles itself through `Model.schemaEntity`. The resulting
 value contains the identifier shape, fields, directory declaration, indexes,
-relationships, ontology binding, and polymorphic membership. `Schema` accepts
-only these values:
+relationships, field authorization rules, ontology binding, and polymorphic
+membership. `Schema` accepts only these values:
 
 ```swift
 let schema = try Schema(

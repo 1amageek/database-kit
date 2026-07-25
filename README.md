@@ -151,9 +151,9 @@ struct Product {
 ```
 
 **Generated code**: `persistableType`, `allFields`, `fieldSchemas`, typed
-`fields`, `indexDescriptors`, concrete `PersistedFieldOutput` traversal,
-canonical decoding, and `Sendable` conformance. The model declares `id` and
-owns its generation policy.
+`fields`, `indexDescriptors`, `fieldAccessRules`, concrete
+`PersistedFieldOutput` traversal, canonical decoding, and `Sendable`
+conformance. The model declares `id` and owns its generation policy.
 
 The production encoder does not inspect a model through `Mirror`, `Any`, or a
 runtime metatype. It writes each concrete property directly to the selected

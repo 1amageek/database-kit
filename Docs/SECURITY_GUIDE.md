@@ -11,42 +11,48 @@ application boundary and `database-framework`.
 validated application identity
              │
              ▼
-         AuthContext
+  AuthorizationContext
              │
              ▼
-database-framework evaluation
+typed database-framework policy registry
              │
       ┌──────┴──────┐
       ▼             ▼
-SecurityPolicy   restrictedFieldsMetadata
+SecurityPolicy   Schema.Entity.fieldAccessRules
 ```
 
 ## Owned Types
 
 | Type | Contract |
 |---|---|
-| `AuthContext` | Application-defined authenticated subject and roles |
+| `Principal` | Validated subject identifier, roles, and canonical claims |
+| `AuthorizationContext` | Concrete anonymous or authenticated request state |
 | `SecurityPolicy` | Per-model allow/deny decisions |
-| `SecurityQuery<Model>` | Bounded query shape presented to list authorization |
+| `SecurityQuery` | Bounded query shape presented to list authorization |
 | `FieldAccessLevel` | Static public, authenticated, or role-based field policy |
-| `Restricted<Value>` | Field declaration wrapper whose policy is immutable |
-| `RestrictedFieldMetadata` | Macro-generated static field policy |
+| `Restricted<Value>` | Lightweight field annotation wrapper |
+| `FieldAccessRule` | Macro-generated static field policy bound to `FieldIdentity` |
 
 ## Authentication Boundary
 
-An application creates `AuthContext` only after validating credentials. The
-database runtime must treat a supplied context as identity data, not as proof
+An application creates a `Principal` only after validating credentials. The
+database runtime treats a supplied principal as identity data, not as proof
 that authentication occurred.
 
 ```swift
-struct RequestIdentity: AuthContext {
-    let userID: String
-    let roles: Set<String>
-}
+let context = AuthorizationContext.authenticated(
+    Principal(
+        identifier: subject,
+        roles: verifiedRoles,
+        claims: verifiedClaims
+    )
+)
 ```
 
-An unauthenticated request is represented by `nil`. Empty roles do not imply an
-administrator.
+An unauthenticated request is represented by `.anonymous`, not by `nil`.
+`AuthorizationContext` is a concrete value and can therefore cross the
+Embedded model and policy boundary without existential storage. Empty roles do
+not imply an administrator.
 
 ## Model Policy
 
@@ -55,44 +61,45 @@ explicitly.
 
 ```swift
 extension Post: SecurityPolicy {
-    static func allowGet(
-        resource: Post,
-        auth: (any AuthContext)?
+    static func permitsRead(
+        of resource: borrowing Post,
+        in context: borrowing AuthorizationContext
     ) -> Bool {
-        resource.isPublic || resource.authorID == auth?.userID
+        resource.isPublic
+            || resource.authorID == context.principal?.identifier
     }
 
-    static func allowList(
-        query: SecurityQuery<Post>,
-        auth: (any AuthContext)?
+    static func permitsQuery(
+        _ query: borrowing SecurityQuery,
+        in context: borrowing AuthorizationContext
     ) -> Bool {
-        guard auth != nil, let limit = query.limit else {
+        guard context.isAuthenticated, let limit = query.limit else {
             return false
         }
         return limit <= 100
     }
 
-    static func allowCreate(
-        newResource: Post,
-        auth: (any AuthContext)?
+    static func permitsCreate(
+        _ newResource: borrowing Post,
+        in context: borrowing AuthorizationContext
     ) -> Bool {
-        newResource.authorID == auth?.userID
+        newResource.authorID == context.principal?.identifier
     }
 
-    static func allowUpdate(
-        resource: Post,
-        newResource: Post,
-        auth: (any AuthContext)?
+    static func permitsUpdate(
+        from resource: borrowing Post,
+        to newResource: borrowing Post,
+        in context: borrowing AuthorizationContext
     ) -> Bool {
-        resource.authorID == auth?.userID
+        resource.authorID == context.principal?.identifier
             && newResource.authorID == resource.authorID
     }
 
-    static func allowDelete(
-        resource: Post,
-        auth: (any AuthContext)?
+    static func permitsDelete(
+        _ resource: borrowing Post,
+        in context: borrowing AuthorizationContext
     ) -> Bool {
-        resource.authorID == auth?.userID
+        resource.authorID == context.principal?.identifier
     }
 }
 ```
@@ -119,13 +126,14 @@ struct Employee {
 }
 ```
 
-`@Persistable` generates `restrictedFieldsMetadata`. Runtime evaluation uses
-that static metadata; policies are not serialized with field values and are not
-reconstructed from persisted data.
+`@Persistable` generates `fieldAccessRules`. `Schema.Entity` validates and
+retains those rules with the exact field name and field number. Policies are
+not serialized with field values and are not reconstructed from persisted
+data.
 
-`Restricted` deliberately has no standalone `Codable` conformance. Decoding a
-wrapper without its declaring model cannot recover the policy and must not
-silently replace it with `.public`.
+`Restricted` stores only its wrapped value. Read and write declarations exist
+once in the static schema instead of being duplicated in every model instance.
+It deliberately has no standalone `Codable` conformance.
 
 `FieldAccessLevel` contains only deterministic, comparable declarations:
 
@@ -143,16 +151,22 @@ path:
 
 | Operation | Required evaluation |
 |---|---|
-| Get | `allowGet` before returning the model |
-| List | `allowList` before query execution |
-| Create | `allowCreate` inside the mutation transaction |
-| Update | `allowUpdate` with old and new values inside one transaction |
-| Delete | `allowDelete` before deletion inside the transaction |
-| Field read | Apply generated read metadata before returning data |
-| Field write | Validate generated write metadata before commit |
+| Read | `permitsRead` before returning the model |
+| Query | `permitsQuery` before query execution |
+| Create | `permitsCreate` inside the mutation transaction |
+| Update | `permitsUpdate` with old and new values inside one transaction |
+| Delete | `permitsDelete` before deletion inside the transaction |
+| Field read | Project authorized fields at the result boundary |
+| Field write | Validate changed canonical field values before commit |
 
 Authorization failure is an explicit typed failure. It must not become an empty
-page, a missing object, a masked write, or a retryable transport error.
+page, a missing object, a default-valued model, a masked write, or a retryable
+transport error.
+
+`database-framework` registers each concrete `SecurityPolicy` through generic
+application runtime composition. DatabaseKit does not expose type-erased policy
+entry points, accept `any Persistable`, or recover policy conformance with a
+runtime cast.
 
 ## Isolation
 

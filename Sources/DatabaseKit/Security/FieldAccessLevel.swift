@@ -30,21 +30,23 @@ public enum FieldAccessLevel: Sendable, Equatable, Hashable {
     /// Only users with specific roles can access
     case roles(Set<String>)
 
-    /// Evaluate access for the given auth context
+    /// Evaluate access for the given authorization context.
     ///
-    /// - Parameter auth: The authentication context (nil = unauthenticated)
+    /// - Parameter context: The request authorization context.
     /// - Returns: true if access is allowed
-    public func evaluate(auth: (any AuthContext)?) -> Bool {
+    public func allows(_ context: AuthorizationContext) -> Bool {
         switch self {
         case .public:
             return true
 
         case .authenticated:
-            return auth != nil
+            return context.isAuthenticated
 
         case .roles(let required):
-            guard let auth = auth else { return false }
-            return !auth.roles.isDisjoint(with: required)
+            guard let principal = context.principal else {
+                return false
+            }
+            return !principal.roles.isDisjoint(with: required)
 
         }
     }

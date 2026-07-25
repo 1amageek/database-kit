@@ -79,8 +79,12 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         // Extract all stored properties (fields) and @Relationship declarations
         var allFields: [String] = []
         var fieldInfos: [(name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)] = []
-        // Track @Restricted fields for field-level security metadata
-        var restrictedFields: [(fieldName: String, readExpr: String, writeExpr: String, defaultExpr: String)] = []
+        // Track @Restricted fields for static authorization declarations.
+        var restrictedFields: [(
+            fieldName: String,
+            readExpr: String,
+            writeExpr: String
+        )] = []
 
         // Track typed @Relationship fields.
         var relationships: [(
@@ -207,33 +211,12 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                 }
                                 fieldInfos.append((name: fieldName, type: fieldType, hasDefault: hasDefault, defaultValue: defaultValue, isTransient: isTransient))
 
-                                // Track @Restricted fields for metadata generation
+                                // Track @Restricted fields for static rules.
                                 if let restricted = restrictedInfo {
-                                    // Determine default value expression based on type
-                                    let defaultExpr: String
-                                    if fieldType.hasSuffix("?") || fieldType.hasPrefix("Optional<") {
-                                        defaultExpr = "nil"
-                                    } else if fieldType == "String" {
-                                        defaultExpr = "\"\""
-                                    } else if fieldType == "Int" || fieldType == "Int64" || fieldType == "Int32" || fieldType == "Int16" || fieldType == "Int8" {
-                                        defaultExpr = "0"
-                                    } else if fieldType == "Double" || fieldType == "Float" {
-                                        defaultExpr = "0"
-                                    } else if fieldType == "Bool" {
-                                        defaultExpr = "false"
-                                    } else if fieldType.hasPrefix("[") || fieldType.hasPrefix("Array<") {
-                                        defaultExpr = "[]"
-                                    } else if fieldType == "ByteString" {
-                                        defaultExpr = "ByteString()"
-                                    } else {
-                                        // For other types, use the initializer default if available
-                                        defaultExpr = defaultValue ?? "/* unknown default */"
-                                    }
                                     restrictedFields.append((
                                         fieldName: fieldName,
                                         readExpr: restricted.readExpr,
-                                        writeExpr: restricted.writeExpr,
-                                        defaultExpr: defaultExpr
+                                        writeExpr: restricted.writeExpr
                                     ))
                                 }
                             }
@@ -675,8 +658,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(directoryLayerDecl)
 
-        // Generate restrictedFieldsMetadata for field-level security
-        // This provides compile-time metadata about @Restricted fields
+        // Generate static field authorization declarations.
         if !restrictedFields.isEmpty {
             // Helper to add FieldAccessLevel prefix to expressions like ".roles([...])"
             func fullyQualify(_ expr: String) -> String {
@@ -686,50 +668,26 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 return expr
             }
 
-            var metadataEntries: [String] = []
+            var ruleEntries: [String] = []
             for field in restrictedFields {
-                metadataEntries.append("""
-                    RestrictedFieldMetadata(
-                            fieldName: "\(field.fieldName)",
-                            readAccess: \(fullyQualify(field.readExpr)),
-                            writeAccess: \(fullyQualify(field.writeExpr))
+                ruleEntries.append("""
+                    FieldAccessRule(
+                            field: Self.fields.\(field.fieldName).identity,
+                            read: \(fullyQualify(field.readExpr)),
+                            write: \(fullyQualify(field.writeExpr))
                         )
                 """)
             }
-            let metadataArray = "[\n            \(metadataEntries.joined(separator: ",\n            "))\n        ]"
-            let restrictedMetadataDecl: DeclSyntax = """
-                public static var restrictedFieldsMetadata: [RestrictedFieldMetadata] { \(raw: metadataArray) }
+            let rulesArray = "[\n            \(ruleEntries.joined(separator: ",\n            "))\n        ]"
+            let fieldAccessRulesDecl: DeclSyntax = """
+                public static var fieldAccessRules: [FieldAccessRule] { \(raw: rulesArray) }
                 """
-            decls.append(restrictedMetadataDecl)
-
-            // Generate masked(auth:) method for field masking
-            var maskAssignments: [String] = []
-            for field in restrictedFields {
-                maskAssignments.append("""
-                    if !\(fullyQualify(field.readExpr)).evaluate(auth: auth) {
-                            copy.\(field.fieldName) = \(field.defaultExpr)
-                        }
-                """)
-            }
-            let maskedDecl: DeclSyntax = """
-                public func masked(auth: (any AuthContext)?) -> Self {
-                    var copy = self
-                    \(raw: maskAssignments.joined(separator: "\n        "))
-                    return copy
-                }
-                """
-            decls.append(maskedDecl)
+            decls.append(fieldAccessRulesDecl)
         } else {
-            // No restricted fields - provide empty metadata and identity mask
-            let emptyMetadataDecl: DeclSyntax = """
-                public static var restrictedFieldsMetadata: [RestrictedFieldMetadata] { [] }
+            let emptyRulesDecl: DeclSyntax = """
+                public static var fieldAccessRules: [FieldAccessRule] { [] }
                 """
-            decls.append(emptyMetadataDecl)
-
-            let identityMaskedDecl: DeclSyntax = """
-                public func masked(auth: (any AuthContext)?) -> Self { self }
-                """
-            decls.append(identityMaskedDecl)
+            decls.append(emptyRulesDecl)
         }
 
         // Generate fieldNumber method (excludes transient fields)

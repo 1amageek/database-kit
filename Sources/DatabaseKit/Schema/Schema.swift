@@ -64,6 +64,9 @@ public final class Schema: Sendable {
         /// Typed relationship declarations owned by this entity.
         public let relationships: [RelationshipDescriptor]
 
+        /// Static field-level authorization declarations.
+        public let fieldAccessRules: [FieldAccessRule]
+
         /// Enum metadata: fieldName → case names
         public let enumMetadata: [String: [String]]
 
@@ -157,6 +160,7 @@ public final class Schema: Sendable {
                 directoryLayer: type.directoryLayer,
                 indexes: indexDescriptors.map { IndexDescriptorMetadata($0) },
                 relationships: type.relationshipDescriptors,
+                fieldAccessRules: type.fieldAccessRules,
                 enumMetadata: Self.extractEnumMetadata(from: type),
                 ontology: type.ontologyBinding,
                 polymorphicMembership: type.polymorphicMembership
@@ -174,6 +178,7 @@ public final class Schema: Sendable {
             directoryLayer: DirectoryLayer = .default,
             indexes: [IndexDescriptorMetadata] = [],
             relationships: [RelationshipDescriptor] = [],
+            fieldAccessRules: [FieldAccessRule] = [],
             enumMetadata: [String: [String]] = [:],
             ontology: OntologyBinding? = nil,
             polymorphicMembership: PolymorphicMembership? = nil
@@ -185,6 +190,7 @@ public final class Schema: Sendable {
                 directoryLayer: directoryLayer,
                 indexes: indexes,
                 relationships: relationships,
+                fieldAccessRules: fieldAccessRules,
                 enumMetadata: enumMetadata,
                 ontology: ontology,
                 polymorphicMembership: polymorphicMembership
@@ -196,6 +202,7 @@ public final class Schema: Sendable {
             self.directoryLayer = directoryLayer
             self.indexes = indexes
             self.relationships = relationships
+            self.fieldAccessRules = fieldAccessRules
             self.enumMetadata = enumMetadata
             self.ontology = ontology
             self.polymorphicMembership = polymorphicMembership
@@ -213,6 +220,7 @@ public final class Schema: Sendable {
             lhs.directoryLayer == rhs.directoryLayer &&
             lhs.indexes == rhs.indexes &&
             lhs.relationships == rhs.relationships &&
+            lhs.fieldAccessRules == rhs.fieldAccessRules &&
             lhs.enumMetadata == rhs.enumMetadata &&
             lhs.ontology == rhs.ontology &&
             lhs.polymorphicMembership == rhs.polymorphicMembership
@@ -228,6 +236,7 @@ public final class Schema: Sendable {
             hasher.combine(directoryLayer)
             hasher.combine(indexes)
             hasher.combine(relationships)
+            hasher.combine(fieldAccessRules)
             hasher.combine(enumMetadata)
             hasher.combine(ontology)
             hasher.combine(polymorphicMembership)
@@ -254,6 +263,7 @@ public final class Schema: Sendable {
             directoryLayer: DirectoryLayer,
             indexes: [IndexDescriptorMetadata],
             relationships: [RelationshipDescriptor],
+            fieldAccessRules: [FieldAccessRule],
             enumMetadata: [String: [String]],
             ontology: OntologyBinding?,
             polymorphicMembership: PolymorphicMembership?
@@ -387,6 +397,22 @@ public final class Schema: Sendable {
                         fieldTarget: field.referenceTargetEntity ?? "",
                         relationshipTarget: relationship.relatedTypeName
                     )
+                }
+            }
+
+            var authorizedFieldNames = Set<String>()
+            for rule in fieldAccessRules {
+                guard
+                    let field = fieldsByNumber[rule.field.number],
+                    field.name == rule.field.name
+                else {
+                    throw .invalidFieldAccessRule(
+                        fieldName: rule.field.name,
+                        fieldNumber: rule.field.number
+                    )
+                }
+                guard authorizedFieldNames.insert(rule.field.name).inserted else {
+                    throw .duplicateFieldAccessRule(rule.field.name)
                 }
             }
 
