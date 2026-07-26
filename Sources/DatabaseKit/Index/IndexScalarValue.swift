@@ -1,7 +1,10 @@
 import DatabaseTypes
 
-/// A scalar value with a stable index metadata category and canonical field value.
-public protocol IndexScalarValue: FieldValueRepresentable {
+/// A scalar value with a stable index metadata category and a reversible
+/// canonical field representation.
+public protocol IndexScalarValue:
+    FieldValueRepresentable,
+    FieldValueDecodable {
     static var indexScalarType: IndexScalarType { get }
 }
 

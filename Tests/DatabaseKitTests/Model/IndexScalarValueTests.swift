@@ -25,6 +25,30 @@ struct IndexScalarValueTests {
         assertComparableType(Timestamp.self, category: .timestamp)
     }
 
+    @Test("Every index scalar round-trips through its canonical field value")
+    func scalarValuesRoundTrip() throws {
+        try assertRoundTrip(Int8(-8))
+        try assertRoundTrip(Int16(-16))
+        try assertRoundTrip(Int32(-32))
+        try assertRoundTrip(Int64(-64))
+        try assertRoundTrip(UInt8(8))
+        try assertRoundTrip(UInt16(16))
+        try assertRoundTrip(UInt32(32))
+        try assertRoundTrip(UInt64(64))
+        try assertRoundTrip(Float(1.25))
+        try assertRoundTrip(Double(2.5))
+        try assertRoundTrip("indexed")
+        try assertRoundTrip(
+            try CivilDate(year: 2026, month: 7, day: 27)
+        )
+        try assertRoundTrip(
+            try Timestamp(
+                secondsSinceUnixEpoch: 1_000,
+                nanoseconds: 123
+            )
+        )
+    }
+
     @Test("Scalar category capabilities match runtime dispatch")
     func scalarCategoryCapabilities() {
         let numeric: Set<IndexScalarType> = [
@@ -54,5 +78,16 @@ struct IndexScalarValueTests {
         category: IndexScalarType
     ) {
         #expect(type.indexScalarType == category)
+    }
+
+    private func assertRoundTrip<Value: IndexComparableValue>(
+        _ value: Value
+    ) throws {
+        #expect(
+            try Value.decodeFieldValue(
+                value.fieldValue,
+                field: "value"
+            ) == value
+        )
     }
 }
