@@ -530,9 +530,6 @@ public final class Schema: Sendable {
     /// Schema version
     public let version: Version
 
-    /// Encoding version (for compatibility)
-    public let encodingVersion: Version
-
     /// All entities
     public let entities: [Entity]
 
@@ -574,8 +571,6 @@ public final class Schema: Sendable {
         version: Version = Version(1, 0, 0)
     ) throws(SchemaError) {
         self.version = version
-        self.encodingVersion = version
-
         // Build entity maps
         var entitiesByName: [String: Entity] = [:]
         for entity in entities {
@@ -900,7 +895,6 @@ extension Schema: CustomDebugStringConvertible {
 extension Schema: Equatable {
     public static func == (lhs: Schema, rhs: Schema) -> Bool {
         lhs.version == rhs.version
-            && lhs.encodingVersion == rhs.encodingVersion
             && lhs.entitiesByName == rhs.entitiesByName
             && lhs.polymorphicGroupsByIdentifier
                 == rhs.polymorphicGroupsByIdentifier
@@ -913,7 +907,6 @@ extension Schema: Equatable {
 extension Schema: Hashable {
     public func hash(into hasher: inout Hasher) {
         hasher.combine(version)
-        hasher.combine(encodingVersion)
         for name in entitiesByName.keys.sorted() {
             hasher.combine(name)
             hasher.combine(entitiesByName[name])
