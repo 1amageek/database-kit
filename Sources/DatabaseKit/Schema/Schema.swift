@@ -670,9 +670,25 @@ public final class Schema: Sendable {
         identifier: String,
         memberType: Member.Type
     ) -> [IndexDescriptor] {
+        polymorphicIndexDescriptors(
+            identifier: identifier,
+            memberTypeName: Member.persistableType
+        )
+    }
+
+    /// Get typed index descriptors for a runtime-resolved concrete member name.
+    ///
+    /// This is the type-erased counterpart of
+    /// `polymorphicIndexDescriptors(identifier:memberType:)`. Runtime dispatch
+    /// uses it after the schema has already validated group membership and
+    /// compiled member-specific field identities.
+    public func polymorphicIndexDescriptors(
+        identifier: String,
+        memberTypeName: String
+    ) -> [IndexDescriptor] {
         polymorphicIndexDescriptorsByIdentifierAndMemberName[
             identifier
-        ]?[Member.persistableType] ?? []
+        ]?[memberTypeName] ?? []
     }
 
     // MARK: - Index Access

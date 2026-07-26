@@ -214,9 +214,14 @@ struct CanonicalReadQueryIRTests {
             identifier: "IndexedCanonicalReadDocument",
             memberType: IndexedCanonicalReadReport.self
         )
+        let runtimeResolvedDescriptors = schema.polymorphicIndexDescriptors(
+            identifier: "IndexedCanonicalReadDocument",
+            memberTypeName: IndexedCanonicalReadArticle.persistableType
+        )
 
         let articleDescriptor = try #require(articleDescriptors.first)
         let reportDescriptor = try #require(reportDescriptors.first)
+        #expect(runtimeResolvedDescriptors == articleDescriptors)
         #expect(articleDescriptor.name == "IndexedCanonicalReadDocument_title")
         #expect(articleDescriptor.fieldNames == ["title"])
         #expect(articleDescriptor.kind.identifier == "scalar")

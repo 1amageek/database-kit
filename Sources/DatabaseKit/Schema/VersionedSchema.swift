@@ -9,7 +9,7 @@ import DatabaseTypes
 /// enum AppSchemaV1: VersionedSchema {
 ///     static let versionIdentifier = Schema.Version(1, 0, 0)
 ///     static var entities: [Schema.Entity] {
-///         get throws {
+///         get throws(SchemaEntityError) {
 ///             [try User.schemaEntity, try Order.schemaEntity]
 ///         }
 ///     }
@@ -34,7 +34,7 @@ import DatabaseTypes
 /// enum AppSchemaV2: VersionedSchema {
 ///     static let versionIdentifier = Schema.Version(2, 0, 0)
 ///     static var entities: [Schema.Entity] {
-///         get throws {
+///         get throws(SchemaEntityError) {
 ///             [try User.schemaEntity, try Order.schemaEntity]
 ///         }
 ///     }
