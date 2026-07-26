@@ -49,8 +49,14 @@ public struct RDFQuad: Sendable, Hashable {
         }
     }
 
-    public func validate() throws(RDFTermCodecError) {
-        try RDFTermCodec.validate(object, role: .object)
+    public func validate(
+        limits: RDFTermValidationLimits = .default
+    ) throws(RDFTermValidationError) {
+        try RDFTermValidation.validate(
+            object,
+            role: .object,
+            limits: limits
+        )
     }
 
 }
@@ -107,9 +113,11 @@ public struct RDFDataset: Sendable, Hashable {
         quads.filter { $0.graph == nil }.map { $0.triple }
     }
 
-    public func validate() throws(RDFTermCodecError) {
+    public func validate(
+        limits: RDFTermValidationLimits = .default
+    ) throws(RDFTermValidationError) {
         for quad in quads {
-            try quad.validate()
+            try quad.validate(limits: limits)
         }
     }
 }

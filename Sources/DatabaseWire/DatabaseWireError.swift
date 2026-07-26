@@ -1,7 +1,7 @@
 import DatabaseKit
 import DatabaseTypes
 
-/// Errors raised by DatabaseKit wire binary codecs.
+/// Errors raised by the canonical DatabaseWire representation.
 public enum DatabaseWireError: Error, Sendable, Equatable {
     case truncated
     case byteCountOverflow
@@ -74,7 +74,7 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidRDFLiteralAnnotation(UInt8)
     case invalidRDFDirection(UInt8)
     case invalidRDFDirectionValue(String)
-    case invalidCanonicalRDFTerm(RDFTermCodecError)
+    case invalidCanonicalRDFTerm(RDFTermWireError)
     case invalidSHACLPath(SHACLPathError)
     case invalidSHACLPathWireState
     case invalidPropertyPathNegatedSet

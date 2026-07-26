@@ -1,12 +1,12 @@
 import DatabaseTypes
 
 /// Formats and parses canonical XSD date and dateTime values without Foundation.
-public enum XSDDateTimeCodec {
-    public static func format(date: CivilDate) -> String {
+public enum XSDDateTimeFormat {
+    public static func string(from date: CivilDate) -> String {
         return formatDateUnchecked(date)
     }
 
-    public static func parseDate(_ value: String) -> CivilDate? {
+    public static func date(from value: String) -> CivilDate? {
         var scanner = XSDDateTimeScanner(value)
         guard let date = scanner.readDate(), scanner.isAtEnd else {
             return nil
@@ -14,15 +14,15 @@ public enum XSDDateTimeCodec {
         return date
     }
 
-    public static func format(
-        timestamp: Timestamp
-    ) throws(XSDDateTimeError) -> String {
+    public static func string(
+        from timestamp: Timestamp
+    ) throws(XSDDateTimeFormatError) -> String {
         let (days, secondOfDay) = splitUnixSeconds(
             timestamp.secondsSinceUnixEpoch
         )
         let civil = civilDate(fromDaysSinceUnixEpoch: days)
         guard let year = Int32(exactly: civil.year) else {
-            throw XSDDateTimeError.timestampOutOfSupportedYearRange
+            throw XSDDateTimeFormatError.timestampOutOfSupportedYearRange
         }
         let date: CivilDate
         do {
@@ -71,8 +71,8 @@ public enum XSDDateTimeCodec {
         }
     }
 
-    public static func parseTimestamp(
-        _ value: String
+    public static func timestamp(
+        from value: String
     ) -> Timestamp? {
         var scanner = XSDDateTimeScanner(value)
         guard let date = scanner.readDate(),

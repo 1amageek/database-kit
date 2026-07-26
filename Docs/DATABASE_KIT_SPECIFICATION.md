@@ -137,7 +137,7 @@ This includes:
 | Mutation | mutation statements, preconditions, and transaction intent |
 | Relationship | cardinality, relationship descriptors, and delete rules |
 | Index | scalar, aggregate, text, vector, geographic, rank, permutation, graph, and RDF index declarations |
-| Graph | RDF dataset meaning, graph names, ontology declarations, and SHACL shapes |
+| Graph | RDF dataset meaning, term-role and resource validation, graph names, ontology declarations, and SHACL shapes |
 | Validation | intrinsic structural and semantic validation of declarations |
 
 Index declarations contain the logical fields, kind, and parameters required
@@ -244,6 +244,20 @@ It does not own:
 Wire-specific encoding of a semantic value is owned by `DatabaseWire`.
 Validation or normalization intrinsic to the semantic value remains owned by
 `DatabaseKit`.
+
+RDF follows this boundary explicitly:
+
+```text
+DatabaseTypes.RDFTerm
+        │
+        ├── DatabaseKit.RDFTermValidation
+        └── DatabaseWire internal RDF term representation
+```
+
+`RDFTermValidation` checks semantic role, nesting depth, and term count without
+creating bytes. The standalone RDF binary reader, writer, measurement plan,
+fingerprint, and sink are internal details of `DatabaseWire`; they are not
+published as a general codec or reused as a storage-key format.
 
 The public Wire vocabulary uses a closed generic descriptor:
 
@@ -605,6 +619,11 @@ owns:
 - graph and SPARQL execution;
 - ontology and SHACL execution;
 - migrations, maintenance, algorithms, and jobs.
+
+Stable hashes for statistics and physical encodings for RDF storage keys are
+execution and persistence contracts owned by `database-framework`. They are
+not extensions published by `DatabaseKit`, even when they consume
+`FieldValue` or `RDFTerm`.
 
 `database-client` consumes `DatabaseKit` and `DatabaseWire`. It owns typed
 invocation, correlation, cancellation, timeout, pagination facades, and

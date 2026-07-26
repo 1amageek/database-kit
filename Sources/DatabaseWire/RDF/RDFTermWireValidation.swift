@@ -1,15 +1,16 @@
+import DatabaseKit
 import DatabaseTypes
 
 /// Proof produced by bounded validation of borrowed canonical RDF bytes.
-public struct RDFTermEncodingValidation: Sendable, Equatable {
-    public let kind: RDFTermKind
-    public let fingerprint: RDFTermEncodingFingerprint
-    public let objectCount: Int
-    public let maximumDepth: Int
+struct RDFTermWireValidation: Sendable, Equatable {
+    let kind: RDFTermKind
+    let fingerprint: RDFTermWireFingerprint
+    let objectCount: Int
+    let maximumDepth: Int
 
-    package init(
+    init(
         kind: RDFTermKind,
-        fingerprint: RDFTermEncodingFingerprint,
+        fingerprint: RDFTermWireFingerprint,
         objectCount: Int,
         maximumDepth: Int
     ) {

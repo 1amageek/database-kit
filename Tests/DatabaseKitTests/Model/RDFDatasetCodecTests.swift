@@ -238,10 +238,10 @@ struct RDFDatasetCodecTests {
             )
         ])
 
-        #expect(throws: RDFTermCodecError.self) {
+        #expect(throws: RDFTermValidationError.self) {
             _ = try NQuadsEncoder().encode(dataset)
         }
-        #expect(throws: RDFTermCodecError.self) {
+        #expect(throws: RDFTermValidationError.self) {
             _ = try TriGEncoder().encode(dataset)
         }
     }

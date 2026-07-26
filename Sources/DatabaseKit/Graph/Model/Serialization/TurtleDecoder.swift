@@ -89,7 +89,7 @@ public enum TurtleDecodingError: Error, Sendable, Equatable {
     case undefinedPrefix(String, line: Int)
     case invalidIRI(String, line: Int)
     case invalidLanguageTag(String, line: Int)
-    case invalidDataset(RDFTermCodecError)
+    case invalidDataset(RDFTermValidationError)
     case unsupportedRDFTerm(String)
     case invalidClassExpression(String)
     case invalidDataRange(String)

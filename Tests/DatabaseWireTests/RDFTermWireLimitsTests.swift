@@ -1,11 +1,12 @@
 import DatabaseKit
+@testable import DatabaseWire
 import Testing
 
-@Suite("RDF term codec limits")
-struct RDFTermCodecLimitsTests {
+@Suite("RDF term wire limits")
+struct RDFTermWireLimitsTests {
     @Test("Valid limits preserve their exact values")
     func validLimitsPreserveValues() throws {
-        let limits = try RDFTermCodecLimits(
+        let limits = try RDFTermWireLimits(
             maximumBytes: 1_024,
             maximumDepth: 8,
             maximumObjectCount: 256
@@ -23,19 +24,19 @@ struct RDFTermCodecLimitsTests {
                 -1,
                 8,
                 256,
-                RDFTermCodecLimitsError.negativeMaximumBytes(-1)
+                RDFTermWireLimitsError.negativeMaximumBytes(-1)
             ),
             (
                 1_024,
                 -1,
                 256,
-                RDFTermCodecLimitsError.negativeMaximumDepth(-1)
+                RDFTermWireLimitsError.negativeMaximumDepth(-1)
             ),
             (
                 1_024,
                 8,
                 0,
-                RDFTermCodecLimitsError.nonPositiveMaximumObjectCount(0)
+                RDFTermWireLimitsError.nonPositiveMaximumObjectCount(0)
             ),
         ]
     )
@@ -43,10 +44,10 @@ struct RDFTermCodecLimitsTests {
         maximumBytes: Int,
         maximumDepth: Int,
         maximumObjectCount: Int,
-        expectedError: RDFTermCodecLimitsError
+        expectedError: RDFTermWireLimitsError
     ) {
         #expect(throws: expectedError) {
-            try RDFTermCodecLimits(
+            try RDFTermWireLimits(
                 maximumBytes: maximumBytes,
                 maximumDepth: maximumDepth,
                 maximumObjectCount: maximumObjectCount

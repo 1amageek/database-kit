@@ -1,6 +1,6 @@
 import DatabaseTypes
 public enum SHACLRDFDecodingError: Error, Sendable, Equatable, CustomStringConvertible {
-    case invalidDataset(RDFTermCodecError)
+    case invalidDataset(RDFTermValidationError)
     case invalidPath(SHACLPathError)
     case missingProperty(subject: String, predicate: String)
     case invalidIRI(String)

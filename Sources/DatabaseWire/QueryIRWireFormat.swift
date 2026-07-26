@@ -1,7 +1,7 @@
 import DatabaseTypes
 import DatabaseKit
 
-/// Canonical binary codec for the Foundation-independent query intermediate representation.
+/// Canonical binary representation of the Foundation-independent query model.
 public enum QueryIRWireFormat {
     public static func encode(
         _ statement: QueryStatement,

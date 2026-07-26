@@ -1,10 +1,11 @@
 import DatabaseKit
 import DatabaseTypes
+@testable import DatabaseWire
 import Synchronization
 import Testing
 
-@Suite("RDF term codec")
-struct RDFTermCodecTests {
+@Suite("RDF term wire format")
+struct RDFTermWireFormatTests {
     @Test("canonical terms round-trip from one owned payload")
     func roundTrip() throws {
         let term = RDFTerm.tripleTerm(
@@ -16,15 +17,15 @@ struct RDFTermCodecTests {
             ))
         )
 
-        let bytes = try RDFTermCodec.encode(term)
+        let bytes = try RDFTermWireFormat.encode(term)
 
-        #expect(try RDFTermCodec.decode(bytes) == term)
+        #expect(try RDFTermWireFormat.decode(bytes) == term)
         #expect(bytes.count > 0)
     }
 
     @Test("the minimal zero-byte-free encoding is stable")
     func stableSpelling() throws {
-        let bytes = try RDFTermCodec.encode(.iri(fixtureIRI("u:")))
+        let bytes = try RDFTermWireFormat.encode(.iri(fixtureIRI("u:")))
 
         #expect(bytes == ByteString([2, 3, 0x75, 0x3A]))
         #expect(bytes.allSatisfy { $0 != 0 })
@@ -35,9 +36,9 @@ struct RDFTermCodecTests {
         let term = RDFTerm.iri(
             fixtureIRI("urn:example:\u{202A}value\u{202C}")
         )
-        let bytes = try RDFTermCodec.encode(term)
+        let bytes = try RDFTermWireFormat.encode(term)
 
-        #expect(try RDFTermCodec.decode(bytes) == term)
+        #expect(try RDFTermWireFormat.decode(bytes) == term)
     }
 
     @Test("all term variants remain zero-byte-free and embedded NUL round-trips")
@@ -67,37 +68,37 @@ struct RDFTermCodecTests {
         ]
 
         for term in terms {
-            let bytes = try RDFTermCodec.encode(term)
+            let bytes = try RDFTermWireFormat.encode(term)
             #expect(bytes.allSatisfy { $0 != 0 })
-            #expect(try RDFTermCodec.decode(bytes) == term)
+            #expect(try RDFTermWireFormat.decode(bytes) == term)
         }
     }
 
     @Test("non-canonical varints and malformed values are rejected")
     func malformedValues() {
         #expect(
-            throws: RDFTermCodecError.nonCanonicalVarint
+            throws: RDFTermWireError.nonCanonicalVarint
         ) {
-            _ = try RDFTermCodec.decode(
+            _ = try RDFTermWireFormat.decode(
                 ByteString([2, 0x83, 0x00, 0x75, 0x3A])
             )
         }
         #expect(
-            throws: RDFTermCodecError.invalidIRI(.missingScheme)
+            throws: RDFTermWireError.invalidIRI(.missingScheme)
         ) {
-            _ = try RDFTermCodec.decode(
+            _ = try RDFTermWireFormat.decode(
                 ByteString([2, 4, 0x62, 0x61, 0x64])
             )
         }
-        #expect(throws: RDFTermCodecError.invalidUTF8) {
-            _ = try RDFTermCodec.decode(
+        #expect(throws: RDFTermWireError.invalidUTF8) {
+            _ = try RDFTermWireFormat.decode(
                 ByteString([2, 2, 0xFF])
             )
         }
         #expect(
-            throws: RDFTermCodecError.nonCanonicalStringEncoding
+            throws: RDFTermWireError.nonCanonicalStringEncoding
         ) {
-            _ = try RDFTermCodec.decode(
+            _ = try RDFTermWireFormat.decode(
                 ByteString([2, 2, 0])
             )
         }
@@ -106,12 +107,12 @@ struct RDFTermCodecTests {
     @Test("encoding enforces all resource limits")
     func encodeValidation() throws {
         #expect(
-            throws: RDFTermCodecError.maximumBytesExceeded(
+            throws: RDFTermWireError.maximumBytesExceeded(
                 actual: 4,
                 maximum: 3
             )
         ) {
-            _ = try RDFTermCodec.encode(
+            _ = try RDFTermWireFormat.encode(
                 .iri(fixtureIRI("u:")),
                 limits: .init(maximumBytes: 3)
             )
@@ -123,12 +124,12 @@ struct RDFTermCodecTests {
             object: .iri(fixtureIRI("urn:object"))
         )
         #expect(
-            throws: RDFTermCodecError.maximumDepthExceeded(
+            throws: RDFTermWireError.maximumDepthExceeded(
                 actual: 1,
                 maximum: 0
             )
         ) {
-            _ = try RDFTermCodec.encode(
+            _ = try RDFTermWireFormat.encode(
                 nested,
                 limits: .init(maximumDepth: 0)
             )
@@ -137,34 +138,34 @@ struct RDFTermCodecTests {
 
     @Test("bytes-only validation enforces outer RDF roles")
     func bytesOnlyRoleValidation() throws {
-        let iri = try RDFTermCodec.encode(
+        let iri = try RDFTermWireFormat.encode(
             .iri(fixtureIRI("urn:predicate"))
         )
-        let literal = try RDFTermCodec.encode(
+        let literal = try RDFTermWireFormat.encode(
             .literal(RDFLiteral(
                 lexicalForm: "value",
                 datatype: .xsdString
             ))
         )
 
-        try RDFTermCodec.validate(iri, role: .predicate)
-        try RDFTermCodec.validate(literal, role: .object)
+        try RDFTermWireFormat.validate(iri, role: .predicate)
+        try RDFTermWireFormat.validate(literal, role: .object)
         #expect(
-            throws: RDFTermCodecError.invalidRole(
+            throws: RDFTermWireError.invalidRole(
                 expected: .subject,
                 actual: .literal
             )
         ) {
-            try RDFTermCodec.validate(literal, role: .subject)
+            try RDFTermWireFormat.validate(literal, role: .subject)
         }
         #expect(
-            throws: RDFTermCodecError.invalidRole(
+            throws: RDFTermWireError.invalidRole(
                 expected: .predicate,
                 actual: .blankNode
             )
         ) {
-            try RDFTermCodec.validate(
-                try RDFTermCodec.encode(
+            try RDFTermWireFormat.validate(
+                try RDFTermWireFormat.encode(
                     .blankNode(fixtureBlankNode("node"))
                 ),
                 role: .predicate
@@ -182,9 +183,9 @@ struct RDFTermCodecTests {
         ])
 
         #expect(
-            throws: RDFTermCodecError.nonCanonicalLanguageTag
+            throws: RDFTermWireError.nonCanonicalLanguageTag
         ) {
-            try RDFTermCodec.validate(uppercaseLanguageLiteral)
+            try RDFTermWireFormat.validate(uppercaseLanguageLiteral)
         }
     }
 
@@ -198,10 +199,10 @@ struct RDFTermCodecTests {
                 language: try RDFLanguageTag("ja")
             ))
         )
-        let encoded = try RDFTermCodec.encode(term)
+        let encoded = try RDFTermWireFormat.encode(term)
         let owner = BorrowCountingOwner(bytes: encoded.copyBytes())
 
-        try RDFTermCodec.validate(
+        try RDFTermWireFormat.validate(
             ByteString(retaining: owner),
             role: .object
         )
@@ -219,12 +220,12 @@ struct RDFTermCodecTests {
                 language: try RDFLanguageTag("ja")
             ))
         )
-        let plan = try RDFTermCodec.encodingPlan(term)
+        let plan = try RDFTermWireFormat.encodingPlan(term)
         var sink = CollectingRDFEncodingSink()
 
-        try RDFTermCodec.encode(plan, into: &sink)
+        try RDFTermWireFormat.encode(plan, into: &sink)
 
-        let owned = try RDFTermCodec.encode(term)
+        let owned = try RDFTermWireFormat.encode(term)
         #expect(plan.byteCount == owned.count)
         #expect(ByteString(sink.bytes) == owned)
     }
@@ -255,37 +256,37 @@ struct RDFTermCodecTests {
             predicate: fixturePredicate("urn:predicate"),
             object: .iri(fixtureIRI("urn:object"))
         )
-        let encoded = try RDFTermCodec.encode(nested)
+        let encoded = try RDFTermWireFormat.encode(nested)
 
         #expect(
-            throws: RDFTermCodecError.maximumDepthExceeded(
+            throws: RDFTermWireError.maximumDepthExceeded(
                 actual: 1,
                 maximum: 0
             )
         ) {
-            try RDFTermCodec.validate(
+            try RDFTermWireFormat.validate(
                 encoded,
                 limits: .init(maximumDepth: 0)
             )
         }
         #expect(
-            throws: RDFTermCodecError.maximumObjectCountExceeded(
+            throws: RDFTermWireError.maximumObjectCountExceeded(
                 actual: 4,
                 maximum: 3
             )
         ) {
-            try RDFTermCodec.validate(
+            try RDFTermWireFormat.validate(
                 encoded,
                 limits: .init(maximumObjectCount: 3)
             )
         }
         #expect(
-            throws: RDFTermCodecError.maximumBytesExceeded(
+            throws: RDFTermWireError.maximumBytesExceeded(
                 actual: encoded.count,
                 maximum: encoded.count - 1
             )
         ) {
-            try RDFTermCodec.validate(
+            try RDFTermWireFormat.validate(
                 encoded,
                 limits: .init(maximumBytes: encoded.count - 1)
             )
@@ -293,8 +294,8 @@ struct RDFTermCodecTests {
 
         var trailing = encoded.copyBytes()
         trailing.append(1)
-        #expect(throws: RDFTermCodecError.trailingBytes) {
-            try RDFTermCodec.validate(ByteString(trailing))
+        #expect(throws: RDFTermWireError.trailingBytes) {
+            try RDFTermWireFormat.validate(ByteString(trailing))
         }
     }
 
@@ -313,19 +314,19 @@ struct RDFTermCodecTests {
             2, 4, 0x75, 0x3A, 0x6F,
         ])
 
-        #expect(throws: RDFTermCodecError.invalidTripleSubject) {
-            try RDFTermCodec.validate(invalidSubject)
+        #expect(throws: RDFTermWireError.invalidTripleSubject) {
+            try RDFTermWireFormat.validate(invalidSubject)
         }
-        #expect(throws: RDFTermCodecError.invalidTriplePredicate) {
-            try RDFTermCodec.validate(invalidPredicate)
+        #expect(throws: RDFTermWireError.invalidTriplePredicate) {
+            try RDFTermWireFormat.validate(invalidPredicate)
         }
     }
 
     private func validationError(
         for bytes: ByteString
-    ) -> RDFTermCodecError? {
+    ) -> RDFTermWireError? {
         do {
-            try RDFTermCodec.validate(bytes)
+            try RDFTermWireFormat.validate(bytes)
             return nil
         } catch let error {
             return error
@@ -334,9 +335,9 @@ struct RDFTermCodecTests {
 
     private func decodingError(
         for bytes: ByteString
-    ) -> RDFTermCodecError? {
+    ) -> RDFTermWireError? {
         do {
-            _ = try RDFTermCodec.decode(bytes)
+            _ = try RDFTermWireFormat.decode(bytes)
             return nil
         } catch let error {
             return error
@@ -366,7 +367,7 @@ struct RDFTermCodecTests {
     }
 }
 
-private struct CollectingRDFEncodingSink: RDFTermEncodingSink {
+private struct CollectingRDFEncodingSink: RDFTermWireSink {
     var bytes: [UInt8] = []
 
     mutating func write(_ byte: UInt8) {

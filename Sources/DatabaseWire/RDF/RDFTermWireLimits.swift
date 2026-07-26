@@ -1,13 +1,13 @@
-public struct RDFTermCodecLimits: Sendable, Equatable {
-    public let maximumBytes: Int
-    public let maximumDepth: Int
-    public let maximumObjectCount: Int
+struct RDFTermWireLimits: Sendable, Equatable {
+    let maximumBytes: Int
+    let maximumDepth: Int
+    let maximumObjectCount: Int
 
-    public init(
+    init(
         maximumBytes: Int = 65_536,
         maximumDepth: Int = 32,
         maximumObjectCount: Int = 65_536
-    ) throws(RDFTermCodecLimitsError) {
+    ) throws(RDFTermWireLimitsError) {
         guard maximumBytes >= 0 else {
             throw .negativeMaximumBytes(maximumBytes)
         }
@@ -22,7 +22,7 @@ public struct RDFTermCodecLimits: Sendable, Equatable {
         self.maximumObjectCount = maximumObjectCount
     }
 
-    package init(
+    init(
         validatedMaximumBytes maximumBytes: Int,
         maximumDepth: Int,
         maximumObjectCount: Int
@@ -32,7 +32,7 @@ public struct RDFTermCodecLimits: Sendable, Equatable {
         self.maximumObjectCount = maximumObjectCount
     }
 
-    public static let `default` = Self(
+    static let `default` = Self(
         validatedMaximumBytes: 65_536,
         maximumDepth: 32,
         maximumObjectCount: 65_536

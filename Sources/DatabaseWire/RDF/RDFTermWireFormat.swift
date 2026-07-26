@@ -1,18 +1,19 @@
+import DatabaseKit
 import DatabaseTypes
 
-/// Canonical, bounded, zero-byte-free encoding for RDF terms stored in database keys.
+/// Canonical, bounded encoding for RDF terms carried by DatabaseWire.
 ///
 /// The returned `ByteString` owns exactly one final payload allocation.
 /// Decoding borrows slices from that owner until an RDF string must be owned.
-/// The zero-byte-free representation lets tuple decoders retain RDF key
-/// components as views instead of allocating an unescaped buffer.
-public enum RDFTermCodec {
+/// The representation is private to DatabaseWire and is not a persistence or
+/// storage-key contract.
+enum RDFTermWireFormat {
     /// Validates a semantic RDF term without allocating an encoded payload.
-    public static func validate(
+    static func validate(
         _ term: RDFTerm,
         role: RDFTermRole = .term,
-        limits: RDFTermCodecLimits = .default
-    ) throws(RDFTermCodecError) {
+        limits: RDFTermWireLimits = .default
+    ) throws(RDFTermWireError) {
         try validate(term.rdfTermKind, for: role)
         var measurement = TermEncoder(
             sink: MeasurementSink(),
@@ -24,11 +25,11 @@ public enum RDFTermCodec {
 
     /// Validates canonical bytes without materializing RDF terms or strings.
     @discardableResult
-    public static func validate(
+    static func validate(
         _ bytes: ByteString,
         role: RDFTermRole = .term,
-        limits: RDFTermCodecLimits = .default
-    ) throws(RDFTermCodecError) -> RDFTermKind {
+        limits: RDFTermWireLimits = .default
+    ) throws(RDFTermWireError) -> RDFTermKind {
         try withValidatedBytes(
             bytes,
             role: role,
@@ -38,37 +39,37 @@ public enum RDFTermCodec {
         }
     }
 
-    /// Validates and lends the same canonical storage in one owner borrow.
+    /// Validates and lends the same wire payload in one owner borrow.
     ///
     /// `buffer` is valid only for the synchronous borrow and must not escape.
-    /// The borrow closure is nonthrowing so the codec retains a precise typed-error
-    /// contract; callers can return their own `Result` when needed.
-    public static func withValidatedBytes<BodyResult>(
+    /// The borrow closure is nonthrowing so this operation retains a precise
+    /// typed-error contract; callers can return their own `Result` when needed.
+    static func withValidatedBytes<BodyResult>(
         _ bytes: ByteString,
         role: RDFTermRole = .term,
-        limits: RDFTermCodecLimits = .default,
+        limits: RDFTermWireLimits = .default,
         _ body: (
             UnsafeRawBufferPointer,
-            RDFTermEncodingValidation
+            RDFTermWireValidation
         ) -> BodyResult
-    ) throws(RDFTermCodecError) -> BodyResult {
+    ) throws(RDFTermWireError) -> BodyResult {
         guard bytes.count <= limits.maximumBytes else {
             throw .maximumBytesExceeded(
                 actual: bytes.count,
                 maximum: limits.maximumBytes
             )
         }
-        let result: Result<BodyResult, RDFTermCodecError>
+        let result: Result<BodyResult, RDFTermWireError>
             = bytes.withUnsafeBytes { buffer in
-                do throws(RDFTermCodecError) {
+                do throws(RDFTermWireError) {
                     let metrics = try validate(
                         buffer,
                         role: role,
                         limits: limits
                     )
-                    let validation = RDFTermEncodingValidation(
+                    let validation = RDFTermWireValidation(
                         kind: metrics.kind,
-                        fingerprint: RDFTermEncodingFingerprint(buffer),
+                        fingerprint: RDFTermWireFingerprint(buffer),
                         objectCount: metrics.objectCount,
                         maximumDepth: metrics.maximumDepth
                     )
@@ -85,34 +86,34 @@ public enum RDFTermCodec {
         }
     }
 
-    public static func encode(
+    static func encode(
         _ term: RDFTerm,
         role: RDFTermRole = .term,
-        limits: RDFTermCodecLimits = .default
-    ) throws(RDFTermCodecError) -> ByteString {
+        limits: RDFTermWireLimits = .default
+    ) throws(RDFTermWireError) -> ByteString {
         let plan = try encodingPlan(term, role: role, limits: limits)
 
         return try ByteString.copying(count: plan.byteCount) {
-            (output: UnsafeMutableRawBufferPointer) throws(RDFTermCodecError) in
+            (output: UnsafeMutableRawBufferPointer) throws(RDFTermWireError) in
             try encode(plan, into: output)
         }
     }
 
     /// Returns the exact canonical byte count without allocating a payload.
-    public static func encodedByteCount(
+    static func encodedByteCount(
         _ term: RDFTerm,
         role: RDFTermRole = .term,
-        limits: RDFTermCodecLimits = .default
-    ) throws(RDFTermCodecError) -> Int {
+        limits: RDFTermWireLimits = .default
+    ) throws(RDFTermWireError) -> Int {
         try encodingPlan(term, role: role, limits: limits).byteCount
     }
 
     /// Measures and validates a term once for direct initialization of final storage.
-    public static func encodingPlan(
+    static func encodingPlan(
         _ term: RDFTerm,
         role: RDFTermRole = .term,
-        limits: RDFTermCodecLimits = .default
-    ) throws(RDFTermCodecError) -> RDFTermEncodingPlan {
+        limits: RDFTermWireLimits = .default
+    ) throws(RDFTermWireError) -> RDFTermWireEncoding {
         try validate(term.rdfTermKind, for: role)
         var measurement = TermEncoder(
             sink: MeasurementSink(),
@@ -127,7 +128,7 @@ public enum RDFTermCodec {
                 maximum: limits.maximumBytes
             )
         }
-        return RDFTermEncodingPlan(
+        return RDFTermWireEncoding(
             term: term,
             limits: limits,
             byteCount: byteCount,
@@ -137,10 +138,10 @@ public enum RDFTermCodec {
     }
 
     /// Initializes exactly the storage measured by `encodingPlan`.
-    package static func encode(
-        _ plan: RDFTermEncodingPlan,
+    static func encode(
+        _ plan: RDFTermWireEncoding,
         into output: UnsafeMutableRawBufferPointer
-    ) throws(RDFTermCodecError) {
+    ) throws(RDFTermWireError) {
         guard output.count == plan.byteCount else {
             throw .byteCountOverflow
         }
@@ -153,10 +154,10 @@ public enum RDFTermCodec {
 
     /// Streams a measured canonical representation directly into a synchronous
     /// destination without allocating an intermediate RDF payload.
-    public static func encode<Sink: RDFTermEncodingSink>(
-        _ plan: RDFTermEncodingPlan,
+    static func encode<Sink: RDFTermWireSink>(
+        _ plan: RDFTermWireEncoding,
         into sink: inout Sink
-    ) throws(RDFTermCodecError) {
+    ) throws(RDFTermWireError) {
         var encoder = TermEncoder(
             sink: sink,
             emitsBytes: true,
@@ -169,11 +170,11 @@ public enum RDFTermCodec {
         sink = encoder.sink
     }
 
-    public static func decode(
+    static func decode(
         _ bytes: ByteString,
         role: RDFTermRole = .term,
-        limits: RDFTermCodecLimits = .default
-    ) throws(RDFTermCodecError) -> RDFTerm {
+        limits: RDFTermWireLimits = .default
+    ) throws(RDFTermWireError) -> RDFTerm {
         try decodeWithMetrics(
             bytes,
             role: role,
@@ -181,27 +182,27 @@ public enum RDFTermCodec {
         ).term
     }
 
-    public static func decodeWithMetrics(
+    static func decodeWithMetrics(
         _ bytes: ByteString,
         role: RDFTermRole = .term,
-        limits: RDFTermCodecLimits = .default
-    ) throws(RDFTermCodecError) -> RDFTermDecodingResult {
+        limits: RDFTermWireLimits = .default
+    ) throws(RDFTermWireError) -> RDFTermWireDecoding {
         guard bytes.count <= limits.maximumBytes else {
             throw .maximumBytesExceeded(
                 actual: bytes.count,
                 maximum: limits.maximumBytes
             )
         }
-        let result: Result<RDFTermDecodingResult, RDFTermCodecError>
+        let result: Result<RDFTermWireDecoding, RDFTermWireError>
             = bytes.withUnsafeBytes { buffer in
-                do throws(RDFTermCodecError) {
+                do throws(RDFTermWireError) {
                     var reader = TermReader(bytes: buffer, limits: limits)
                     let term = try reader.readTerm(depth: 0)
                     guard reader.isAtEnd else {
                         return .failure(.trailingBytes)
                     }
                     try validate(term.rdfTermKind, for: role)
-                    return .success(RDFTermDecodingResult(
+                    return .success(RDFTermWireDecoding(
                         term: term,
                         objectCount: reader.objectCount,
                         maximumDepth: reader.maximumDepth
@@ -221,19 +222,8 @@ public enum RDFTermCodec {
     private static func validate(
         _ kind: RDFTermKind,
         for role: RDFTermRole
-    ) throws(RDFTermCodecError) {
-        let isValid: Bool
-        switch role {
-        case .term:
-            isValid = true
-        case .subject, .graphName:
-            isValid = kind == .iri || kind == .blankNode
-        case .predicate:
-            isValid = kind == .iri
-        case .object:
-            isValid = true
-        }
-        guard isValid else {
+    ) throws(RDFTermWireError) {
+        guard kind.isValid(for: role) else {
             throw .invalidRole(expected: role, actual: kind)
         }
     }
@@ -241,13 +231,13 @@ public enum RDFTermCodec {
     private static func validate(
         _ buffer: UnsafeRawBufferPointer,
         role: RDFTermRole,
-        limits: RDFTermCodecLimits
-    ) throws(RDFTermCodecError) -> (
+        limits: RDFTermWireLimits
+    ) throws(RDFTermWireError) -> (
         kind: RDFTermKind,
         objectCount: Int,
         maximumDepth: Int
     ) {
-        var validator = RDFTermEncodingValidator(
+        var validator = RDFTermWireValidator(
             bytes: buffer,
             limits: limits
         )
@@ -267,13 +257,13 @@ public enum RDFTermCodec {
         case byte(UInt8)
     }
 
-    private struct MeasurementSink: RDFTermEncodingSink {
+    private struct MeasurementSink: RDFTermWireSink {
         mutating func write(_ byte: UInt8) {}
 
         mutating func write(_ bytes: UnsafeRawBufferPointer) {}
     }
 
-    private struct DestinationSink: RDFTermEncodingSink {
+    private struct DestinationSink: RDFTermWireSink {
         let output: UnsafeMutableRawBufferPointer
         var offset = 0
 
@@ -291,17 +281,17 @@ public enum RDFTermCodec {
         }
     }
 
-    private struct TermEncoder<Sink: RDFTermEncodingSink> {
+    private struct TermEncoder<Sink: RDFTermWireSink> {
         var sink: Sink
         let emitsBytes: Bool
-        let limits: RDFTermCodecLimits
+        let limits: RDFTermWireLimits
         var offset = 0
         var objectCount = 0
         var maximumDepth = 0
 
         mutating func encode(
             _ root: RDFTerm
-        ) throws(RDFTermCodecError) {
+        ) throws(RDFTermWireError) {
             var encodingSteps: [EncodingStep] = [.term(root, depth: 0)]
             while let encodingStep = encodingSteps.popLast() {
                 switch encodingStep {
@@ -355,7 +345,7 @@ public enum RDFTermCodec {
 
         private mutating func registerTerm(
             at depth: Int
-        ) throws(RDFTermCodecError) {
+        ) throws(RDFTermWireError) {
             guard depth <= limits.maximumDepth else {
                 throw .maximumDepthExceeded(
                     actual: depth,
@@ -376,7 +366,7 @@ public enum RDFTermCodec {
 
         private mutating func appendString(
             _ value: String
-        ) throws(RDFTermCodecError) {
+        ) throws(RDFTermWireError) {
             var encodedByteCount = 0
             var containsNUL = false
             for byte in value.utf8 {
@@ -415,7 +405,7 @@ public enum RDFTermCodec {
 
         private mutating func appendVarint(
             _ value: UInt64
-        ) throws(RDFTermCodecError) {
+        ) throws(RDFTermWireError) {
             var remaining = value
             while remaining >= 0x80 {
                 try append(UInt8(remaining & 0x7F) | 0x80)
@@ -426,7 +416,7 @@ public enum RDFTermCodec {
 
         private mutating func append(
             _ byte: UInt8
-        ) throws(RDFTermCodecError) {
+        ) throws(RDFTermWireError) {
             try reserve(1)
             if emitsBytes {
                 sink.write(byte)
@@ -435,7 +425,7 @@ public enum RDFTermCodec {
 
         private mutating func reserve(
             _ count: Int
-        ) throws(RDFTermCodecError) {
+        ) throws(RDFTermWireError) {
             let (nextOffset, overflow) = offset.addingReportingOverflow(count)
             guard !overflow, count >= 0 else { throw .byteCountOverflow }
             guard nextOffset <= limits.maximumBytes else {
@@ -450,7 +440,7 @@ public enum RDFTermCodec {
 
     private struct TermReader {
         let bytes: UnsafeRawBufferPointer
-        let limits: RDFTermCodecLimits
+        let limits: RDFTermWireLimits
         var offset = 0
         var objectCount = 0
         var maximumDepth = 0
@@ -459,7 +449,7 @@ public enum RDFTermCodec {
 
         mutating func readTerm(
             depth: Int
-        ) throws(RDFTermCodecError) -> RDFTerm {
+        ) throws(RDFTermWireError) -> RDFTerm {
             try registerTerm(at: depth)
             switch try readByte() {
             case 1:
@@ -508,7 +498,7 @@ public enum RDFTermCodec {
         }
 
         private mutating func readLiteral(
-        ) throws(RDFTermCodecError) -> RDFLiteral {
+        ) throws(RDFTermWireError) -> RDFLiteral {
             let lexicalForm = try readString()
             switch try readByte() {
             case 1:
@@ -549,7 +539,7 @@ public enum RDFTermCodec {
         }
 
         private mutating func readLanguageTag(
-        ) throws(RDFTermCodecError) -> RDFLanguageTag {
+        ) throws(RDFTermWireError) -> RDFLanguageTag {
             let rawLanguage = try readString()
             let language: RDFLanguageTag
             do {
@@ -564,7 +554,7 @@ public enum RDFTermCodec {
         }
 
         private mutating func readString(
-        ) throws(RDFTermCodecError) -> String {
+        ) throws(RDFTermWireError) -> String {
             let storedByteCount = try readCount()
             guard storedByteCount > 0 else {
                 throw .nonCanonicalStringEncoding
@@ -597,7 +587,7 @@ public enum RDFTermCodec {
             }
 
             guard escapedZeroCount > 0 else {
-                guard let value = RDFTextDecoder.decode(encoded) else {
+                guard let value = RDFWireTextDecoder.decode(encoded) else {
                     throw .invalidUTF8
                 }
                 return value
@@ -620,14 +610,14 @@ public enum RDFTermCodec {
                     destination += 1
                 }
             }
-            guard let value = RDFTextDecoder.decode(decoded) else {
+            guard let value = RDFWireTextDecoder.decode(decoded) else {
                 throw .invalidUTF8
             }
             return value
         }
 
         private mutating func readCount(
-        ) throws(RDFTermCodecError) -> Int {
+        ) throws(RDFTermWireError) -> Int {
             var value: UInt64 = 0
             for byteIndex in 0..<10 {
                 let byte = try readByte()
@@ -649,7 +639,7 @@ public enum RDFTermCodec {
         }
 
         private mutating func readByte(
-        ) throws(RDFTermCodecError) -> UInt8 {
+        ) throws(RDFTermWireError) -> UInt8 {
             guard offset < bytes.count else { throw .truncated }
             let byte = bytes[offset]
             offset += 1
@@ -658,7 +648,7 @@ public enum RDFTermCodec {
 
         private mutating func registerTerm(
             at depth: Int
-        ) throws(RDFTermCodecError) {
+        ) throws(RDFTermWireError) {
             guard depth <= limits.maximumDepth else {
                 throw .maximumDepthExceeded(
                     actual: depth,
@@ -677,16 +667,4 @@ public enum RDFTermCodec {
             maximumDepth = max(maximumDepth, depth)
         }
     }
-}
-
-private extension RDFTerm {
-    var rdfTermKind: RDFTermKind {
-        switch self {
-        case .blankNode: .blankNode
-        case .iri: .iri
-        case .literal: .literal
-        case .tripleTerm: .tripleTerm
-        }
-    }
-
 }

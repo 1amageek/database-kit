@@ -129,7 +129,8 @@ struct DatabaseWireWriter {
     ///
     /// The buffer passed to `consume` is valid only until that call returns.
     /// The consumer must not retain the pointer. This internal primitive is
-    /// intentionally limited to canonical codecs that never back-patch output.
+    /// intentionally limited to canonical representations that never
+    /// back-patch output.
     public static func emit<DestinationFailure: Error>(
         limits: DatabaseWireLimits,
         prepare: (Int) throws(DestinationFailure) -> Void,
@@ -450,7 +451,7 @@ struct DatabaseWireWriter {
     ) throws(DatabaseWireError) {
         if case .borrowed = destination {
             // Streaming output cannot be back-patched. Canonical streaming
-            // codecs must write known lengths before emitting their payload.
+            // writers must know lengths before emitting their payload.
             throw .invalidQueryIRWireState
         }
         try writeBackpatchedLengthPrefixed(encode)
@@ -512,17 +513,17 @@ struct DatabaseWireWriter {
             )
         }
         let remainingDepth = limits.maximumNestingDepth - nestingDepth
-        let codecLimits = RDFTermCodecLimits(
+        let rdfLimits = RDFTermWireLimits(
             validatedMaximumBytes: limits.maximumByteStringBytes,
             maximumDepth: remainingDepth,
             maximumObjectCount: remainingObjectCount
         )
-        let plan: RDFTermEncodingPlan
+        let plan: RDFTermWireEncoding
         do {
-            plan = try RDFTermCodec.encodingPlan(
+            plan = try RDFTermWireFormat.encodingPlan(
                 term,
                 role: role,
-                limits: codecLimits
+                limits: rdfLimits
             )
         } catch let error {
             throw mapCanonicalRDFTermError(error)
@@ -536,14 +537,14 @@ struct DatabaseWireWriter {
         }
 
         do {
-            try RDFTermCodec.encode(plan, into: &self)
+            try RDFTermWireFormat.encode(plan, into: &self)
         } catch let error {
             throw mapCanonicalRDFTermError(error)
         }
     }
 
     private func mapCanonicalRDFTermError(
-        _ error: RDFTermCodecError
+        _ error: RDFTermWireError
     ) -> DatabaseWireError {
         switch error {
         case .maximumBytesExceeded(let actual, _):
@@ -643,7 +644,7 @@ struct DatabaseWireWriter {
     }
 }
 
-extension DatabaseWireWriter: RDFTermEncodingSink {
+extension DatabaseWireWriter: RDFTermWireSink {
     public mutating func write(_ byte: UInt8) {
         appendByte(byte)
     }

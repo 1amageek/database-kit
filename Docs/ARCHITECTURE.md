@@ -175,6 +175,13 @@ encoding first measures the exact output, then writes directly into one final
 lifetime ends when the consumer call returns. Decoder state inconsistencies are
 typed `DatabaseWireError` failures rather than traps.
 
+RDF term-role, nesting-depth, and term-count validation is a semantic
+`DatabaseKit` contract and does not allocate a binary representation.
+`DatabaseWire` owns its private measured RDF representation and embeds it
+directly into the final frame. Physical RDF storage-key encoding and stable
+hashing for execution statistics are separate `database-framework`
+responsibilities.
+
 ## Version 1 Contract
 
 There is one protocol version and one canonical representation. Version 1 does

@@ -11,7 +11,7 @@ public enum RDFSyntaxError: Error, Sendable, Equatable, CustomStringConvertible 
     case undefinedPrefix(String, line: Int)
     case invalidTerm(String, line: Int)
     case invalidQuad(String, line: Int)
-    case invalidDataset(RDFTermCodecError)
+    case invalidDataset(RDFTermValidationError)
 
     public var description: String {
         switch self {

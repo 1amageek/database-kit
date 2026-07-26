@@ -600,6 +600,7 @@ The database-kit-owned production paths implement the completed contract:
 |---|---|
 | Bytes | Canonical `ByteString` with immutable owner retention and constant-time slices |
 | Wire API | Closed DatabaseWire-provided operation descriptors and internal directional encoding |
+| RDF terms | Allocation-free semantic validation in `DatabaseKit`; private measured encoding writes directly into the final `DatabaseWire` frame |
 | Query and RDF results | Validated owner-retaining pages with on-demand element materialization |
 | Algorithm, ontology, SHACL, and maintenance results | The same owner-retaining page contract for every bulk result family |
 | Job results | Exact-size result pages, bounded chunk writes, and incremental digest |

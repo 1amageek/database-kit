@@ -10,11 +10,11 @@ public enum OWLRDFLexicalForm {
 
     public static func dateTime(
         _ value: Timestamp
-    ) throws(XSDDateTimeError) -> String {
-        try XSDDateTimeCodec.format(timestamp: value)
+    ) throws(XSDDateTimeFormatError) -> String {
+        try XSDDateTimeFormat.string(from: value)
     }
 
     public static func date(_ value: CivilDate) -> String {
-        XSDDateTimeCodec.format(date: value)
+        XSDDateTimeFormat.string(from: value)
     }
 }

@@ -5,12 +5,12 @@ import DatabaseTypes
 /// A fingerprint only selects a cache bucket. Callers must compare canonical
 /// bytes before treating two values as equal because hash collisions remain
 /// possible by definition.
-public struct RDFTermEncodingFingerprint: Sendable, Hashable, Equatable {
-    public let high: UInt64
-    public let low: UInt64
-    public let byteCount: Int
+struct RDFTermWireFingerprint: Sendable, Hashable, Equatable {
+    let high: UInt64
+    let low: UInt64
+    let byteCount: Int
 
-    package init(_ bytes: UnsafeRawBufferPointer) {
+    init(_ bytes: UnsafeRawBufferPointer) {
         var high: UInt64 = 0xCBF2_9CE4_8422_2325
         var low: UInt64 = 0x9E37_79B1_85EB_CA87
         for byte in bytes {

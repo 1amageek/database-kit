@@ -6,7 +6,7 @@ public enum OWLProjectionError: Error, Sendable, Equatable, CustomStringConverti
     case invalidPropertyIRI(String, RDFIRIError)
     case invalidVocabularyIRI(String, RDFIRIError)
     case dataPropertyRequiresLiteral
-    case invalidDateTime(XSDDateTimeError)
+    case invalidDateTime(XSDDateTimeFormatError)
 
     public var description: String {
         switch self {

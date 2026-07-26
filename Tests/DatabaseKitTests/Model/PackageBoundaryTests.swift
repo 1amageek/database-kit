@@ -96,11 +96,13 @@ struct PackageBoundaryTests {
         )
         let forbiddenDeclarations: Set<String> = [
             "AlternativePlan",
+            "CanonicalFieldValueHash",
             "ChangeType",
             "CollectionStatistics",
             "DiffError",
             "DiffOptions",
             "FieldChange",
+            "FieldValueStableHash",
             "GraphIndexScanPlanner",
             "HyperLogLog",
             "HyperLogLogError",
@@ -169,7 +171,9 @@ struct PackageBoundaryTests {
             "QueryIRWireCodec",
             "QueryParameterValue",
             "RDFQuadValue",
+            "RDFTermCodec",
             "ServiceEnvelope",
+            "XSDDateTimeCodec",
         ]
 
         var violations: [String] = []

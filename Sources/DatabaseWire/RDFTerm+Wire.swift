@@ -16,13 +16,13 @@ extension DatabaseWireReader {
         role: RDFTermRole
     ) throws(DatabaseWireError) -> RDFTerm {
         let bytes = try readBytes()
-        let codecLimits = try remainingRDFTermLimits()
-        let result: RDFTermDecodingResult
+        let rdfLimits = try remainingRDFTermLimits()
+        let result: RDFTermWireDecoding
         do {
-            result = try RDFTermCodec.decodeWithMetrics(
+            result = try RDFTermWireFormat.decodeWithMetrics(
                 bytes,
                 role: role,
-                limits: codecLimits
+                limits: rdfLimits
             )
         } catch let error {
             throw mapCanonicalRDFTermError(error)
@@ -35,13 +35,13 @@ extension DatabaseWireReader {
         role: RDFTermRole
     ) throws(DatabaseWireError) {
         let bytes = try readBytes()
-        let codecLimits = try remainingRDFTermLimits()
-        let validation: RDFTermEncodingValidation
+        let rdfLimits = try remainingRDFTermLimits()
+        let validation: RDFTermWireValidation
         do {
-            validation = try RDFTermCodec.withValidatedBytes(
+            validation = try RDFTermWireFormat.withValidatedBytes(
                 bytes,
                 role: role,
-                limits: codecLimits
+                limits: rdfLimits
             ) { _, validation in
                 validation
             }
@@ -52,7 +52,7 @@ extension DatabaseWireReader {
     }
 
     private func remainingRDFTermLimits()
-        throws(DatabaseWireError) -> RDFTermCodecLimits {
+        throws(DatabaseWireError) -> RDFTermWireLimits {
         guard limits.maximumObjectCount > registeredObjectCount else {
             let (actual, overflow) = registeredObjectCount
                 .addingReportingOverflow(1)
@@ -70,7 +70,7 @@ extension DatabaseWireReader {
             )
         }
         let remainingDepth = limits.maximumNestingDepth - currentNestingDepth
-        return RDFTermCodecLimits(
+        return RDFTermWireLimits(
             validatedMaximumBytes: self.limits.maximumByteStringBytes,
             maximumDepth: remainingDepth,
             maximumObjectCount: remainingObjectCount
@@ -78,7 +78,7 @@ extension DatabaseWireReader {
     }
 
     private func mapCanonicalRDFTermError(
-        _ error: RDFTermCodecError
+        _ error: RDFTermWireError
     ) -> DatabaseWireError {
         switch error {
         case .maximumBytesExceeded(let actual, _):

@@ -27,6 +27,7 @@ It provides:
 - `@OWLDataProperty` / `@OWLObjectProperty` macros for OWL property annotations
 - `IndexKind` protocol for extensible index type definitions
 - Foundation-independent identity, RDF, and `QueryIR` semantic models
+- bounded RDF term-role and structural validation without binary materialization
 - canonical binary `DatabaseWire` operations, envelopes, limits, and errors
 - one Foundation-independent semantic module
 - one canonical bounded binary protocol module

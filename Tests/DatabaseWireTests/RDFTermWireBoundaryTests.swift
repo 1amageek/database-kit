@@ -27,7 +27,7 @@ struct RDFTermWireBoundaryTests {
             lexicalForm: "before\0after",
             language: try RDFLanguageTag("ja")
         ))
-        let canonical = try RDFTermCodec.encode(term)
+        let canonical = try RDFTermWireFormat.encode(term)
         let wire = try encodeTerm(term)
         var expected = [
             UInt8(truncatingIfNeeded: canonical.count),

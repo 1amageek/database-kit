@@ -4,7 +4,7 @@ import DatabaseTypes
 ///
 /// The input remains borrowed for the duration of decoding. The returned
 /// `String` is the required semantic ownership boundary.
-enum RDFTextDecoder {
+enum RDFWireTextDecoder {
     static func decode(_ bytes: ByteString) -> String? {
         bytes.withUnsafeBytes { decode($0) }
     }

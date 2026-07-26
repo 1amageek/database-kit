@@ -24,7 +24,7 @@ struct FieldValueTests {
     }
 
     @Test("Every fixed-width numeric type retains a distinct storage identity")
-    func fixedWidthNumericTypesRetainDistinctIdentity() throws {
+    func fixedWidthNumericTypesRetainDistinctIdentity() {
         let values: [FieldValue] = [
             .int8(1),
             .int16(1),
@@ -39,25 +39,20 @@ struct FieldValueTests {
         ]
 
         #expect(Set(values).count == values.count)
-        #expect(try Set(values.map { try $0.stableHash() }).count == values.count)
         #expect(FieldValue.float32(-0.0) != .float32(0.0))
         #expect(FieldValue.float64(-0.0) != .float64(0.0))
     }
 
-    @Test("Stored numeric types preserve distinct identity and hashes")
-    func storedNumericIdentityIsExact() throws {
+    @Test("Stored numeric types preserve distinct identity")
+    func storedNumericIdentityIsExact() {
         let zero: [FieldValue] = [.int64(0), .uint64(0), .float64(-0.0)]
         #expect(Set(zero).count == 3)
-        #expect(try Set(zero.map { try $0.stableHash() }).count == 3)
 
         let signedBoundary: [FieldValue] = [
             .int64(Int64.max),
             .uint64(UInt64(Int64.max)),
         ]
         #expect(Set(signedBoundary).count == 2)
-        #expect(
-            try Set(signedBoundary.map { try $0.stableHash() }).count == 2
-        )
 
         let unsignedDoubleBoundary = UInt64(1) << 63
         let unsignedAndDouble: [FieldValue] = [
@@ -65,9 +60,6 @@ struct FieldValueTests {
             .float64(Double(unsignedDoubleBoundary)),
         ]
         #expect(Set(unsignedAndDouble).count == 2)
-        #expect(
-            try Set(unsignedAndDouble.map { try $0.stableHash() }).count == 2
-        )
 
         #expect(FieldValue.int64(0).compare(to: .uint64(0)) == .equal)
         #expect(
@@ -78,7 +70,7 @@ struct FieldValueTests {
     }
 
     @Test("Adjacent UInt64 values above 2^53 remain distinct")
-    func adjacentLargeUnsignedValuesRemainDistinct() throws {
+    func adjacentLargeUnsignedValuesRemainDistinct() {
         let exactDoubleBoundary = UInt64(1) << 53
         let adjacent = exactDoubleBoundary + 1
         let rounded = Double(adjacent)
@@ -98,10 +90,6 @@ struct FieldValueTests {
         )
 
         #expect(
-            try FieldValue.uint64(exactDoubleBoundary).stableHash()
-                != FieldValue.uint64(adjacent).stableHash()
-        )
-        #expect(
             Set([
                 FieldValue.uint64(exactDoubleBoundary),
                 .uint64(adjacent),
@@ -110,7 +98,7 @@ struct FieldValueTests {
     }
 
     @Test("UInt64 upper boundary has exact ordering")
-    func uint64UpperBoundaryOrderingIsExact() throws {
+    func uint64UpperBoundaryOrderingIsExact() {
         let penultimate = FieldValue.uint64(UInt64.max - 1)
         let maximum = FieldValue.uint64(UInt64.max)
         let roundedBeyondMaximum = FieldValue.float64(Double(UInt64.max))
@@ -122,9 +110,6 @@ struct FieldValueTests {
         #expect(maximum != roundedBeyondMaximum)
         #expect(maximum.compare(to: penultimate) == .greaterThan)
         #expect(maximum.compare(to: roundedBeyondMaximum) == .lessThan)
-        let penultimateHash = try penultimate.stableHash()
-        let maximumHash = try maximum.stableHash()
-        #expect(penultimateHash != maximumHash)
     }
 
     // MARK: - Initialization
@@ -354,116 +339,16 @@ struct FieldValueTests {
         #expect(dict[.string("key2")] == "value2")
     }
 
-    // MARK: - Stable Hash
-
-    @Test("Stable hash is deterministic")
-    func testStableHashDeterministic() throws {
-        let value = FieldValue.string("test")
-
-        let hash1 = try value.stableHash()
-        let hash2 = try value.stableHash()
-
-        #expect(hash1 == hash2)
-    }
-
-    @Test("Stable hash traverses deeply nested values without process-stack recursion")
-    func stableHashUsesIterativeTraversal() throws {
-        var value = FieldValue.string("leaf")
-        // This is intentionally far above every accepted wire decoding depth.
-        // A larger value also tests recursive destruction of FieldValue itself
-        // rather than the iterative hashing algorithm.
-        for _ in 0..<1_024 {
-            value = .array([value])
-        }
-
-        let first = try value.stableHash()
-        let second = try value.stableHash()
-        #expect(first == second)
-    }
-
-    @Test("Different types produce different hashes")
-    func testStableHashDifferentTypes() throws {
-        let intVal = FieldValue.int64(1)
-        let strVal = FieldValue.string("1")
-
-        let integerHash = try intVal.stableHash()
-        let stringHash = try strVal.stableHash()
-        #expect(integerHash != stringHash)
-    }
-
-    @Test("RDF stable hash is deterministic and semantic")
-    func testRDFStableHash() throws {
-        let first = FieldValue.rdfTerm(
-            try .iri(validating: "urn:database:first")
-        )
-        let same = FieldValue.rdfTerm(
-            try .iri(validating: "urn:database:first")
-        )
-        let different = FieldValue.rdfTerm(
-            try .blankNode(identifier: "urn:database:first")
-        )
-
-        let firstHash = try first.stableHash()
-        let sameHash = try same.stableHash()
-        let differentHash = try different.stableHash()
-        #expect(firstHash == sameHash)
-        #expect(firstHash != differentHash)
-    }
-
-    @Test("RDF language-tag identity and stable hash are consistent")
-    func testRDFLanguageTagStableHash() throws {
-        let uppercase = FieldValue.rdfTerm(.literal(RDFLiteral(
-            lexicalForm: "hello",
-            language: try RDFLanguageTag("EN-Latn-US")
-        )))
-        let lowercase = FieldValue.rdfTerm(.literal(RDFLiteral(
-            lexicalForm: "hello",
-            language: try RDFLanguageTag("en-latn-us")
-        )))
-
-        #expect(uppercase == lowercase)
-        let uppercaseHash = try uppercase.stableHash()
-        let lowercaseHash = try lowercase.stableHash()
-        #expect(uppercaseHash == lowercaseHash)
-    }
-
-    @Test("Stable hash for all types")
-    func testStableHashAllTypes() throws {
-        let values: [FieldValue] = [
-            .int64(42),
-            .float64(3.14),
-            .string("hello"),
-            .bool(true),
-            .bytes([1, 2, 3]),
-            .null
-        ]
-
-        var hashes: Set<UInt64> = []
-        for value in values {
-            let hash = try value.stableHash()
-            hashes.insert(hash)
-        }
-
-        // All values should have unique hashes
-        #expect(hashes.count == values.count)
-    }
-
     @Test("query numeric comparison does not alter stored identity")
-    func queryNumericComparisonPreservesStoredIdentity() throws {
+    func queryNumericComparisonPreservesStoredIdentity() {
         let exactInteger = FieldValue.int64(42)
         let exactDouble = FieldValue.float64(42)
         let roundedInteger = FieldValue.int64(9_007_199_254_740_993)
         let roundedDouble = FieldValue.float64(9_007_199_254_740_992)
 
         #expect(exactInteger != exactDouble)
-        let exactIntegerHash = try exactInteger.stableHash()
-        let exactDoubleHash = try exactDouble.stableHash()
-        #expect(exactIntegerHash != exactDoubleHash)
         #expect(exactInteger.compare(to: exactDouble) == .equal)
         #expect(roundedInteger != roundedDouble)
-        let roundedIntegerHash = try roundedInteger.stableHash()
-        let roundedDoubleHash = try roundedDouble.stableHash()
-        #expect(roundedIntegerHash != roundedDoubleHash)
         #expect(roundedInteger.compare(to: roundedDouble) == .greaterThan)
     }
 

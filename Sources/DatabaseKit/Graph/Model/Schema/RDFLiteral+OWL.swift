@@ -57,7 +57,7 @@ extension RDFLiteral {
     /// Create a canonical XSD date literal.
     public static func date(_ value: CivilDate) -> RDFLiteral {
         RDFLiteral(
-            lexicalForm: XSDDateTimeCodec.format(date: value),
+            lexicalForm: XSDDateTimeFormat.string(from: value),
             datatype: XSDDatatype.date.typedLiteralDatatype
         )
     }
@@ -65,9 +65,9 @@ extension RDFLiteral {
     /// Create a canonical UTC XSD dateTime literal.
     public static func dateTime(
         _ value: Timestamp
-    ) throws(XSDDateTimeError) -> RDFLiteral {
+    ) throws(XSDDateTimeFormatError) -> RDFLiteral {
         RDFLiteral(
-            lexicalForm: try XSDDateTimeCodec.format(timestamp: value),
+            lexicalForm: try XSDDateTimeFormat.string(from: value),
             datatype: XSDDatatype.dateTime.typedLiteralDatatype
         )
     }
@@ -137,13 +137,13 @@ extension RDFLiteral {
     /// Extract an untimezoned XSD date without losing timezone information.
     public var databaseDateValue: CivilDate? {
         guard datatypeIRI == XSDDatatype.date.iri else { return nil }
-        return XSDDateTimeCodec.parseDate(lexicalForm)
+        return XSDDateTimeFormat.date(from: lexicalForm)
     }
 
     /// Extract a timezoned XSD dateTime as an absolute timestamp.
     public var timestampValue: Timestamp? {
         guard datatypeIRI == XSDDatatype.dateTime.iri else { return nil }
-        return XSDDateTimeCodec.parseTimestamp(lexicalForm)
+        return XSDDateTimeFormat.timestamp(from: lexicalForm)
     }
 
     /// String value (always available)

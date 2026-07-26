@@ -1,6 +1,7 @@
+import DatabaseKit
 import DatabaseTypes
 
-public enum RDFTermCodecError: Error, Sendable, Equatable {
+public enum RDFTermWireError: Error, Sendable, Equatable {
     case truncated
     case trailingBytes
     case unknownTag(UInt8)
