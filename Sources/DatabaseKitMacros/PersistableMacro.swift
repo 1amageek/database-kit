@@ -172,7 +172,9 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 
                         if let pattern = binding.pattern.as(IdentifierPatternSyntax.self) {
                             let fieldName = pattern.identifier.text
-                            let fieldType = binding.typeAnnotation?.type.description.trimmingCharacters(in: .whitespaces) ?? "Any"
+                            let fieldType =
+                                binding.typeAnnotation?.type.trimmedDescription
+                                ?? "Any"
                             let hasDefault = binding.initializer != nil
                             let defaultValue = binding.initializer?.value.description.trimmingCharacters(in: .whitespaces)
 

@@ -206,6 +206,27 @@ struct ModelMacroTests {
         #expect(decoded.displayName == "Alice <test@example.com>")
     }
 
+    @Test("@Persistable excludes declaration comments from generated types")
+    func declarationCommentsAreNotPartOfGeneratedTypes() throws {
+        let model = CommentedFieldModel(
+            status: "active",
+            score: 42
+        )
+
+        #expect(CommentedFieldModel.fields.status.type == .string)
+        #expect(CommentedFieldModel.fields.score.type == .int64)
+        #expect(
+            try model.persistedFieldValue(
+                for: CommentedFieldModel.fields.status.identity
+            ) == .string("active")
+        )
+        #expect(
+            try model.persistedFieldValue(
+                for: CommentedFieldModel.fields.score.identity
+            ) == .int64(42)
+        )
+    }
+
     @Test("@Persistable resolves protocol-extension KeyPath field names")
     func protocolExtensionKeyPathFieldNames() throws {
         let schema = try Schema(
@@ -386,6 +407,13 @@ struct StaticAndComputedMemberModel {
     var email: String
     var name: String
     var displayName: String { "\(name) <\(email)>" }
+}
+
+@Persistable
+struct CommentedFieldModel {
+    var id: String = "fixture-id"
+    var status: String  // Stored status label.
+    var score: Int64    // Stable score value.
 }
 
 @Persistable
