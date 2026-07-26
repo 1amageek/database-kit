@@ -138,7 +138,7 @@ This includes:
 | Query | SQL, SQL/PGQ, graph-pattern, and SPARQL intermediate representations |
 | Mutation | mutation statements, preconditions, and transaction intent |
 | Relationship | cardinality, relationship descriptors, and delete rules |
-| Index | scalar, aggregate, text, vector, geographic, rank, permutation, graph, and RDF index declarations |
+| Index | scalar, aggregate, text, vector, geographic, rank, permutation, property-graph, and RDF-dataset index declarations |
 | Graph | RDF dataset meaning, term-role and resource validation, graph names, ontology declarations, and SHACL shapes |
 | Validation | intrinsic structural and semantic validation of declarations |
 
@@ -148,6 +148,16 @@ budgets, physical subspaces, maintainer construction, and runtime index
 configuration are execution concerns owned by `database-framework`.
 Query-cost and graph-pattern complexity estimates are likewise planner output,
 not properties of the semantic QueryIR.
+
+Property-graph and RDF-dataset indexes are distinct semantic declarations:
+
+| Declaration | Canonical kind | Required identity fields |
+|---|---|---|
+| `IndexDefinition.propertyGraph` | `graph` | `String` source, optional field label, target, and optional namespace |
+| `IndexDefinition.rdfDataset` | `rdf_quad` | `RDFTerm` subject, predicate, object, and optional graph |
+
+The model selects the graph semantics explicitly. Schema validation checks the
+selected identity contract and does not infer or convert between graph models.
 
 ### Model and document adaptation
 

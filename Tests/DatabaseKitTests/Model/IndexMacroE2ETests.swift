@@ -38,6 +38,22 @@ struct IndexMacroE2ETests {
         #expect(scalar.storedFieldNames == ["title"])
     }
 
+    @Test("RDF dataset declarations retain RDF identity semantics")
+    func rdfDatasetRetainsRDFIdentitySemantics() throws {
+        let descriptor = try #require(
+            try RDFDatasetRecord.indexDescriptors.first
+        )
+        #expect(descriptor.kindIdentifier == "rdf_quad")
+        #expect(
+            descriptor.fieldNames
+                == ["subject", "predicate", "object", "graph"]
+        )
+        #expect(descriptor.kind.metadata.isEmpty)
+
+        let definition = try IndexDefinition(metadata: descriptor.kind)
+        #expect(definition == .rdfDataset)
+    }
+
     @Test("#Index preserves kind-specific metadata")
     func preservesKindSpecificMetadata() throws {
         let scalar = try Self.descriptor(named: "e2e_scalar_category").kind
@@ -173,7 +189,7 @@ struct IndexMacroE2ETests {
                 named: "e2e_graph_subject_predicate_object_graph"
             ).kind
         )
-        guard case .graph(let strategy, let label) = graph else {
+        guard case .propertyGraph(let strategy, let label) = graph else {
             Issue.record("Expected graph definition")
             return
         }
@@ -235,6 +251,24 @@ private struct ExpectedIndexSpec: Sendable {
         self.kindIdentifier = kindIdentifier
         self.fieldNames = fieldNames
     }
+}
+
+@Persistable
+private struct RDFDatasetRecord {
+    #Directory<RDFDatasetRecord>("tests", "rdf-dataset")
+    #Index(
+        .rdfDataset,
+        from: \RDFDatasetRecord.subject,
+        edge: \RDFDatasetRecord.predicate,
+        to: \RDFDatasetRecord.object,
+        graph: \RDFDatasetRecord.graph
+    )
+
+    var id: String
+    var subject: RDFTerm
+    var predicate: RDFTerm
+    var object: RDFTerm
+    var graph: RDFTerm?
 }
 
 @Persistable
@@ -377,7 +411,7 @@ private struct IndexMacroE2ERecord {
         name: "e2e_permuted_category_status_title"
     )
     #Index(
-        .graph(strategy: .hexastore),
+        .propertyGraph(strategy: .hexastore),
         from: \IndexMacroE2ERecord.subject,
         edge: \IndexMacroE2ERecord.predicate,
         to: \IndexMacroE2ERecord.object,

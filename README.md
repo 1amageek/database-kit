@@ -308,6 +308,12 @@ struct Event {
     )
     #Index(.spatial(), location: \Event.location)
     #Index(.rank(), field: \Event.attendeeCount)
+    #Index(
+        .propertyGraph(strategy: .adjacency),
+        from: \Event.sourceID,
+        edge: \Event.relationship,
+        to: \Event.targetID
+    )
 
     var id: String
     var calendarID: String
@@ -318,6 +324,9 @@ struct Event {
     var description: String
     var searchTerms: [String]
     var location: GeographicPoint
+    var sourceID: String
+    var relationship: String
+    var targetID: String
 }
 ```
 
@@ -327,10 +336,38 @@ logical property names, which `@Polymorphable` verifies against protocol
 properties.
 Neither runtime path retains a KeyPath.
 
+Property graphs and RDF datasets have separate declarations because their
+identity contracts are different. A property graph uses `String` source,
+label, target, and optional namespace fields. An RDF dataset uses `RDFTerm`
+subject, predicate, object, and optional graph fields:
+
+```swift
+@Persistable
+struct Statement {
+    #Index(
+        .rdfDataset,
+        from: \Statement.subject,
+        edge: \Statement.predicate,
+        to: \Statement.object,
+        graph: \Statement.graph
+    )
+
+    var id: String
+    var subject: RDFTerm
+    var predicate: RDFTerm
+    var object: RDFTerm
+    var graph: RDFTerm?
+}
+```
+
+The canonical kind identifiers remain `graph` and `rdf_quad`, respectively.
+Schema validation never infers one graph model from the other.
+
 ## Custom Index Kinds
 
-`IndexKind` is reserved for RDF, OWL, and third-party extension semantics that
-are not built into `IndexDefinition`:
+`IndexKind` is reserved for OWL-generated and third-party extension semantics
+that are not built into `IndexDefinition`. Property graph and RDF dataset
+declarations are built in and use `IndexDefinition`:
 
 ```swift
 import DatabaseKit

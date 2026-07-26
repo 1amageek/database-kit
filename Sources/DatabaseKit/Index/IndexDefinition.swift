@@ -43,10 +43,11 @@ public enum IndexDefinition: Sendable, Hashable {
     )
     case rank(bucketSize: Int = 100)
     case permuted(PermutationPattern)
-    case graph(
+    case propertyGraph(
         strategy: PropertyGraphIndexStrategy = .adjacency,
         label: PropertyGraphLabelSource = .field
     )
+    case rdfDataset
 }
 
 extension IndexDefinition {
@@ -71,7 +72,8 @@ extension IndexDefinition {
         case .spatial: "spatial"
         case .rank: "rank"
         case .permuted: "permuted"
-        case .graph: "graph"
+        case .propertyGraph: "graph"
+        case .rdfDataset: "rdf_quad"
         }
     }
 
@@ -83,7 +85,7 @@ extension IndexDefinition {
             .aggregation
         case .version, .bitmap, .timeWindowLeaderboard, .vector, .fullText,
              .autocomplete,
-             .rank, .graph:
+             .rank, .propertyGraph, .rdfDataset:
             .hierarchical
         }
     }
@@ -420,7 +422,7 @@ extension IndexDefinition {
                 reason: "Permuted index requires fields with canonical ordering"
             )
 
-        case .graph(_, let label):
+        case .propertyGraph(_, let label):
             let minimumCount = label == .field ? 3 : 2
             let maximumCount = minimumCount + 1
             guard (minimumCount...maximumCount).contains(schemas.count) else {
@@ -437,6 +439,32 @@ extension IndexDefinition {
                     field: field,
                     reason: "Property-graph identity fields must be String"
                 )
+            }
+        case .rdfDataset:
+            guard schemas.count == 3 || schemas.count == 4 else {
+                throw .invalidFieldCount(
+                    index: identifier,
+                    expected: 4,
+                    actual: schemas.count
+                )
+            }
+            for field in schemas.prefix(3)
+            where field.type != .rdfTerm || field.isArray {
+                throw .unsupportedField(
+                    index: identifier,
+                    field: field,
+                    reason: "RDF subject, predicate, and object fields must be RDFTerm"
+                )
+            }
+            if schemas.count == 4 {
+                let graph = schemas[3]
+                guard graph.type == .rdfTerm, !graph.isArray else {
+                    throw .unsupportedField(
+                        index: identifier,
+                        field: graph,
+                        reason: "RDF graph field must be RDFTerm or Optional<RDFTerm>"
+                    )
+                }
             }
         }
     }
@@ -542,7 +570,7 @@ extension IndexDefinition {
                     permutation.indices.map { .int64(Int64($0)) }
                 )
             ]
-        case .graph(let strategy, let label):
+        case .propertyGraph(let strategy, let label):
             return [
                 "strategy": .string(strategy.rawValue),
                 "hasEdgeField": .bool(label == .field),
@@ -550,6 +578,8 @@ extension IndexDefinition {
                     schemas.count == (label == .field ? 4 : 3)
                 ),
             ]
+        case .rdfDataset:
+            return [:]
         }
     }
 }
@@ -880,10 +910,18 @@ extension IndexDefinition {
             let expectedFieldCount =
                 2 + (hasEdgeField ? 1 : 0) + (hasGraphField ? 1 : 0)
             try kind.validateFieldCount(expectedFieldCount)
-            self = .graph(
+            self = .propertyGraph(
                 strategy: strategy,
                 label: hasEdgeField ? .field : .implicit
             )
+
+        case "rdf_quad":
+            try validate(
+                identifier: "rdf_quad",
+                subspaceStructure: .hierarchical
+            )
+            try kind.validateFieldCount(minimum: 3, maximum: 4)
+            self = .rdfDataset
 
         default:
             throw .unknownIdentifier(kind.identifier)

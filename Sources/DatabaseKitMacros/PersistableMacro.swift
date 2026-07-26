@@ -596,7 +596,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 let graphIndexInit = """
                     IndexDescriptor(
                         name: "\(graphIndexName)",
-                        definition: .graph(
+                        definition: .propertyGraph(
                             strategy: .adjacency,
                             label: .implicit
                         ),
@@ -1179,7 +1179,7 @@ func selectedIndexFieldPaths(
         allowedRoles = ["embedding"]
     case "spatial":
         allowedRoles = ["location"]
-    case "graph":
+    case "propertyGraph", "rdfDataset":
         allowedRoles = ["from", "edge", "to", "graph"]
     default:
         throw DiagnosticsError(diagnostics: [
@@ -1230,7 +1230,7 @@ func selectedIndexFieldPaths(
         return [try one("embedding")]
     case "spatial":
         return [try one("location")]
-    case "graph":
+    case "propertyGraph":
         let usesImplicitLabel =
             definition.arguments["label"]?.contains("implicit") == true
         var fields = [try one("from")]
@@ -1256,6 +1256,26 @@ func selectedIndexFieldPaths(
                         node: node,
                         message: MacroExpansionErrorMessage(
                             ".graph accepts at most one 'graph' field"
+                        )
+                    )
+                ])
+            }
+            fields.append(graph[0])
+        }
+        return fields
+    case "rdfDataset":
+        var fields = [
+            try one("from"),
+            try one("edge"),
+            try one("to"),
+        ]
+        if let graph = roles["graph"], !graph.isEmpty {
+            guard graph.count == 1 else {
+                throw DiagnosticsError(diagnostics: [
+                    Diagnostic(
+                        node: node,
+                        message: MacroExpansionErrorMessage(
+                            ".rdfDataset accepts at most one 'graph' field"
                         )
                     )
                 ])
@@ -1363,7 +1383,8 @@ func generateIndexName(
     case "spatial": return prefixed("spatial")
     case "rank": return prefixed("rank")
     case "permuted": return prefixed("permuted")
-    case "graph": return prefixed("graph")
+    case "propertyGraph": return prefixed("graph")
+    case "rdfDataset": return prefixed("rdf_quad")
     default:
         return prefixed(definition.name)
     }

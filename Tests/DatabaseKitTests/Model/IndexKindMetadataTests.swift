@@ -105,7 +105,7 @@ struct IndexKindMetadataTests {
         )
 
         let definition = try IndexDefinition(metadata: metadata)
-        guard case .graph(let strategy, let label) = definition else {
+        guard case .propertyGraph(let strategy, let label) = definition else {
             Issue.record("Expected graph definition")
             return
         }
