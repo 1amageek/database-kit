@@ -318,24 +318,3 @@ public macro Polymorphable() = #externalMacro(module: "DatabaseKitMacros", type:
 /// - Field must have a default value (since it's excluded from initializer)
 @attached(peer)
 public macro Transient() = #externalMacro(module: "DatabaseKitMacros", type: "TransientMacro")
-
-// MARK: - @Reference Macro (Test)
-
-/// @Reference macro declaration - TEST for circular reference behavior
-///
-/// Tests if type references in macros cause circular dependency issues.
-///
-/// **Usage**:
-/// ```swift
-/// struct A {
-///     @Reference(B.self)
-///     var bId: String?
-/// }
-///
-/// struct B {
-///     @Reference(A.self)
-///     var aId: String?
-/// }
-/// ```
-@attached(peer)
-public macro Reference<T>(_ type: T.Type) = #externalMacro(module: "DatabaseKitMacros", type: "ReferenceMacro")

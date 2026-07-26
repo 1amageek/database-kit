@@ -1529,7 +1529,6 @@ struct DatabaseDeclarationPlugin: CompilerPlugin {
         IndexMacro.self,
         DirectoryMacro.self,
         TransientMacro.self,
-        ReferenceMacro.self,
         RelationshipMacro.self,
         OWLDataPropertyMacro.self,
         OWLClassMacro.self,
