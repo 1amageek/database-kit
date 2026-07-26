@@ -113,6 +113,54 @@ struct IndexKindMetadataTests {
         #expect(label == .implicit)
     }
 
+    @Test("OWL class metadata restores only a valid RDF graph name")
+    func owlClassMetadataRestoresGraphName() throws {
+        let graph = try RDFGraphName(
+            iri: "https://example.org/graphs/people"
+        )
+        let metadata = IndexKindMetadata(
+            identifier: "owl_class_rdf",
+            subspaceStructure: .hierarchical,
+            fields: [],
+            metadata: [
+                "individualIRIBase": .string(
+                    "https://example.org/people/"
+                ),
+                "graph": .rdfTerm(graph.term),
+            ]
+        )
+
+        let decoded = try OWLClassRDFIndexMetadata(canonical: metadata)
+        #expect(decoded.graph == graph)
+
+        let invalid = IndexKindMetadata(
+            identifier: "owl_class_rdf",
+            subspaceStructure: .hierarchical,
+            fields: [],
+            metadata: [
+                "individualIRIBase": .string(
+                    "https://example.org/people/"
+                ),
+                "graph": .rdfTerm(
+                    .literal(
+                        RDFLiteral(
+                            lexicalForm: "not a graph name",
+                            datatype: .xsdString
+                        )
+                    )
+                ),
+            ]
+        )
+        #expect(
+            throws: IndexKindMetadataError.invalidMetadata(
+                identifier: "owl_class_rdf",
+                key: "graph"
+            )
+        ) {
+            _ = try OWLClassRDFIndexMetadata(canonical: invalid)
+        }
+    }
+
     @Test("Autocomplete accepts scalar and array string fields")
     func autocompleteAcceptsStringFields() throws {
         let definition = IndexDefinition.autocomplete(
