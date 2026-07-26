@@ -56,6 +56,63 @@ struct PolymorphableMacroExpansionTests {
         )
     }
 
+    @Test("@Polymorphable preserves an explicit stable group identifier")
+    func preservesExplicitGroupIdentifier() {
+        assertMacroExpansion(
+            """
+            @Polymorphable(identifier: "Document")
+            protocol VersionedDocument: Polymorphable<VersionedDocumentPolymorphicGroup> {
+                var id: String { get }
+            }
+            """,
+            expandedSource: """
+            protocol VersionedDocument: Polymorphable<VersionedDocumentPolymorphicGroup> {
+                var id: String { get }
+            }
+
+            enum VersionedDocumentPolymorphicGroup: DatabaseKit.PolymorphicGroupDeclaration {
+                static let identifier = "Document"
+
+                static let directoryComponents: [DatabaseKit.DirectoryPathComponent] = [.staticPath(identifier)]
+
+                static let directoryLayer: DatabaseKit.DirectoryLayer = .default
+
+                static let indexes: [DatabaseKit.PolymorphicIndexDefinition] = []
+            }
+            """,
+            macros: [
+                "Polymorphable": PolymorphableMacro.self,
+            ]
+        )
+    }
+
+    @Test("@Polymorphable rejects an empty group identifier")
+    func rejectsEmptyGroupIdentifier() {
+        assertMacroExpansion(
+            """
+            @Polymorphable(identifier: "")
+            protocol VersionedDocument: Polymorphable<VersionedDocumentPolymorphicGroup> {
+                var id: String { get }
+            }
+            """,
+            expandedSource: """
+            protocol VersionedDocument: Polymorphable<VersionedDocumentPolymorphicGroup> {
+                var id: String { get }
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "@Polymorphable identifier must be a nonempty string literal",
+                    line: 1,
+                    column: 16
+                )
+            ],
+            macros: [
+                "Polymorphable": PolymorphableMacro.self,
+            ]
+        )
+    }
+
     @Test("@Polymorphable preserves a global count descriptor")
     func preservesGlobalCountDescriptor() {
         assertMacroExpansion(

@@ -218,6 +218,20 @@ attached macro on a protocol to add protocol inheritance, so the protocol must
 explicitly bind the generated declaration with
 `: Polymorphable<EntityPolymorphicGroup>`.
 
+Schema versions may use different Swift protocol names while preserving one
+logical storage identity. Declare that stable identity explicitly:
+
+```swift
+@Polymorphable(identifier: "Document")
+protocol DocumentV2: Polymorphable<DocumentV2PolymorphicGroup> {
+    var id: String { get }
+}
+```
+
+The identifier is part of persisted polymorphic membership and directory
+identity. It must remain unchanged across schema versions that represent the
+same logical group.
+
 Swift 6.4 cannot form a `KeyPath<Self, Value>` while the protocol containing
 the declaration is still being defined. Protocol-level indexes therefore use
 logical property names with the `@PolymorphicIndex` attribute.

@@ -284,7 +284,8 @@ public enum DirectoryLayer: String, Sendable, Hashable {
 /// [type-directory]/R/[PersistableType]/[id] → canonical persisted fields (if dual-write)
 /// ```
 @attached(peer, names: suffixed(PolymorphicGroup))
-public macro Polymorphable() = #externalMacro(module: "DatabaseKitMacros", type: "PolymorphableMacro")
+public macro Polymorphable(identifier: String? = nil) =
+    #externalMacro(module: "DatabaseKitMacros", type: "PolymorphableMacro")
 
 // MARK: - @Transient Macro
 

@@ -36,6 +36,13 @@ public struct PolymorphableMacro: PeerMacro {
             return []
         }
         let protocolName = protocolDecl.name.text
+        let groupIdentifier = try parseGroupIdentifier(
+            from: node,
+            defaultValue: protocolName
+        )
+        let groupIdentifierLiteral = StringLiteralExprSyntax(
+            content: groupIdentifier
+        )
         let declarationName = "\(protocolName)PolymorphicGroup"
         guard protocolDecl.polymorphicGroupType == declarationName else {
             throw DiagnosticsError(diagnostics: [
@@ -138,7 +145,7 @@ public struct PolymorphableMacro: PeerMacro {
 
         let declaration: DeclSyntax = """
             \(raw: accessPrefix)enum \(raw: declarationName): DatabaseKit.PolymorphicGroupDeclaration {
-                \(raw: accessPrefix)static let identifier = "\(raw: protocolName)"
+                \(raw: accessPrefix)static let identifier = \(groupIdentifierLiteral)
 
                 \(raw: accessPrefix)static let directoryComponents: [DatabaseKit.DirectoryPathComponent] = \(raw: componentsExpression)
 
@@ -152,6 +159,33 @@ public struct PolymorphableMacro: PeerMacro {
 }
 
 // MARK: - Helper Functions
+
+private func parseGroupIdentifier(
+    from attribute: AttributeSyntax,
+    defaultValue: String
+) throws -> String {
+    guard
+        let arguments = attribute.arguments?.as(LabeledExprListSyntax.self),
+        let argument = arguments.first
+    else {
+        return defaultValue
+    }
+    guard
+        argument.label?.text == "identifier",
+        let identifier = staticStringLiteralValue(argument.expression),
+        !identifier.isEmpty
+    else {
+        throw DiagnosticsError(diagnostics: [
+            Diagnostic(
+                node: Syntax(argument),
+                message: MacroExpansionErrorMessage(
+                    "@Polymorphable identifier must be a nonempty string literal"
+                )
+            )
+        ])
+    }
+    return identifier
+}
 
 private extension ProtocolDeclSyntax {
     var polymorphicGroupType: String? {
