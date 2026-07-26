@@ -78,6 +78,23 @@ struct DatabaseWireBoundaryTests {
         }
     }
 
+    @Test("request payload boundary preserves the selected operation")
+    func requestPayloadRoundTrip() throws {
+        let encoder = DatabaseWireEncoder()
+        let decoder = DatabaseWireDecoder()
+        let payload = try encoder.encodeRequestPayload(
+            DatabaseOperations.queryExecute,
+            request: request
+        )
+
+        let decoded = try decoder.decodeRequestPayload(
+            DatabaseOperations.queryExecute,
+            from: payload
+        )
+
+        #expect(decoded == request)
+    }
+
     @Test("successful responses validate operation and request identity")
     func responseRoundTrip() throws {
         let encoder = DatabaseWireEncoder()
@@ -158,5 +175,43 @@ struct DatabaseWireBoundaryTests {
         )
 
         #expect(payloadAddress == frameAddress + 22)
+    }
+
+    @Test("a persisted success payload can be decoded and replayed")
+    func persistedResponsePayloadRoundTrip() throws {
+        let encoder = DatabaseWireEncoder()
+        let decoder = DatabaseWireDecoder()
+        let response = QueryExecuteOperation.Response.boolean(true)
+        let encoded = try encoder.encodeResponseAndPayload(
+            DatabaseOperations.queryExecute,
+            requestID: 20,
+            response: response
+        )
+
+        let decodedPayload = try decoder.decodeResponsePayload(
+            DatabaseOperations.queryExecute,
+            from: encoded.payload
+        )
+        guard case .boolean(let value) = decodedPayload else {
+            Issue.record("Expected a boolean response payload")
+            return
+        }
+        #expect(value)
+
+        let replayedFrame = try encoder.encodeSuccessPayload(
+            requestID: 21,
+            operation: .queryExecute,
+            payload: encoded.payload
+        )
+        let replayed = try decoder.decodeResponse(
+            DatabaseOperations.queryExecute,
+            from: replayedFrame,
+            matching: 21
+        )
+        guard case .success(.boolean(let replayedValue)) = replayed else {
+            Issue.record("Expected a replayed boolean response")
+            return
+        }
+        #expect(replayedValue)
     }
 }

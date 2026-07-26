@@ -26,6 +26,18 @@ public struct DatabaseWireEncoder: Sendable {
         )
     }
 
+    /// Encodes only the operation request body.
+    ///
+    /// This is the canonical representation stored by resumable job runtimes.
+    /// It excludes request identity and metadata because those belong to the
+    /// outer invocation envelope.
+    public func encodeRequestPayload<Request, Response>(
+        _ operation: DatabaseOperation<Request, Response>,
+        request: Request
+    ) throws(DatabaseWireError) -> ByteString {
+        try operation.encodeRequestPayload(request, limits: limits)
+    }
+
     public func encodeResponse<Request, Response>(
         _ operation: DatabaseOperation<Request, Response>,
         requestID: UInt64,
@@ -49,6 +61,24 @@ public struct DatabaseWireEncoder: Sendable {
                 operation: operation,
                 payload: .failure(error)
             ),
+            limits: limits
+        )
+    }
+
+    /// Reattaches a previously validated successful response body to a new
+    /// request envelope without decoding or copying the payload.
+    ///
+    /// Idempotency replay uses this operation to preserve the exact canonical
+    /// response bytes committed with the original mutation.
+    public func encodeSuccessPayload(
+        requestID: UInt64,
+        operation: DatabaseOperationIdentifier,
+        payload: ByteString
+    ) throws(DatabaseWireError) -> ByteString {
+        try EnvelopeWireFormat.encodeSuccessResponse(
+            requestID: requestID,
+            operation: operation,
+            payload: payload,
             limits: limits
         )
     }

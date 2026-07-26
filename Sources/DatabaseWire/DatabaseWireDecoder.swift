@@ -43,6 +43,19 @@ public struct DatabaseWireDecoder: Sendable {
         try operation.decodeRequest(envelope, limits: limits)
     }
 
+    /// Decodes one operation request body that has already been separated from
+    /// its envelope.
+    ///
+    /// Server runtimes use this boundary after routing an envelope or when
+    /// resuming a persisted job request. The returned value is still validated
+    /// by the closed operation descriptor and the configured limits.
+    public func decodeRequestPayload<Request, Response>(
+        _ operation: DatabaseOperation<Request, Response>,
+        from payload: ByteString
+    ) throws(DatabaseWireError) -> Request {
+        try operation.decodeRequestPayload(payload, limits: limits)
+    }
+
     public func decodeResponseHeader(
         _ frame: ByteString
     ) throws(DatabaseWireError) -> DatabaseWireEnvelopeHeader {
@@ -59,5 +72,14 @@ public struct DatabaseWireDecoder: Sendable {
             matching: requestID,
             limits: limits
         )
+    }
+
+    /// Decodes one successful operation response body that has already been
+    /// separated from its envelope.
+    public func decodeResponsePayload<Request, Response>(
+        _ operation: DatabaseOperation<Request, Response>,
+        from payload: ByteString
+    ) throws(DatabaseWireError) -> Response {
+        try operation.decodeResponsePayload(payload, limits: limits)
     }
 }
