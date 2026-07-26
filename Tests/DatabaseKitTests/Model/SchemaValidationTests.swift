@@ -10,14 +10,30 @@ private struct SchemaValidationEntity {
 }
 
 @Persistable
-private struct InvalidScalarIndexEntity {
+private struct ArrayScalarIndexEntity {
     var id: String = "fixture-id"
     #Index(
         .scalar,
-        fields: [\InvalidScalarIndexEntity.tags],
-        name: "invalid_scalar"
+        fields: [\ArrayScalarIndexEntity.tags],
+        name: "tags"
     )
 
+    var tags: [String]
+}
+
+@Persistable
+private struct CompositeArrayScalarIndexEntity {
+    var id: String = "fixture-id"
+    #Index(
+        .scalar,
+        fields: [
+            \CompositeArrayScalarIndexEntity.category,
+            \CompositeArrayScalarIndexEntity.tags,
+        ],
+        name: "category_tags"
+    )
+
+    var category: String
     var tags: [String]
 }
 
@@ -322,26 +338,33 @@ struct SchemaValidationTests {
         #expect(schema.allIndexNames.isEmpty)
     }
 
-    @Test("Concrete index field types are enforced by schema construction")
-    func concreteIndexFieldTypesAreEnforced() {
+    @Test("Single array scalar indexes use the ordered element domain")
+    func singleArrayScalarIndexesAreAccepted() throws {
+        let entity = try ArrayScalarIndexEntity.schemaEntity
+
+        #expect(entity.indexes.map(\.name) == ["tags"])
+    }
+
+    @Test("Composite scalar indexes reject implicit array products")
+    func compositeScalarIndexesRejectArrays() {
         #expect(
             throws: SchemaEntityError.invalidIndexDeclaration(
                 IndexDeclarationError(
-                    indexName: "invalid_scalar",
+                    indexName: "category_tags",
                     validationError: .unsupportedField(
                         index: "scalar",
                         field: FieldSchema(
                             name: "tags",
-                            fieldNumber: 2,
+                            fieldNumber: 3,
                             type: .string,
                             isArray: true
                         ),
-                        reason: "Scalar index requires fields with canonical ordering"
+                        reason: "Composite scalar indexes require scalar fields with canonical ordering"
                     )
                 )
             )
         ) {
-            _ = try InvalidScalarIndexEntity.schemaEntity
+            _ = try CompositeArrayScalarIndexEntity.schemaEntity
         }
     }
 

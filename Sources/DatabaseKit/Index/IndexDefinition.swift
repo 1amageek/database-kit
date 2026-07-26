@@ -161,10 +161,20 @@ extension IndexDefinition {
         switch self {
         case .scalar:
             try requireMinimumCount(1)
-            try requireOrdered(
-                schemas,
-                reason: "Scalar index requires fields with canonical ordering"
-            )
+            if schemas.count == 1, let field = schemas.first {
+                guard field.supportsScalarIndex else {
+                    throw .unsupportedField(
+                        index: identifier,
+                        field: field,
+                        reason: "Scalar index requires values with canonical ordering"
+                    )
+                }
+            } else {
+                try requireOrdered(
+                    schemas,
+                    reason: "Composite scalar indexes require scalar fields with canonical ordering"
+                )
+            }
 
         case .count:
             try requireOrdered(

@@ -1,9 +1,10 @@
 extension FieldSchema {
-    /// Whether the field has a canonical scalar ordering suitable for ordered keys.
-    public var supportsOrderedIndex: Bool {
-        guard !isArray else {
-            return false
-        }
+    /// Whether each value represented by the field has a canonical ordering.
+    ///
+    /// For an array field, `type` describes the element type. Cardinality is
+    /// intentionally not considered here so a single-field scalar index can
+    /// index each array element independently.
+    package var valuesHaveCanonicalOrdering: Bool {
         switch type {
         case .bool,
              .int8, .int16, .int32, .int64,
@@ -17,6 +18,20 @@ extension FieldSchema {
         case .geographicPoint, .geographicPosition, .vector, .object, .nested:
             return false
         }
+    }
+
+    /// Whether the field has a canonical scalar ordering suitable for ordered keys.
+    public var supportsOrderedIndex: Bool {
+        !isArray && valuesHaveCanonicalOrdering
+    }
+
+    /// Whether a scalar index can represent this field.
+    ///
+    /// Scalar indexes admit one key for a scalar field or one key per element
+    /// for a single array field. Composite scalar indexes still require every
+    /// field to be scalar because an array product has no implicit semantics.
+    public var supportsScalarIndex: Bool {
+        valuesHaveCanonicalOrdering
     }
 
     /// Whether the field is a scalar numeric value.
