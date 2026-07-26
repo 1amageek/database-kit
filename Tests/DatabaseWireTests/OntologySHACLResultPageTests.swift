@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@testable import DatabaseWire
+@_spi(DatabaseServer) @testable import DatabaseWire
 import Testing
 
 @Suite("Owner-retaining ontology and SHACL results")

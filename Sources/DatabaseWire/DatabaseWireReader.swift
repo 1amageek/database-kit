@@ -1,7 +1,8 @@
 import DatabaseTypes
 
 /// Little-endian reader used by database-kit wire DTOs.
-struct DatabaseWireReader: Sendable {
+@_spi(DatabaseServer)
+public struct DatabaseWireReader: Sendable {
     private let bytes: ByteString
     private var offset: Int
     private var nestingDepth: Int

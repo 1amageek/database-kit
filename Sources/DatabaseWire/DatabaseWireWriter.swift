@@ -6,7 +6,8 @@ import DatabaseTypes
 /// Exact-size encoding writes directly into the final `ByteString` storage.
 /// The mutable pointer is confined to the synchronous `encode` call and never
 /// crosses a concurrency boundary.
-struct DatabaseWireWriter {
+@_spi(DatabaseServer)
+public struct DatabaseWireWriter {
     private enum Destination {
         case measuring
         case fixed(UnsafeMutableRawBufferPointer)

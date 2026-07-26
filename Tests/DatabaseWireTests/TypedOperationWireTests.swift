@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@testable import DatabaseWire
+@_spi(DatabaseServer) @testable import DatabaseWire
 import Testing
 
 @Suite("Typed operation family wire")
@@ -1050,10 +1050,24 @@ struct TypedOperationWireTests {
             envelope
         )
         #expect(
-            try JobOperations.maintenance.operation.decodeRequestPayload(
+            try JobOperations.maintenance.decodeStartRequest(
                 rawRequest.requestPayload
             ) == request
         )
+        let completedResponse = MaintenanceExecuteOperation.Response.execution(
+            .init(kind: .compaction, completedWorkUnits: 77, isComplete: true)
+        )
+        let completedPayload = try JobOperations.maintenance
+            .encodeCompletedResponse(completedResponse)
+        let decodedResponse = try JobOperations.maintenance
+            .decodeCompletedResponse(completedPayload)
+        guard case .execution(let decodedResult) = decodedResponse else {
+            Issue.record("Expected an execution response")
+            return
+        }
+        #expect(decodedResult.kind == .compaction)
+        #expect(decodedResult.completedWorkUnits == 77)
+        #expect(decodedResult.isComplete)
         #expect(
             JobOperations.maintenance.identifier
                 == (try DatabaseOperations.maintenanceExecute.resumableJob(

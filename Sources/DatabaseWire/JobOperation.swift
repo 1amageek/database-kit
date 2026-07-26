@@ -34,6 +34,20 @@ public struct JobOperation<
         )
     }
 
+    public func decodeStartRequest(
+        _ payload: ByteString,
+        limits: DatabaseWireLimits = .default
+    ) throws(DatabaseWireError) -> Request {
+        try operation.decodeRequestPayload(payload, limits: limits)
+    }
+
+    public func encodeCompletedResponse(
+        _ response: Response,
+        limits: DatabaseWireLimits = .default
+    ) throws(DatabaseWireError) -> ByteString {
+        try operation.encodeResponsePayload(response, limits: limits)
+    }
+
     public func decodeCompletedResponse(
         _ payload: ByteString,
         limits: DatabaseWireLimits = .default

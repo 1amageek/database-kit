@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-import DatabaseWire
+@_spi(DatabaseServer) import DatabaseWire
 import Testing
 
 @Suite("Public DatabaseWire boundary")
@@ -213,5 +213,46 @@ struct DatabaseWireBoundaryTests {
             return
         }
         #expect(replayedValue)
+    }
+
+    @Test("server payload SPI preserves opaque bounded state")
+    func serverPayloadRoundTrip() throws {
+        let value = ServerCursor(sequence: 7, continuation: ByteString([1, 2, 3]))
+        let payload = try ServerPayloadEncoder.encode(value)
+        let decoded = try ServerPayloadDecoder.decode(
+            ServerCursor.self,
+            from: payload
+        )
+
+        #expect(decoded == value)
+    }
+}
+
+private struct ServerCursor: ServerPayloadValue, Equatable {
+    let sequence: UInt32
+    let continuation: ByteString
+
+    func encode(
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        writer.writeUInt32(sequence)
+        try writer.writeBytes(continuation)
+    }
+
+    init(
+        sequence: UInt32,
+        continuation: ByteString
+    ) {
+        self.sequence = sequence
+        self.continuation = continuation
+    }
+
+    init(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) {
+        self.init(
+            sequence: try reader.readUInt32(),
+            continuation: try reader.readBytes()
+        )
     }
 }
