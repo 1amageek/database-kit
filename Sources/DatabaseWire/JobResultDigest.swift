@@ -3,7 +3,6 @@ import DatabaseTypes
 
 /// Canonical SHA-256 digest of a completed job response payload.
 public struct JobResultDigest:
-    WireValue,
     Hashable {
     public static let byteCount = 32
 
@@ -27,7 +26,8 @@ public struct JobResultDigest:
         try self.init(ByteString(bytes))
     }
 
-    func encode(
+    @_spi(DatabaseServer)
+    public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         guard bytes.count == Self.byteCount else {
@@ -39,7 +39,8 @@ public struct JobResultDigest:
         writer.writeUnframedBytes(bytes)
     }
 
-    init(
+    @_spi(DatabaseServer)
+    public init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         try self.init(
@@ -56,6 +57,8 @@ public struct JobResultDigest:
         self.bytes = validatedBytes
     }
 }
+
+extension JobResultDigest: WireValue {}
 
 /// Incrementally computes the canonical digest used by `job.result`.
 ///

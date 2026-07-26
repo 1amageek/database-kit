@@ -1,3 +1,4 @@
+import DatabaseKit
 import DatabaseTypes
 
 /// Bounded decoding for opaque state owned by the database server runtime.
@@ -10,6 +11,17 @@ public enum ServerPayloadDecoder {
     ) throws(DatabaseWireError) -> Value {
         var reader = DatabaseWireReader(bytes, limits: limits)
         let value = try Value(from: &reader)
+        try reader.ensureFullyRead()
+        return value
+    }
+
+    public static func decode(
+        _ type: RDFQuad.Type,
+        from bytes: ByteString,
+        limits: DatabaseWireLimits = .default
+    ) throws(DatabaseWireError) -> RDFQuad {
+        var reader = DatabaseWireReader(bytes, limits: limits)
+        let value = try RDFQuad(from: &reader)
         try reader.ensureFullyRead()
         return value
     }

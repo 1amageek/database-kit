@@ -83,6 +83,17 @@ public struct DatabaseWireEncoder: Sendable {
         )
     }
 
+    /// Validates an already encoded successful response body before it is
+    /// persisted for idempotency replay.
+    public func validateSuccessPayload(
+        _ payload: borrowing ByteString
+    ) throws(DatabaseWireError) {
+        try EnvelopeWireFormat.validateSuccessResponsePayloadByteCount(
+            payload.count,
+            limits: limits
+        )
+    }
+
     public func encodeResponseAndPayload<Request, Response>(
         _ operation: DatabaseOperation<Request, Response>,
         requestID: UInt64,

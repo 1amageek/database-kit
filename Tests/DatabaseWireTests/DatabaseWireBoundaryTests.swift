@@ -217,7 +217,13 @@ struct DatabaseWireBoundaryTests {
 
     @Test("server payload SPI preserves opaque bounded state")
     func serverPayloadRoundTrip() throws {
-        let value = ServerCursor(sequence: 7, continuation: ByteString([1, 2, 3]))
+        let value = ServerCursor(
+            sequence: 7,
+            continuation: ByteString([1, 2, 3]),
+            details: try FieldObject([
+                (key: "phase", value: .string("indexing")),
+            ])
+        )
         let payload = try ServerPayloadEncoder.encode(value)
         let decoded = try ServerPayloadDecoder.decode(
             ServerCursor.self,
@@ -226,25 +232,67 @@ struct DatabaseWireBoundaryTests {
 
         #expect(decoded == value)
     }
+
+    @Test("server semantic payloads use one canonical borrowed emission")
+    func serverSemanticPayloadEmission() throws {
+        let quad = RDFQuad(
+            subject: .iri(try RDFIRI("urn:event:1")),
+            predicate: RDFPredicateIRI(try RDFIRI("urn:event:startsAt")),
+            object: .literal(
+                RDFLiteral(
+                    lexicalForm: "2026-07-26",
+                    annotation: .typed(
+                        XSDDatatype.date.typedLiteralDatatype
+                    )
+                )
+            )
+        )
+        let encodedQuad = try ServerPayloadEncoder.encode(quad)
+        #expect(
+            try ServerPayloadDecoder.decode(
+                RDFQuad.self,
+                from: encodedQuad
+            ) == quad
+        )
+
+        let term = GraphAlgorithmOperation.Term.rdf(
+            .iri(try RDFIRI("urn:event:1"))
+        )
+        let encodedTerm = try ServerPayloadEncoder.encode(term)
+        var measuredByteCount = 0
+        var emittedBytes: [UInt8] = []
+        try ServerPayloadEncoder.emit(
+            term,
+            prepare: { measuredByteCount = $0 },
+            consume: { emittedBytes.append(contentsOf: $0) }
+        )
+
+        #expect(measuredByteCount == encodedTerm.count)
+        #expect(ByteString(emittedBytes) == encodedTerm)
+    }
 }
 
 private struct ServerCursor: ServerPayloadValue, Equatable {
     let sequence: UInt32
     let continuation: ByteString
+    let details: FieldObject
 
     func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         writer.writeUInt32(sequence)
         try writer.writeBytes(continuation)
+        try details.encode(into: &writer)
     }
 
     init(
         sequence: UInt32,
-        continuation: ByteString
+        continuation: ByteString,
+        details: FieldObject
     ) {
         self.sequence = sequence
         self.continuation = continuation
+        self.details = details
     }
 
     init(
@@ -252,7 +300,8 @@ private struct ServerCursor: ServerPayloadValue, Equatable {
     ) throws(DatabaseWireError) {
         self.init(
             sequence: try reader.readUInt32(),
-            continuation: try reader.readBytes()
+            continuation: try reader.readBytes(),
+            details: try FieldObject(from: &reader)
         )
     }
 }

@@ -1,7 +1,6 @@
 import DatabaseTypes
 /// Canonical identifier for one resumable job operation.
 public struct JobOperationIdentifier:
-    WireValue,
     Hashable {
     public static let maximumKindUTF8Bytes = 128
 
@@ -30,7 +29,8 @@ public struct JobOperationIdentifier:
         self.kind = kind
     }
 
-    func encode(
+    @_spi(DatabaseServer)
+    public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         guard Self.supportsJobs(family) else {
@@ -43,7 +43,8 @@ public struct JobOperationIdentifier:
         try writer.writeString(kind)
     }
 
-    init(
+    @_spi(DatabaseServer)
+    public init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         try self.init(
@@ -108,3 +109,5 @@ public struct JobOperationIdentifier:
         return !previousWasSeparator
     }
 }
+
+extension JobOperationIdentifier: WireValue {}
