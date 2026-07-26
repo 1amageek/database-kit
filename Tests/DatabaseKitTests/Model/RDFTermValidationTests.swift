@@ -80,6 +80,76 @@ struct RDFTermValidationTests {
         }
     }
 
+    @Test("Untyped RDF terms are admitted through role validation")
+    func untypedTermsRequireRoleValidation() throws {
+        let subject = RDFTerm.blankNode(
+            try RDFBlankNodeIdentifier("subject")
+        )
+        let predicate = RDFTerm.iri(try RDFIRI("urn:predicate"))
+        let object = RDFTerm.literal(
+            RDFLiteral(
+                lexicalForm: "value",
+                datatype: .xsdString
+            )
+        )
+        let graph = RDFTerm.iri(try RDFIRI("urn:graph"))
+
+        let triple = try RDFTriple(
+            validatingSubject: subject,
+            predicate: predicate,
+            object: object
+        )
+        let quad = try RDFQuad(
+            validatingSubject: subject,
+            predicate: predicate,
+            object: object,
+            graph: graph
+        )
+
+        #expect(triple.subject == .blankNode(
+            try RDFBlankNodeIdentifier("subject")
+        ))
+        #expect(quad.predicate == RDFPredicateIRI(
+            try RDFIRI("urn:predicate")
+        ))
+        let expectedGraph = try RDFGraphName(graph)
+        #expect(quad.graph == expectedGraph)
+    }
+
+    @Test("Untyped RDF terms reject invalid semantic roles")
+    func untypedTermsRejectInvalidRoles() throws {
+        let iri = RDFTerm.iri(try RDFIRI("urn:value"))
+        let literal = RDFTerm.literal(
+            RDFLiteral(
+                lexicalForm: "value",
+                datatype: .xsdString
+            )
+        )
+
+        #expect(throws: RDFDatasetValidationError.invalidSubject(literal)) {
+            try RDFTriple(
+                validatingSubject: literal,
+                predicate: iri,
+                object: iri
+            )
+        }
+        #expect(throws: RDFDatasetValidationError.invalidPredicate(literal)) {
+            try RDFTriple(
+                validatingSubject: iri,
+                predicate: literal,
+                object: iri
+            )
+        }
+        #expect(throws: RDFDatasetValidationError.invalidGraphName(literal)) {
+            try RDFQuad(
+                validatingSubject: iri,
+                predicate: iri,
+                object: iri,
+                graph: literal
+            )
+        }
+    }
+
     private func nestedTerm(depth: Int) throws -> RDFTerm {
         var term = RDFTerm.iri(try RDFIRI("urn:leaf"))
         for index in 0..<depth {

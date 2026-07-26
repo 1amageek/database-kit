@@ -33,7 +33,7 @@ public struct RDFQuad: Sendable, Hashable {
         RDFTriple(subject: subject, predicate: predicate, object: object)
     }
 
-    package init(
+    public init(
         validatingSubject subject: RDFTerm,
         predicate: RDFTerm,
         object: RDFTerm,
@@ -81,7 +81,7 @@ public struct RDFTriple: Sendable, Hashable {
         RDFQuad(subject: subject, predicate: predicate, object: object)
     }
 
-    package init(
+    public init(
         validatingSubject subject: RDFTerm,
         predicate: RDFTerm,
         object: RDFTerm
