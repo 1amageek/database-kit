@@ -31,8 +31,8 @@ The arrows point from a consumer to a dependency.
 
 | Module | Owns | Does not own |
 |---|---|---|
-| `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, and SHACL declarations | Primitive values, Codable-based canonical persistence, execution, transport |
-| `DatabaseWire` | Version 1 envelopes, typed operations, bounded binary encoding and decoding, and internal canonical digest support | Semantic meaning, network transport, or operation execution |
+| `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, SHACL, and shared streaming digest support | Primitive values, Codable-based canonical persistence, execution, transport |
+| `DatabaseWire` | Version 1 envelopes, typed operations, bounded binary encoding and decoding, and protocol-specific digest values | Semantic meaning, network transport, or operation execution |
 | `DatabaseKitFoundation` | Native Foundation scalar participation in `Persistable` field adaptation | Primitive conversion rules, Wire, transport, or Embedded behavior |
 | Compiler plugin | Static generation for `DatabaseKit` contracts | Runtime behavior or a public library product |
 

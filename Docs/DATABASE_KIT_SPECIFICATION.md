@@ -28,6 +28,8 @@ It defines:
 - index declarations;
 - graph, RDF, ontology, and SHACL declarations;
 - query and mutation language models;
+- Foundation-independent streaming digest algorithms required by standard
+  query semantics and canonical integrity checks;
 - operation request and response models;
 - the canonical bounded binary representation of those operations;
 - compiler macros that generate static conformance to these contracts.
@@ -74,7 +76,7 @@ reasons to change.
 
 | Product | Owns | Changes when |
 |---|---|---|
-| `DatabaseKit` | Persisted model and document meaning, identity, schema, query, mutation, relationship, index, graph, ontology, and SHACL declarations | Database semantics or their static declaration contracts change |
+| `DatabaseKit` | Persisted model and document meaning, identity, schema, query, mutation, relationship, index, graph, ontology, SHACL, and database-semantic digest support | Database semantics or their Foundation-independent support contracts change |
 | `DatabaseWire` | The canonical version 1 binary representation of database operations | The version 1 frame, operation, bound, or protocol-error contract changes |
 | `DatabaseKitFoundation` | Native Foundation scalar participation in `DatabaseKit` model adaptation | Foundation APIs or the explicit canonical scalar-conversion boundary changes |
 
@@ -230,7 +232,7 @@ It owns:
 - operation-to-request-and-response type binding;
 - protocol error representation;
 - canonical operation golden vectors;
-- digest implementation used only to establish canonical protocol values.
+- protocol-specific digest domains and result values.
 
 It does not own:
 
@@ -244,6 +246,12 @@ It does not own:
 Wire-specific encoding of a semantic value is owned by `DatabaseWire`.
 Validation or normalization intrinsic to the semantic value remains owned by
 `DatabaseKit`.
+
+The MD5, SHA-1, SHA-256, SHA-384, and SHA-512 streaming accumulators live in
+`DatabaseKit` because standard database query functions and canonical
+integrity checks share those deterministic algorithms. `DatabaseWire` owns
+only the protocol-specific digest domain construction and typed result
+contracts. Digest support does not form a separate product.
 
 RDF follows this boundary explicitly:
 
@@ -336,7 +344,8 @@ product is published. In particular:
   to `Persistable`;
 - relationship, vector, full-text, geographic, rank, permutation, graph,
   ontology, and SHACL declarations remain in `DatabaseKit`;
-- digest implementation used by canonical Wire values is internal to
+- streaming digest algorithms shared by database semantics and protocol
+  integrity live in `DatabaseKit`; protocol-specific digest values remain in
   `DatabaseWire`.
 
 ## Source Organization
@@ -367,12 +376,12 @@ Sources/
 │   │   ├── Ontology/
 │   │   └── SHACL/
 │   └── Support/
+│       ├── Digest/
 │       └── package-internal platform-neutral utilities
 ├── DatabaseWire/
 │   ├── Operation/
 │   ├── Encoding/
-│   ├── Decoding/
-│   └── Digest/
+│   └── Decoding/
 ├── DatabaseKitFoundation/
 │   └── explicit Foundation scalar participation in model adaptation
 └── DatabaseKitMacros/

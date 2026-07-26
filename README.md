@@ -57,8 +57,8 @@ dependencies: [
 
 | Module | Description |
 |--------|-------------|
-| `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, and SHACL declarations |
-| `DatabaseWire` | Canonical binary envelopes, typed operations, bounded encoding and decoding, results, errors, and internal digest support |
+| `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, SHACL, and shared streaming digest support |
+| `DatabaseWire` | Canonical binary envelopes, typed operations, bounded encoding and decoding, results, errors, and protocol-specific digest values |
 | `DatabaseKitFoundation` | Native-only participation of Foundation scalar types in `Persistable` field adaptation |
 
 Relationship, vector, full-text, geographic, rank, permutation, graph,
