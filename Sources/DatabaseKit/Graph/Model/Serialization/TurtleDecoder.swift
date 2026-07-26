@@ -127,6 +127,11 @@ private enum TurtleToken: Sendable {
     case eof
 }
 
+private struct LocatedTurtleToken: Sendable {
+    let token: TurtleToken
+    let line: Int
+}
+
 // MARK: - Tokenizer
 
 private final class TurtleTokenizer {
@@ -139,53 +144,54 @@ private final class TurtleTokenizer {
         self.index = input.startIndex
     }
 
-    func tokenize() throws(TurtleDecodingError) -> [TurtleToken] {
-        var tokens: [TurtleToken] = []
+    func tokenize() throws(TurtleDecodingError) -> [LocatedTurtleToken] {
+        var tokens: [LocatedTurtleToken] = []
         while index < input.endIndex {
             skipWhitespaceAndComments()
             guard index < input.endIndex else { break }
 
+            let tokenLine = line
             let ch = input[index]
-
+            let token: TurtleToken
             switch ch {
             case "<":
-                tokens.append(try readIRI())
+                token = try readIRI()
             case "\"":
-                tokens.append(try readStringLiteral())
+                token = try readStringLiteral()
             case "'":
-                tokens.append(try readSingleQuotedStringLiteral())
+                token = try readSingleQuotedStringLiteral()
             case ".":
                 // Check for decimal literal
                 let next = peek(offset: 1)
                 if let next, isASCIIDigit(next) {
-                    tokens.append(try readNumericLiteral())
+                    token = try readNumericLiteral()
                 } else {
                     advance()
-                    tokens.append(.dot)
+                    token = .dot
                 }
             case ";":
                 advance()
-                tokens.append(.semicolon)
+                token = .semicolon
             case ",":
                 advance()
-                tokens.append(.comma)
+                token = .comma
             case "[":
                 advance()
-                tokens.append(.openBracket)
+                token = .openBracket
             case "]":
                 advance()
-                tokens.append(.closeBracket)
+                token = .closeBracket
             case "(":
                 advance()
-                tokens.append(.openParen)
+                token = .openParen
             case ")":
                 advance()
-                tokens.append(.closeParen)
+                token = .closeParen
             case "^":
                 if peek(offset: 1) == "^" {
                     advance()
                     advance()
-                    tokens.append(.hatHat)
+                    token = .hatHat
                 } else {
                     throw TurtleDecodingError.unexpectedToken(expected: "^^", found: String(ch), line: line)
                 }
@@ -193,28 +199,27 @@ private final class TurtleTokenizer {
                 advance()
                 let word = readWord()
                 if word == "prefix" {
-                    tokens.append(.prefixDecl)
+                    token = .prefixDecl
                 } else if word == "base" {
-                    tokens.append(.baseDecl)
+                    token = .baseDecl
                 } else {
-                    tokens.append(.langTag(word))
+                    token = .langTag(word)
                 }
             case "_":
                 if peek(offset: 1) == ":" {
                     advance() // _
                     advance() // :
                     let label = readLocalName()
-                    tokens.append(.blankNode(label))
+                    token = .blankNode(label)
                 } else {
                     let word = readWord()
-                    tokens.append(classifyWord(word))
+                    token = classifyWord(word)
                 }
             default:
                 if ch == "+" || ch == "-" || isASCIIDigit(ch) {
-                    tokens.append(try readNumericLiteral())
+                    token = try readNumericLiteral()
                 } else if ch.isLetter || ch == ":" {
-                    let word = readPrefixedNameOrWord()
-                    tokens.append(word)
+                    token = readPrefixedNameOrWord()
                 } else {
                     throw TurtleDecodingError.unexpectedToken(
                         expected: "valid token",
@@ -223,8 +228,9 @@ private final class TurtleTokenizer {
                     )
                 }
             }
+            tokens.append(LocatedTurtleToken(token: token, line: tokenLine))
         }
-        tokens.append(.eof)
+        tokens.append(LocatedTurtleToken(token: .eof, line: line))
         return tokens
     }
 
@@ -583,14 +589,14 @@ private final class TurtleTokenizer {
 // MARK: - Parser
 
 private final class TurtleParser {
-    let tokens: [TurtleToken]
+    let tokens: [LocatedTurtleToken]
     var pos: Int = 0
     var prefixes: [String: String] = [:]
     var baseIRI: String?
     var triples: [ParsedRDFTriple] = []
     var blankNodeCounter: Int = 0
 
-    init(tokens: [TurtleToken]) {
+    init(tokens: [LocatedTurtleToken]) {
         self.tokens = tokens
     }
 
@@ -937,7 +943,7 @@ private final class TurtleParser {
     }
 
     private var current: TurtleToken {
-        pos < tokens.count ? tokens[pos] : .eof
+        pos < tokens.count ? tokens[pos].token : .eof
     }
 
     private var isAtEnd: Bool {
@@ -946,8 +952,10 @@ private final class TurtleParser {
     }
 
     private var currentLine: Int {
-        // Approximate line from position
-        return 0
+        guard !tokens.isEmpty else {
+            return 1
+        }
+        return tokens[min(pos, tokens.count - 1)].line
     }
 
     private func advance() {

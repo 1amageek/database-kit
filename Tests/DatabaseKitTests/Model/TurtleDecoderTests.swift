@@ -473,13 +473,16 @@ struct TurtleDecoderTests {
     // MARK: - Error Cases
 
     @Test("Undefined prefix throws error")
-    func errorUndefinedPrefix() throws {
+    func errorUndefinedPrefix() {
         let turtle = """
         @prefix owl: <http://www.w3.org/2002/07/owl#> .
         unknown:Person a owl:Class .
         """
-        #expect(throws: TurtleDecodingError.self) {
-            try TurtleDecoder().decode(from: turtle)
+        do {
+            _ = try TurtleDecoder().decode(from: turtle)
+            Issue.record("Expected the undefined prefix to fail")
+        } catch {
+            #expect(error == .undefinedPrefix("unknown", line: 2))
         }
     }
 

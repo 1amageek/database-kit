@@ -48,6 +48,11 @@ private enum TriGToken: Sendable {
     case eof
 }
 
+private struct LocatedTriGToken: Sendable {
+    let token: TriGToken
+    let line: Int
+}
+
 private final class TriGTokenizer {
     let input: String
     var index: String.Index
@@ -58,56 +63,58 @@ private final class TriGTokenizer {
         self.index = input.startIndex
     }
 
-    func tokenize() throws(RDFSyntaxError) -> [TriGToken] {
-        var tokens: [TriGToken] = []
+    func tokenize() throws(RDFSyntaxError) -> [LocatedTriGToken] {
+        var tokens: [LocatedTriGToken] = []
         while index < input.endIndex {
             skipWhitespaceAndComments()
             guard index < input.endIndex else { break }
 
+            let tokenLine = line
             let ch = input[index]
+            let token: TriGToken
             switch ch {
             case "<":
-                tokens.append(try readIRI())
+                token = try readIRI()
             case "\"":
-                tokens.append(try readStringLiteral(quote: "\""))
+                token = try readStringLiteral(quote: "\"")
             case "'":
-                tokens.append(try readStringLiteral(quote: "'"))
+                token = try readStringLiteral(quote: "'")
             case ".":
                 if let next = peek(offset: 1), next.isNumber {
-                    tokens.append(readNumericLiteral())
+                    token = readNumericLiteral()
                 } else {
                     advance()
-                    tokens.append(.dot)
+                    token = .dot
                 }
             case ";":
                 advance()
-                tokens.append(.semicolon)
+                token = .semicolon
             case ",":
                 advance()
-                tokens.append(.comma)
+                token = .comma
             case "[":
                 advance()
-                tokens.append(.openBracket)
+                token = .openBracket
             case "]":
                 advance()
-                tokens.append(.closeBracket)
+                token = .closeBracket
             case "(":
                 advance()
-                tokens.append(.openParen)
+                token = .openParen
             case ")":
                 advance()
-                tokens.append(.closeParen)
+                token = .closeParen
             case "{":
                 advance()
-                tokens.append(.openBrace)
+                token = .openBrace
             case "}":
                 advance()
-                tokens.append(.closeBrace)
+                token = .closeBrace
             case "^":
                 if peek(offset: 1) == "^" {
                     advance()
                     advance()
-                    tokens.append(.hatHat)
+                    token = .hatHat
                 } else {
                     throw RDFSyntaxError.unexpectedToken(expected: "^^", found: String(ch), line: line)
                 }
@@ -115,31 +122,32 @@ private final class TriGTokenizer {
                 advance()
                 let word = readWord()
                 if word == "prefix" {
-                    tokens.append(.prefixDecl)
+                    token = .prefixDecl
                 } else if word == "base" {
-                    tokens.append(.baseDecl)
+                    token = .baseDecl
                 } else {
-                    tokens.append(.langTag(word))
+                    token = .langTag(word)
                 }
             case "_":
                 if peek(offset: 1) == ":" {
                     advance()
                     advance()
-                    tokens.append(.blankNode(readLocalName()))
+                    token = .blankNode(readLocalName())
                 } else {
-                    tokens.append(classifyWord(readWord()))
+                    token = classifyWord(readWord())
                 }
             default:
                 if ch == "+" || ch == "-" || ch.isNumber {
-                    tokens.append(readNumericLiteral())
+                    token = readNumericLiteral()
                 } else if ch.isLetter || ch == ":" {
-                    tokens.append(readPrefixedNameOrWord())
+                    token = readPrefixedNameOrWord()
                 } else {
                     throw RDFSyntaxError.unexpectedToken(expected: "valid token", found: String(ch), line: line)
                 }
             }
+            tokens.append(LocatedTriGToken(token: token, line: tokenLine))
         }
-        tokens.append(.eof)
+        tokens.append(LocatedTriGToken(token: .eof, line: line))
         return tokens
     }
 
@@ -319,7 +327,7 @@ private final class TriGTokenizer {
 }
 
 private struct TriGParser {
-    let tokens: [TriGToken]
+    let tokens: [LocatedTriGToken]
     var pos = 0
     var prefixes: [String: String] = [:]
     var baseIRI: String?
@@ -753,7 +761,8 @@ private struct TriGParser {
     private var startsGraphBlock: Bool {
         switch current {
         case .iri, .prefixedName, .blankNode:
-            if pos + 1 < tokens.count, case .openBrace = tokens[pos + 1] {
+            if pos + 1 < tokens.count,
+               case .openBrace = tokens[pos + 1].token {
                 return true
             }
             return false
@@ -763,7 +772,7 @@ private struct TriGParser {
     }
 
     private var current: TriGToken {
-        pos < tokens.count ? tokens[pos] : .eof
+        pos < tokens.count ? tokens[pos].token : .eof
     }
 
     private var isAtEnd: Bool {
@@ -772,7 +781,10 @@ private struct TriGParser {
     }
 
     private var currentLine: Int {
-        0
+        guard !tokens.isEmpty else {
+            return 1
+        }
+        return tokens[min(pos, tokens.count - 1)].line
     }
 
     private mutating func advance() {

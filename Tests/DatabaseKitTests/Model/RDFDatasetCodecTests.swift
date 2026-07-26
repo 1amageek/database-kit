@@ -202,6 +202,22 @@ struct RDFDatasetCodecTests {
         }
     }
 
+    @Test("TriG parser errors preserve the source token line")
+    func triGParserErrorLine() {
+        let input = """
+        @prefix ex: <http://example.org/> .
+
+        missing:alice ex:knows ex:bob .
+        """
+
+        do {
+            _ = try TriGDecoder().decode(from: input)
+            Issue.record("Expected the undefined prefix to fail")
+        } catch {
+            #expect(error == .undefinedPrefix("missing", line: 3))
+        }
+    }
+
     @Test("TriG encoder groups by graph and round-trips")
     func triGRoundTrip() throws {
         let dataset = RDFDataset(
