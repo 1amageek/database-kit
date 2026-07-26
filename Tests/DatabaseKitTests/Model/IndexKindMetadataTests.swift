@@ -113,6 +113,89 @@ struct IndexKindMetadataTests {
         #expect(label == .implicit)
     }
 
+    @Test("Autocomplete accepts scalar and array string fields")
+    func autocompleteAcceptsStringFields() throws {
+        let definition = IndexDefinition.autocomplete(
+            minPrefixLength: 2,
+            maxPrefixLength: 12
+        )
+        let fields = [
+            IndexFieldMetadata(
+                identity: FieldIdentity(name: "title", number: 1)
+            ),
+            IndexFieldMetadata(
+                identity: FieldIdentity(name: "aliases", number: 2)
+            ),
+        ]
+        let metadata = try definition.kindMetadata(
+            fields: fields,
+            schemas: [
+                FieldSchema(
+                    name: "title",
+                    fieldNumber: 1,
+                    type: .string
+                ),
+                FieldSchema(
+                    name: "aliases",
+                    fieldNumber: 2,
+                    type: .string,
+                    isArray: true
+                ),
+            ]
+        )
+
+        #expect(metadata.identifier == "autocomplete")
+        #expect(metadata.fields == fields)
+        #expect(metadata.metadata["minPrefixLength"] == .int64(2))
+        #expect(metadata.metadata["maxPrefixLength"] == .int64(12))
+        #expect(try IndexDefinition(metadata: metadata) == definition)
+    }
+
+    @Test("Autocomplete rejects invalid prefix bounds")
+    func autocompleteRejectsInvalidPrefixBounds() {
+        let field = IndexFieldMetadata(
+            identity: FieldIdentity(name: "title", number: 1)
+        )
+        let schema = FieldSchema(
+            name: "title",
+            fieldNumber: 1,
+            type: .string
+        )
+
+        #expect(throws: IndexValidationError.self) {
+            _ = try IndexDefinition.autocomplete(
+                minPrefixLength: 0,
+                maxPrefixLength: 12
+            ).kindMetadata(fields: [field], schemas: [schema])
+        }
+        #expect(throws: IndexValidationError.self) {
+            _ = try IndexDefinition.autocomplete(
+                minPrefixLength: 4,
+                maxPrefixLength: 3
+            ).kindMetadata(fields: [field], schemas: [schema])
+        }
+    }
+
+    @Test("Autocomplete rejects non-string fields")
+    func autocompleteRejectsNonStringFields() {
+        #expect(throws: IndexValidationError.self) {
+            _ = try IndexDefinition.autocomplete().kindMetadata(
+                fields: [
+                    IndexFieldMetadata(
+                        identity: FieldIdentity(name: "count", number: 1)
+                    )
+                ],
+                schemas: [
+                    FieldSchema(
+                        name: "count",
+                        fieldNumber: 1,
+                        type: .int64
+                    )
+                ]
+            )
+        }
+    }
+
     private func makeMetadata(
         _ values: [String: FieldValue]
     ) -> IndexKindMetadata {

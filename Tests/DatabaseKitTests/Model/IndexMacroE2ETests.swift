@@ -124,6 +124,21 @@ struct IndexMacroE2ETests {
         #expect(ngramSize == 2)
         #expect(minTermLength == 1)
 
+        let autocomplete = try IndexDefinition(
+            metadata: Self.descriptor(
+                named: "e2e_autocomplete_title_search_terms"
+            ).kind
+        )
+        guard case .autocomplete(
+            let minimumPrefixLength,
+            let maximumPrefixLength
+        ) = autocomplete else {
+            Issue.record("Expected autocomplete definition")
+            return
+        }
+        #expect(minimumPrefixLength == 2)
+        #expect(maximumPrefixLength == 12)
+
         let spatial = try IndexDefinition(
             metadata: Self.descriptor(
                 named: "e2e_spatial_latitude_longitude"
@@ -196,6 +211,7 @@ struct IndexMacroE2ETests {
         .init(name: "e2e_percentile_category_latency", kindIdentifier: "percentile", fieldNames: ["category", "latency"]),
         .init(name: "e2e_vector_embedding", kindIdentifier: "vector", fieldNames: ["embedding"]),
         .init(name: "e2e_fulltext_title_body", kindIdentifier: "fulltext", fieldNames: ["title", "body"]),
+        .init(name: "e2e_autocomplete_title_search_terms", kindIdentifier: "autocomplete", fieldNames: ["title", "searchTerms"]),
         .init(name: "e2e_spatial_latitude_longitude", kindIdentifier: "spatial", fieldNames: ["location"]),
         .init(name: "e2e_rank_score", kindIdentifier: "rank", fieldNames: ["score"]),
         .init(name: "e2e_permuted_category_status_title", kindIdentifier: "permuted", fieldNames: ["category", "status", "title"]),
@@ -328,6 +344,17 @@ private struct IndexMacroE2ERecord {
         name: "e2e_fulltext_title_body"
     )
     #Index(
+        .autocomplete(
+            minPrefixLength: 2,
+            maxPrefixLength: 12
+        ),
+        fields: [
+            \IndexMacroE2ERecord.title,
+            \IndexMacroE2ERecord.searchTerms,
+        ],
+        name: "e2e_autocomplete_title_search_terms"
+    )
+    #Index(
         .spatial(
             encoding: .s2,
             level: 12
@@ -362,6 +389,7 @@ private struct IndexMacroE2ERecord {
     var status: String
     var title: String
     var body: String
+    var searchTerms: [String]
     var amount: Double
     var score: Int64
     var latency: Double

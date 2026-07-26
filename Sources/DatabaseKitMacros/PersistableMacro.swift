@@ -1164,7 +1164,7 @@ func selectedIndexFieldPaths(
 
     let allowedRoles: Set<String>
     switch definition.name {
-    case "scalar", "fullText", "permuted":
+    case "scalar", "fullText", "autocomplete", "permuted":
         allowedRoles = ["fields"]
     case "count":
         allowedRoles = ["groupBy"]
@@ -1204,7 +1204,7 @@ func selectedIndexFieldPaths(
     }
 
     switch definition.name {
-    case "scalar", "fullText", "permuted":
+    case "scalar", "fullText", "autocomplete", "permuted":
         let fields = roles["fields"] ?? []
         guard !fields.isEmpty else {
             throw DiagnosticsError(diagnostics: [
@@ -1359,6 +1359,7 @@ func generateIndexName(
     case "percentile": return prefixed("percentile")
     case "vector": return prefixed("vector")
     case "fullText": return prefixed("fulltext")
+    case "autocomplete": return prefixed("autocomplete")
     case "spatial": return prefixed("spatial")
     case "rank": return prefixed("rank")
     case "permuted": return prefixed("permuted")

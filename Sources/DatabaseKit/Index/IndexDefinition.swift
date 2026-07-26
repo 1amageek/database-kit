@@ -33,6 +33,10 @@ public enum IndexDefinition: Sendable, Hashable {
         ngramSize: Int = 3,
         minTermLength: Int = 2
     )
+    case autocomplete(
+        minPrefixLength: Int = 1,
+        maxPrefixLength: Int = 10
+    )
     case spatial(
         encoding: SpatialEncoding = .s2,
         level: Int = 15
@@ -63,6 +67,7 @@ extension IndexDefinition {
         case .percentile: "percentile"
         case .vector: "vector"
         case .fullText: "fulltext"
+        case .autocomplete: "autocomplete"
         case .spatial: "spatial"
         case .rank: "rank"
         case .permuted: "permuted"
@@ -77,6 +82,7 @@ extension IndexDefinition {
         case .count, .sum, .average, .countNotNull, .distinct, .percentile:
             .aggregation
         case .version, .bitmap, .timeWindowLeaderboard, .vector, .fullText,
+             .autocomplete,
              .rank, .graph:
             .hierarchical
         }
@@ -343,6 +349,28 @@ extension IndexDefinition {
                 )
             }
 
+        case .autocomplete(let minPrefixLength, let maxPrefixLength):
+            try requireMinimumCount(1)
+            guard minPrefixLength > 0 else {
+                throw .invalidConfiguration(
+                    index: identifier,
+                    reason: "Minimum prefix length must be positive"
+                )
+            }
+            guard maxPrefixLength >= minPrefixLength else {
+                throw .invalidConfiguration(
+                    index: identifier,
+                    reason: "Maximum prefix length must not be less than the minimum"
+                )
+            }
+            for field in schemas where field.type != .string {
+                throw .unsupportedField(
+                    index: identifier,
+                    field: field,
+                    reason: "Autocomplete index fields must be String or [String]"
+                )
+            }
+
         case .spatial(let encoding, let level):
             try requireCount(1)
             let maximumLevel = encoding == .morton ? 20 : 30
@@ -488,6 +516,11 @@ extension IndexDefinition {
                 "storePositions": .bool(storePositions),
                 "ngramSize": .int64(Int64(ngramSize)),
                 "minTermLength": .int64(Int64(minTermLength)),
+            ]
+        case .autocomplete(let minPrefixLength, let maxPrefixLength):
+            return [
+                "minPrefixLength": .int64(Int64(minPrefixLength)),
+                "maxPrefixLength": .int64(Int64(maxPrefixLength)),
             ]
         case .spatial(let encoding, let level):
             return [
@@ -725,6 +758,35 @@ extension IndexDefinition {
                 storePositions: try kind.requireBool("storePositions"),
                 ngramSize: ngramSize,
                 minTermLength: minTermLength
+            )
+
+        case "autocomplete":
+            try validate(
+                identifier: "autocomplete",
+                subspaceStructure: .hierarchical,
+                requiredMetadata: [
+                    "minPrefixLength",
+                    "maxPrefixLength",
+                ]
+            )
+            try kind.validateFieldCount(minimum: 1)
+            let minPrefixLength = try kind.requireInt("minPrefixLength")
+            let maxPrefixLength = try kind.requireInt("maxPrefixLength")
+            guard minPrefixLength > 0 else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "minPrefixLength"
+                )
+            }
+            guard maxPrefixLength >= minPrefixLength else {
+                throw .invalidMetadata(
+                    identifier: kind.identifier,
+                    key: "maxPrefixLength"
+                )
+            }
+            self = .autocomplete(
+                minPrefixLength: minPrefixLength,
+                maxPrefixLength: maxPrefixLength
             )
 
         case "spatial":

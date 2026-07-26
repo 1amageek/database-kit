@@ -301,6 +301,10 @@ struct Event {
         .fullText(tokenizer: .simple),
         fields: [\Event.title, \Event.description]
     )
+    #Index(
+        .autocomplete(minPrefixLength: 2, maxPrefixLength: 12),
+        fields: [\Event.title, \Event.searchTerms]
+    )
     #Index(.spatial(), location: \Event.location)
     #Index(.rank(), field: \Event.attendeeCount)
 
@@ -311,6 +315,7 @@ struct Event {
     var embedding: Vector
     var title: String
     var description: String
+    var searchTerms: [String]
     var location: GeographicPoint
 }
 ```
