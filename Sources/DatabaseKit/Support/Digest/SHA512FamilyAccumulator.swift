@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-/// Shared streaming state for SHA-384 and SHA-512.
+/// Streaming state shared by SHA-384 and SHA-512.
 ///
 /// Both algorithms use the SHA-512 compression function and differ only in
 /// their initial state and digest truncation.

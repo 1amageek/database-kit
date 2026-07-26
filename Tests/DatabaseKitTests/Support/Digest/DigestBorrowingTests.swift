@@ -1,4 +1,4 @@
-@testable import DatabaseWire
+@testable import DatabaseKit
 import DatabaseTypes
 import Testing
 

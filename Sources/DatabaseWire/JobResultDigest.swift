@@ -1,3 +1,4 @@
+import DatabaseKit
 import DatabaseTypes
 
 /// Canonical SHA-256 digest of a completed job response payload.

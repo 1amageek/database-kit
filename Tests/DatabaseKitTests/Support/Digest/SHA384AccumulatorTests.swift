@@ -1,4 +1,4 @@
-@testable import DatabaseWire
+@testable import DatabaseKit
 import Testing
 
 @Suite("SHA-384 Accumulator Tests")

@@ -1,6 +1,7 @@
 import DatabaseTypes
 import Synchronization
 
+/// Tracks synchronous borrowing performed by digest accumulators.
 final class DigestBorrowCountingOwner: ByteStringOwner {
     let bytes: [UInt8]
     private let counter = Mutex(0)

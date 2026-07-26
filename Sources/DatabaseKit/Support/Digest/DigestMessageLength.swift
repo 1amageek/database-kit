@@ -1,4 +1,4 @@
-/// Message length encoded by digest algorithms with a 64-bit bit-count field.
+/// Message length used by digest algorithms with a 64-bit bit-count field.
 struct DigestMessageLength64: Sendable {
     static let maximumByteCount = UInt64.max >> 3
 

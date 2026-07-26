@@ -1,5 +1,6 @@
 import DatabaseTypes
 
+/// Shared digest vector input and hexadecimal rendering.
 enum DigestVectorFixture {
     static func bytes(repeating byte: UInt8, count: Int) -> ByteString {
         ByteString([UInt8](repeating: byte, count: count))
