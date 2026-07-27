@@ -28,7 +28,7 @@ public struct IndexKindMetadata: Sendable, Hashable {
     /// - Graph: "fromField", "edgeField", "toField", "graphField", "strategy"
     /// - FullText: "tokenizer", "storePositions", "ngramSize", "minTermLength"
     /// - Spatial: "encoding", "level"
-    /// - Rank: "scoreTypeName", "bucketSize"
+    /// - Rank: "scoreType"
     /// - etc.
     public let metadata: [String: FieldValue]
 

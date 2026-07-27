@@ -170,7 +170,7 @@ struct IndexMacroE2ETests {
         let rank = try Self.descriptor(named: "e2e_rank_score").kind
         #expect(rank.fieldNames == ["score"])
         #expect(try rank.requireScalarType("scoreType") == .int64)
-        #expect(try rank.requireInt("bucketSize") == 50)
+        #expect(rank.metadata.keys.sorted() == ["scoreType"])
 
         let permuted = try IndexDefinition(
             metadata: Self.descriptor(
@@ -397,7 +397,7 @@ private struct IndexMacroE2ERecord {
         name: "e2e_spatial_latitude_longitude"
     )
     #Index(
-        .rank(bucketSize: 50),
+        .rank,
         field: \IndexMacroE2ERecord.score,
         name: "e2e_rank_score"
     )

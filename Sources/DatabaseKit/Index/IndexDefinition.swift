@@ -41,7 +41,7 @@ public enum IndexDefinition: Sendable, Hashable {
         encoding: SpatialEncoding = .s2,
         level: Int = 15
     )
-    case rank(bucketSize: Int = 100)
+    case rank
     case permuted(PermutationPattern)
     case propertyGraph(
         strategy: PropertyGraphIndexStrategy = .adjacency,
@@ -403,14 +403,8 @@ extension IndexDefinition {
                 )
             }
 
-        case .rank(let bucketSize):
+        case .rank:
             try requireCount(1)
-            guard bucketSize > 0 else {
-                throw .invalidConfiguration(
-                    index: identifier,
-                    reason: "Bucket size must be positive"
-                )
-            }
             if let score = schemas.first {
                 try requireNumeric(
                     score,
@@ -565,13 +559,12 @@ extension IndexDefinition {
                 "encoding": .string(encoding.rawValue),
                 "level": .int64(Int64(level)),
             ]
-        case .rank(let bucketSize):
+        case .rank:
             guard let score = schemas.first else {
                 return [:]
             }
             return [
                 "scoreType": .string(try scalarType(for: score).rawValue),
-                "bucketSize": .int64(Int64(bucketSize)),
             ]
         case .permuted(let pattern):
             let permutation = try resolvedPermutation(from: pattern)
@@ -857,18 +850,11 @@ extension IndexDefinition {
             try validate(
                 identifier: "rank",
                 subspaceStructure: .hierarchical,
-                requiredMetadata: ["scoreType", "bucketSize"]
+                requiredMetadata: ["scoreType"]
             )
             try kind.validateFieldCount(1)
             _ = try kind.requireScalarType("scoreType")
-            let bucketSize = try kind.requireInt("bucketSize")
-            guard bucketSize > 0 else {
-                throw .invalidMetadata(
-                    identifier: kind.identifier,
-                    key: "bucketSize"
-                )
-            }
-            self = .rank(bucketSize: bucketSize)
+            self = .rank
 
         case "permuted":
             try validate(

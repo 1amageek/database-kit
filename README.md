@@ -321,7 +321,7 @@ struct Event {
         fields: [\Event.title, \Event.searchTerms]
     )
     #Index(.spatial(), location: \Event.location)
-    #Index(.rank(), field: \Event.attendeeCount)
+    #Index(.rank, field: \Event.attendeeCount)
     #Index(
         .propertyGraph(strategy: .adjacency),
         from: \Event.sourceID,
