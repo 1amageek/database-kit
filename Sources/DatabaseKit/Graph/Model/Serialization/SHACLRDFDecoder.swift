@@ -622,37 +622,103 @@ public struct SHACLRDFDecoder: Sendable {
     }
 
     private struct Index {
-        private var values: [RDFTerm: [RDFIRI: [RDFTerm]]] = [:]
-        private let vocabularyIRIs: [String: RDFIRI]
+        private struct PredicateEntry {
+            let predicate: RDFIRI
+            var objects: [RDFTerm]
+        }
+
+        private struct SubjectEntry {
+            let subject: RDFTerm
+            var predicates: [PredicateEntry]
+        }
+
+        private struct VocabularyEntry {
+            let rawValue: String
+            let iri: RDFIRI
+        }
+
+        private var values: [SubjectEntry]
+        private let vocabularyIRIs: [VocabularyEntry]
 
         init(_ quads: [RDFQuad]) throws(SHACLRDFDecodingError) {
-            var vocabularyIRIs: [String: RDFIRI] = [:]
+            var vocabularyIRIs: [VocabularyEntry] = []
             vocabularyIRIs.reserveCapacity(Vocabulary.allIRIs.count)
             for rawValue in Vocabulary.allIRIs {
                 do {
-                    vocabularyIRIs[rawValue] = try RDFIRI(rawValue)
+                    vocabularyIRIs.append(
+                        VocabularyEntry(
+                            rawValue: rawValue,
+                            iri: try RDFIRI(rawValue)
+                        )
+                    )
                 } catch {
                     throw .invalidVocabularyIRI(rawValue)
                 }
             }
+            vocabularyIRIs.sort { $0.rawValue < $1.rawValue }
             self.vocabularyIRIs = vocabularyIRIs
-            for quad in quads {
-                values[quad.subject.term, default: [:]][
-                    quad.predicate.iri,
-                    default: []
-                ]
-                    .append(quad.object)
+
+            // The index sorts integer positions rather than materializing a
+            // second RDF payload. RDF terms retain their existing storage.
+            var orderedPositions = Array(quads.indices)
+            orderedPositions.sort { left, right in
+                let leftQuad = quads[left]
+                let rightQuad = quads[right]
+                if leftQuad.subject.term != rightQuad.subject.term {
+                    return leftQuad.subject.term < rightQuad.subject.term
+                }
+                if leftQuad.predicate.iri != rightQuad.predicate.iri {
+                    return leftQuad.predicate.iri < rightQuad.predicate.iri
+                }
+                return leftQuad.object < rightQuad.object
             }
+
+            var values: [SubjectEntry] = []
+            for position in orderedPositions {
+                let quad = quads[position]
+                if values.last?.subject != quad.subject.term {
+                    values.append(
+                        SubjectEntry(subject: quad.subject.term, predicates: [])
+                    )
+                }
+                let subjectIndex = values.index(before: values.endIndex)
+                if values[subjectIndex].predicates.last?.predicate
+                    != quad.predicate.iri {
+                    values[subjectIndex].predicates.append(
+                        PredicateEntry(
+                            predicate: quad.predicate.iri,
+                            objects: []
+                        )
+                    )
+                }
+                let predicateIndex = values[subjectIndex].predicates.index(
+                    before: values[subjectIndex].predicates.endIndex
+                )
+                values[subjectIndex].predicates[predicateIndex].objects.append(
+                    quad.object
+                )
+            }
+            self.values = values
         }
 
         func objects(
             _ subject: RDFTerm,
             _ predicate: String
         ) throws(SHACLRDFDecodingError) -> [RDFTerm] {
-            guard let predicateIRI = vocabularyIRIs[predicate] else {
+            guard let predicateIRI = vocabularyIRI(for: predicate) else {
                 throw .unregisteredVocabularyIRI(predicate)
             }
-            return values[subject]?[predicateIRI] ?? []
+            guard let subjectIndex = subjectIndex(for: subject) else {
+                return []
+            }
+            let predicates = values[subjectIndex].predicates
+            guard let predicateIndex = predicateIndex(
+                for: predicateIRI,
+                in: predicates
+            ) else {
+                return []
+            }
+            return predicates[predicateIndex].objects
         }
 
         func firstObject(
@@ -671,36 +737,41 @@ public struct SHACLRDFDecoder: Sendable {
         }
 
         func predicates(_ subject: RDFTerm) -> [RDFIRI] {
-            Array(
-                values[subject]?.keys
-                    ?? Dictionary<RDFIRI, [RDFTerm]>().keys
-            )
+            guard let index = subjectIndex(for: subject) else { return [] }
+            return values[index].predicates.map(\.predicate)
         }
 
         func subjects(
             predicate: String,
             objects: [String]
-        ) throws(SHACLRDFDecodingError) -> Set<RDFTerm> {
-            guard let predicateIRI = vocabularyIRIs[predicate] else {
+        ) throws(SHACLRDFDecodingError) -> [RDFTerm] {
+            guard let predicateIRI = vocabularyIRI(for: predicate) else {
                 throw .unregisteredVocabularyIRI(predicate)
             }
-            var objectIRIs = Set<RDFIRI>()
+            var objectIRIs: [RDFIRI] = []
             objectIRIs.reserveCapacity(objects.count)
             for object in objects {
-                guard let objectIRI = vocabularyIRIs[object] else {
+                guard let objectIRI = vocabularyIRI(for: object) else {
                     throw .invalidVocabularyIRI(object)
                 }
-                objectIRIs.insert(objectIRI)
+                objectIRIs.append(objectIRI)
             }
-            return Set(values.compactMap { subject, predicates in
-                let matches = predicates[predicateIRI] ?? []
+            objectIRIs.sort()
+            return values.compactMap { entry in
+                guard let predicateIndex = predicateIndex(
+                    for: predicateIRI,
+                    in: entry.predicates
+                ) else {
+                    return nil
+                }
+                let matches = entry.predicates[predicateIndex].objects
                 return matches.contains { term in
                     if case .iri(let value) = term {
-                        return objectIRIs.contains(value)
+                        return contains(value, in: objectIRIs)
                     }
                     return false
-                } ? subject : nil
-            })
+                } ? entry.subject : nil
+            }
         }
 
         func hasIRI(
@@ -710,10 +781,85 @@ public struct SHACLRDFDecoder: Sendable {
             guard case .iri(let iri) = term else {
                 return false
             }
-            guard let expected = vocabularyIRIs[rawValue] else {
+            guard let expected = vocabularyIRI(for: rawValue) else {
                 throw .unregisteredVocabularyIRI(rawValue)
             }
             return iri == expected
+        }
+
+        private func vocabularyIRI(for rawValue: String) -> RDFIRI? {
+            var lowerBound = 0
+            var upperBound = vocabularyIRIs.count
+            while lowerBound < upperBound {
+                let midpoint = lowerBound + (upperBound - lowerBound) / 2
+                if vocabularyIRIs[midpoint].rawValue < rawValue {
+                    lowerBound = midpoint + 1
+                } else {
+                    upperBound = midpoint
+                }
+            }
+            guard lowerBound < vocabularyIRIs.count,
+                  vocabularyIRIs[lowerBound].rawValue == rawValue else {
+                return nil
+            }
+            return vocabularyIRIs[lowerBound].iri
+        }
+
+        private func subjectIndex(for subject: RDFTerm) -> Int? {
+            var lowerBound = 0
+            var upperBound = values.count
+            while lowerBound < upperBound {
+                let midpoint = lowerBound + (upperBound - lowerBound) / 2
+                if values[midpoint].subject < subject {
+                    lowerBound = midpoint + 1
+                } else {
+                    upperBound = midpoint
+                }
+            }
+            guard lowerBound < values.count,
+                  values[lowerBound].subject == subject else {
+                return nil
+            }
+            return lowerBound
+        }
+
+        private func predicateIndex(
+            for predicate: RDFIRI,
+            in predicates: [PredicateEntry]
+        ) -> Int? {
+            var lowerBound = 0
+            var upperBound = predicates.count
+            while lowerBound < upperBound {
+                let midpoint = lowerBound + (upperBound - lowerBound) / 2
+                if predicates[midpoint].predicate < predicate {
+                    lowerBound = midpoint + 1
+                } else {
+                    upperBound = midpoint
+                }
+            }
+            guard lowerBound < predicates.count,
+                  predicates[lowerBound].predicate == predicate else {
+                return nil
+            }
+            return lowerBound
+        }
+
+        private func contains(
+            _ value: RDFIRI,
+            in sortedValues: [RDFIRI]
+        ) -> Bool {
+            var lowerBound = 0
+            var upperBound = sortedValues.count
+            while lowerBound < upperBound {
+                let midpoint = lowerBound + (upperBound - lowerBound) / 2
+                if sortedValues[midpoint] < value {
+                    lowerBound = midpoint + 1
+                } else {
+                    upperBound = midpoint
+                }
+            }
+            return lowerBound < sortedValues.count
+                && sortedValues[lowerBound] == value
         }
     }
 

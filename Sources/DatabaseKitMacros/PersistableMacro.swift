@@ -435,7 +435,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     )
                 }
 
-                let selectedFields = compiledIndexFields(
+                let selectedFields = compiledIndexFieldMetadata(
                     definition: definition,
                     fieldPaths: keyPaths,
                     rootType: structName,
@@ -444,13 +444,16 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
 
                 let storedFields = storedFieldKeyPaths
-                    .map { "\(structName).fields.\($0).ascending" }
+                    .map {
+                        "IndexFieldMetadata(identity: \(structName).fields.\($0).identity, order: .ascending)"
+                    }
                     .joined(separator: ", ")
 
                 let descriptorInit: String
                 if storedFieldKeyPaths.isEmpty {
                     descriptorInit = """
                         IndexDescriptor(
+                            model: \(structName).self,
                             name: "\(finalIndexName)",
                             definition: \(definitionExpression),
                             fields: \(selectedFields),
@@ -460,6 +463,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 } else {
                     descriptorInit = """
                         IndexDescriptor(
+                            model: \(structName).self,
                             name: "\(finalIndexName)",
                             definition: \(definitionExpression),
                             fields: \(selectedFields),
@@ -577,9 +581,15 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                             let reverseIndexName = "\(typeName)_\(fieldName)"
                             let reverseIndexInit = """
                                 IndexDescriptor(
+                                    model: \(structName).self,
                                     name: "\(reverseIndexName)",
                                     definition: .scalar,
-                                    fields: [\(structName).fields.\(fieldName).ascending],
+                                    fields: [
+                                        IndexFieldMetadata(
+                                            identity: \(structName).fields.\(fieldName).identity,
+                                            order: .ascending
+                                        )
+                                    ],
                                     commonOptions: .init()
                                 )
                             """
@@ -597,14 +607,21 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 let graphIndexName = "\(typeName)_graph_\(objPropInfo.fromField)_\(objPropInfo.toField)"
                 let graphIndexInit = """
                     IndexDescriptor(
+                        model: \(structName).self,
                         name: "\(graphIndexName)",
                         definition: .propertyGraph(
                             strategy: .adjacency,
                             label: .implicit
                         ),
                         fields: [
-                            \(structName).fields.\(objPropInfo.fromField).ascending,
-                            \(structName).fields.\(objPropInfo.toField).ascending
+                            IndexFieldMetadata(
+                                identity: \(structName).fields.\(objPropInfo.fromField).identity,
+                                order: .ascending
+                            ),
+                            IndexFieldMetadata(
+                                identity: \(structName).fields.\(objPropInfo.toField).identity,
+                                order: .ascending
+                            )
                         ],
                         commonOptions: .init()
                     )
@@ -1322,14 +1339,14 @@ func validateIndexFieldOrders(
     }
 }
 
-private func compiledIndexFields(
+private func compiledIndexFieldMetadata(
     definition: ParsedIndexDefinition,
     fieldPaths: [String],
     rootType: String,
     fieldOrders: [String]
 ) -> String {
     guard !fieldPaths.isEmpty else {
-        return "[IndexField<\(rootType)>]()"
+        return "[IndexFieldMetadata]()"
     }
     let elements = fieldPaths.enumerated().map { offset, path in
         let order: String
@@ -1342,10 +1359,7 @@ private func compiledIndexFields(
         } else {
             order = ".ascending"
         }
-        let member = order.hasPrefix(".")
-            ? String(order.dropFirst())
-            : order
-        return "\(rootType).fields.\(path).\(member)"
+        return "IndexFieldMetadata(identity: \(rootType).fields.\(path).identity, order: \(order))"
     }
     .joined(separator: ", ")
     return "[\(elements)]"

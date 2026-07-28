@@ -1180,7 +1180,7 @@ private final class OWLBuilder {
         var allDisjointPropBNodes = Set<String>()
 
         // Property characteristics collected from rdf:type
-        var propCharacteristics: [String: Set<PropertyCharacteristic>] = [:]
+        var propCharacteristics: [String: UInt8] = [:]
 
         for triple in triples {
             guard triple.predicate.iriValue == Self.rdfType else { continue }
@@ -1207,31 +1207,38 @@ private final class OWLBuilder {
                 if let bnode = triple.subject.blankNodeID { allDisjointPropBNodes.insert(bnode) }
             case Self.owlFunctionalProperty:
                 if let iri = triple.subject.iriValue {
-                    propCharacteristics[iri, default: []].insert(.functional)
+                    propCharacteristics[iri, default: 0]
+                        |= Self.characteristicBit(.functional)
                 }
             case Self.owlInverseFunctionalProperty:
                 if let iri = triple.subject.iriValue {
-                    propCharacteristics[iri, default: []].insert(.inverseFunctional)
+                    propCharacteristics[iri, default: 0]
+                        |= Self.characteristicBit(.inverseFunctional)
                 }
             case Self.owlTransitiveProperty:
                 if let iri = triple.subject.iriValue {
-                    propCharacteristics[iri, default: []].insert(.transitive)
+                    propCharacteristics[iri, default: 0]
+                        |= Self.characteristicBit(.transitive)
                 }
             case Self.owlSymmetricProperty:
                 if let iri = triple.subject.iriValue {
-                    propCharacteristics[iri, default: []].insert(.symmetric)
+                    propCharacteristics[iri, default: 0]
+                        |= Self.characteristicBit(.symmetric)
                 }
             case Self.owlAsymmetricProperty:
                 if let iri = triple.subject.iriValue {
-                    propCharacteristics[iri, default: []].insert(.asymmetric)
+                    propCharacteristics[iri, default: 0]
+                        |= Self.characteristicBit(.asymmetric)
                 }
             case Self.owlReflexiveProperty:
                 if let iri = triple.subject.iriValue {
-                    propCharacteristics[iri, default: []].insert(.reflexive)
+                    propCharacteristics[iri, default: 0]
+                        |= Self.characteristicBit(.reflexive)
                 }
             case Self.owlIrreflexiveProperty:
                 if let iri = triple.subject.iriValue {
-                    propCharacteristics[iri, default: []].insert(.irreflexive)
+                    propCharacteristics[iri, default: 0]
+                        |= Self.characteristicBit(.irreflexive)
                 }
             default:
                 // Type assertions for individuals (non-OWL types)
@@ -1286,7 +1293,9 @@ private final class OWLBuilder {
                 iri: compactedIRI,
                 label: label,
                 comment: comment,
-                characteristics: propCharacteristics[iri] ?? [],
+                characteristics: Self.characteristics(
+                    from: propCharacteristics[iri]
+                ),
                 inverseOf: inverseOf,
                 domains: domains,
                 ranges: ranges
@@ -1300,7 +1309,10 @@ private final class OWLBuilder {
             var comment: String?
             var domains: [OWLClassExpression] = []
             var ranges: [OWLDataRange] = []
-            let isFunctional = propCharacteristics[iri]?.contains(.functional) ?? false
+            let isFunctional = Self.contains(
+                .functional,
+                in: propCharacteristics[iri]
+            )
 
             for triple in subjectIndex[.iri(iri)] ?? [] {
                 switch triple.predicate.iriValue {
@@ -1410,8 +1422,9 @@ private final class OWLBuilder {
             }
 
             // Property characteristics as axioms
-            if let chars = propCharacteristics[iri] {
-                for char in chars {
+            if let bits = propCharacteristics[iri] {
+                for char in PropertyCharacteristic.allCases where
+                    Self.contains(char, in: bits) {
                     switch char {
                     case .functional: axioms.append(.functionalObjectProperty(compactedIRI))
                     case .inverseFunctional: axioms.append(.inverseFunctionalObjectProperty(compactedIRI))
@@ -1447,7 +1460,7 @@ private final class OWLBuilder {
                 default: break
                 }
             }
-            if propCharacteristics[iri]?.contains(.functional) == true {
+            if Self.contains(.functional, in: propCharacteristics[iri]) {
                 axioms.append(.functionalDataProperty(compactedIRI))
             }
         }
@@ -1535,6 +1548,41 @@ private final class OWLBuilder {
             individuals: individuals,
             axioms: axioms
         )
+    }
+
+    private static func characteristicBit(
+        _ characteristic: PropertyCharacteristic
+    ) -> UInt8 {
+        switch characteristic {
+        case .functional: 1 << 0
+        case .inverseFunctional: 1 << 1
+        case .symmetric: 1 << 2
+        case .asymmetric: 1 << 3
+        case .transitive: 1 << 4
+        case .reflexive: 1 << 5
+        case .irreflexive: 1 << 6
+        }
+    }
+
+    private static func contains(
+        _ characteristic: PropertyCharacteristic,
+        in bits: UInt8?
+    ) -> Bool {
+        guard let bits else { return false }
+        return bits & characteristicBit(characteristic) != 0
+    }
+
+    private static func characteristics(
+        from bits: UInt8?
+    ) -> Set<PropertyCharacteristic> {
+        guard let bits else { return [] }
+        var characteristics = Set<PropertyCharacteristic>()
+        characteristics.reserveCapacity(PropertyCharacteristic.allCases.count)
+        for characteristic in PropertyCharacteristic.allCases where
+            contains(characteristic, in: bits) {
+            characteristics.insert(characteristic)
+        }
+        return characteristics
     }
 
     // MARK: - Class Expression Building

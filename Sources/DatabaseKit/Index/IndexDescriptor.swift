@@ -163,6 +163,45 @@ public struct IndexDescriptor: Descriptor, Sendable {
         commonOptions: CommonIndexOptions = .init(),
         storedFields: [IndexField<Model>] = []
     ) throws(IndexDeclarationError) {
+        var fieldMetadata: [IndexFieldMetadata] = []
+        fieldMetadata.reserveCapacity(fields.count)
+        var fieldIndex = 0
+        while fieldIndex < fields.count {
+            fieldMetadata.append(fields[fieldIndex].metadata)
+            fieldIndex += 1
+        }
+
+        var storedFieldMetadata: [IndexFieldMetadata] = []
+        storedFieldMetadata.reserveCapacity(storedFields.count)
+        var storedFieldIndex = 0
+        while storedFieldIndex < storedFields.count {
+            storedFieldMetadata.append(storedFields[storedFieldIndex].metadata)
+            storedFieldIndex += 1
+        }
+
+        try self.init(
+            model: Model.self,
+            name: name,
+            definition: definition,
+            fields: fieldMetadata,
+            commonOptions: commonOptions,
+            storedFields: storedFieldMetadata
+        )
+    }
+
+    /// Creates a built-in descriptor from model-scoped field metadata.
+    ///
+    /// Macro expansion uses this initializer after resolving source key paths
+    /// into stable field identities. Runtime metadata does not retain key paths
+    /// or phantom model-scoped field values.
+    public init<Model: Persistable>(
+        model: Model.Type,
+        name: String,
+        definition: IndexDefinition,
+        fields: borrowing [IndexFieldMetadata],
+        commonOptions: CommonIndexOptions = .init(),
+        storedFields: borrowing [IndexFieldMetadata] = []
+    ) throws(IndexDeclarationError) {
         var fieldsByNumber: [Int: FieldSchema] = [:]
         for field in Model.fieldSchemas {
             fieldsByNumber[field.fieldNumber] = field
@@ -170,7 +209,13 @@ public struct IndexDescriptor: Descriptor, Sendable {
 
         var resolvedSchemas: [FieldSchema] = []
         resolvedSchemas.reserveCapacity(fields.count)
-        for selectedField in fields {
+        var fieldMetadata: [IndexFieldMetadata] = []
+        fieldMetadata.reserveCapacity(fields.count)
+        var fieldNames: [String] = []
+        fieldNames.reserveCapacity(fields.count)
+        var fieldIndex = 0
+        while fieldIndex < fields.count {
+            let selectedField = fields[fieldIndex]
             guard
                 let schema = fieldsByNumber[selectedField.identity.number],
                 schema.name == selectedField.identity.name
@@ -184,9 +229,16 @@ public struct IndexDescriptor: Descriptor, Sendable {
                 )
             }
             resolvedSchemas.append(schema)
+            fieldMetadata.append(selectedField)
+            fieldNames.append(selectedField.name)
+            fieldIndex += 1
         }
 
-        for storedField in storedFields {
+        var storedFieldNames: [String] = []
+        storedFieldNames.reserveCapacity(storedFields.count)
+        var storedFieldIndex = 0
+        while storedFieldIndex < storedFields.count {
+            let storedField = storedFields[storedFieldIndex]
             guard
                 let schema = fieldsByNumber[storedField.identity.number],
                 schema.name == storedField.identity.name
@@ -199,18 +251,20 @@ public struct IndexDescriptor: Descriptor, Sendable {
                     )
                 )
             }
+            storedFieldNames.append(storedField.name)
+            storedFieldIndex += 1
         }
 
         do {
             self.entityName = Model.persistableType
             self.name = name
             self.kind = try definition.kindMetadata(
-                fields: fields.map { $0.metadata },
+                fields: fieldMetadata,
                 schemas: resolvedSchemas
             )
             self.commonOptions = commonOptions
-            self.fieldNames = fields.map { $0.name }
-            self.storedFieldNames = storedFields.map { $0.name }
+            self.fieldNames = fieldNames
+            self.storedFieldNames = storedFieldNames
         } catch let validationError {
             throw IndexDeclarationError(
                 indexName: name,
