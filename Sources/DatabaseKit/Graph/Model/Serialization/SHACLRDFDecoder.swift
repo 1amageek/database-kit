@@ -738,7 +738,7 @@ public struct SHACLRDFDecoder: Sendable {
 
         func predicates(_ subject: RDFTerm) -> [RDFIRI] {
             guard let index = subjectIndex(for: subject) else { return [] }
-            return values[index].predicates.map(\.predicate)
+            return values[index].predicates.map { $0.predicate }
         }
 
         func subjects(
