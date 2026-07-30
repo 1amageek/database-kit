@@ -1,4 +1,4 @@
-public import DatabaseTypes
+import DatabaseTypes
 
 extension RDFTerm {
     public static func iri(

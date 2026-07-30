@@ -225,10 +225,12 @@ extension IndexDefinition {
                     )
                 }
             case .version(.keepForDuration(let duration)):
-                guard duration.isFinite, duration > 0 else {
+                guard duration.seconds > 0
+                        || (duration.seconds == 0 && duration.nanoseconds > 0)
+                else {
                     throw .invalidConfiguration(
                         index: identifier,
-                        reason: "Retention duration must be finite and positive"
+                        reason: "Retention duration must be positive"
                     )
                 }
             default:
@@ -507,7 +509,7 @@ extension IndexDefinition {
             case .keepForDuration(let duration):
                 return [
                     "strategy": .string("keepForDuration"),
-                    "strategyDurationSeconds": .float64(duration),
+                    "strategyDuration": .timeSpan(duration),
                 ]
             }
         case .timeWindowLeaderboard(let window, let windowCount):
@@ -946,14 +948,14 @@ extension IndexDefinition {
         )
         try kind.validateMetadataKeys(
             required: ["strategy"],
-            optional: ["strategyCount", "strategyDurationSeconds"]
+            optional: ["strategyCount", "strategyDuration"]
         )
         try kind.validateFieldCount(1)
 
         switch try kind.requireString("strategy") {
         case "keepAll":
             guard kind.metadata["strategyCount"] == nil,
-                  kind.metadata["strategyDurationSeconds"] == nil else {
+                  kind.metadata["strategyDuration"] == nil else {
                 throw .invalidMetadata(
                     identifier: kind.identifier,
                     key: "strategy"
@@ -961,10 +963,10 @@ extension IndexDefinition {
             }
             return .version(strategy: .keepAll)
         case "keepLast":
-            guard kind.metadata["strategyDurationSeconds"] == nil else {
+            guard kind.metadata["strategyDuration"] == nil else {
                 throw .invalidMetadata(
                     identifier: kind.identifier,
-                    key: "strategyDurationSeconds"
+                    key: "strategyDuration"
                 )
             }
             let count = try kind.requireInt("strategyCount")
@@ -982,11 +984,13 @@ extension IndexDefinition {
                     key: "strategyCount"
                 )
             }
-            let duration = try kind.requireDouble("strategyDurationSeconds")
-            guard duration.isFinite, duration > 0 else {
+            let duration = try kind.requireTimeSpan("strategyDuration")
+            guard duration.seconds > 0
+                    || (duration.seconds == 0 && duration.nanoseconds > 0)
+            else {
                 throw .invalidMetadata(
                     identifier: kind.identifier,
-                    key: "strategyDurationSeconds"
+                    key: "strategyDuration"
                 )
             }
             return .version(strategy: .keepForDuration(duration))

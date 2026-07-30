@@ -19,6 +19,20 @@ public protocol PersistedFieldInput {
     ) throws(PersistableDecodingFailure<Failure>)
 }
 
+public extension PersistedFieldInput where Failure == Never {
+    /// Runs a compiled model decoder over an input whose transport boundary
+    /// cannot fail, preserving only canonical model adaptation failures.
+    mutating func decode<Model>(
+        _ body: (inout Self) throws(PersistableDecodingFailure<Never>) -> Model
+    ) throws(PersistableDecodingError) -> Model {
+        do {
+            return try body(&self)
+        } catch {
+            throw error.adaptationError
+        }
+    }
+}
+
 /// Preserves whether model reconstruction failed at the concrete input
 /// boundary or while adapting a canonical field to the declared Swift type.
 public enum PersistableDecodingFailure<
@@ -28,7 +42,7 @@ public enum PersistableDecodingFailure<
     case adaptation(PersistableDecodingError)
 }
 
-extension PersistableDecodingFailure where InputFailure == Never {
+public extension PersistableDecodingFailure where InputFailure == Never {
     var adaptationError: PersistableDecodingError {
         switch self {
         case .input(let failure):

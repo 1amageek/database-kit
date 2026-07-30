@@ -863,7 +863,37 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(persistedFieldEncoderDecl)
 
-        let recordDecodeAssignments = fieldInfos
+        let selectedFieldEntries = fieldInfos
+            .filter { !$0.isTransient }
+            .map { fieldInfo in
+                """
+                if field.number == Self.fields.\(fieldInfo.name).identity.number ||
+                   field.name == Self.fields.\(fieldInfo.name).identity.name {
+                    guard field.number == Self.fields.\(fieldInfo.name).identity.number,
+                          field.name == Self.fields.\(fieldInfo.name).identity.name else {
+                        throw DatabaseKit.PersistableEncodingError.invalidSchema(
+                            entity: Self.persistableType,
+                            reason: "field identity '\\(field.name)#\\(field.number)' does not match '\\(Self.fields.\(fieldInfo.name).identity.name)#\\(Self.fields.\(fieldInfo.name).identity.number)'"
+                        )
+                    }
+                    return try DatabaseKit.PersistableFieldEncoder.fieldValue(
+                        from: self.\(fieldInfo.name)
+                    )
+                }
+                """
+            }
+            .joined(separator: "\n        ")
+        let selectedFieldDecl: DeclSyntax = """
+            public func persistedFieldValue(
+                for field: DatabaseKit.FieldIdentity
+            ) throws(DatabaseKit.PersistableEncodingError) -> DatabaseTypes.FieldValue? {
+                \(raw: selectedFieldEntries)
+                return nil
+            }
+            """
+        decls.append(selectedFieldDecl)
+
+        let modelDecodeAssignments = fieldInfos
             .map { fieldInfo in
                 "self.\(fieldInfo.name) = \(persistableFieldDecodeExpr(for: fieldInfo))"
             }
@@ -872,7 +902,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             private init<Input: DatabaseKit.PersistedFieldInput>(
                 _persistedFieldInput input: inout Input
             ) throws(DatabaseKit.PersistableDecodingFailure<Input.Failure>) {
-                \(raw: recordDecodeAssignments)
+                \(raw: modelDecodeAssignments)
                 try input.finish(entity: Self.persistableType)
             }
             """
@@ -886,6 +916,42 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             }
             """
         decls.append(persistedFieldInputDecl)
+
+        let persistedFieldCollectionDecl: DeclSyntax = """
+            public static func decodePersistedFields(
+                _ fields: consuming [DatabaseKit.PersistableField]
+            ) throws(DatabaseKit.PersistableDecodingError) -> Self {
+                var input = try DatabaseKit.PersistedFieldCollectionInput(
+                    entity: Self.persistableType,
+                    fields: fields,
+                    schemas: Self.fieldSchemas
+                )
+                return try input.decode { (
+                    input: inout DatabaseKit.PersistedFieldCollectionInput
+                ) throws(DatabaseKit.PersistableDecodingFailure<Never>) -> Self in
+                    try Self(_persistedFieldInput: &input)
+                }
+            }
+            """
+        decls.append(persistedFieldCollectionDecl)
+
+        let persistedObjectDecl: DeclSyntax = """
+            public static func decodePersistedObject(
+                _ object: DatabaseTypes.FieldObject
+            ) throws(DatabaseKit.PersistableDecodingError) -> Self {
+                var input = try DatabaseKit.PersistedObjectInput(
+                    entity: Self.persistableType,
+                    object: object,
+                    schemas: Self.fieldSchemas
+                )
+                return try input.decode { (
+                    input: inout DatabaseKit.PersistedObjectInput
+                ) throws(DatabaseKit.PersistableDecodingFailure<Never>) -> Self in
+                    try Self(_persistedFieldInput: &input)
+                }
+            }
+            """
+        decls.append(persistedObjectDecl)
 
         // Generate enum metadata through the field type's static value contract.
         let primitiveTypeNames: Set<String> = [

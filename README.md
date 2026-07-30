@@ -98,15 +98,15 @@ host transport contract.
 | Decoder safety | Tests cover truncation, limits, malformed values, non-canonical input, and cyclic RDF lists |
 
 The current baseline is
-`swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a` with the exactly matching
+`swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a` with the exactly matching
 standard and Embedded WASM SDKs:
 
 ```bash
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a_wasm --product DatabaseKit -c release
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a_wasm --product DatabaseWire -c release
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a_wasm-embedded --product DatabaseKit -c release
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a_wasm-embedded --product DatabaseWire -c release
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-17-a_wasm-embedded --target DatabaseKitDeclarationContract -c release
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseKit -c release
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseWire -c release
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --product DatabaseKit -c release
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --product DatabaseWire -c release
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --target DatabaseKitDeclarationContract -c release
 ```
 
 ## Quick Start

@@ -1,8 +1,12 @@
 /// A concrete destination for fields emitted by macro-generated model traversal.
 ///
 /// The generic value parameter preserves the declared Swift field type until
-/// the destination chooses its representation. Implementations may encode
-/// directly into a frame or explicitly materialize owned fields.
+/// the destination chooses its representation. `@Persistable` emits the
+/// traversal through a generic `Persistable` requirement. That requirement
+/// deliberately makes existential model storage unavailable while preserving
+/// static specialization for Embedded runtimes.
+/// Implementations may encode directly into a frame or explicitly materialize
+/// owned fields.
 public protocol PersistedFieldOutput {
     associatedtype Failure: Error & Sendable
 

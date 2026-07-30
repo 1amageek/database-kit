@@ -50,6 +50,45 @@ struct PersistableProtocolTests {
                 entity: Self.persistableType
             )
         }
+
+        static func decodePersistedFields<Input: PersistedFieldInput>(
+            from input: inout Input
+        ) throws(PersistableDecodingFailure<Input.Failure>) -> Self {
+            let id = try input.decode(
+                String.self,
+                for: FieldIdentity(name: "id", number: 1),
+                entity: Self.persistableType
+            )
+            let email = try input.decode(
+                String.self,
+                for: FieldIdentity(name: "email", number: 2),
+                entity: Self.persistableType
+            )
+            let name = try input.decode(
+                String.self,
+                for: FieldIdentity(name: "name", number: 3),
+                entity: Self.persistableType
+            )
+            try input.finish(entity: Self.persistableType)
+            return Self(id: id, email: email, name: name)
+        }
+
+        func persistedFieldValue(
+            for field: FieldIdentity
+        ) throws(PersistableEncodingError) -> FieldValue? {
+            switch (field.name, field.number) {
+            case ("id", 1): return .string(id)
+            case ("email", 2): return .string(email)
+            case ("name", 3): return .string(name)
+            case ("id", _), ("email", _), ("name", _), (_, 1), (_, 2), (_, 3):
+                throw .invalidSchema(
+                    entity: Self.persistableType,
+                    reason: "field name and number do not identify the same field"
+                )
+            default:
+                return nil
+            }
+        }
     }
 
     @Test("Model modelName")

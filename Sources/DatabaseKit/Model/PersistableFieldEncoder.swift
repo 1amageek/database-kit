@@ -2,15 +2,21 @@ import DatabaseTypes
 
 /// Entry points used by macro-generated, statically typed persistence code.
 public enum PersistableFieldEncoder {
+    public static func fieldValue<Value: FieldValueEncodable>(
+        from value: borrowing Value
+    ) throws(PersistableEncodingError) -> FieldValue {
+        try value.encodeFieldValue()
+    }
+
     public static func encode<Model: Persistable>(
         _ model: borrowing Model
     ) throws(PersistableEncodingError) -> [PersistableField] {
-        var output = PersistedFieldMaterializer()
+        var output = PersistedFieldCollectionOutput()
         do {
             try model.encodePersistedFields(to: &output)
             return output.fields
-        } catch let failure {
-            throw failure.adaptationError
+        } catch {
+            throw error.adaptationError
         }
     }
 
@@ -55,19 +61,7 @@ public enum PersistableFieldEncoder {
             )
         }
 
-        var output = SelectedPersistedFieldOutput(
-            requestedField: field,
-            expectedEntity: Model.persistableType
-        )
-        do {
-            try model.encodePersistedFields(to: &output)
-        } catch let failure {
-            switch failure {
-            case .adaptation(let error), .output(let error):
-                throw error
-            }
-        }
-        return output.selectedValue
+        return try model.persistedFieldValue(for: field)
     }
 
     public static func object(
@@ -101,61 +95,10 @@ public enum PersistableFieldEncoder {
     }
 }
 
-private struct SelectedPersistedFieldOutput: PersistedFieldOutput {
-    typealias Failure = PersistableEncodingError
-
-    let requestedField: FieldIdentity
-    let expectedEntity: String
-    private(set) var selectedValue: FieldValue?
-
-    mutating func write<Value: FieldValueEncodable>(
-        _ identity: FieldIdentity,
-        value: borrowing Value,
-        entity: String
-    ) throws(PersistableEncodingFailure<PersistableEncodingError>) {
-        guard entity == expectedEntity else {
-            throw .output(
-                .invalidSchema(
-                    entity: expectedEntity,
-                    reason: "field '\(identity.name)' was emitted for entity '\(entity)'"
-                )
-            )
-        }
-
-        let numberMatches = identity.number == requestedField.number
-        let nameMatches = identity.name == requestedField.name
-        guard numberMatches || nameMatches else {
-            return
-        }
-        guard numberMatches && nameMatches else {
-            throw .output(
-                .invalidSchema(
-                    entity: expectedEntity,
-                    reason: "field identity '\(requestedField.name)#\(requestedField.number)' does not match '\(identity.name)#\(identity.number)'"
-                )
-            )
-        }
-        guard selectedValue == nil else {
-            throw .output(
-                .invalidSchema(
-                    entity: expectedEntity,
-                    reason: "field '\(identity.name)' was emitted more than once"
-                )
-            )
-        }
-
-        do {
-            selectedValue = try value.encodeFieldValue()
-        } catch let error {
-            throw .output(error)
-        }
-    }
-}
-
-private struct PersistedFieldMaterializer: PersistedFieldOutput {
+private struct PersistedFieldCollectionOutput: PersistedFieldOutput {
     typealias Failure = Never
 
-    private(set) var fields: [PersistableField] = []
+    var fields: [PersistableField] = []
 
     mutating func write<Value: FieldValueEncodable>(
         _ identity: FieldIdentity,

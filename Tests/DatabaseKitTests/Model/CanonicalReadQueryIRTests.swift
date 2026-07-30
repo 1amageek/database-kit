@@ -12,40 +12,16 @@ protocol CanonicalReadDocument:
     var title: String { get }
 }
 
-struct CanonicalReadArticle: Persistable, Sendable, CanonicalReadDocument {
-    typealias ID = String
-
+@Persistable
+struct CanonicalReadArticle: CanonicalReadDocument {
     var id: String
     var title: String
-
-    static var persistableType: String { "CanonicalReadArticle" }
-    static var allFields: [String] { ["id", "title"] }
-    static func fieldNumber(for fieldName: String) -> Int? {
-        switch fieldName {
-        case "id": return 1
-        case "title": return 2
-        default: return nil
-        }
-    }
-    static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
 }
 
-struct CanonicalReadReport: Persistable, Sendable, CanonicalReadDocument {
-    typealias ID = String
-
+@Persistable
+struct CanonicalReadReport: CanonicalReadDocument {
     var id: String
     var title: String
-
-    static var persistableType: String { "CanonicalReadReport" }
-    static var allFields: [String] { ["id", "title"] }
-    static func fieldNumber(for fieldName: String) -> Int? {
-        switch fieldName {
-        case "id": return 1
-        case "title": return 2
-        default: return nil
-        }
-    }
-    static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
 }
 
 @Polymorphable
@@ -67,52 +43,16 @@ protocol IndexedCanonicalReadDocument:
     var title: String { get }
 }
 
-struct IndexedCanonicalReadArticle: Persistable, Sendable, IndexedCanonicalReadDocument {
-    typealias ID = String
-
+@Persistable
+struct IndexedCanonicalReadArticle: IndexedCanonicalReadDocument {
     var id: String
     var title: String
-
-    static var persistableType: String { "IndexedCanonicalReadArticle" }
-    static var allFields: [String] { ["id", "title"] }
-    static var fieldSchemas: [FieldSchema] {
-        [
-            FieldSchema(name: "id", fieldNumber: 1, type: .string),
-            FieldSchema(name: "title", fieldNumber: 2, type: .string),
-        ]
-    }
-    static func fieldNumber(for fieldName: String) -> Int? {
-        switch fieldName {
-        case "id": return 1
-        case "title": return 2
-        default: return nil
-        }
-    }
-    static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
 }
 
-struct IndexedCanonicalReadReport: Persistable, Sendable, IndexedCanonicalReadDocument {
-    typealias ID = String
-
+@Persistable
+struct IndexedCanonicalReadReport: IndexedCanonicalReadDocument {
     var id: String
     var title: String
-
-    static var persistableType: String { "IndexedCanonicalReadReport" }
-    static var allFields: [String] { ["id", "title"] }
-    static var fieldSchemas: [FieldSchema] {
-        [
-            FieldSchema(name: "id", fieldNumber: 1, type: .string),
-            FieldSchema(name: "title", fieldNumber: 2, type: .string),
-        ]
-    }
-    static func fieldNumber(for fieldName: String) -> Int? {
-        switch fieldName {
-        case "id": return 1
-        case "title": return 2
-        default: return nil
-        }
-    }
-    static func enumMetadata(for fieldName: String) -> EnumMetadata? { nil }
 }
 
 enum CanonicalReadUnindexedSchema: VersionedSchema {

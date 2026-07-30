@@ -1,4 +1,3 @@
-import DatabaseTypes
 import DatabaseKit
 
 enum DeclarationContract {

@@ -1,4 +1,4 @@
-public import DatabaseTypes
+import DatabaseTypes
 
 /// Converts a model identifier into the canonical database identity domain.
 ///

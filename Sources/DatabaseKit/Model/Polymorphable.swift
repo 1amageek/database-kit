@@ -128,6 +128,19 @@ public extension Persistable where Self: Polymorphable {
 
 // MARK: - Type Code Generation
 
+/// Canonical numeric identity for one concrete entity inside polymorphic
+/// storage keys.
+public enum PolymorphicTypeCode {
+    /// Derives the stable positive code used by every polymorphic key layout.
+    public static func value(for entityName: String) -> Int64 {
+        var hash: UInt64 = 5381
+        for byte in entityName.utf8 {
+            hash = ((hash << 5) &+ hash) &+ UInt64(byte)
+        }
+        return Int64(hash & 0x7FFF_FFFF_FFFF_FFFF)
+    }
+}
+
 public extension Polymorphable {
     /// Generate a deterministic type code for a type name
     ///
@@ -137,11 +150,6 @@ public extension Polymorphable {
     /// - Parameter typeName: The persistableType of a conforming type
     /// - Returns: Deterministic Int64 type code
     static func typeCode(for typeName: String) -> Int64 {
-        var hash: UInt64 = 5381
-        for char in typeName.utf8 {
-            hash = ((hash << 5) &+ hash) &+ UInt64(char)
-        }
-        // Ensure positive by masking off sign bit
-        return Int64(hash & 0x7FFFFFFFFFFFFFFF)
+        PolymorphicTypeCode.value(for: typeName)
     }
 }

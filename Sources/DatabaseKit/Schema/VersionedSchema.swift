@@ -72,6 +72,29 @@ public protocol VersionedSchema: Sendable {
     static var entities: [Schema.Entity] {
         get throws(SchemaEntityError)
     }
+
+    /// Materializes the immutable schema represented by this version.
+    static func makeSchema() throws(SchemaError) -> Schema
+
+    /// All concrete index declarations in this version.
+    static var allIndexDescriptors: [IndexDescriptor] {
+        get throws(SchemaError)
+    }
+
+    /// All concrete and polymorphic index names in this version.
+    static var indexNames: Set<String> {
+        get throws(SchemaError)
+    }
+
+    /// Computes the index transition from another version.
+    static func indexChanges(
+        from other: any VersionedSchema.Type
+    ) throws(SchemaError) -> (added: Set<String>, removed: Set<String>)
+
+    /// Determines whether migration from another version is metadata-only.
+    static func canLightweightMigrate(
+        from other: any VersionedSchema.Type
+    ) throws(SchemaError) -> Bool
 }
 
 // MARK: - VersionedSchema Extensions
@@ -127,8 +150,8 @@ extension VersionedSchema {
     ///
     /// - Parameter other: Another VersionedSchema type
     /// - Returns: Tuple of (added indexes, removed indexes)
-    public static func indexChanges<Previous: VersionedSchema>(
-        from other: Previous.Type
+    public static func indexChanges(
+        from other: any VersionedSchema.Type
     ) throws(SchemaError) -> (added: Set<String>, removed: Set<String>) {
         let currentIndexes = try Self.indexNames
         let otherIndexes = try other.indexNames
@@ -146,8 +169,8 @@ extension VersionedSchema {
     ///
     /// - Parameter other: Previous schema version
     /// - Returns: true if lightweight migration is possible
-    public static func canLightweightMigrate<Previous: VersionedSchema>(
-        from other: Previous.Type
+    public static func canLightweightMigrate(
+        from other: any VersionedSchema.Type
     ) throws(SchemaError) -> Bool {
         let report = try makeSchema().compatibilityReport(from: other.makeSchema())
         return report.isLightweightCompatible

@@ -632,10 +632,10 @@ struct TypedOperationWireTests {
             kind: "database.test.status"
         )
         let job = JobIdentity(jobID: jobID, operation: operation)
-        let now = try Timestamp(
+        let now = Timestamp(
             secondsSinceUnixEpoch: 1_784_131_200
         )
-        let past = try Timestamp(
+        let past = Timestamp(
             secondsSinceUnixEpoch: 1_784_131_199
         )
         #expect(throws: DatabaseWireError.invalidJobStatus) {

@@ -260,7 +260,7 @@ rejects runtime KeyPath references. Support is established by this executable
 gate, not inferred from successful native macro expansion.
 
 The compiler-ordering feasibility gate passed on 2026-07-25 with the Swift 6.4
-development snapshot dated 2026-07-17 and its exactly matching Embedded WASM
+development snapshot dated 2026-07-23 and its exactly matching Embedded WASM
 SDK. A freestanding expression macro declared with a
 `KeyPath<Root, Value>` parameter accepted `#field(\Event.title)`, expanded the
 complete expression to a non-KeyPath value, and linked the Embedded WASM

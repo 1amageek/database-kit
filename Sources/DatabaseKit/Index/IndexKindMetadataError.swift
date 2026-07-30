@@ -136,6 +136,16 @@ extension IndexKindMetadata {
         }
     }
 
+    public func requireTimeSpan(
+        _ key: String
+    ) throws(IndexKindMetadataError) -> TimeSpan {
+        guard let fieldValue = metadata[key],
+              case .timeSpan(let value) = fieldValue else {
+            throw .invalidMetadata(identifier: identifier, key: key)
+        }
+        return value
+    }
+
     public func requireBool(
         _ key: String
     ) throws(IndexKindMetadataError) -> Bool {

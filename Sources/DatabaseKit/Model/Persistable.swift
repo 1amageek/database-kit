@@ -150,6 +150,12 @@ public protocol Persistable: FieldValueEncodable {
     /// **Default**: `.default` if not specified via macro.
     static var directoryLayer: DirectoryLayer { get }
 
+    /// Names of fields used as dynamic directory components.
+    static var directoryFieldNames: [String] { get }
+
+    /// Whether directory resolution requires runtime partition values.
+    static var hasDynamicDirectory: Bool { get }
+
     /// Field-level type metadata for all persisted fields
     ///
     /// Provides name, stable field number, type, optionality, and array status
@@ -173,16 +179,22 @@ public protocol Persistable: FieldValueEncodable {
     /// ```
     static var fieldSchemas: [FieldSchema] { get }
 
-    /// Reconstruct a compiled persistable from one concrete canonical field
-    /// source without runtime type discovery.
+    /// Streams compiled fields from the concrete model to a caller-selected
+    /// destination without existential storage or an intermediate model DTO.
+    func encodePersistedFields<Output: PersistedFieldOutput>(
+        to output: inout Output
+    ) throws(PersistableEncodingFailure<Output.Failure>)
+
+    /// Reconstructs the concrete model directly from a caller-selected,
+    /// bounded canonical field source.
     static func decodePersistedFields<Input: PersistedFieldInput>(
         from input: inout Input
     ) throws(PersistableDecodingFailure<Input.Failure>) -> Self
 
-    /// Traverse this compiled model into a concrete typed field destination.
-    func encodePersistedFields<Output: PersistedFieldOutput>(
-        to output: inout Output
-    ) throws(PersistableEncodingFailure<Output.Failure>)
+    /// Reconstructs a compiled model from its owned canonical field set.
+    static func decodePersistedFields(
+        _ fields: consuming [PersistableField]
+    ) throws(PersistableDecodingError) -> Self
 
     /// Encode one schema-identified persisted field into its canonical value.
     ///
@@ -302,59 +314,25 @@ public extension Persistable {
     /// Default implementation returns empty array (no field schemas)
     static var fieldSchemas: [FieldSchema] { [] }
 
-    static func decodePersistedFields<Input: PersistedFieldInput>(
-        from input: inout Input
-    ) throws(PersistableDecodingFailure<Input.Failure>) -> Self {
-        throw .adaptation(
-            .missingCompiledDecoder(persistableType)
-        )
-    }
-
-    /// Reconstructs a model from an explicitly owned canonical field
-    /// collection.
     static func decodePersistedFields(
         _ fields: consuming [PersistableField]
     ) throws(PersistableDecodingError) -> Self {
-        var input = try PersistedFieldCollectionInput(
-            entity: persistableType,
-            fields: fields,
-            schemas: fieldSchemas
-        )
-        do {
-            return try decodePersistedFields(from: &input)
-        } catch let failure {
-            throw failure.adaptationError
-        }
-    }
-
-    func encodePersistedFields<Output: PersistedFieldOutput>(
-        to output: inout Output
-    ) throws(PersistableEncodingFailure<Output.Failure>) {
-        throw .adaptation(.missingCompiledEncoder(Self.persistableType))
+        _ = fields
+        throw .missingCompiledDecoder(persistableType)
     }
 
     func persistedFieldValue(
         for field: FieldIdentity
     ) throws(PersistableEncodingError) -> FieldValue? {
-        try PersistableFieldEncoder.value(
-            for: field,
-            in: self
-        )
+        _ = field
+        throw .missingCompiledEncoder(Self.persistableType)
     }
 
     static func decodePersistedObject(
         _ object: FieldObject
     ) throws(PersistableDecodingError) -> Self {
-        var input = try PersistedObjectInput(
-            entity: persistableType,
-            object: object,
-            schemas: fieldSchemas
-        )
-        do {
-            return try decodePersistedFields(from: &input)
-        } catch let failure {
-            throw failure.adaptationError
-        }
+        _ = object
+        throw .missingCompiledDecoder(persistableType)
     }
 
     /// Default implementation returns nil (no field numbers)

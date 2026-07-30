@@ -5,7 +5,7 @@ import Testing
 
 @Suite("Canonical database references")
 struct PersistableReferenceTests {
-    @Test("References round-trip as canonical record identities")
+    @Test("References round-trip as canonical entity references")
     func recordRoundTrip() throws {
         let firstIdentity = try EntityReference(
             entity: ReferenceTargetModel.persistableType,

@@ -36,8 +36,8 @@ struct DatabaseWireBoundaryTests {
         #expect(decoded.request == request)
     }
 
-    @Test("decoder accepts a borrowed frame whose index does not start at zero")
-    func slicedRequestRoundTrip() throws {
+    @Test("decoder accepts a borrowed frame view at an owner offset")
+    func borrowedRequestFrameRoundTrip() throws {
         let encoded = try DatabaseWireEncoder().encodeRequest(
             DatabaseOperations.queryExecute,
             requestID: 43,

@@ -58,7 +58,7 @@ struct OntNamedGraphEntity {
     var name: String
 }
 
-// --- Contract 3: Record feature coexistence ---
+// --- Contract 3: Persistable feature coexistence ---
 @Persistable
 @OWLClass(
     "https://example.org/onto#Product",
@@ -135,7 +135,7 @@ struct OntFullDepartment {
     var name: String
 }
 
-// --- Contract 10: Full IRI @OWLClass + record feature coexistence ---
+// --- Contract 10: Full IRI @OWLClass + Persistable feature coexistence ---
 @Persistable
 @OWLClass(
     "http://example.org/onto#FullProduct",
@@ -319,7 +319,7 @@ struct OntologyMacroTests {
         #expect(reverseIdx != nil)
     }
 
-    // -- Contract 4: Record feature coexistence --
+    // -- Contract 4: Persistable feature coexistence --
 
     @Test("OWL features coexist with #Index and @Transient")
     func coexistenceWithRecordFeatures() throws {
@@ -340,7 +340,7 @@ struct OntologyMacroTests {
 
     // -- Contract 6: Persistable basics maintained --
 
-    @Test("OWL entities retain Persistable record features")
+    @Test("OWL entities retain Persistable features")
     func persistableBasics() {
         #expect(OntEmployee.persistableType == "OntEmployee")
         #expect(OntEmployee.allFields.contains("id"))
@@ -602,7 +602,7 @@ struct TypedMetadataOwnershipTests {
         // OntProduct combines ontology, scalar-index, and transient metadata.
         let indexes = try OntProduct.indexDescriptors
 
-        // The record index and RDF projection are both registered.
+        // The model index and RDF projection are both registered.
         let scalar = indexes.first { $0.kindIdentifier == "scalar" }
         let owlRDF = indexes.first { $0.kindIdentifier == "owl_class_rdf" }
 
