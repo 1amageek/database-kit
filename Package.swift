@@ -22,7 +22,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/1amageek/database-types.git",
-            from: "26.0728.2"
+            from: "26.0730.0"
         ),
         .package(
             url: "https://github.com/swiftlang/swift-syntax.git",
