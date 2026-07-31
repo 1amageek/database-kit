@@ -30,6 +30,22 @@ public enum QueryStructuralValidator {
     }
 
     public static func validate(
+        _ expression: Expression,
+        limits: QueryStructuralLimits = .default
+    ) throws(QueryStructuralValidationError) {
+        var validation = ValidationTraversal(limits: limits)
+        try validation.validate([.expression(expression, depth: 0)])
+    }
+
+    public static func validate(
+        _ aggregate: AggregateFunction,
+        limits: QueryStructuralLimits = .default
+    ) throws(QueryStructuralValidationError) {
+        var validation = ValidationTraversal(limits: limits)
+        try validation.validate([.aggregate(aggregate, depth: 0)])
+    }
+
+    public static func validate(
         _ request: SPARQLUpdateRequest,
         limits: QueryStructuralLimits = .default
     ) throws(QueryStructuralValidationError) {

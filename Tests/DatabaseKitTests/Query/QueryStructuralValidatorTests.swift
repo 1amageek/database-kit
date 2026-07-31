@@ -254,4 +254,56 @@ struct QueryStructuralValidatorTests {
             )
         }
     }
+
+    @Test("Standalone expressions use the canonical collection ledger")
+    func standaloneExpressionCollectionOverflow() {
+        let expression = Expression.function(
+            FunctionCall(
+                name: "urn:example:function",
+                arguments: [
+                    .literal(.int(1)),
+                    .literal(.int(2)),
+                    .literal(.int(3)),
+                ]
+            )
+        )
+
+        #expect(
+            throws: QueryStructuralValidationError.resourceLimitExceeded(
+                resource: .collectionElements,
+                actual: 3,
+                maximum: 2
+            )
+        ) {
+            try QueryStructuralValidator.validate(
+                expression,
+                limits: QueryStructuralLimits(
+                    maximumCollectionElements: 2
+                )
+            )
+        }
+    }
+
+    @Test("Standalone aggregates use the canonical nesting ledger")
+    func standaloneAggregateDepthOverflow() {
+        let aggregate = AggregateFunction.sum(
+            .not(.not(.literal(.int(1)))),
+            distinct: false
+        )
+
+        #expect(
+            throws: QueryStructuralValidationError.resourceLimitExceeded(
+                resource: .nestingDepth,
+                actual: 3,
+                maximum: 2
+            )
+        ) {
+            try QueryStructuralValidator.validate(
+                aggregate,
+                limits: QueryStructuralLimits(
+                    maximumNestingDepth: 2
+                )
+            )
+        }
+    }
 }
