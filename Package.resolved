@@ -1,0 +1,24 @@
+{
+  "originHash" : "bdd7e2efbb49c81bc998f20e51e6243d2c6d5367c5f5d35014f20b208dc1b8d0",
+  "pins" : [
+    {
+      "identity" : "database-types",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/1amageek/database-types.git",
+      "state" : {
+        "revision" : "4b0c81a9c322cbfa5628e411ee1fa931c2890e5d",
+        "version" : "26.730.0"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "b90056de69eed23b3fb39ab69cf1780071dfb664",
+        "version" : "604.0.0-prerelease-2026-06-05"
+      }
+    }
+  ],
+  "version" : 3
+}
