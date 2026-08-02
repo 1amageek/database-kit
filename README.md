@@ -90,7 +90,7 @@ host transport contract.
 
 | Contract | Verification |
 |---|---|
-| Apple platform behavior | `xcodebuild test` for the package scheme |
+| Apple platform behavior | `TOOLCHAINS=org.swift.64202607231a scripts/xcode-test-harness`; exactly 613 passing tests, zero skips, expected failures, runtime warnings, or internal tool errors |
 | Standard WASM contract | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 WASM SDK |
 | Embedded semantic and Wire graph | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 Embedded WASM SDK |
 | Embedded macro use | Embedded release build of `DatabaseKitDeclarationContract`, which expands model, field, directory, index, and relationship declarations |
@@ -99,14 +99,21 @@ host transport contract.
 
 The current baseline is
 `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a` with the exactly matching
-standard and Embedded WASM SDKs:
+standard and Embedded WASM SDKs. The macro dependency is pinned to
+`swift-syntax` `604.0.0-prerelease-2026-06-05`; the older 602 line is not a
+valid compiler-plugin baseline for this Swift 6.4 toolchain.
+Release/WASM verification disables debug information because it is not shipped
+in the reactor and avoids running host-side `dsymutil` over macro dependency
+objects. Compiler diagnostics remain enabled.
 
 ```bash
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseKit -c release
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseWire -c release
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --product DatabaseKit -c release
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --product DatabaseWire -c release
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --target DatabaseKitDeclarationContract -c release
+TOOLCHAINS=org.swift.64202607231a scripts/xcode-test-harness
+
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseKit -c release -debug-info-format none
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseWire -c release -debug-info-format none
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --product DatabaseKit -c release -debug-info-format none
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --product DatabaseWire -c release -debug-info-format none
+swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --target DatabaseKitDeclarationContract -c release -debug-info-format none
 ```
 
 ## Quick Start

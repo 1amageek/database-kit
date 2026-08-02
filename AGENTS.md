@@ -61,3 +61,18 @@
 - A required copy must be documented at the implementation site and verified when described as a performance improvement.
 - Do not silently substitute defaults for malformed input. Return a typed DatabaseWire error.
 - This is protocol version 1. Do not add compatibility aliases, version negotiation, or deprecated duplicate models.
+
+## Verification
+
+- Native verification uses `scripts/xcode-test-harness` with the pinned Swift
+  snapshot. The harness must execute exactly 613 tests with zero failures,
+  skips, expected failures, runtime warnings, compiler-plugin internal errors,
+  profile errors, or debug-information verification warnings.
+- The harness uses the `database-kit-Package` scheme, separates
+  `build-for-testing` from `test-without-building`, injects the pinned
+  `libTesting.dylib` path into the generated `.xctestrun`, and applies a timeout
+  to both phases.
+- Standard and Embedded WASM verification uses the exact Swift 6.4 snapshot
+  SDK identifiers and the release commands documented in `README.md`.
+- A successful compile is not proof of decoder behavior or buffer ownership;
+  the native behavioral suite remains mandatory.
