@@ -72,7 +72,11 @@ public struct Variable: Sendable, Equatable, Hashable {
     public let name: String
 
     public init(_ name: String) {
-        self.name = name
+        if name.hasPrefix("?") || name.hasPrefix("$") {
+            self.name = String(name.dropFirst())
+        } else {
+            self.name = name
+        }
     }
 }
 
