@@ -48,7 +48,7 @@ database-client ────────┐
 dependencies: [
     .package(
         url: "https://github.com/1amageek/database-kit.git",
-        branch: "main"
+        from: "26.0803.0"
     )
 ]
 ```
