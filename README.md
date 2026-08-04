@@ -100,12 +100,12 @@ host transport contract.
 The current baseline is
 `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a` with the exactly matching
 standard and Embedded WASM SDKs. The macro dependency requires `swift-syntax`
-as a release range (`from: "602.0.0"`) so downstream graphs that also
+as a release range (`from: "603.0.2"`) so downstream graphs that also
 constrain swift-syntax (e.g. through JavaScriptKit) stay resolvable;
 reproducibility comes from the committed `Package.resolved`, which CI enforces
 with `-onlyUsePackageVersionsFromResolvedFile`. The full verification matrix
 (host test harness plus the standard and Embedded WASM release builds below)
-passes on this toolchain with swift-syntax `602.0.0`.
+passes on this toolchain with swift-syntax `603.0.2`.
 Release/WASM verification disables debug information because it is not shipped
 in the reactor and avoids running host-side `dsymutil` over macro dependency
 objects. Compiler diagnostics remain enabled.
