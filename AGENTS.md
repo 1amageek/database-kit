@@ -65,7 +65,7 @@
 ## Verification
 
 - Native verification uses `scripts/xcode-test-harness` with the pinned Swift
-  snapshot. The harness must execute exactly 613 tests with zero failures,
+  snapshot. The harness must execute exactly 614 tests with zero failures,
   skips, expected failures, runtime warnings, compiler-plugin internal errors,
   profile errors, or debug-information verification warnings.
 - The harness uses the `database-kit-Package` scheme, separates
@@ -74,5 +74,9 @@
   to both phases.
 - Standard and Embedded WASM verification uses the exact Swift 6.4 snapshot
   SDK identifiers and the release commands documented in `README.md`.
+- Cross-platform release verification uses `-debug-info-format none`. The
+  pinned snapshot emits invalid host-side DWARF name indexes while linking the
+  macro dependency graph; release verification must neither emit nor ignore
+  those input-verification warnings.
 - A successful compile is not proof of decoder behavior or buffer ownership;
   the native behavioral suite remains mandatory.

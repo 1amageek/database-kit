@@ -179,14 +179,14 @@ public enum SPARQLVariableScopeAnalyzer {
             let left = scope(of: join.left)
             let right = scope(of: join.right)
             switch join.type {
-            case .left, .leftLateral:
+            case .left, .naturalLeft, .leftLateral:
                 return SPARQLVariableScope(
                     visibleVariables: left.visibleVariables.union(
                         right.visibleVariables
                     ),
                     definitelyBoundVariables: left.definitelyBoundVariables
                 )
-            case .right:
+            case .right, .naturalRight:
                 return SPARQLVariableScope(
                     visibleVariables: left.visibleVariables.union(
                         right.visibleVariables
@@ -200,8 +200,7 @@ public enum SPARQLVariableScopeAnalyzer {
                     ),
                     definitelyBoundVariables: []
                 )
-            case .inner, .cross, .natural, .naturalLeft, .naturalRight,
-                 .lateral:
+            case .inner, .cross, .natural, .lateral:
                 return joining(left, right)
             }
         case .values(let rows, let columnNames):

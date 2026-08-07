@@ -761,6 +761,42 @@ struct SPARQLSemanticValidatorTests {
         #expect(subquery.variableScope.visibleVariables == ["alias"])
     }
 
+    @Test("Natural joins preserve their outer-join binding guarantees")
+    func naturalJoinVariableScopeMatchesOuterJoinSemantics() {
+        let left = DataSource.values(
+            [[.int(1)]],
+            columnNames: ["left"]
+        )
+        let right = DataSource.values(
+            [[.int(2)]],
+            columnNames: ["right"]
+        )
+
+        let cases: [(JoinType, Set<String>)] = [
+            (.natural, ["left", "right"]),
+            (.naturalLeft, ["left"]),
+            (.naturalRight, ["right"]),
+            (.naturalFull, []),
+        ]
+
+        for (joinType, expectedDefinitelyBoundVariables) in cases {
+            let scope = SPARQLVariableScopeAnalyzer.scope(
+                of: .join(
+                    JoinClause(
+                        type: joinType,
+                        left: left,
+                        right: right
+                    )
+                )
+            )
+            #expect(scope.visibleVariables == ["left", "right"])
+            #expect(
+                scope.definitelyBoundVariables
+                    == expectedDefinitelyBoundVariables
+            )
+        }
+    }
+
     @Test("The maximum structural nesting depth is accepted")
     func maximumStructuralDepthIsAccepted() throws {
         let pattern = GraphPattern.basic([

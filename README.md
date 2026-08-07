@@ -90,10 +90,10 @@ host transport contract.
 
 | Contract | Verification |
 |---|---|
-| Apple platform behavior | `TOOLCHAINS=org.swift.64202607231a scripts/xcode-test-harness`; exactly 613 passing tests, zero skips, expected failures, runtime warnings, or internal tool errors |
-| Standard WASM contract | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 WASM SDK |
-| Embedded semantic and Wire graph | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 Embedded WASM SDK |
-| Embedded macro use | Embedded release build of `DatabaseKitDeclarationContract`, which expands model, field, directory, index, and relationship declarations |
+| Apple platform behavior | `TOOLCHAINS=org.swift.64202607231a scripts/xcode-test-harness`; exactly 614 passing tests, zero skips, expected failures, runtime warnings, or internal tool errors |
+| Standard WASM contract | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 WASM SDK and `-debug-info-format none` |
+| Embedded semantic and Wire graph | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 Embedded WASM SDK and `-debug-info-format none` |
+| Embedded macro use | Embedded release build of `DatabaseKitDeclarationContract` with `-debug-info-format none`, which expands model, field, directory, index, and relationship declarations |
 | Binary ownership | Tests assert that payload pages borrow ranges from the single final frame allocation |
 | Decoder safety | Tests cover truncation, limits, malformed values, non-canonical input, and cyclic RDF lists |
 
