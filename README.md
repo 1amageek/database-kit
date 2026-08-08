@@ -202,6 +202,10 @@ explicit type-erasure boundary.
 Ontology bindings retain the complete field-to-property descriptor mapping in
 `Schema.Entity`. A schema manifest therefore preserves the same RDF projection
 contract as a compiled `@OWLClass` or `@OWLObjectProperty` model.
+`OWLCanonicalDataPropertyProjection` and the canonical
+`OWLIndividualIRIBuilder` overloads apply that contract directly to
+`FieldValue`, so schema-driven runtimes do not reconstruct concrete Swift
+models or pass through JSON before materializing RDF terms.
 
 ## Polymorphic Persistence
 

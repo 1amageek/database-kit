@@ -7,6 +7,9 @@ public enum OWLProjectionError: Error, Sendable, Equatable, CustomStringConverti
     case invalidVocabularyIRI(String, RDFIRIError)
     case dataPropertyRequiresLiteral
     case invalidDateTime(XSDDateTimeFormatError)
+    case unsupportedCanonicalValue(String)
+    case unsupportedIndividualIdentifier
+    case objectPropertyTargetMismatch(expected: String, actual: String)
 
     public var description: String {
         switch self {
@@ -24,6 +27,12 @@ public enum OWLProjectionError: Error, Sendable, Equatable, CustomStringConverti
             return "OWL data property values must be RDF literals"
         case .invalidDateTime(let error):
             return "OWL dateTime projection failed: \(error)"
+        case .unsupportedCanonicalValue(let valueType):
+            return "Canonical value type '\(valueType)' cannot be projected to OWL RDF."
+        case .unsupportedIndividualIdentifier:
+            return "Composite identifiers cannot be projected to OWL individual IRIs."
+        case .objectPropertyTargetMismatch(let expected, let actual):
+            return "OWL object property targets '\(actual)', expected '\(expected)'."
         }
     }
 }

@@ -557,6 +557,66 @@ struct OntologyMacroTests {
         let entity = try OntPlainModel.schemaEntity
         #expect(entity.ontology == nil)
     }
+
+    @Test("Canonical data-property projection matches compiled values")
+    func canonicalDataPropertyProjectionMatchesCompiledValues() throws {
+        #expect(
+            try OWLCanonicalDataPropertyProjection.terms(
+                from: .string("alice")
+            ) == "alice".owlDataPropertyTerms()
+        )
+        #expect(
+            try OWLCanonicalDataPropertyProjection.terms(
+                from: .array([.int64(42), .null])
+            ) == [Int64(42)].owlDataPropertyTerms()
+        )
+    }
+
+    @Test("Canonical individual subjects match compiled identifiers")
+    func canonicalIndividualSubjectsMatchCompiledIdentifiers() throws {
+        #expect(
+            try OWLIndividualIRIBuilder.subject(
+                baseIRI: "https://example.org/individuals",
+                persistableType: "Person",
+                identifier: FieldValue.string("alice")
+            ) == OWLIndividualIRIBuilder.subject(
+                baseIRI: "https://example.org/individuals",
+                persistableType: "Person",
+                identifier: "alice"
+            )
+        )
+    }
+
+    @Test("Canonical object-property references enforce target identity")
+    func canonicalObjectPropertyReferencesEnforceTargetIdentity() throws {
+        let reference = try EntityReference(
+            entity: "Person",
+            id: .string("alice")
+        )
+        #expect(
+            try OWLIndividualIRIBuilder.terms(
+                baseIRI: "https://example.org/individuals",
+                persistableType: "Person",
+                value: .reference(reference)
+            ) == OWLIndividualIRIBuilder.terms(
+                baseIRI: "https://example.org/individuals",
+                persistableType: "Person",
+                value: "alice"
+            )
+        )
+        #expect(
+            throws: OWLProjectionError.objectPropertyTargetMismatch(
+                expected: "Organization",
+                actual: "Person"
+            )
+        ) {
+            try OWLIndividualIRIBuilder.terms(
+                baseIRI: "https://example.org/individuals",
+                persistableType: "Organization",
+                value: .reference(reference)
+            )
+        }
+    }
 }
 
 // MARK: - Typed Metadata Ownership Tests

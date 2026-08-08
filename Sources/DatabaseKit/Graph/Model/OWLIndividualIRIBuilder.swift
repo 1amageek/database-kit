@@ -15,6 +15,20 @@ public enum OWLIndividualIRIBuilder {
         )
     }
 
+    public static func subject(
+        baseIRI: String,
+        persistableType: String,
+        identifier: FieldValue
+    ) throws(OWLProjectionError) -> RDFSubject {
+        .iri(
+            try individualIRI(
+                baseIRI: baseIRI,
+                persistableType: persistableType,
+                lexicalForm: try lexicalForm(of: identifier)
+            )
+        )
+    }
+
     public static func term<Identifier: OWLIndividualIdentifier>(
         baseIRI: String,
         persistableType: String,
@@ -49,6 +63,47 @@ public enum OWLIndividualIRIBuilder {
             )
         }
         return result
+    }
+
+    public static func terms(
+        baseIRI: String,
+        persistableType: String,
+        value: FieldValue
+    ) throws(OWLProjectionError) -> [RDFTerm] {
+        switch value {
+        case .null:
+            return []
+        case .array(let values):
+            var projectedTerms: [RDFTerm] = []
+            for value in values {
+                projectedTerms.append(
+                    contentsOf: try terms(
+                        baseIRI: baseIRI,
+                        persistableType: persistableType,
+                        value: value
+                    )
+                )
+            }
+            return projectedTerms
+        case .reference(let reference):
+            guard reference.entity == persistableType else {
+                throw .objectPropertyTargetMismatch(
+                    expected: persistableType,
+                    actual: reference.entity
+                )
+            }
+            return [
+                .iri(
+                    try individualIRI(
+                        baseIRI: baseIRI,
+                        persistableType: persistableType,
+                        lexicalForm: try lexicalForm(of: reference.id)
+                    )
+                )
+            ]
+        default:
+            throw .unsupportedCanonicalValue(value.owlProjectionSemanticName)
+        }
     }
 
     private static func individualIRI(
@@ -95,5 +150,65 @@ public enum OWLIndividualIRIBuilder {
             }
         }
         return String(decoding: result, as: UTF8.self)
+    }
+
+    private static func lexicalForm(
+        of value: FieldValue
+    ) throws(OWLProjectionError) -> String {
+        switch value {
+        case .bool(let value): return value ? "true" : "false"
+        case .int8(let value): return String(value)
+        case .int16(let value): return String(value)
+        case .int32(let value): return String(value)
+        case .int64(let value): return String(value)
+        case .uint8(let value): return String(value)
+        case .uint16(let value): return String(value)
+        case .uint32(let value): return String(value)
+        case .uint64(let value): return String(value)
+        case .float32(let value):
+            return OWLRDFLexicalForm.floatingPoint(Double(value))
+        case .float64(let value):
+            return OWLRDFLexicalForm.floatingPoint(value)
+        case .string(let value): return value
+        case .bytes(let value):
+            return try lexicalForm(of: ReferenceIdentifier.bytes(value))
+        case .uuid(let value): return value.description
+        default:
+            throw .unsupportedCanonicalValue(value.owlProjectionSemanticName)
+        }
+    }
+
+    private static func lexicalForm(
+        of identifier: ReferenceIdentifier
+    ) throws(OWLProjectionError) -> String {
+        switch identifier {
+        case .bool(let value): return value ? "true" : "false"
+        case .int8(let value): return String(value)
+        case .int16(let value): return String(value)
+        case .int32(let value): return String(value)
+        case .int64(let value): return String(value)
+        case .uint8(let value): return String(value)
+        case .uint16(let value): return String(value)
+        case .uint32(let value): return String(value)
+        case .uint64(let value): return String(value)
+        case .string(let value): return value
+        case .bytes(let value):
+            let base64 = QueryLiteralEncoding.base64(value)
+            var result = ""
+            result.reserveCapacity(base64.utf8.count)
+            for byte in base64.utf8 {
+                switch byte {
+                case 43: result.append("-")
+                case 47: result.append("_")
+                case 61: continue
+                default:
+                    result.unicodeScalars.append(Unicode.Scalar(byte))
+                }
+            }
+            return result
+        case .uuid(let value): return value.description
+        case .composite:
+            throw .unsupportedIndividualIdentifier
+        }
     }
 }
