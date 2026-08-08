@@ -417,4 +417,85 @@ struct SchemaValidationTests {
             )
         }
     }
+
+    @Test("Ontology properties must reference declared fields")
+    func ontologyPropertiesMustReferenceDeclaredFields() {
+        #expect(
+            throws: SchemaEntityError.unknownOntologyPropertyField("missing")
+        ) {
+            try Schema.Entity(
+                name: "Entity",
+                identifierType: .string,
+                fields: [
+                    FieldSchema(name: "name", fieldNumber: 1, type: .string)
+                ],
+                ontology: .owlClass(
+                    iri: "urn:Entity",
+                    properties: [
+                        OWLDataPropertyDescriptor(
+                            name: "Entity_missing",
+                            fieldName: "missing",
+                            iri: "urn:missing"
+                        )
+                    ]
+                )
+            )
+        }
+    }
+
+    @Test("One field has one ontology property mapping")
+    func ontologyPropertyFieldMappingsAreUnique() {
+        #expect(
+            throws: SchemaEntityError.duplicateOntologyPropertyField("name")
+        ) {
+            try Schema.Entity(
+                name: "Entity",
+                identifierType: .string,
+                fields: [
+                    FieldSchema(name: "name", fieldNumber: 1, type: .string)
+                ],
+                ontology: .owlClass(
+                    iri: "urn:Entity",
+                    properties: [
+                        OWLDataPropertyDescriptor(
+                            name: "Entity_name_a",
+                            fieldName: "name",
+                            iri: "urn:name:a"
+                        ),
+                        OWLDataPropertyDescriptor(
+                            name: "Entity_name_b",
+                            fieldName: "name",
+                            iri: "urn:name:b"
+                        )
+                    ]
+                )
+            )
+        }
+    }
+
+    @Test("Ontology object-property targets match reference fields")
+    func ontologyPropertyTargetsMatchReferenceFields() {
+        #expect(
+            throws: SchemaEntityError.invalidOntologyPropertyTarget("name")
+        ) {
+            try Schema.Entity(
+                name: "Entity",
+                identifierType: .string,
+                fields: [
+                    FieldSchema(name: "name", fieldNumber: 1, type: .string)
+                ],
+                ontology: .owlClass(
+                    iri: "urn:Entity",
+                    properties: [
+                        OWLDataPropertyDescriptor(
+                            name: "Entity_name",
+                            fieldName: "name",
+                            iri: "urn:name",
+                            targetTypeName: "Target"
+                        )
+                    ]
+                )
+            )
+        }
+    }
 }

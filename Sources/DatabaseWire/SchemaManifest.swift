@@ -260,21 +260,36 @@ private extension SchemaManifest {
             return
         }
         switch ontology {
-        case .owlClass(let iri, let dataPropertyIRIs):
+        case .owlClass(let iri, let properties):
             writer.writeUInt8(1)
             try writer.writeString(iri)
-            try writeStringArray(dataPropertyIRIs, into: &writer)
+            try writeOntologyProperties(properties, into: &writer)
         case .owlObjectProperty(
             let iri,
             let fromField,
             let toField,
-            let dataPropertyIRIs
+            let properties
         ):
             writer.writeUInt8(2)
             try writer.writeString(iri)
             try writer.writeString(fromField)
             try writer.writeString(toField)
-            try writeStringArray(dataPropertyIRIs, into: &writer)
+            try writeOntologyProperties(properties, into: &writer)
+        }
+    }
+
+    static func writeOntologyProperties(
+        _ properties: [OWLDataPropertyDescriptor],
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        try writer.writeCount(properties.count)
+        for property in properties {
+            try writer.writeString(property.name)
+            try writer.writeString(property.fieldName)
+            try writer.writeString(property.iri)
+            try writeOptionalString(property.label, into: &writer)
+            try writeOptionalString(property.targetTypeName, into: &writer)
+            try writeOptionalString(property.targetFieldName, into: &writer)
         }
     }
 
@@ -742,18 +757,39 @@ private extension SchemaManifest {
         case 1:
             return .owlClass(
                 iri: try reader.readString(),
-                dataPropertyIRIs: try readStringArray(from: &reader)
+                properties: try readOntologyProperties(from: &reader)
             )
         case 2:
             return .owlObjectProperty(
                 iri: try reader.readString(),
                 fromField: try reader.readString(),
                 toField: try reader.readString(),
-                dataPropertyIRIs: try readStringArray(from: &reader)
+                properties: try readOntologyProperties(from: &reader)
             )
         case let tag:
             throw .invalidValueTag(tag)
         }
+    }
+
+    static func readOntologyProperties(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> [OWLDataPropertyDescriptor] {
+        let count = try reader.readCount()
+        var properties: [OWLDataPropertyDescriptor] = []
+        properties.reserveCapacity(count)
+        for _ in 0..<count {
+            properties.append(
+                OWLDataPropertyDescriptor(
+                    name: try reader.readString(),
+                    fieldName: try reader.readString(),
+                    iri: try reader.readString(),
+                    label: try readOptionalString(from: &reader),
+                    targetTypeName: try readOptionalString(from: &reader),
+                    targetFieldName: try readOptionalString(from: &reader)
+                )
+            )
+        }
+        return properties
     }
 
     static func readPolymorphicMembership(

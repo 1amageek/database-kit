@@ -58,6 +58,10 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
     case emptyOntologyIRI
     case emptyDataPropertyIRI
     case duplicateDataPropertyIRI(String)
+    case emptyOntologyPropertyField
+    case unknownOntologyPropertyField(String)
+    case duplicateOntologyPropertyField(String)
+    case invalidOntologyPropertyTarget(String)
     case emptyPolymorphicGroupIdentifier
     case invalidPolymorphicDirectoryComponent(position: Int)
 
@@ -133,6 +137,14 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Data-property IRIs must not be empty."
         case .duplicateDataPropertyIRI(let iri):
             return "Data-property IRI '\(iri)' is declared more than once."
+        case .emptyOntologyPropertyField:
+            return "Ontology property field names must not be empty."
+        case .unknownOntologyPropertyField(let fieldName):
+            return "Ontology property metadata references unknown field '\(fieldName)'."
+        case .duplicateOntologyPropertyField(let fieldName):
+            return "Field '\(fieldName)' has more than one ontology property mapping."
+        case .invalidOntologyPropertyTarget(let fieldName):
+            return "Ontology property target metadata is invalid for field '\(fieldName)'."
         case .emptyPolymorphicGroupIdentifier:
             return "A polymorphic group identifier must not be empty."
         case .invalidPolymorphicDirectoryComponent(let position):

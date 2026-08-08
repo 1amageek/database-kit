@@ -27,7 +27,7 @@ extension OWLClassEntity {
     public static var ontologyBinding: OntologyBinding? {
         .owlClass(
             iri: ontologyClassIRI,
-            dataPropertyIRIs: dataPropertyIRIs
+            properties: ontologyPropertyDescriptors
         )
     }
 }

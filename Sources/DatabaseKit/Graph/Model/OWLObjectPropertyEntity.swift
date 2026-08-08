@@ -21,7 +21,7 @@ extension OWLObjectPropertyEntity {
             iri: objectPropertyIRI,
             fromField: fromFieldName,
             toField: toFieldName,
-            dataPropertyIRIs: dataPropertyIRIs
+            properties: ontologyPropertyDescriptors
         )
     }
 }

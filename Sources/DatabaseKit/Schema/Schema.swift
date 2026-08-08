@@ -447,12 +447,34 @@ public final class Schema: Sendable {
             }
 
             var seenDataPropertyIRIs = Set<String>()
-            for iri in ontology?.dataPropertyIRIs ?? [] {
+            var seenOntologyPropertyFields = Set<String>()
+            for property in ontology?.propertyDescriptors ?? [] {
+                let iri = property.iri
                 guard !iri.isEmpty else {
                     throw .emptyDataPropertyIRI
                 }
                 guard seenDataPropertyIRIs.insert(iri).inserted else {
                     throw .duplicateDataPropertyIRI(iri)
+                }
+                guard !property.fieldName.isEmpty else {
+                    throw .emptyOntologyPropertyField
+                }
+                guard fieldsByName[property.fieldName] != nil else {
+                    throw .unknownOntologyPropertyField(property.fieldName)
+                }
+                guard seenOntologyPropertyFields.insert(property.fieldName).inserted else {
+                    throw .duplicateOntologyPropertyField(property.fieldName)
+                }
+                let field = fieldsByName[property.fieldName]
+                if let targetTypeName = property.targetTypeName {
+                    guard field?.type == .reference,
+                          field?.referenceTargetEntity == targetTypeName else {
+                        throw .invalidOntologyPropertyTarget(
+                            property.fieldName
+                        )
+                    }
+                } else if property.targetFieldName != nil {
+                    throw .invalidOntologyPropertyTarget(property.fieldName)
                 }
             }
             switch ontology {

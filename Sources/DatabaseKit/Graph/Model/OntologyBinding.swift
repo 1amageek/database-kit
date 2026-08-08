@@ -5,21 +5,25 @@
 public enum OntologyBinding: Sendable, Hashable {
     case owlClass(
         iri: String,
-        dataPropertyIRIs: [String]
+        properties: [OWLDataPropertyDescriptor]
     )
     case owlObjectProperty(
         iri: String,
         fromField: String,
         toField: String,
-        dataPropertyIRIs: [String]
+        properties: [OWLDataPropertyDescriptor]
     )
 
     public var dataPropertyIRIs: [String] {
+        propertyDescriptors.map { $0.iri }
+    }
+
+    public var propertyDescriptors: [OWLDataPropertyDescriptor] {
         switch self {
-        case .owlClass(_, let iris):
-            return iris
-        case .owlObjectProperty(_, _, _, let iris):
-            return iris
+        case .owlClass(_, let properties):
+            return properties
+        case .owlObjectProperty(_, _, _, let properties):
+            return properties
         }
     }
 }

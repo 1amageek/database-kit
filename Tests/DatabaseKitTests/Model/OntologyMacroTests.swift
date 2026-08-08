@@ -534,10 +534,7 @@ struct OntologyMacroTests {
         #expect(
             entity.ontology == .owlClass(
                 iri: "https://example.org/onto#Employee",
-                dataPropertyIRIs: [
-                    "https://example.org/onto#name",
-                    "https://example.org/onto#age",
-                ]
+                properties: OntEmployee.ontologyPropertyDescriptors
             )
         )
     }
@@ -550,7 +547,7 @@ struct OntologyMacroTests {
                 iri: "https://example.org/onto#employs",
                 fromField: "employeeID",
                 toField: "projectID",
-                dataPropertyIRIs: ["https://example.org/onto#since"]
+                properties: OntAssignment.ontologyPropertyDescriptors
             )
         )
     }

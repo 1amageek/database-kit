@@ -173,7 +173,13 @@ struct SchemaExecuteWireTests {
             ],
             ontology: .owlClass(
                 iri: "urn:database:Venue",
-                dataPropertyIRIs: ["urn:database:name"]
+                properties: [
+                    OWLDataPropertyDescriptor(
+                        name: "Venue_name",
+                        fieldName: "name",
+                        iri: "urn:database:name"
+                    )
+                ]
             )
         )
         let event = try Schema.Entity(
@@ -239,7 +245,13 @@ struct SchemaExecuteWireTests {
             enumMetadata: ["state": ["draft", "published"]],
             ontology: .owlClass(
                 iri: "urn:database:Event",
-                dataPropertyIRIs: ["urn:database:title"]
+                properties: [
+                    OWLDataPropertyDescriptor(
+                        name: "Event_title",
+                        fieldName: "title",
+                        iri: "urn:database:title"
+                    )
+                ]
             ),
             polymorphicMembership: PolymorphicMembership(
                 identifier: "Content",

@@ -199,6 +199,10 @@ synthetic or concrete `Persistable` value. Its complete-field accessor preserves
 the owned `PersistedModel` backing and materializes compiled values only at the
 explicit type-erasure boundary.
 
+Ontology bindings retain the complete field-to-property descriptor mapping in
+`Schema.Entity`. A schema manifest therefore preserves the same RDF projection
+contract as a compiled `@OWLClass` or `@OWLObjectProperty` model.
+
 ## Polymorphic Persistence
 
 Polymorphic persistence lets multiple concrete `@Persistable` models share a
