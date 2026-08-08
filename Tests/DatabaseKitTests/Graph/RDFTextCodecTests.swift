@@ -27,6 +27,47 @@ struct RDFTextCodecTests {
         #expect(try NQuadsDecoder().decode(from: encoded) == dataset)
     }
 
+    @Test("N-Quads formats one validated quad without a trailing newline")
+    func nQuadsSingleQuadFormatting() throws {
+        let quad = RDFQuad(
+            subject: .iri(try RDFIRI("urn:subject")),
+            predicate: try RDFPredicateIRI("urn:predicate"),
+            object: .literal(.string("value")),
+            graph: RDFGraphName(
+                RDFSubject.iri(try RDFIRI("urn:graph"))
+            )
+        )
+
+        let formatted = try NQuadsEncoder().format(quad)
+
+        #expect(
+            formatted
+                == "<urn:subject> <urn:predicate> \"value\" <urn:graph> ."
+        )
+        #expect(!formatted.hasSuffix("\n"))
+    }
+
+    @Test("N-Quads single-quad formatting enforces validation limits")
+    func nQuadsSingleQuadFormattingRejectsExcessiveDepth() throws {
+        var object = RDFTerm.iri(try RDFIRI("urn:object"))
+        for depth in 0..<40 {
+            object = .tripleTerm(
+                subject: .iri(try RDFIRI("urn:nested:\(depth)")),
+                predicate: try RDFPredicateIRI("urn:predicate"),
+                object: object
+            )
+        }
+        let quad = RDFQuad(
+            subject: .iri(try RDFIRI("urn:subject")),
+            predicate: try RDFPredicateIRI("urn:predicate"),
+            object: object
+        )
+
+        #expect(throws: RDFTermValidationError.self) {
+            _ = try NQuadsEncoder().format(quad)
+        }
+    }
+
     @Test("Turtle uses the shared canonical literal escaping")
     func turtleLiteralEscaping() {
         let ontology = OWLOntology(
