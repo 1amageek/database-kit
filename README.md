@@ -195,7 +195,9 @@ contract has no `Any`, `any Sendable`, dynamic-member, or reflection fallback.
 `PersistedEntityValue` is the common read boundary for compiled values and
 `PersistedModel`. Once a concrete model becomes an owned `PersistedModel`,
 heterogeneous execution can read its canonical fields without reconstructing a
-synthetic or concrete `Persistable` value.
+synthetic or concrete `Persistable` value. Its complete-field accessor preserves
+the owned `PersistedModel` backing and materializes compiled values only at the
+explicit type-erasure boundary.
 
 ## Polymorphic Persistence
 

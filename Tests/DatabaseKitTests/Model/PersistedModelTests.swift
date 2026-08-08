@@ -28,6 +28,7 @@ struct PersistedModelTests {
             try persisted.persistedValue(forFieldNamed: "title")
                 == source.persistedValue(forFieldNamed: "title")
         )
+        #expect(try persisted.persistedFields() == source.persistedFields())
         #expect(decoded.id == source.id)
         #expect(decoded.title == source.title)
         #expect(decoded.values == source.values)

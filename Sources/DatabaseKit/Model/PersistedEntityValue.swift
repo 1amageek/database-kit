@@ -14,4 +14,11 @@ public protocol PersistedEntityValue: Sendable {
     func persistedValue(
         forFieldNamed name: String
     ) throws(PersistableEncodingError) -> FieldValue?
+
+    /// Returns the complete canonical field sequence in schema field order.
+    ///
+    /// The returned array shares its backing storage when the receiver already
+    /// owns a `PersistedModel`. Compiled models materialize exactly once at this
+    /// explicit type-erasure boundary.
+    func persistedFields() throws(PersistableEncodingError) -> [PersistableField]
 }

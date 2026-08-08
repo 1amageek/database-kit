@@ -63,6 +63,10 @@ public struct PersistedModel: PersistedEntityValue, Hashable {
         value(forFieldNamed: name)
     }
 
+    public func persistedFields() -> [PersistableField] {
+        fields
+    }
+
     public func decode<Model: Persistable>(
         as type: Model.Type
     ) throws -> Model {

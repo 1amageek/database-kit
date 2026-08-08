@@ -262,6 +262,10 @@ public extension Persistable {
         )
     }
 
+    func persistedFields() throws(PersistableEncodingError) -> [PersistableField] {
+        try PersistableFieldEncoder.encode(self)
+    }
+
     static var fieldSchemaType: FieldSchemaType { .nested }
 
     func encodeFieldValue() throws(PersistableEncodingError) -> FieldValue {
