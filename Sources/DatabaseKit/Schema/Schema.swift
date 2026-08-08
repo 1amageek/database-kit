@@ -466,14 +466,22 @@ public final class Schema: Sendable {
                     throw .duplicateOntologyPropertyField(property.fieldName)
                 }
                 let field = fieldsByName[property.fieldName]
-                if let targetTypeName = property.targetTypeName {
-                    guard field?.type == .reference,
-                          field?.referenceTargetEntity == targetTypeName else {
-                        throw .invalidOntologyPropertyTarget(
-                            property.fieldName
-                        )
+                switch (
+                    property.targetTypeName,
+                    property.targetFieldName
+                ) {
+                case (nil, nil):
+                    break
+                case (.some(let targetTypeName), .some(let targetFieldName)):
+                    guard !targetTypeName.isEmpty,
+                          !targetFieldName.isEmpty else {
+                        throw .invalidOntologyPropertyTarget(property.fieldName)
                     }
-                } else if property.targetFieldName != nil {
+                    if field?.type == .reference,
+                       field?.referenceTargetEntity != targetTypeName {
+                        throw .invalidOntologyPropertyTarget(property.fieldName)
+                    }
+                case (.some, nil), (nil, .some):
                     throw .invalidOntologyPropertyTarget(property.fieldName)
                 }
             }
@@ -915,6 +923,53 @@ public final class Schema: Sendable {
                     )
                 }
             }
+            for property in entity.ontology?.propertyDescriptors ?? [] {
+                guard let targetEntityName = property.targetTypeName,
+                      let targetFieldName = property.targetFieldName else {
+                    continue
+                }
+                guard let targetEntity = entitiesByName[targetEntityName] else {
+                    throw .unknownOntologyPropertyTarget(
+                        entity: entity.name,
+                        field: property.fieldName,
+                        target: targetEntityName
+                    )
+                }
+                guard let targetField = targetEntity.fieldMapByName[
+                    targetFieldName
+                ] else {
+                    throw .unknownOntologyPropertyTargetField(
+                        entity: entity.name,
+                        field: property.fieldName,
+                        target: targetEntityName,
+                        targetField: targetFieldName
+                    )
+                }
+                guard let sourceField = entity.fieldMapByName[
+                    property.fieldName
+                ] else {
+                    continue
+                }
+                if sourceField.type == .reference {
+                    guard sourceField.referenceTargetEntity
+                            == targetEntityName else {
+                        throw .ontologyPropertyTargetTypeMismatch(
+                            entity: entity.name,
+                            field: property.fieldName,
+                            target: targetEntityName,
+                            targetField: targetFieldName
+                        )
+                    }
+                } else if sourceField.type != targetField.type
+                            || targetField.isArray {
+                    throw .ontologyPropertyTargetTypeMismatch(
+                        entity: entity.name,
+                        field: property.fieldName,
+                        target: targetEntityName,
+                        targetField: targetFieldName
+                    )
+                }
+            }
         }
     }
 
@@ -986,6 +1041,26 @@ public enum SchemaError: Error, CustomStringConvertible, Sendable, Equatable {
         target: String
     )
 
+    case unknownOntologyPropertyTarget(
+        entity: String,
+        field: String,
+        target: String
+    )
+
+    case unknownOntologyPropertyTargetField(
+        entity: String,
+        field: String,
+        target: String,
+        targetField: String
+    )
+
+    case ontologyPropertyTargetTypeMismatch(
+        entity: String,
+        field: String,
+        target: String,
+        targetField: String
+    )
+
     /// Concrete members disagree on the directory path of a polymorphic group.
     case inconsistentPolymorphicDirectory(group: String)
 
@@ -1030,6 +1105,22 @@ public enum SchemaError: Error, CustomStringConvertible, Sendable, Equatable {
             return error.description
         case .unknownReferenceTarget(let entity, let field, let target):
             return "Entity '\(entity)' field '\(field)' references missing entity '\(target)'."
+        case .unknownOntologyPropertyTarget(let entity, let field, let target):
+            return "Entity '\(entity)' ontology field '\(field)' targets missing entity '\(target)'."
+        case .unknownOntologyPropertyTargetField(
+            let entity,
+            let field,
+            let target,
+            let targetField
+        ):
+            return "Entity '\(entity)' ontology field '\(field)' targets missing field '\(target).\(targetField)'."
+        case .ontologyPropertyTargetTypeMismatch(
+            let entity,
+            let field,
+            let target,
+            let targetField
+        ):
+            return "Entity '\(entity)' ontology field '\(field)' is incompatible with target '\(target).\(targetField)'."
         case .inconsistentPolymorphicDirectory(let group):
             return "Polymorphic group '\(group)' has inconsistent directory components across member types."
         case .inconsistentPolymorphicDirectoryLayer(let group):

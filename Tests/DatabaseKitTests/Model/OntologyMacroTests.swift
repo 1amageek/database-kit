@@ -587,6 +587,21 @@ struct OntologyMacroTests {
         )
     }
 
+    @Test("Canonical object-property scalar IDs match compiled values")
+    func canonicalObjectPropertyScalarIDsMatchCompiledValues() throws {
+        #expect(
+            try OWLIndividualIRIBuilder.terms(
+                baseIRI: "https://example.org/individuals",
+                persistableType: "Organization",
+                value: .string("organization-1")
+            ) == OWLIndividualIRIBuilder.terms(
+                baseIRI: "https://example.org/individuals",
+                persistableType: "Organization",
+                value: "organization-1"
+            )
+        )
+    }
+
     @Test("Canonical object-property references enforce target identity")
     func canonicalObjectPropertyReferencesEnforceTargetIdentity() throws {
         let reference = try EntityReference(

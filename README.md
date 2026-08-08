@@ -31,6 +31,8 @@ It provides:
 - canonical binary `DatabaseWire` operations, envelopes, limits, and errors
 - canonical schema manifests, SHA-256 fingerprints, and typed schema
   plan/apply requests through `schema.execute`
+- strict, lossless JSON adaptation for schema manifests in the optional
+  native `DatabaseSchemaJSON` product
 - one Foundation-independent semantic module
 - one canonical bounded binary protocol module
 - one optional native Foundation model-integration module
@@ -50,7 +52,7 @@ database-client ────────┐
 dependencies: [
     .package(
         url: "https://github.com/1amageek/database-kit.git",
-        from: "26.0803.0"
+        from: "26.0809.4"
     )
 ]
 ```
@@ -61,6 +63,7 @@ dependencies: [
 |--------|-------------|
 | `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, SHACL, and shared streaming digest support |
 | `DatabaseWire` | Canonical binary envelopes, typed operations, bounded encoding and decoding, results, errors, and protocol-specific digest values |
+| `DatabaseSchemaJSON` | Native strict JSON adapter for `SchemaManifest`; rejects duplicate or unknown keys and preserves every `FieldValue` case without numeric inference |
 | `DatabaseKitFoundation` | Native-only participation of Foundation scalar types in `Persistable` field adaptation |
 
 Relationship, vector, full-text, geographic, rank, permutation, graph,
@@ -68,8 +71,8 @@ ontology, and SHACL are source classifications within `DatabaseKit`, not
 separate products.
 
 `DatabaseKit` and `DatabaseWire` build with the matching Swift 6.4 standard and
-Embedded WASM SDKs. `DatabaseKitFoundation` is excluded from that dependency
-graph.
+Embedded WASM SDKs. `DatabaseSchemaJSON` and `DatabaseKitFoundation` are native
+adapter products and are excluded from that dependency graph.
 
 There is no umbrella value module in database-kit. `FieldValue` and every
 primitive alternative are defined only by `DatabaseTypes`; the database-kit

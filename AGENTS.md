@@ -65,7 +65,7 @@
 ## Verification
 
 - Native verification uses `scripts/xcode-test-harness` with the pinned Swift
-  snapshot. The harness must execute exactly 621 tests with zero failures,
+  snapshot. The harness must execute exactly 635 tests with zero failures,
   skips, expected failures, runtime warnings, compiler-plugin internal errors,
   profile errors, or debug-information verification warnings.
 - The harness uses the `database-kit-Package` scheme, separates

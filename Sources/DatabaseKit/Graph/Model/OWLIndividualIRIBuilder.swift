@@ -102,7 +102,15 @@ public enum OWLIndividualIRIBuilder {
                 )
             ]
         default:
-            throw .unsupportedCanonicalValue(value.owlProjectionSemanticName)
+            return [
+                .iri(
+                    try individualIRI(
+                        baseIRI: baseIRI,
+                        persistableType: persistableType,
+                        lexicalForm: try lexicalForm(of: value)
+                    )
+                )
+            ]
         }
     }
 

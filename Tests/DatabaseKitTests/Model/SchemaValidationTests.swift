@@ -473,8 +473,8 @@ struct SchemaValidationTests {
         }
     }
 
-    @Test("Ontology object-property targets match reference fields")
-    func ontologyPropertyTargetsMatchReferenceFields() {
+    @Test("Ontology object-property target metadata must be complete")
+    func ontologyPropertyTargetMetadataMustBeComplete() {
         #expect(
             throws: SchemaEntityError.invalidOntologyPropertyTarget("name")
         ) {
@@ -491,11 +491,50 @@ struct SchemaValidationTests {
                             name: "Entity_name",
                             fieldName: "name",
                             iri: "urn:name",
-                            targetTypeName: "Target"
+                            targetTypeName: "Target",
+                            targetFieldName: nil
                         )
                     ]
                 )
             )
         }
+    }
+
+    @Test("Ontology object properties accept canonical scalar target IDs")
+    func ontologyObjectPropertiesAcceptCanonicalScalarTargetIDs() throws {
+        let target = try Schema.Entity(
+            name: "Target",
+            identifierType: .string,
+            fields: [
+                FieldSchema(name: "id", fieldNumber: 1, type: .string),
+            ]
+        )
+        let source = try Schema.Entity(
+            name: "Entity",
+            identifierType: .string,
+            fields: [
+                FieldSchema(name: "id", fieldNumber: 1, type: .string),
+                FieldSchema(
+                    name: "targetID",
+                    fieldNumber: 2,
+                    type: .string,
+                    isOptional: true
+                ),
+            ],
+            ontology: .owlClass(
+                iri: "urn:Entity",
+                properties: [
+                    OWLDataPropertyDescriptor(
+                        name: "Entity_targetID",
+                        fieldName: "targetID",
+                        iri: "urn:target",
+                        targetTypeName: "Target",
+                        targetFieldName: "id"
+                    ),
+                ]
+            )
+        )
+
+        _ = try Schema(entities: [source, target])
     }
 }

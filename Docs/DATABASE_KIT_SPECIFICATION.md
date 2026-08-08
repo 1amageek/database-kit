@@ -16,8 +16,8 @@ part of the design.
 ## Package Responsibility
 
 `database-kit` owns the Foundation-independent database semantic contract above
-the primitive values provided by `database-types`, plus an optional native
-product that integrates Foundation scalars with that semantic contract.
+the primitive values provided by `database-types`, plus native adapter products
+for strict schema JSON and Foundation scalar integration.
 
 It defines:
 
@@ -70,18 +70,19 @@ per direction, and is measured.
 
 ## Responsibility Decomposition
 
-The package contains three public responsibilities. They are separate products
-because semantic declarations and their transfer representation have different
-reasons to change.
+The package contains four public responsibilities. They are separate products
+because semantic declarations, their canonical transfer representation, and
+native external-format adaptation have different reasons to change.
 
 | Product | Owns | Changes when |
 |---|---|---|
 | `DatabaseKit` | Persisted model and document meaning, identity, schema, query, mutation, relationship, index, graph, ontology, SHACL, and database-semantic digest support | Database semantics or their Foundation-independent support contracts change |
 | `DatabaseWire` | The canonical version 1 binary representation of database operations | The version 1 frame, operation, bound, or protocol-error contract changes |
+| `DatabaseSchemaJSON` | Strict native JSON adaptation of the canonical schema manifest | The human-readable manifest mapping, JSON validation, or native text boundary changes |
 | `DatabaseKitFoundation` | Native Foundation scalar participation in `DatabaseKit` model adaptation | Foundation APIs or the explicit canonical scalar-conversion boundary changes |
 
-`DatabaseKitFoundation` is an optional platform integration product. It is not
-part of the Foundation-independent or Embedded graph.
+`DatabaseSchemaJSON` and `DatabaseKitFoundation` are optional native adapter
+products. They are not part of the Foundation-independent or Embedded graph.
 
 The package name is not a semantic namespace. A declaration belongs here only
 when its represented concept belongs to one of the responsibilities above.
@@ -103,6 +104,10 @@ database-framework ────────────┴───────�
 native application ────▶ DatabaseKitFoundation ────▶ DatabaseKit
                                   │
                                   └───────────────▶ DatabaseTypesFoundation
+
+database CLI ──────────▶ DatabaseSchemaJSON ───────▶ DatabaseWire
+                                  │
+                                  └───────────────▶ DatabaseKit
 ```
 
 Arrows point from a consumer to the contract it depends on.
@@ -342,12 +347,13 @@ index declared for another entity.
 
 ## Public Product Surface
 
-`database-kit` publishes three library products:
+`database-kit` publishes four library products:
 
 | Product | Responsibility |
 |---|---|
 | `DatabaseKit` | Foundation-independent database semantic declarations |
 | `DatabaseWire` | Canonical bounded binary operation representation |
+| `DatabaseSchemaJSON` | Native strict JSON adaptation for canonical schema manifests |
 | `DatabaseKitFoundation` | Native-only integration of Foundation scalar values with `DatabaseKit` field adaptation |
 
 The compiler-plugin target is an implementation dependency of `DatabaseKit`
@@ -402,6 +408,8 @@ Sources/
 │   ├── Operation/
 │   ├── Encoding/
 │   └── Decoding/
+├── DatabaseSchemaJSON/
+│   └── strict native schema-manifest JSON adaptation
 ├── DatabaseKitFoundation/
 │   └── explicit Foundation scalar participation in model adaptation
 └── DatabaseKitMacros/
@@ -411,9 +419,11 @@ Sources/
 
 `DatabaseKit` and `DatabaseWire` must not import Foundation,
 FoundationEssentials, `DatabaseTypesFoundation`, URLSession, JavaScriptKit, or
-platform runtime APIs. `DatabaseKitFoundation` imports `DatabaseKit`,
-`DatabaseTypesFoundation`, and Foundation but is never a dependency of either
-canonical product.
+platform runtime APIs. `DatabaseSchemaJSON` may import Foundation only for its
+native text/base64 boundary and depends on the canonical schema and Wire
+contracts. `DatabaseKitFoundation` imports `DatabaseKit`,
+`DatabaseTypesFoundation`, and Foundation. Neither native adapter is a
+dependency of either canonical product.
 
 Foundation scalar conversion is owned by the
 `DatabaseTypesFoundation` product in `database-types`:
@@ -672,8 +682,9 @@ Neither execution nor transport behavior is implemented in this package.
 
 The responsibility migration is complete only when all of the following hold:
 
-1. `Package.swift` publishes only `DatabaseKit`, `DatabaseWire`, and the
-   native-only `DatabaseKitFoundation` integration product.
+1. `Package.swift` publishes only `DatabaseKit`, `DatabaseWire`, the native
+   `DatabaseSchemaJSON` adapter, and the native-only `DatabaseKitFoundation`
+   integration product.
 2. No source or test imports a removed feature module.
 3. `DatabaseKit` and `DatabaseWire` contain no Foundation, Codable-based
    canonical adaptation, transport, runtime, or storage dependency.

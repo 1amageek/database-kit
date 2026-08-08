@@ -33,6 +33,7 @@ The arrows point from a consumer to a dependency.
 |---|---|---|
 | `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, SHACL, and shared streaming digest support | Primitive values, Codable-based canonical persistence, execution, transport |
 | `DatabaseWire` | Version 1 envelopes, typed operations, bounded binary encoding and decoding, and protocol-specific digest values | Semantic meaning, network transport, or operation execution |
+| `DatabaseSchemaJSON` | Strict native JSON adaptation of `SchemaManifest` | Canonical schema meaning, Wire framing, execution, or Embedded behavior |
 | `DatabaseKitFoundation` | Native Foundation scalar participation in `Persistable` field adaptation | Primitive conversion rules, Wire, transport, or Embedded behavior |
 | Compiler plugin | Static generation for `DatabaseKit` contracts | Runtime behavior or a public library product |
 
@@ -54,6 +55,8 @@ Primitive Foundation conversions remain in `DatabaseTypesFoundation`.
 `DatabaseKit` and `DatabaseWire` do not depend on that product.
 `DatabaseKitFoundation` depends on those conversions and exposes their
 participation in `Persistable` field adaptation to native applications.
+`DatabaseSchemaJSON` depends on `DatabaseKit` and `DatabaseWire`, but neither
+canonical module depends on this native external-format adapter.
 
 ## Performance Foundation
 
