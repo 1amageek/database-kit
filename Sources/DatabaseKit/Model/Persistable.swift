@@ -34,7 +34,7 @@ import DatabaseTypes
 /// - `allFields`: All field names
 /// - `indexDescriptors`: Index metadata
 ///
-public protocol Persistable: FieldValueEncodable {
+public protocol Persistable: FieldValueEncodable, PersistedEntityValue {
     // MARK: - ID
 
     /// The type of the unique identifier
@@ -251,6 +251,17 @@ public protocol Persistable: FieldValueEncodable {
 // MARK: - Default Implementations
 
 public extension Persistable {
+    var persistedEntityName: String { Self.persistableType }
+
+    func persistedValue(
+        forFieldNamed name: String
+    ) throws(PersistableEncodingError) -> FieldValue? {
+        guard let number = Self.fieldNumber(for: name) else { return nil }
+        return try persistedFieldValue(
+            for: FieldIdentity(name: name, number: number)
+        )
+    }
+
     static var fieldSchemaType: FieldSchemaType { .nested }
 
     func encodeFieldValue() throws(PersistableEncodingError) -> FieldValue {

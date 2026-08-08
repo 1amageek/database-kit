@@ -6,6 +6,9 @@ public enum DatabaseOperations {
     public static let schemaDescribe = operation(
         SchemaDescribeOperation.self
     )
+    public static let schemaExecute = operation(
+        SchemaExecuteOperation.self
+    )
     public static let queryExecute = operation(
         QueryExecuteOperation.self
     )

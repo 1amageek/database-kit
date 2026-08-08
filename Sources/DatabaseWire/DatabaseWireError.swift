@@ -56,6 +56,12 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidResultPayload(UInt8)
     case invalidRowValueCount(expected: Int, actual: Int)
     case invalidDigestLength(actual: Int, expected: Int)
+    case unsupportedSchemaManifestVersion(UInt16)
+    case invalidSchemaManifest(String)
+    case invalidSchemaExecutionInvocation(UInt8)
+    case invalidSchemaExecutionResponse(UInt8)
+    case invalidSchemaCompatibility(UInt8)
+    case duplicateSchemaMapKey(context: String, key: String)
     case invalidParameterReference(UInt8)
     case invalidParameterPosition(UInt32)
     case emptyParameterName

@@ -6,7 +6,7 @@ import DatabaseTypes
 /// heterogeneous database execution. Query, index, and mutation runtimes can
 /// then consume the canonical `FieldValue` representation without reopening the
 /// concrete `Persistable` type or rebuilding the fields through JSON.
-public struct PersistedModel: Sendable, Hashable {
+public struct PersistedModel: PersistedEntityValue, Hashable {
     public let entity: String
     public let fields: [PersistableField]
 
@@ -53,6 +53,14 @@ public struct PersistedModel: Sendable, Hashable {
         fields.first {
             $0.number == identity.number && $0.name == identity.name
         }?.value
+    }
+
+    public var persistedEntityName: String { entity }
+
+    public func persistedValue(
+        forFieldNamed name: String
+    ) throws(PersistableEncodingError) -> FieldValue? {
+        value(forFieldNamed: name)
     }
 
     public func decode<Model: Persistable>(

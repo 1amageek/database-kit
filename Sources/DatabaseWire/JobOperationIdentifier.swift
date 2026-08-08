@@ -68,7 +68,8 @@ public struct JobOperationIdentifier:
         _ family: DatabaseOperationIdentifier
     ) -> Bool {
         switch family {
-        case .queryExecute,
+        case .schemaExecute,
+             .queryExecute,
              .mutationExecute,
              .graphAlgorithm,
              .ontologyExecute,

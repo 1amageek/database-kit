@@ -165,11 +165,14 @@ selected identity contract and does not infer or convert between graph models.
 structured entities and document-shaped models; the API does not use `Record`
 as the universal database noun.
 
-Model adaptation has three distinct values:
+Model adaptation has four distinct values:
 
 ```text
 application model
       │ generated static field adaptation
+      ▼
+PersistedModel
+      │ owned PersistableField values
       ▼
 PersistableField + FieldValue
       │ DatabaseWire representation
@@ -180,12 +183,19 @@ operation frame
 | Value | Owner | Meaning |
 |---|---|---|
 | application model | Application | The user's Swift type and chosen Swift property types |
+| `PersistedModel` | `DatabaseKit` | One owned, type-independent entity snapshot after the persistence boundary |
 | `PersistableField` | `DatabaseKit` | Stable field identity plus one canonical primitive value |
 | `FieldValue` / `FieldObject` | `DatabaseTypes` | Closed primitive value algebra |
 
 The adaptation contract is:
 
 - `@Persistable` generates concrete, statically typed field adaptation.
+- `PersistedEntityValue` is the shared field-access contract implemented by
+  compiled `Persistable` values and `PersistedModel`; execution layers do not
+  need a synthetic `Persistable` type for schema-driven entities.
+- A compiled model is materialized as `PersistedModel` once at the persistence
+  boundary. Heterogeneous query, mutation, and index execution consume that
+  canonical value instead of decoding it back into the application type.
 - The declared `id` property determines the generated concrete `ID` associated
   type; associated-type inference is not deferred to a runtime or compiler
   witness heuristic.
@@ -522,17 +532,25 @@ The operation families are:
 
 1. `capabilities.describe`
 2. `schema.describe`
-3. `query.execute`
-4. `mutation.execute`
-5. `graph.algorithm`
-6. `ontology.execute`
-7. `shacl.execute`
-8. `command.execute`
-9. `maintenance.execute`
-10. `job.start`
-11. `job.status`
-12. `job.result`
-13. `job.cancel`
+3. `schema.execute`
+4. `query.execute`
+5. `mutation.execute`
+6. `graph.algorithm`
+7. `ontology.execute`
+8. `shacl.execute`
+9. `command.execute`
+10. `maintenance.execute`
+11. `job.start`
+12. `job.status`
+13. `job.result`
+14. `job.cancel`
+
+`schema.execute` transfers a complete `SchemaManifest`, not a CLI-specific
+schema DTO. The manifest uses the same bounded canonical writer as every other
+Wire value. Its `SchemaFingerprint` is the SHA-256 digest of those canonical
+bytes, so optimistic concurrency and idempotent apply use one representation
+on every host. `plan` accepts an optional expected fingerprint; `apply`
+requires both the expected fingerprint and a non-empty idempotency key.
 
 Decoding must deterministically reject:
 

@@ -23,6 +23,11 @@ struct PersistedModelTests {
 
         #expect(persisted.entity == PersistableFieldEncoderTestDocument.persistableType)
         #expect(persisted.value(forFieldNamed: "title") == .string("Canonical"))
+        #expect(persisted.persistedEntityName == source.persistedEntityName)
+        #expect(
+            try persisted.persistedValue(forFieldNamed: "title")
+                == source.persistedValue(forFieldNamed: "title")
+        )
         #expect(decoded.id == source.id)
         #expect(decoded.title == source.title)
         #expect(decoded.values == source.values)

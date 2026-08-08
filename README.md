@@ -29,6 +29,8 @@ It provides:
 - Foundation-independent identity, RDF, and `QueryIR` semantic models
 - bounded RDF term-role and structural validation without binary materialization
 - canonical binary `DatabaseWire` operations, envelopes, limits, and errors
+- canonical schema manifests, SHA-256 fingerprints, and typed schema
+  plan/apply requests through `schema.execute`
 - one Foundation-independent semantic module
 - one canonical bounded binary protocol module
 - one optional native Foundation model-integration module
@@ -90,7 +92,7 @@ host transport contract.
 
 | Contract | Verification |
 |---|---|
-| Apple platform behavior | `TOOLCHAINS=org.swift.64202607231a scripts/xcode-test-harness`; exactly 614 passing tests, zero skips, expected failures, runtime warnings, or internal tool errors |
+| Apple platform behavior | `TOOLCHAINS=org.swift.64202607231a scripts/xcode-test-harness`; the package-owned harness enforces the reviewed exact test count with zero skips, expected failures, runtime warnings, or internal tool errors |
 | Standard WASM contract | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 WASM SDK and `-debug-info-format none` |
 | Embedded semantic and Wire graph | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 Embedded WASM SDK and `-debug-info-format none` |
 | Embedded macro use | Embedded release build of `DatabaseKitDeclarationContract` with `-debug-info-format none`, which expands model, field, directory, index, and relationship declarations |
@@ -189,6 +191,11 @@ When an execution path needs one field after typed access has been erased,
 `persistedFieldValue(for:)` selects it by `FieldIdentity` through the same
 generated traversal. It materializes only that field as `FieldValue`; the model
 contract has no `Any`, `any Sendable`, dynamic-member, or reflection fallback.
+
+`PersistedEntityValue` is the common read boundary for compiled values and
+`PersistedModel`. Once a concrete model becomes an owned `PersistedModel`,
+heterogeneous execution can read its canonical fields without reconstructing a
+synthetic or concrete `Persistable` value.
 
 ## Polymorphic Persistence
 
