@@ -105,6 +105,7 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
         public let currentRevision: UInt64
         public let resultingRevision: UInt64
         public let destinationPlacementID: Base.Placement.ID?
+        public let layoutFingerprint: DatabaseLayoutFingerprint?
         public let requiresJob: Bool
 
         public init(
@@ -112,6 +113,7 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
             currentRevision: UInt64,
             resultingRevision: UInt64,
             destinationPlacementID: Base.Placement.ID? = nil,
+            layoutFingerprint: DatabaseLayoutFingerprint? = nil,
             requiresJob: Bool
         ) throws(DatabaseWireError) {
             guard resultingRevision > currentRevision else {
@@ -120,10 +122,15 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
             guard (action == .move) == (destinationPlacementID != nil) else {
                 throw .invalidBaseExecutionPlan
             }
+            guard (action == .migrateLegacyLayout)
+                    == (layoutFingerprint != nil) else {
+                throw .invalidBaseExecutionPlan
+            }
             self.action = action
             self.currentRevision = currentRevision
             self.resultingRevision = resultingRevision
             self.destinationPlacementID = destinationPlacementID
+            self.layoutFingerprint = layoutFingerprint
             self.requiresJob = requiresJob
         }
 
@@ -136,6 +143,10 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
             writer.writeBool(destinationPlacementID != nil)
             if let destinationPlacementID {
                 try destinationPlacementID.encode(into: &writer)
+            }
+            writer.writeBool(layoutFingerprint != nil)
+            if let layoutFingerprint {
+                try layoutFingerprint.encode(into: &writer)
             }
             writer.writeBool(requiresJob)
         }
@@ -153,6 +164,9 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
                 resultingRevision: try reader.readUInt64(),
                 destinationPlacementID: try reader.readBool()
                     ? try Base.Placement.ID(from: &reader)
+                    : nil,
+                layoutFingerprint: try reader.readBool()
+                    ? try DatabaseLayoutFingerprint(from: &reader)
                     : nil,
                 requiresJob: try reader.readBool()
             )
@@ -185,8 +199,7 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
         case legacyMigrationPlan(
             baseID: Base.ID,
             placementID: Base.Placement.ID,
-            initialGrants: [Security.Grant],
-            expectedLayoutFingerprint: DatabaseLayoutFingerprint
+            initialGrants: [Security.Grant]
         )
         case legacyMigrationApply(
             baseID: Base.ID,
@@ -260,8 +273,7 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
             case .legacyMigrationPlan(
                 let baseID,
                 let placementID,
-                let initialGrants,
-                let expectedLayoutFingerprint
+                let initialGrants
             ):
                 writer.writeUInt8(9)
                 try baseID.encode(into: &writer)
@@ -271,7 +283,6 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
                     for: baseID,
                     into: &writer
                 )
-                try expectedLayoutFingerprint.encode(into: &writer)
             case .legacyMigrationApply(
                 let baseID,
                 let placementID,
@@ -373,9 +384,7 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
                         initialGrants: try Self.decodeInitialGrants(
                             for: baseID,
                             from: &reader
-                        ),
-                        expectedLayoutFingerprint:
-                            try DatabaseLayoutFingerprint(from: &reader)
+                        )
                     )
                 )
             case 10:

@@ -155,6 +155,41 @@ struct BaseWireContractTests {
         )
     }
 
+    @Test("Legacy migration plan returns the fingerprint required by apply")
+    func legacyMigrationPlanCarriesFingerprint() throws {
+        let baseID = try Base.ID("migrated")
+        let placementID = try Base.Placement.ID("primary")
+        let grant = Security.Grant(
+            subject: .principal("operator"),
+            resource: .base(baseID),
+            access: .all
+        )
+        try expectRoundTrip(
+            BaseExecuteOperation.Request(
+                invocation: .legacyMigrationPlan(
+                    baseID: baseID,
+                    placementID: placementID,
+                    initialGrants: [grant]
+                )
+            )
+        )
+
+        let fingerprint = try DatabaseLayoutFingerprint(
+            ByteString(repeating: 0x5a, count: 32)
+        )
+        try expectRoundTrip(
+            BaseExecuteOperation.Response.plan(
+                try BaseExecuteOperation.Plan(
+                    action: .migrateLegacyLayout,
+                    currentRevision: 0,
+                    resultingRevision: 2,
+                    layoutFingerprint: fingerprint,
+                    requiresJob: true
+                )
+            )
+        )
+    }
+
     @Test("Federated read points require canonical unique domain order")
     func federatedReadPointOrder() throws {
         let primary = try DomainReadPoint(
