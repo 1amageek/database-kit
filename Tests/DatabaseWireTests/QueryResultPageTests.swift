@@ -17,7 +17,8 @@ struct QueryResultPageTests {
                     QueryRow(values: [.bytes([5, 6, 7, 8])]),
                 ],
                 continuation: [9, 10],
-                snapshotVersion: 21
+                provenance: nil,
+                consistency: try consistency(version: 21)
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
@@ -67,10 +68,11 @@ struct QueryResultPageTests {
             )
         )
         let response = QueryExecuteOperation.Response.rdfGraph(
-            RDFGraphPage(
+            try RDFGraphPage(
                 quads: [quad, quad],
                 continuation: [1],
-                snapshotVersion: 34
+                provenance: nil,
+                consistency: try consistency(version: 34)
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
@@ -104,7 +106,10 @@ struct QueryResultPageTests {
                 columns: [QueryColumn(number: 1, name: "marker")],
                 rows: [
                     QueryRow(values: [.uint64(0x8877_6655_4433_2211)]),
-                ]
+                ],
+                continuation: nil,
+                provenance: nil,
+                consistency: try consistency()
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
@@ -133,7 +138,10 @@ struct QueryResultPageTests {
     func materializationLimit() throws {
         let page = try QueryRowPage(
             columns: [],
-            rows: [QueryRow(values: []), QueryRow(values: [])]
+            rows: [QueryRow(values: []), QueryRow(values: [])],
+            continuation: nil,
+            provenance: nil,
+            consistency: try consistency()
         )
 
         #expect(
@@ -151,7 +159,10 @@ struct QueryResultPageTests {
         let response = QueryExecuteOperation.Response.rows(
             try QueryRowPage(
                 columns: [QueryColumn(number: 1, name: "v")],
-                rows: [QueryRow(values: [.string("long value")])]
+                rows: [QueryRow(values: [.string("long value")])],
+                continuation: nil,
+                provenance: nil,
+                consistency: try consistency()
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
@@ -210,6 +221,17 @@ struct QueryResultPageTests {
             }
         )
         #expect(ownerRange.contains(childAddress))
+    }
+
+    private func consistency(
+        version: UInt64 = 1
+    ) throws -> DatabaseReadConsistency {
+        .transactional(
+            try DomainReadPoint(
+                domainID: "primary",
+                position: .version(version)
+            )
+        )
     }
 
     private func firstIndex(

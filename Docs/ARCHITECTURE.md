@@ -10,8 +10,9 @@ The performance-sensitive ownership path is defined in
 
 `database-kit` owns the Foundation-independent database semantic model above
 primitive values. Its public contracts describe persisted models, identity,
-schema, relationships, indexes, graph and ontology declarations, queries,
-mutations, and the canonical binary operation protocol.
+Base and Composition boundaries, authorization Grants, schema, relationships,
+indexes, graph and ontology declarations, queries, mutations, provenance,
+read consistency, and the canonical binary operation protocol.
 
 It does not own primitive representation, transport, database execution,
 transactions, storage backends, runtime assembly, or application schemas.
@@ -208,6 +209,10 @@ The version 1 operation families are fixed:
 |---|---|
 | `capabilities.describe` | Runtime capability catalog |
 | `schema.describe` | Validated schema catalog |
+| `schema.execute` | Schema plan and apply |
+| `base.execute` | Placement discovery and Base lifecycle operations |
+| `composition.execute` | Composition catalog and membership mutation |
+| `grant.execute` | Direct and effective Grant inspection and mutation |
 | `query.execute` | SQL, graph pattern, and SPARQL queries |
 | `mutation.execute` | Typed mutation batches |
 | `graph.algorithm` | Graph algorithm invocation and paging |

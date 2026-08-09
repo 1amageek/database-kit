@@ -19,11 +19,13 @@ public struct JobOperation<
 
     public func makeStartRequest(
         _ request: Request,
+        target: DatabaseOperationTarget,
         maximumSliceWorkUnits: UInt64 = 100_000,
         retryPolicy: JobStartOperation.RetryPolicy = .init(),
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> JobStartOperation.Request {
         JobStartOperation.Request(
+            target: target,
             operation: identifier,
             requestPayload: try operation.encodeRequestPayload(
                 request,

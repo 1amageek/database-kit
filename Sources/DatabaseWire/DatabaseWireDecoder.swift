@@ -28,6 +28,7 @@ public struct DatabaseWireDecoder: Sendable {
         let envelope = try decodeRequestEnvelope(frame)
         return DecodedOperationRequest(
             requestID: envelope.requestID,
+            target: envelope.target,
             metadata: envelope.metadata,
             request: try operation.decodeRequest(
                 envelope,

@@ -15,11 +15,13 @@ public struct DatabaseWireEncoder: Sendable {
     public func encodeRequest<Request, Response>(
         _ operation: DatabaseOperation<Request, Response>,
         requestID: UInt64,
+        target: DatabaseOperationTarget,
         metadata: OperationRequestMetadata = OperationRequestMetadata(),
         request: Request
     ) throws(DatabaseWireError) -> ByteString {
         try operation.encodeRequest(
             requestID: requestID,
+            target: target,
             metadata: metadata,
             request: request,
             limits: limits

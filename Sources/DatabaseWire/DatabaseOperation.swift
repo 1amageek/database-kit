@@ -111,6 +111,7 @@ public struct DatabaseOperation<
 
     func encodeRequest(
         requestID: UInt64,
+        target: DatabaseOperationTarget,
         metadata: OperationRequestMetadata = OperationRequestMetadata(),
         request: Request,
         limits: DatabaseWireLimits = .default
@@ -118,6 +119,7 @@ public struct DatabaseOperation<
         try EnvelopeWireFormat.encodeRequest(
             identifier: identifier,
             requestID: requestID,
+            target: target,
             metadata: metadata,
             request: request,
             limits: limits,

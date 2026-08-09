@@ -38,17 +38,20 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
     }
 
     public struct Request: WireValue, Hashable {
+        public let target: DatabaseOperationTarget
         public let operation: JobOperationIdentifier
         public let requestPayload: ByteString
         public let maximumSliceWorkUnits: UInt64
         public let retryPolicy: RetryPolicy
 
         public init(
+            target: DatabaseOperationTarget,
             operation: JobOperationIdentifier,
             requestPayload: ByteString,
             maximumSliceWorkUnits: UInt64 = 100_000,
             retryPolicy: RetryPolicy = RetryPolicy()
         ) {
+            self.target = target
             self.operation = operation
             self.requestPayload = requestPayload
             self.maximumSliceWorkUnits = maximumSliceWorkUnits
@@ -58,6 +61,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
         func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
+            try target.encode(into: &writer)
             try operation.encode(into: &writer)
             try writer.writeBytes(requestPayload)
             writer.writeUInt64(maximumSliceWorkUnits)
@@ -68,6 +72,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
             self.init(
+                target: try DatabaseOperationTarget(from: &reader),
                 operation: try JobOperationIdentifier(from: &reader),
                 requestPayload: try reader.readBytes(),
                 maximumSliceWorkUnits: try reader.readUInt64(),
@@ -81,6 +86,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
 
         public var jobID: DatabaseTypes.UUID { job.jobID }
         public var operation: JobOperationIdentifier { job.operation }
+        public var target: DatabaseOperationTarget { job.target }
 
         public init(job: JobIdentity) {
             self.job = job
@@ -88,10 +94,15 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
 
         public init(
             jobID: DatabaseTypes.UUID,
-            operation: JobOperationIdentifier
+            operation: JobOperationIdentifier,
+            target: DatabaseOperationTarget
         ) {
             self.init(
-                job: JobIdentity(jobID: jobID, operation: operation)
+                job: JobIdentity(
+                    jobID: jobID,
+                    operation: operation,
+                    target: target
+                )
             )
         }
 

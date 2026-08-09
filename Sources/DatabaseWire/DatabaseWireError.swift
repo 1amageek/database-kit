@@ -21,6 +21,33 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidReferenceCardinality(UInt8)
     case invalidReferenceDeleteRule(UInt8)
     case invalidOperationIdentifier(UInt16)
+    case invalidOperationTarget(UInt8)
+    case invalidBaseIdentifier(BaseIdentifierError)
+    case invalidBaseComposition(BaseCompositionError)
+    case invalidSecurityAccess(UInt8)
+    case invalidSecurityResource(UInt8)
+    case invalidSecuritySubject(UInt8)
+    case emptySecuritySubject
+    case invalidDomainReadPoint
+    case invalidDomainReadPointPosition(UInt8)
+    case invalidReadConsistency(UInt8)
+    case invalidFederatedReadPoints
+    case invalidBaseLifecycleState(UInt8)
+    case invalidBaseExecutionInvocation(UInt8)
+    case invalidBaseExecutionResponse(UInt8)
+    case invalidBaseExecutionPlan
+    case nonCanonicalPlacementSet
+    case nonCanonicalBaseSet
+    case invalidInitialBaseGrants
+    case emptyIdempotencyKey
+    case invalidCompositionExecutionInvocation(UInt8)
+    case invalidCompositionExecutionResponse(UInt8)
+    case nonCanonicalCompositionSet
+    case invalidGrantExecutionInvocation(UInt8)
+    case invalidGrantExecutionResponse(UInt8)
+    case nonCanonicalGrantSet
+    case invalidCompositionOrigin(UInt8)
+    case invalidCompositionProvenance
     case unexpectedOperationIdentifier(
         expected: DatabaseOperationIdentifier,
         actual: DatabaseOperationIdentifier

@@ -13,7 +13,8 @@ public struct RDFGraphPage: Sendable {
 
     public let quadCount: Int
     public let continuation: ByteString?
-    public let snapshotVersion: Int64?
+    public let provenance: CompositionPageProvenance?
+    public let consistency: DatabaseReadConsistency
 
     private let storage: Storage
     private let limits: DatabaseWireLimits
@@ -27,12 +28,17 @@ public struct RDFGraphPage: Sendable {
 
     public init(
         quads: consuming [RDFQuad],
-        continuation: ByteString? = nil,
-        snapshotVersion: Int64? = nil
-    ) {
+        continuation: ByteString?,
+        provenance: CompositionPageProvenance?,
+        consistency: DatabaseReadConsistency
+    ) throws(DatabaseWireError) {
+        guard provenance == nil || provenance?.originCount == quads.count else {
+            throw .invalidCompositionProvenance
+        }
         self.quadCount = quads.count
         self.continuation = continuation
-        self.snapshotVersion = snapshotVersion
+        self.provenance = provenance
+        self.consistency = consistency
         self.storage = .materialized(quads)
         self.limits = .default
     }
@@ -99,11 +105,15 @@ public struct RDFGraphPage: Sendable {
             )
             writer.writeUnframedBytes(bytes)
         }
-        try writer.writeOptionalBytes(continuation)
-        writer.writeBool(snapshotVersion != nil)
-        if let snapshotVersion {
-            writer.writeInt64(snapshotVersion)
+        writer.writeBool(provenance != nil)
+        if let provenance {
+            guard provenance.originCount == quadCount else {
+                throw .invalidCompositionProvenance
+            }
+            try provenance.encode(into: &writer)
         }
+        try consistency.encode(into: &writer)
+        try writer.writeOptionalBytes(continuation)
     }
 
     init(
@@ -120,9 +130,14 @@ public struct RDFGraphPage: Sendable {
         )
 
         self.quadCount = quadCount
+        self.provenance = try reader.readBool()
+            ? try CompositionPageProvenance(from: &reader)
+            : nil
+        guard provenance == nil || provenance?.originCount == quadCount else {
+            throw .invalidCompositionProvenance
+        }
+        self.consistency = try DatabaseReadConsistency(from: &reader)
         self.continuation = try reader.readOptionalBytes()
-        self.snapshotVersion =
-            try reader.readBool() ? try reader.readInt64() : nil
         self.storage = .encoded(encodedQuads)
         self.limits = reader.limits
     }

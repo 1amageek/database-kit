@@ -23,6 +23,8 @@ It defines:
 
 - persisted model and document metadata;
 - logical identity;
+- Base, Composition, authorization Grant, provenance, and read-consistency
+  semantics;
 - schema and migration declarations;
 - relationship declarations;
 - index declarations;
@@ -139,6 +141,7 @@ This includes:
 |---|---|
 | Model and document | persistence contracts, field metadata, model adaptation contracts |
 | Identity | persisted identifiers, logical references, identity validation |
+| Boundary | Base identity, Composition membership, placement identity, Grant vocabulary, result provenance, and read consistency |
 | Schema | schema catalog, versions, constraints, migration declarations |
 | Query | SQL, SQL/PGQ, graph-pattern, and SPARQL intermediate representations |
 | Mutation | mutation statements, preconditions, and transaction intent |
@@ -253,6 +256,7 @@ It owns:
 - operation identifiers;
 - request and response envelopes;
 - request identifiers, trace metadata, and idempotency metadata;
+- a mandatory database, Base, or Composition target on every request;
 - bounded binary readers and writers;
 - operation-to-request-and-response type binding;
 - protocol error representation;

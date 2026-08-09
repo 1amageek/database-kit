@@ -5,6 +5,17 @@ import Testing
 
 @Suite("Canonical DatabaseWire")
 struct CanonicalDatabaseWireTests {
+    private func consistency(
+        version: UInt64
+    ) throws -> DatabaseReadConsistency {
+        .transactional(
+            try DomainReadPoint(
+                domainID: "primary",
+                position: .version(version)
+            )
+        )
+    }
+
     @Test("fixed request header decoding does not traverse an oversized payload")
     func requestHeaderDecodingIsIndependentOfPayloadLimits() throws {
         let payloadByteCount = DatabaseWireLimits.default.maximumFrameBytes
@@ -20,6 +31,7 @@ struct CanonicalDatabaseWireTests {
             request: DatabaseWireRequestEnvelope(
                 requestID: 0x0102_0304_0506_0708,
                 operation: .queryExecute,
+                target: .database,
                 payload: ByteString(
                     [UInt8](repeating: 0xa5, count: payloadByteCount)
                 )
@@ -42,6 +54,7 @@ struct CanonicalDatabaseWireTests {
             request: DatabaseWireRequestEnvelope(
                 requestID: 7,
                 operation: .capabilitiesDescribe,
+                target: .database,
                 payload: []
             )
         )
@@ -58,6 +71,7 @@ struct CanonicalDatabaseWireTests {
         let request = DatabaseWireRequestEnvelope(
             requestID: 0x0102_0304_0506_0708,
             operation: .capabilitiesDescribe,
+            target: .database,
             payload: []
         )
 
@@ -69,6 +83,7 @@ struct CanonicalDatabaseWireTests {
             0x01,
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
             0x01, 0x01,
+            0x00,
             0x00,
             0x00,
             0x00, 0x00, 0x00, 0x00,
@@ -296,12 +311,19 @@ struct CanonicalDatabaseWireTests {
                         ),
                     ],
                     continuation: [1, 2, 3],
-                    snapshotVersion: 12
+                    provenance: nil,
+                    consistency: try consistency(version: 12)
                 )
             ),
-            .boolean(true),
+            .boolean(
+                try QueryBooleanResult(
+                    value: true,
+                    provenance: nil,
+                    consistency: consistency(version: 19)
+                )
+            ),
             .rdfGraph(
-                RDFGraphPage(
+                try RDFGraphPage(
                     quads: [
                         RDFQuad(
                             subject: .iri(try RDFIRI("urn:event:1")),
@@ -317,7 +339,9 @@ struct CanonicalDatabaseWireTests {
                             )
                         ),
                     ],
-                    snapshotVersion: 27
+                    continuation: nil,
+                    provenance: nil,
+                    consistency: consistency(version: 27)
                 )
             ),
         ]
@@ -330,12 +354,17 @@ struct CanonicalDatabaseWireTests {
             )
             switch (result, decoded) {
             case (.boolean(let expected), .boolean(let actual)):
-                #expect(actual == expected)
+                #expect(actual.value == expected.value)
+                #expect(actual.consistency == expected.consistency)
+                #expect(actual.provenance == nil)
+                #expect(expected.provenance == nil)
             case (.rows(let expected), .rows(let actual)):
                 #expect(actual.columns == expected.columns)
                 #expect(actual.rowCount == expected.rowCount)
                 #expect(actual.continuation == expected.continuation)
-                #expect(actual.snapshotVersion == expected.snapshotVersion)
+                #expect(actual.consistency == expected.consistency)
+                #expect(actual.provenance == nil)
+                #expect(expected.provenance == nil)
                 #expect(
                     try actual.materializedRows(maximumCount: 10)
                         == expected.materializedRows(maximumCount: 10)
@@ -343,7 +372,9 @@ struct CanonicalDatabaseWireTests {
             case (.rdfGraph(let expected), .rdfGraph(let actual)):
                 #expect(actual.quadCount == expected.quadCount)
                 #expect(actual.continuation == expected.continuation)
-                #expect(actual.snapshotVersion == expected.snapshotVersion)
+                #expect(actual.consistency == expected.consistency)
+                #expect(actual.provenance == nil)
+                #expect(expected.provenance == nil)
                 #expect(
                     try actual.materializedQuads(maximumCount: 10)
                         == expected.materializedQuads(maximumCount: 10)
@@ -420,6 +451,7 @@ struct CanonicalDatabaseWireTests {
         let request = DatabaseWireRequestEnvelope(
             requestID: 1,
             operation: .capabilitiesDescribe,
+            target: .database,
             payload: []
         )
         var unsupportedVersion = try EnvelopeWireFormat.encode(

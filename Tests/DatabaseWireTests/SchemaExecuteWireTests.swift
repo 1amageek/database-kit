@@ -70,6 +70,7 @@ struct SchemaExecuteWireTests {
             let frame = try DatabaseWireEncoder().encodeRequest(
                 DatabaseOperations.schemaExecute,
                 requestID: 42,
+                target: .database,
                 request: request
             )
             let decoded = try DatabaseWireDecoder().decodeRequest(
@@ -159,6 +160,7 @@ struct SchemaExecuteWireTests {
             _ = try DatabaseWireEncoder().encodeRequest(
                 DatabaseOperations.schemaExecute,
                 requestID: 44,
+                target: .database,
                 request: request
             )
         }

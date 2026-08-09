@@ -1,4 +1,5 @@
 import DatabaseTypes
+import DatabaseKit
 
 /// An owner-retaining page of query rows.
 ///
@@ -13,7 +14,8 @@ public struct QueryRowPage: Sendable {
     public let columns: [QueryColumn]
     public let rowCount: Int
     public let continuation: ByteString?
-    public let snapshotVersion: UInt64?
+    public let provenance: CompositionPageProvenance?
+    public let consistency: DatabaseReadConsistency
 
     private let storage: Storage
     private let limits: DatabaseWireLimits
@@ -28,8 +30,9 @@ public struct QueryRowPage: Sendable {
     public init(
         columns: [QueryColumn],
         rows: [QueryRow],
-        continuation: ByteString? = nil,
-        snapshotVersion: UInt64? = nil
+        continuation: ByteString?,
+        provenance: CompositionPageProvenance?,
+        consistency: DatabaseReadConsistency
     ) throws(DatabaseWireError) {
         for row in rows {
             guard row.values.count == columns.count else {
@@ -39,10 +42,14 @@ public struct QueryRowPage: Sendable {
                 )
             }
         }
+        guard provenance == nil || provenance?.originCount == rows.count else {
+            throw .invalidCompositionProvenance
+        }
         self.columns = columns
         self.rowCount = rows.count
         self.continuation = continuation
-        self.snapshotVersion = snapshotVersion
+        self.provenance = provenance
+        self.consistency = consistency
         self.storage = .materialized(rows)
         self.limits = .default
     }
@@ -117,11 +124,15 @@ public struct QueryRowPage: Sendable {
             )
             writer.writeUnframedBytes(bytes)
         }
-        try writer.writeOptionalBytes(continuation)
-        writer.writeBool(snapshotVersion != nil)
-        if let snapshotVersion {
-            writer.writeUInt64(snapshotVersion)
+        writer.writeBool(provenance != nil)
+        if let provenance {
+            guard provenance.originCount == rowCount else {
+                throw .invalidCompositionProvenance
+            }
+            try provenance.encode(into: &writer)
         }
+        try consistency.encode(into: &writer)
+        try writer.writeOptionalBytes(continuation)
     }
 
     init(
@@ -149,9 +160,14 @@ public struct QueryRowPage: Sendable {
 
         self.columns = columns
         self.rowCount = rowCount
+        self.provenance = try reader.readBool()
+            ? try CompositionPageProvenance(from: &reader)
+            : nil
+        guard provenance == nil || provenance?.originCount == rowCount else {
+            throw .invalidCompositionProvenance
+        }
+        self.consistency = try DatabaseReadConsistency(from: &reader)
         self.continuation = try reader.readOptionalBytes()
-        self.snapshotVersion =
-            try reader.readBool() ? try reader.readUInt64() : nil
         self.storage = .encoded(encodedRows)
         self.limits = reader.limits
     }

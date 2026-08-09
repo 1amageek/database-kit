@@ -5,6 +5,15 @@ import Testing
 
 @Suite("Public DatabaseWire boundary")
 struct DatabaseWireBoundaryTests {
+    private func consistency() throws -> DatabaseReadConsistency {
+        .transactional(
+            try DomainReadPoint(
+                domainID: "primary",
+                position: .version(1)
+            )
+        )
+    }
+
     private let request = QueryExecuteOperation.Request(
         input: .text(
             language: .sparql,
@@ -19,6 +28,7 @@ struct DatabaseWireBoundaryTests {
         let frame = try encoder.encodeRequest(
             DatabaseOperations.queryExecute,
             requestID: 42,
+            target: .database,
             metadata: .init(
                 traceID: "trace-42",
                 idempotencyKey: "query-42"
@@ -41,6 +51,7 @@ struct DatabaseWireBoundaryTests {
         let encoded = try DatabaseWireEncoder().encodeRequest(
             DatabaseOperations.queryExecute,
             requestID: 43,
+            target: .database,
             request: request
         )
         var storageBytes: [UInt8] = [0xA5]
@@ -62,6 +73,7 @@ struct DatabaseWireBoundaryTests {
         let frame = try DatabaseWireEncoder().encodeRequest(
             DatabaseOperations.queryExecute,
             requestID: 7,
+            target: .database,
             request: request
         )
 
@@ -99,7 +111,13 @@ struct DatabaseWireBoundaryTests {
     func responseRoundTrip() throws {
         let encoder = DatabaseWireEncoder()
         let decoder = DatabaseWireDecoder()
-        let response = QueryExecuteOperation.Response.boolean(true)
+        let response = QueryExecuteOperation.Response.boolean(
+            try QueryBooleanResult(
+                value: true,
+                provenance: nil,
+                consistency: try consistency()
+            )
+        )
         let frame = try encoder.encodeResponse(
             DatabaseOperations.queryExecute,
             requestID: 91,
@@ -115,7 +133,7 @@ struct DatabaseWireBoundaryTests {
             Issue.record("Expected a successful boolean response")
             return
         }
-        #expect(value)
+        #expect(value.value)
         #expect(
             throws: DatabaseWireError.unexpectedRequestIdentifier(
                 expected: 92,
@@ -161,7 +179,13 @@ struct DatabaseWireBoundaryTests {
         let encoded = try DatabaseWireEncoder().encodeResponseAndPayload(
             DatabaseOperations.queryExecute,
             requestID: 12,
-            response: QueryExecuteOperation.Response.boolean(true)
+            response: QueryExecuteOperation.Response.boolean(
+                try QueryBooleanResult(
+                    value: true,
+                    provenance: nil,
+                    consistency: try consistency()
+                )
+            )
         )
         let frameAddress = try #require(
             encoded.frame.withUnsafeBytes { buffer in
@@ -181,7 +205,13 @@ struct DatabaseWireBoundaryTests {
     func persistedResponsePayloadRoundTrip() throws {
         let encoder = DatabaseWireEncoder()
         let decoder = DatabaseWireDecoder()
-        let response = QueryExecuteOperation.Response.boolean(true)
+        let response = QueryExecuteOperation.Response.boolean(
+            try QueryBooleanResult(
+                value: true,
+                provenance: nil,
+                consistency: try consistency()
+            )
+        )
         let encoded = try encoder.encodeResponseAndPayload(
             DatabaseOperations.queryExecute,
             requestID: 20,
@@ -196,7 +226,7 @@ struct DatabaseWireBoundaryTests {
             Issue.record("Expected a boolean response payload")
             return
         }
-        #expect(value)
+        #expect(value.value)
 
         let replayedFrame = try encoder.encodeSuccessPayload(
             requestID: 21,
@@ -212,7 +242,7 @@ struct DatabaseWireBoundaryTests {
             Issue.record("Expected a replayed boolean response")
             return
         }
-        #expect(replayedValue)
+        #expect(replayedValue.value)
     }
 
     @Test("server payload SPI preserves opaque bounded state")

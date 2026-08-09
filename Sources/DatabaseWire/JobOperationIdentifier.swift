@@ -69,6 +69,7 @@ public struct JobOperationIdentifier:
     ) -> Bool {
         switch family {
         case .schemaExecute,
+             .baseExecute,
              .queryExecute,
              .mutationExecute,
              .graphAlgorithm,
@@ -79,6 +80,8 @@ public struct JobOperationIdentifier:
             return true
         case .capabilitiesDescribe,
              .schemaDescribe,
+             .compositionExecute,
+             .grantExecute,
              .jobStart,
              .jobStatus,
              .jobResult,

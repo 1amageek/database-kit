@@ -27,8 +27,11 @@ It provides:
 - `@OWLDataProperty` / `@OWLObjectProperty` macros for OWL property annotations
 - `IndexKind` protocol for extensible index type definitions
 - Foundation-independent identity, RDF, and `QueryIR` semantic models
+- native `Base`, `Base.Composition`, and `Security.Grant` boundaries for
+  data identity, authorization, placement, and provenance
 - bounded RDF term-role and structural validation without binary materialization
 - canonical binary `DatabaseWire` operations, envelopes, limits, and errors
+- an explicit database, Base, or Composition target on every Wire request
 - canonical schema manifests, SHA-256 fingerprints, and typed schema
   plan/apply requests through `schema.execute`
 - strict, lossless JSON adaptation for schema manifests in the optional
@@ -52,7 +55,7 @@ database-client ────────┐
 dependencies: [
     .package(
         url: "https://github.com/1amageek/database-kit.git",
-        from: "26.0809.4"
+        from: "26.0809.5"
     )
 ]
 ```
@@ -83,6 +86,13 @@ Query pagination uses `UInt64`, so negative `LIMIT` and `OFFSET` values are not
 representable. DatabaseWire encoding measures the exact frame and writes
 directly into one final `ByteString` allocation; there is no public
 mutable-array writer path.
+
+`Base.ID`, `Base.Placement.ID`, and `Base.Composition.ID` are validated ASCII
+slugs. A Composition stores a nonempty, unique, canonically ordered Base set.
+Every request explicitly identifies its authorization and execution target;
+there is no Base-less default. Composition result pages encode their Base table
+once and attach ordinal provenance to each row or quad, together with the
+transactional or federated read points that fixed the result.
 
 See [Architecture and ownership](Docs/ARCHITECTURE.md) for the package boundary
 and dependency rules.

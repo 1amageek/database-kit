@@ -25,6 +25,7 @@ enum EnvelopeWireFormat {
             writeHeader(kind: .request, into: &writer)
             writer.writeUInt64(request.requestID)
             request.operation.encode(into: &writer)
+            try request.target.encode(into: &writer)
             try request.metadata.encode(into: &writer)
             try writer.writeBytes(request.payload)
         }
@@ -33,6 +34,7 @@ enum EnvelopeWireFormat {
     static func encodeRequest<Request>(
         identifier: DatabaseOperationIdentifier,
         requestID: UInt64,
+        target: DatabaseOperationTarget,
         metadata: OperationRequestMetadata,
         request: Request,
         limits: DatabaseWireLimits,
@@ -45,6 +47,7 @@ enum EnvelopeWireFormat {
             writeHeader(kind: .request, into: &writer)
             writer.writeUInt64(requestID)
             identifier.encode(into: &writer)
+            try target.encode(into: &writer)
             try metadata.encode(into: &writer)
             try writer.writeLengthPrefixed {
                 (payloadWriter: inout DatabaseWireWriter) throws(DatabaseWireError) in
@@ -62,6 +65,7 @@ enum EnvelopeWireFormat {
         let envelope = DatabaseWireRequestEnvelope(
             requestID: try reader.readUInt64(),
             operation: try DatabaseOperationIdentifier(from: &reader),
+            target: try DatabaseOperationTarget(from: &reader),
             metadata: try OperationRequestMetadata(from: &reader),
             payload: try reader.readBytes()
         )

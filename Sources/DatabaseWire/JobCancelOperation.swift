@@ -8,6 +8,7 @@ public enum JobCancelOperation: DatabaseOperationDeclaration {
 
         public var jobID: DatabaseTypes.UUID { job.jobID }
         public var operation: JobOperationIdentifier { job.operation }
+        public var target: DatabaseOperationTarget { job.target }
 
         public init(job: JobIdentity) {
             self.job = job

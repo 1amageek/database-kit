@@ -9,6 +9,15 @@ public enum DatabaseOperations {
     public static let schemaExecute = operation(
         SchemaExecuteOperation.self
     )
+    public static let baseExecute = operation(
+        BaseExecuteOperation.self
+    )
+    public static let compositionExecute = operation(
+        CompositionExecuteOperation.self
+    )
+    public static let grantExecute = operation(
+        GrantExecuteOperation.self
+    )
     public static let queryExecute = operation(
         QueryExecuteOperation.self
     )
