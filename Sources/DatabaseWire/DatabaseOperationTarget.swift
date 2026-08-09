@@ -8,7 +8,8 @@ public enum DatabaseOperationTarget: Sendable, Hashable {
 }
 
 extension DatabaseOperationTarget: WireValue {
-    func encode(
+    @_spi(DatabaseServer)
+    public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         switch self {
@@ -23,7 +24,8 @@ extension DatabaseOperationTarget: WireValue {
         }
     }
 
-    init(
+    @_spi(DatabaseServer)
+    public init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
         switch try reader.readUInt8() {
