@@ -190,20 +190,17 @@ public enum SchemaExecuteOperation: DatabaseOperationDeclaration {
         public let fingerprint: SchemaFingerprint
         public let schemaVersion: SchemaVersion
         public let generation: UInt64
-        public let job: JobIdentity?
 
         public init(
             previousFingerprint: SchemaFingerprint?,
             fingerprint: SchemaFingerprint,
             schemaVersion: SchemaVersion,
-            generation: UInt64,
-            job: JobIdentity? = nil
+            generation: UInt64
         ) {
             self.previousFingerprint = previousFingerprint
             self.fingerprint = fingerprint
             self.schemaVersion = schemaVersion
             self.generation = generation
-            self.job = job
         }
 
         fileprivate func encode(
@@ -216,10 +213,6 @@ public enum SchemaExecuteOperation: DatabaseOperationDeclaration {
             try fingerprint.encode(into: &writer)
             try schemaVersion.encode(into: &writer)
             writer.writeUInt64(generation)
-            writer.writeBool(job != nil)
-            if let job {
-                try job.encode(into: &writer)
-            }
         }
 
         fileprivate init(
@@ -231,16 +224,14 @@ public enum SchemaExecuteOperation: DatabaseOperationDeclaration {
                     : nil,
                 fingerprint: try SchemaFingerprint(from: &reader),
                 schemaVersion: try SchemaVersion(from: &reader),
-                generation: try reader.readUInt64(),
-                job: try reader.readBool()
-                    ? JobIdentity(from: &reader)
-                    : nil
+                generation: try reader.readUInt64()
             )
         }
     }
 
     public enum Response: WireValue, Hashable {
         case plan(Plan)
+        case accepted(JobIdentity)
         case applied(Applied)
 
         func encode(
@@ -250,8 +241,11 @@ public enum SchemaExecuteOperation: DatabaseOperationDeclaration {
             case .plan(let plan):
                 writer.writeUInt8(0)
                 try plan.encode(into: &writer)
-            case .applied(let applied):
+            case .accepted(let job):
                 writer.writeUInt8(1)
+                try job.encode(into: &writer)
+            case .applied(let applied):
+                writer.writeUInt8(2)
                 try applied.encode(into: &writer)
             }
         }
@@ -261,7 +255,8 @@ public enum SchemaExecuteOperation: DatabaseOperationDeclaration {
         ) throws(DatabaseWireError) {
             switch try reader.readUInt8() {
             case 0: self = .plan(try Plan(from: &reader))
-            case 1: self = .applied(try Applied(from: &reader))
+            case 1: self = .accepted(try JobIdentity(from: &reader))
+            case 2: self = .applied(try Applied(from: &reader))
             case let tag: throw .invalidSchemaExecutionResponse(tag)
             }
         }

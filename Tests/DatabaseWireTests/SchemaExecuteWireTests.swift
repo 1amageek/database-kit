@@ -82,9 +82,19 @@ struct SchemaExecuteWireTests {
         }
     }
 
-    @Test("plan and applied responses preserve generation state")
+    @Test("plan, accepted, and applied responses preserve state")
     func responsesRoundTrip() throws {
         let fingerprint = try SchemaManifest(schema: makeSchema()).fingerprint()
+        let job = JobIdentity(
+            jobID: DatabaseTypes.UUID(
+                high: 0x0011_2233_4455_6677,
+                low: 0x8899_AABB_CCDD_EEFF
+            ),
+            operation: try DatabaseOperations.schemaExecute
+                .resumableJob(kind: "database.schema-apply")
+                .identifier,
+            target: .database
+        )
         let responses: [SchemaExecuteOperation.Response] = [
             .plan(
                 .init(
@@ -94,6 +104,7 @@ struct SchemaExecuteWireTests {
                     issues: []
                 )
             ),
+            .accepted(job),
             .applied(
                 .init(
                     previousFingerprint: fingerprint,
