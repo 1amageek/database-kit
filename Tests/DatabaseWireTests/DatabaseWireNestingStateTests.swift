@@ -1,5 +1,5 @@
 import DatabaseTypes
-@_spi(DatabaseServer) @testable import DatabaseWire
+@_spi(DatabaseWireRuntime) @testable import DatabaseWire
 import Testing
 
 @Suite("DatabaseWire nesting state")

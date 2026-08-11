@@ -2,7 +2,7 @@ import DatabaseTypes
 
 extension DatabaseTypes.UUID: WireValue {}
 
-@_spi(DatabaseServer)
+@_spi(DatabaseWireRuntime)
 public extension DatabaseTypes.UUID {
     func encode(
         into writer: inout DatabaseWireWriter

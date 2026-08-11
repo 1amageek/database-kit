@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-@_spi(DatabaseServer)
+@_spi(DatabaseWireRuntime)
 public extension FieldObject {
     func encode(
         into writer: inout DatabaseWireWriter

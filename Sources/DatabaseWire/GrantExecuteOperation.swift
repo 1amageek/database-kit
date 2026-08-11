@@ -5,7 +5,7 @@ public enum GrantExecuteOperation: DatabaseOperationDeclaration {
 
     public enum Invocation: Sendable, Hashable {
         case direct(subject: Security.Subject?)
-        case effective(subject: Security.Subject)
+        case effective
         case grant(
             Security.Grant,
             expectedRevision: UInt64,
@@ -35,9 +35,8 @@ public enum GrantExecuteOperation: DatabaseOperationDeclaration {
                 if let subject {
                     try subject.encode(into: &writer)
                 }
-            case .effective(let subject):
+            case .effective:
                 writer.writeUInt8(1)
-                try subject.encode(into: &writer)
             case .grant(
                 let grant,
                 let expectedRevision,
@@ -72,11 +71,7 @@ public enum GrantExecuteOperation: DatabaseOperationDeclaration {
                     )
                 )
             case 1:
-                self.init(
-                    invocation: .effective(
-                        subject: try Security.Subject(from: &reader)
-                    )
-                )
+                self.init(invocation: .effective)
             case 2:
                 self.init(
                     invocation: .grant(

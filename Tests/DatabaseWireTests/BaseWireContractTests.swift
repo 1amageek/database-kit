@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseServer) @testable import DatabaseWire
+@_spi(DatabaseWireRuntime) @testable import DatabaseWire
 import Testing
 
 @Suite("Base, Composition, and Security wire contracts")
@@ -147,6 +147,9 @@ struct BaseWireContractTests {
                     idempotencyKey: "grant-analyst"
                 )
             )
+        )
+        try expectRoundTrip(
+            GrantExecuteOperation.Request(invocation: .effective)
         )
         try expectRoundTrip(
             GrantExecuteOperation.Response.effective(

@@ -1,10 +1,10 @@
 import DatabaseKit
 import DatabaseTypes
 
-/// Bounded decoding for opaque state owned by the database server runtime.
-@_spi(DatabaseServer)
-public enum ServerPayloadDecoder {
-    public static func decode<Value: ServerPayloadValue>(
+/// Bounded decoding for opaque state owned by database operation execution.
+@_spi(DatabaseWireRuntime)
+public enum DatabaseRuntimePayloadDecoder {
+    public static func decode<Value: DatabaseRuntimePayloadValue>(
         _ type: Value.Type,
         from bytes: ByteString,
         limits: DatabaseWireLimits = .default
@@ -26,7 +26,7 @@ public enum ServerPayloadDecoder {
         return value
     }
 
-    public static func decodeResult<Value: ServerPayloadValue>(
+    public static func decodeResult<Value: DatabaseRuntimePayloadValue>(
         _ type: Value.Type,
         from bytes: ByteString,
         limits: DatabaseWireLimits = .default

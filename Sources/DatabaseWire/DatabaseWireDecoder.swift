@@ -47,7 +47,7 @@ public struct DatabaseWireDecoder: Sendable {
     /// Decodes one operation request body that has already been separated from
     /// its envelope.
     ///
-    /// Server runtimes use this boundary after routing an envelope or when
+    /// Operation runtimes use this boundary after routing an envelope or when
     /// resuming a persisted job request. The returned value is still validated
     /// by the closed operation descriptor and the configured limits.
     public func decodeRequestPayload<Request, Response>(

@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseServer) import DatabaseWire
+@_spi(DatabaseWireRuntime) import DatabaseWire
 import Testing
 
 @Suite("Public DatabaseWire boundary")
@@ -254,8 +254,8 @@ struct DatabaseWireBoundaryTests {
                 (key: "phase", value: .string("indexing")),
             ])
         )
-        let payload = try ServerPayloadEncoder.encode(value)
-        let decoded = try ServerPayloadDecoder.decode(
+        let payload = try DatabaseRuntimePayloadEncoder.encode(value)
+        let decoded = try DatabaseRuntimePayloadDecoder.decode(
             ServerCursor.self,
             from: payload
         )
@@ -277,9 +277,9 @@ struct DatabaseWireBoundaryTests {
                 )
             )
         )
-        let encodedQuad = try ServerPayloadEncoder.encode(quad)
+        let encodedQuad = try DatabaseRuntimePayloadEncoder.encode(quad)
         #expect(
-            try ServerPayloadDecoder.decode(
+            try DatabaseRuntimePayloadDecoder.decode(
                 RDFQuad.self,
                 from: encodedQuad
             ) == quad
@@ -288,10 +288,10 @@ struct DatabaseWireBoundaryTests {
         let term = GraphAlgorithmOperation.Term.rdf(
             .iri(try RDFIRI("urn:event:1"))
         )
-        let encodedTerm = try ServerPayloadEncoder.encode(term)
+        let encodedTerm = try DatabaseRuntimePayloadEncoder.encode(term)
         var measuredByteCount = 0
         var emittedBytes: [UInt8] = []
-        try ServerPayloadEncoder.emit(
+        try DatabaseRuntimePayloadEncoder.emit(
             term,
             prepare: { measuredByteCount = $0 },
             consume: { emittedBytes.append(contentsOf: $0) }
@@ -302,7 +302,7 @@ struct DatabaseWireBoundaryTests {
     }
 }
 
-private struct ServerCursor: ServerPayloadValue, Equatable {
+private struct ServerCursor: DatabaseRuntimePayloadValue, Equatable {
     let sequence: UInt32
     let continuation: ByteString
     let details: FieldObject

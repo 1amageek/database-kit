@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseServer) @testable import DatabaseWire
+@_spi(DatabaseWireRuntime) @testable import DatabaseWire
 import Testing
 
 @Suite("RDF term wire boundaries")

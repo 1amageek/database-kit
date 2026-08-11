@@ -26,7 +26,7 @@ public struct JobResultDigest:
         try self.init(ByteString(bytes))
     }
 
-    @_spi(DatabaseServer)
+    @_spi(DatabaseWireRuntime)
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
@@ -39,7 +39,7 @@ public struct JobResultDigest:
         writer.writeUnframedBytes(bytes)
     }
 
-    @_spi(DatabaseServer)
+    @_spi(DatabaseWireRuntime)
     public init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
