@@ -191,8 +191,8 @@ public struct CompositionPageProvenance: Sendable {
         guard !baseIDs.isEmpty else {
             throw .invalidCompositionProvenance
         }
-        for index in 1..<baseIDs.count {
-            guard baseIDs[index - 1] < baseIDs[index] else {
+        for (previous, current) in zip(baseIDs, baseIDs.dropFirst()) {
+            guard previous < current else {
                 throw .invalidCompositionProvenance
             }
         }
@@ -204,8 +204,11 @@ public struct CompositionPageProvenance: Sendable {
         guard !contributors.isEmpty else {
             throw .invalidCompositionProvenance
         }
-        for index in 1..<contributors.count {
-            guard contributors[index - 1] < contributors[index] else {
+        for (previous, current) in zip(
+            contributors,
+            contributors.dropFirst()
+        ) {
+            guard previous < current else {
                 throw .invalidCompositionProvenance
             }
         }

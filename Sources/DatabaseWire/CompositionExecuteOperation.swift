@@ -192,11 +192,11 @@ public enum CompositionExecuteOperation: DatabaseOperationDeclaration {
             guard !bases.isEmpty else {
                 throw .invalidBaseComposition(.empty)
             }
-            for index in 1..<bases.count {
-                guard bases[index - 1] < bases[index] else {
-                    if bases[index - 1] == bases[index] {
+            for (previous, current) in zip(bases, bases.dropFirst()) {
+                guard previous < current else {
+                    if previous == current {
                         throw .invalidBaseComposition(
-                            .duplicateBase(bases[index])
+                            .duplicateBase(current)
                         )
                     }
                     throw .invalidBaseComposition(.nonCanonicalBaseOrder)
@@ -275,9 +275,11 @@ public enum CompositionExecuteOperation: DatabaseOperationDeclaration {
         private static func validateCanonical(
             _ compositions: [Description]
         ) throws(DatabaseWireError) {
-            for index in 1..<compositions.count {
-                guard compositions[index - 1].composition.id
-                        < compositions[index].composition.id else {
+            for (previous, current) in zip(
+                compositions,
+                compositions.dropFirst()
+            ) {
+                guard previous.composition.id < current.composition.id else {
                     throw .nonCanonicalCompositionSet
                 }
             }

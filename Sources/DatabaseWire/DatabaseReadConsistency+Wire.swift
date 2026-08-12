@@ -93,8 +93,11 @@ extension DatabaseReadConsistency: WireValue {
         guard !readPoints.isEmpty else {
             throw .invalidFederatedReadPoints
         }
-        for index in 1..<readPoints.count {
-            guard readPoints[index - 1].domainID < readPoints[index].domainID else {
+        for (previous, current) in zip(
+            readPoints,
+            readPoints.dropFirst()
+        ) {
+            guard previous.domainID < current.domainID else {
                 throw .invalidFederatedReadPoints
             }
         }

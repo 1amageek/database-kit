@@ -158,6 +158,20 @@ struct BaseWireContractTests {
         )
     }
 
+    @Test("Empty administrative result sets round-trip without trapping")
+    func emptyAdministrativeResultSetsRoundTrip() throws {
+        try expectRoundTrip(BaseExecuteOperation.Response.placements([]))
+        try expectRoundTrip(BaseExecuteOperation.Response.bases([]))
+        try expectRoundTrip(
+            CompositionExecuteOperation.Response.compositions([])
+        )
+        try expectRoundTrip(
+            GrantExecuteOperation.Response.direct(
+                .init(revision: 0, grants: [])
+            )
+        )
+    }
+
     @Test("Legacy migration plan returns the fingerprint required by apply")
     func legacyMigrationPlanCarriesFingerprint() throws {
         let baseID = try Base.ID("migrated")

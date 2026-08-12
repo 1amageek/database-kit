@@ -4,8 +4,8 @@ enum SecurityGrantCanonicalOrder {
     static func validate(
         _ grants: [Security.Grant]
     ) throws(DatabaseWireError) {
-        for index in 1..<grants.count {
-            guard precedes(grants[index - 1], grants[index]) else {
+        for (previous, current) in zip(grants, grants.dropFirst()) {
+            guard precedes(previous, current) else {
                 throw .nonCanonicalGrantSet
             }
         }

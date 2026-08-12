@@ -552,8 +552,11 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
                 }
                 hasDefault = true
             }
-            for index in 1..<placements.count {
-                guard placements[index - 1].id < placements[index].id else {
+            for (previous, current) in zip(
+                placements,
+                placements.dropFirst()
+            ) {
+                guard previous.id < current.id else {
                     throw .nonCanonicalPlacementSet
                 }
             }
@@ -562,8 +565,8 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
         private static func validateBases(
             _ bases: [Description]
         ) throws(DatabaseWireError) {
-            for index in 1..<bases.count {
-                guard bases[index - 1].id < bases[index].id else {
+            for (previous, current) in zip(bases, bases.dropFirst()) {
+                guard previous.id < current.id else {
                     throw .nonCanonicalBaseSet
                 }
             }

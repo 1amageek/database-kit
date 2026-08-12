@@ -117,9 +117,12 @@ public struct Base: Sendable, Hashable {
                 throw .empty
             }
             let canonicalBases = bases.sorted()
-            for index in 1..<canonicalBases.count {
-                guard canonicalBases[index - 1] != canonicalBases[index] else {
-                    throw .duplicateBase(canonicalBases[index])
+            for (previous, current) in zip(
+                canonicalBases,
+                canonicalBases.dropFirst()
+            ) {
+                guard previous != current else {
+                    throw .duplicateBase(current)
                 }
             }
             self.id = id
