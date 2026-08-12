@@ -2,7 +2,7 @@ import DatabaseTypes
 
 extension Timestamp: WireValue {}
 
-@_spi(DatabaseWireRuntime)
+@_spi(DatabaseOperations)
 public extension Timestamp {
     func encode(
         into writer: inout DatabaseWireWriter

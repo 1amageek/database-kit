@@ -81,6 +81,6 @@ public enum JobOperations {
             validatedFamily: .maintenanceExecute,
             validatedKind: "database.maintenance"
         ),
-        operation: DatabaseOperations.maintenanceExecute
+        operation: DatabaseOperationCatalog.maintenanceExecute
     )
 }

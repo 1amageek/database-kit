@@ -1,5 +1,5 @@
 import DatabaseKit
-@_spi(DatabaseWireRuntime) @testable import DatabaseWire
+@_spi(DatabaseOperations) @testable import DatabaseWire
 import Testing
 
 @Suite("RDF term wire limits")

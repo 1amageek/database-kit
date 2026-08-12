@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseWireRuntime) @testable import DatabaseWire
+@_spi(DatabaseOperations) @testable import DatabaseWire
 import Testing
 
 @Suite("Typed operation family wire")
@@ -439,15 +439,15 @@ struct TypedOperationWireTests {
             input: input,
             budget: budget
         )
-        let requestPayload = try DatabaseOperations.commandExecute
+        let requestPayload = try DatabaseOperationCatalog.commandExecute
             .encodeRequestPayload(request)
         #expect(
-            try DatabaseOperations.commandExecute.decodeRequestPayload(
+            try DatabaseOperationCatalog.commandExecute.decodeRequestPayload(
                 requestPayload
             ) == request
         )
 
-        let requestFrame = try DatabaseOperations.commandExecute.encodeRequest(
+        let requestFrame = try DatabaseOperationCatalog.commandExecute.encodeRequest(
             requestID: 17,
             target: .database,
             metadata: .init(traceID: "command"),
@@ -457,7 +457,7 @@ struct TypedOperationWireTests {
             requestFrame
         )
         #expect(
-            try DatabaseOperations.commandExecute.decodeRequest(
+            try DatabaseOperationCatalog.commandExecute.decodeRequest(
                 requestEnvelope
             ) == request
         )
@@ -467,13 +467,13 @@ struct TypedOperationWireTests {
             commitVersion: 42,
             continuation: [3, 2, 1]
         )
-        let responseFrame = try DatabaseOperations.commandExecute
+        let responseFrame = try DatabaseOperationCatalog.commandExecute
             .encodeResponse(
                 requestID: 17,
                 response: response
             )
         #expect(
-            try DatabaseOperations.commandExecute.decodeResponse(
+            try DatabaseOperationCatalog.commandExecute.decodeResponse(
                 responseFrame,
                 matching: 17
             ) == .success(response)
@@ -484,8 +484,8 @@ struct TypedOperationWireTests {
             continuation: [1, 2, 3]
         )
         #expect(
-            try DatabaseOperations.commandExecute.decodeResponsePayload(
-                DatabaseOperations.commandExecute.encodeResponsePayload(
+            try DatabaseOperationCatalog.commandExecute.decodeResponsePayload(
+                DatabaseOperationCatalog.commandExecute.encodeResponsePayload(
                     readResponse
                 )
             ) == readResponse
@@ -1049,21 +1049,21 @@ struct TypedOperationWireTests {
             maximumSliceWorkUnits: 77,
             retryPolicy: retryPolicy
         )
-        let typedFrame = try DatabaseOperations.jobStart.encodeRequest(
+        let typedFrame = try DatabaseOperationCatalog.jobStart.encodeRequest(
             requestID: 91,
             target: .database,
             metadata: OperationRequestMetadata(traceID: "declared-job"),
             request: start
         )
 
-        let canonicalFrame = try DatabaseOperations.jobStart.encodeRequest(
+        let canonicalFrame = try DatabaseOperationCatalog.jobStart.encodeRequest(
             requestID: 91,
             target: .database,
             metadata: OperationRequestMetadata(traceID: "declared-job"),
             request: JobStartOperation.Request(
                 target: .database,
                 operation: JobOperations.maintenance.identifier,
-                requestPayload: try DatabaseOperations.maintenanceExecute
+                requestPayload: try DatabaseOperationCatalog.maintenanceExecute
                     .encodeRequestPayload(request),
                 maximumSliceWorkUnits: 77,
                 retryPolicy: retryPolicy
@@ -1072,7 +1072,7 @@ struct TypedOperationWireTests {
 
         #expect(typedFrame == canonicalFrame)
         let envelope = try EnvelopeWireFormat.decodeRequest(typedFrame)
-        let rawRequest = try DatabaseOperations.jobStart.decodeRequest(
+        let rawRequest = try DatabaseOperationCatalog.jobStart.decodeRequest(
             envelope
         )
         #expect(
@@ -1096,7 +1096,7 @@ struct TypedOperationWireTests {
         #expect(decodedResult.isComplete)
         #expect(
             JobOperations.maintenance.identifier
-                == (try DatabaseOperations.maintenanceExecute.resumableJob(
+                == (try DatabaseOperationCatalog.maintenanceExecute.resumableJob(
                     kind: "database.maintenance"
                 )).identifier
         )

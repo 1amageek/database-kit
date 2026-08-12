@@ -1,5 +1,5 @@
 import DatabaseTypes
-@_spi(DatabaseWireRuntime) @testable import DatabaseWire
+@_spi(DatabaseOperations) @testable import DatabaseWire
 import Testing
 
 @Suite("Owner-retaining maintenance results")
@@ -23,12 +23,12 @@ struct MaintenanceResultPageTests {
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.maintenanceExecute,
+            DatabaseOperationCatalog.maintenanceExecute,
             requestID: 111,
             response: response
         )
         let decoded = try DatabaseWireDecoder().decodeResponse(
-            DatabaseOperations.maintenanceExecute,
+            DatabaseOperationCatalog.maintenanceExecute,
             from: frame,
             matching: 111
         )
@@ -68,7 +68,7 @@ struct MaintenanceResultPageTests {
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.maintenanceExecute,
+            DatabaseOperationCatalog.maintenanceExecute,
             requestID: 112,
             response: response
         )
@@ -81,7 +81,7 @@ struct MaintenanceResultPageTests {
 
         #expect(throws: DatabaseWireError.invalidValueTag(0xFF)) {
             _ = try DatabaseWireDecoder().decodeResponse(
-                DatabaseOperations.maintenanceExecute,
+                DatabaseOperationCatalog.maintenanceExecute,
                 from: ByteString(corrupted),
                 matching: 112
             )

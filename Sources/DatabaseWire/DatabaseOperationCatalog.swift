@@ -1,5 +1,5 @@
 /// The complete version 1 operation catalog.
-public enum DatabaseOperations {
+public enum DatabaseOperationCatalog {
     public static let capabilitiesDescribe = operation(
         CapabilitiesDescribeOperation.self
     )

@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseWireRuntime) @testable import DatabaseWire
+@_spi(DatabaseOperations) @testable import DatabaseWire
 import Testing
 
 @Suite("Owner-retaining query result pages")
@@ -22,12 +22,12 @@ struct QueryResultPageTests {
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             requestID: 91,
             response: response
         )
         let decoded = try DatabaseWireDecoder().decodeResponse(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             from: frame,
             matching: 91
         )
@@ -76,12 +76,12 @@ struct QueryResultPageTests {
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             requestID: 92,
             response: response
         )
         let decoded = try DatabaseWireDecoder().decodeResponse(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             from: frame,
             matching: 92
         )
@@ -113,7 +113,7 @@ struct QueryResultPageTests {
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             requestID: 93,
             response: response
         )
@@ -127,7 +127,7 @@ struct QueryResultPageTests {
 
         #expect(throws: DatabaseWireError.invalidValueTag(0xFF)) {
             _ = try DatabaseWireDecoder().decodeResponse(
-                DatabaseOperations.queryExecute,
+                DatabaseOperationCatalog.queryExecute,
                 from: ByteString(corrupted),
                 matching: 93
             )
@@ -166,12 +166,12 @@ struct QueryResultPageTests {
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             requestID: 94,
             response: response
         )
         let decoded = try DatabaseWireDecoder().decodeResponse(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             from: frame,
             matching: 94
         )
@@ -195,7 +195,7 @@ struct QueryResultPageTests {
             )
         ) {
             _ = try DatabaseWireEncoder(limits: strictLimits).encodeResponse(
-                DatabaseOperations.queryExecute,
+                DatabaseOperationCatalog.queryExecute,
                 requestID: 94,
                 response: retainedResponse
             )

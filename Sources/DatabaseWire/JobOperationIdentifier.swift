@@ -29,7 +29,7 @@ public struct JobOperationIdentifier:
         self.kind = kind
     }
 
-    @_spi(DatabaseWireRuntime)
+    @_spi(DatabaseOperations)
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
@@ -43,7 +43,7 @@ public struct JobOperationIdentifier:
         try writer.writeString(kind)
     }
 
-    @_spi(DatabaseWireRuntime)
+    @_spi(DatabaseOperations)
     public init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {

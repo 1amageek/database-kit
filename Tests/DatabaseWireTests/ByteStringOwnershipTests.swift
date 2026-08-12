@@ -1,5 +1,5 @@
 import DatabaseTypes
-@_spi(DatabaseWireRuntime) @testable import DatabaseWire
+@_spi(DatabaseOperations) @testable import DatabaseWire
 import Synchronization
 import Testing
 

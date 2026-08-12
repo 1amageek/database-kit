@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseWireRuntime) @testable import DatabaseWire
+@_spi(DatabaseOperations) @testable import DatabaseWire
 import Testing
 
 @Suite("Owner-retaining ontology and SHACL results")
@@ -17,12 +17,12 @@ struct OntologySHACLResultPageTests {
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.ontologyExecute,
+            DatabaseOperationCatalog.ontologyExecute,
             requestID: 121,
             response: response
         )
         let decoded = try DatabaseWireDecoder().decodeResponse(
-            DatabaseOperations.ontologyExecute,
+            DatabaseOperationCatalog.ontologyExecute,
             from: frame,
             matching: 121
         )
@@ -52,12 +52,12 @@ struct OntologySHACLResultPageTests {
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.shaclExecute,
+            DatabaseOperationCatalog.shaclExecute,
             requestID: 122,
             response: response
         )
         let decoded = try DatabaseWireDecoder().decodeResponse(
-            DatabaseOperations.shaclExecute,
+            DatabaseOperationCatalog.shaclExecute,
             from: frame,
             matching: 122
         )
@@ -95,12 +95,12 @@ struct OntologySHACLResultPageTests {
             ValidationReport(conforms: false, issues: [issue])
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.shaclExecute,
+            DatabaseOperationCatalog.shaclExecute,
             requestID: 123,
             response: response
         )
         let decoded = try DatabaseWireDecoder().decodeResponse(
-            DatabaseOperations.shaclExecute,
+            DatabaseOperationCatalog.shaclExecute,
             from: frame,
             matching: 123
         )
@@ -132,7 +132,7 @@ struct OntologySHACLResultPageTests {
             ValidationReport(conforms: false, issues: [issue])
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.shaclExecute,
+            DatabaseOperationCatalog.shaclExecute,
             requestID: 124,
             response: response
         )
@@ -144,7 +144,7 @@ struct OntologySHACLResultPageTests {
 
         #expect(throws: DatabaseWireError.invalidValueTag(0xFF)) {
             _ = try DatabaseWireDecoder().decodeResponse(
-                DatabaseOperations.shaclExecute,
+                DatabaseOperationCatalog.shaclExecute,
                 from: ByteString(corrupted),
                 matching: 124
             )

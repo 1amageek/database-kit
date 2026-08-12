@@ -1,5 +1,5 @@
 import DatabaseTypes
-@_spi(DatabaseWireRuntime) @testable import DatabaseWire
+@_spi(DatabaseOperations) @testable import DatabaseWire
 import Testing
 
 @Suite("Owner-retaining graph algorithm results")
@@ -20,12 +20,12 @@ struct GraphAlgorithmResultPageTests {
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.graphAlgorithm,
+            DatabaseOperationCatalog.graphAlgorithm,
             requestID: 101,
             response: response
         )
         let decoded = try DatabaseWireDecoder().decodeResponse(
-            DatabaseOperations.graphAlgorithm,
+            DatabaseOperationCatalog.graphAlgorithm,
             from: frame,
             matching: 101
         )
@@ -73,7 +73,7 @@ struct GraphAlgorithmResultPageTests {
             )
         ) {
             _ = try DatabaseWireEncoder(limits: strictLimits).encodeResponse(
-                DatabaseOperations.graphAlgorithm,
+                DatabaseOperationCatalog.graphAlgorithm,
                 requestID: 101,
                 response: GraphAlgorithmOperation.Response.ranking(page)
             )
@@ -102,12 +102,12 @@ struct GraphAlgorithmResultPageTests {
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.graphAlgorithm,
+            DatabaseOperationCatalog.graphAlgorithm,
             requestID: 102,
             response: response
         )
         let decoded = try DatabaseWireDecoder().decodeResponse(
-            DatabaseOperations.graphAlgorithm,
+            DatabaseOperationCatalog.graphAlgorithm,
             from: frame,
             matching: 102
         )
@@ -152,7 +152,7 @@ struct GraphAlgorithmResultPageTests {
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
-            DatabaseOperations.graphAlgorithm,
+            DatabaseOperationCatalog.graphAlgorithm,
             requestID: 103,
             response: response
         )
@@ -164,7 +164,7 @@ struct GraphAlgorithmResultPageTests {
 
         #expect(throws: DatabaseWireError.invalidValueTag(0xFF)) {
             _ = try DatabaseWireDecoder().decodeResponse(
-                DatabaseOperations.graphAlgorithm,
+                DatabaseOperationCatalog.graphAlgorithm,
                 from: ByteString(corrupted),
                 matching: 103
             )

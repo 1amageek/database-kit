@@ -306,7 +306,7 @@ public struct DatabaseOperation<
     public let identifier: DatabaseOperationIdentifier
 }
 
-public enum DatabaseOperations {
+public enum DatabaseOperationCatalog {
     public static let queryExecute: DatabaseOperation<
         QueryExecuteOperation.Request,
         QueryExecuteOperation.Response

@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseWireRuntime) @testable import DatabaseWire
+@_spi(DatabaseOperations) @testable import DatabaseWire
 import Testing
 
 @Suite("Base, Composition, and Security wire contracts")
@@ -21,13 +21,13 @@ struct BaseWireContractTests {
 
         for (index, target) in targets.enumerated() {
             let frame = try DatabaseWireEncoder().encodeRequest(
-                DatabaseOperations.queryExecute,
+                DatabaseOperationCatalog.queryExecute,
                 requestID: UInt64(index + 1),
                 target: target,
                 request: query
             )
             let decoded = try DatabaseWireDecoder().decodeRequest(
-                DatabaseOperations.queryExecute,
+                DatabaseOperationCatalog.queryExecute,
                 from: frame
             )
             #expect(decoded.target == target)
@@ -50,7 +50,7 @@ struct BaseWireContractTests {
 
         #expect(throws: DatabaseWireError.self) {
             try DatabaseWireDecoder().decodeRequest(
-                DatabaseOperations.capabilitiesDescribe,
+                DatabaseOperationCatalog.capabilitiesDescribe,
                 from: oldCapabilitiesFrame
             )
         }
@@ -91,7 +91,7 @@ struct BaseWireContractTests {
         )
 
         #expect(throws: DatabaseWireError.invalidInitialBaseGrants) {
-            try DatabaseOperations.baseExecute.encodeRequestPayload(
+            try DatabaseOperationCatalog.baseExecute.encodeRequestPayload(
                 .init(
                     invocation: .create(
                         baseID: baseID,

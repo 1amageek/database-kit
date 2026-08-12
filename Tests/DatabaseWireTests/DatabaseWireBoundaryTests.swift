@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseWireRuntime) import DatabaseWire
+@_spi(DatabaseOperations) import DatabaseWire
 import Testing
 
 @Suite("Public DatabaseWire boundary")
@@ -26,7 +26,7 @@ struct DatabaseWireBoundaryTests {
         let encoder = DatabaseWireEncoder()
         let decoder = DatabaseWireDecoder()
         let frame = try encoder.encodeRequest(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             requestID: 42,
             target: .database,
             metadata: .init(
@@ -36,7 +36,7 @@ struct DatabaseWireBoundaryTests {
             request: request
         )
         let decoded = try decoder.decodeRequest(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             from: frame
         )
 
@@ -49,7 +49,7 @@ struct DatabaseWireBoundaryTests {
     @Test("decoder accepts a borrowed frame view at an owner offset")
     func borrowedRequestFrameRoundTrip() throws {
         let encoded = try DatabaseWireEncoder().encodeRequest(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             requestID: 43,
             target: .database,
             request: request
@@ -60,7 +60,7 @@ struct DatabaseWireBoundaryTests {
         let frame = storage[1..<storage.endIndex]
 
         let decoded = try DatabaseWireDecoder().decodeRequest(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             from: frame
         )
 
@@ -71,7 +71,7 @@ struct DatabaseWireBoundaryTests {
     @Test("a request cannot be decoded through another operation")
     func operationMismatch() throws {
         let frame = try DatabaseWireEncoder().encodeRequest(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             requestID: 7,
             target: .database,
             request: request
@@ -84,7 +84,7 @@ struct DatabaseWireBoundaryTests {
             )
         ) {
             try DatabaseWireDecoder().decodeRequest(
-                DatabaseOperations.mutationExecute,
+                DatabaseOperationCatalog.mutationExecute,
                 from: frame
             )
         }
@@ -95,12 +95,12 @@ struct DatabaseWireBoundaryTests {
         let encoder = DatabaseWireEncoder()
         let decoder = DatabaseWireDecoder()
         let payload = try encoder.encodeRequestPayload(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             request: request
         )
 
         let decoded = try decoder.decodeRequestPayload(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             from: payload
         )
 
@@ -119,13 +119,13 @@ struct DatabaseWireBoundaryTests {
             )
         )
         let frame = try encoder.encodeResponse(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             requestID: 91,
             response: response
         )
 
         let decoded = try decoder.decodeResponse(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             from: frame,
             matching: 91
         )
@@ -141,7 +141,7 @@ struct DatabaseWireBoundaryTests {
             )
         ) {
             try decoder.decodeResponse(
-                DatabaseOperations.queryExecute,
+                DatabaseOperationCatalog.queryExecute,
                 from: frame,
                 matching: 92
             )
@@ -163,7 +163,7 @@ struct DatabaseWireBoundaryTests {
         )
 
         let decoded = try DatabaseWireDecoder().decodeResponse(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             from: frame,
             matching: 33
         )
@@ -177,7 +177,7 @@ struct DatabaseWireBoundaryTests {
     @Test("encoded response payload borrows the final frame allocation")
     func responsePayloadOwnership() throws {
         let encoded = try DatabaseWireEncoder().encodeResponseAndPayload(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             requestID: 12,
             response: QueryExecuteOperation.Response.boolean(
                 try QueryBooleanResult(
@@ -213,13 +213,13 @@ struct DatabaseWireBoundaryTests {
             )
         )
         let encoded = try encoder.encodeResponseAndPayload(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             requestID: 20,
             response: response
         )
 
         let decodedPayload = try decoder.decodeResponsePayload(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             from: encoded.payload
         )
         guard case .boolean(let value) = decodedPayload else {
@@ -234,7 +234,7 @@ struct DatabaseWireBoundaryTests {
             payload: encoded.payload
         )
         let replayed = try decoder.decodeResponse(
-            DatabaseOperations.queryExecute,
+            DatabaseOperationCatalog.queryExecute,
             from: replayedFrame,
             matching: 21
         )

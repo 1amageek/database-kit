@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseWireRuntime) @testable import DatabaseWire
+@_spi(DatabaseOperations) @testable import DatabaseWire
 import Testing
 
 @Suite("Schema execute wire")
@@ -68,13 +68,13 @@ struct SchemaExecuteWireTests {
 
         for request in requests {
             let frame = try DatabaseWireEncoder().encodeRequest(
-                DatabaseOperations.schemaExecute,
+                DatabaseOperationCatalog.schemaExecute,
                 requestID: 42,
                 target: .database,
                 request: request
             )
             let decoded = try DatabaseWireDecoder().decodeRequest(
-                DatabaseOperations.schemaExecute,
+                DatabaseOperationCatalog.schemaExecute,
                 from: frame
             )
             #expect(decoded.requestID == 42)
@@ -90,7 +90,7 @@ struct SchemaExecuteWireTests {
                 high: 0x0011_2233_4455_6677,
                 low: 0x8899_AABB_CCDD_EEFF
             ),
-            operation: try DatabaseOperations.schemaExecute
+            operation: try DatabaseOperationCatalog.schemaExecute
                 .resumableJob(kind: "database.schema-apply")
                 .identifier,
             target: .database
@@ -117,12 +117,12 @@ struct SchemaExecuteWireTests {
 
         for response in responses {
             let frame = try DatabaseWireEncoder().encodeResponse(
-                DatabaseOperations.schemaExecute,
+                DatabaseOperationCatalog.schemaExecute,
                 requestID: 43,
                 response: response
             )
             let decoded = try DatabaseWireDecoder().decodeResponse(
-                DatabaseOperations.schemaExecute,
+                DatabaseOperationCatalog.schemaExecute,
                 from: frame,
                 matching: 43
             )
@@ -169,7 +169,7 @@ struct SchemaExecuteWireTests {
             )
         ) {
             _ = try DatabaseWireEncoder().encodeRequest(
-                DatabaseOperations.schemaExecute,
+                DatabaseOperationCatalog.schemaExecute,
                 requestID: 44,
                 target: .database,
                 request: request

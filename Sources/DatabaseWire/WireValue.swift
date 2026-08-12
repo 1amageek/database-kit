@@ -9,7 +9,7 @@ protocol WireValue: Sendable {
 /// Conformance does not create a DatabaseWire operation or expose a new
 /// protocol identifier. Values travel only inside an already-declared opaque
 /// byte field such as a continuation or persistent job state.
-@_spi(DatabaseWireRuntime)
+@_spi(DatabaseOperations)
 public protocol DatabaseRuntimePayloadValue: Sendable {
     func encode(
         into writer: inout DatabaseWireWriter
