@@ -63,7 +63,7 @@ database-client ────────┐
 dependencies: [
     .package(
         url: "https://github.com/1amageek/database-kit.git",
-        from: "26.0809.5"
+        from: "26.0814.0"
     )
 ]
 ```
@@ -109,7 +109,7 @@ with the transactional or federated read points that fixed the result.
 ```swift
 .package(
     url: "https://github.com/1amageek/database-kit.git",
-    from: "26.0809.5",
+    from: "26.0814.0",
     traits: [.trait(name: "MultipleBases")]
 )
 ```
@@ -669,4 +669,4 @@ Bare names (without `:`, `#`, or `/`) default to the namespace extracted from th
 
 ## License
 
-MIT License
+Licensed under the [MIT License](LICENSE).
