@@ -12,7 +12,9 @@ public enum JobResultOperation: DatabaseOperationDeclaration {
 
         public var jobID: DatabaseTypes.UUID { job.jobID }
         public var operation: JobOperationIdentifier { job.operation }
+        #if DATABASE_KIT_MULTIPLE_BASES
         public var target: DatabaseOperationTarget { job.target }
+        #endif
 
         public init(
             job: JobIdentity,
@@ -74,7 +76,9 @@ public enum JobResultOperation: DatabaseOperationDeclaration {
 
         public var jobID: DatabaseTypes.UUID { job.jobID }
         public var operation: JobOperationIdentifier { job.operation }
+        #if DATABASE_KIT_MULTIPLE_BASES
         public var target: DatabaseOperationTarget { job.target }
+        #endif
 
         public init(
             job: JobIdentity,

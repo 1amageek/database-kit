@@ -2,10 +2,13 @@
 /// its canonical DatabaseWire envelope.
 public struct DecodedOperationRequest<Request: Sendable>: Sendable {
     public let requestID: UInt64
+    #if DATABASE_KIT_MULTIPLE_BASES
     public let target: DatabaseOperationTarget
+    #endif
     public let metadata: OperationRequestMetadata
     public let request: Request
 
+    #if DATABASE_KIT_MULTIPLE_BASES
     init(
         requestID: UInt64,
         target: DatabaseOperationTarget,
@@ -17,4 +20,15 @@ public struct DecodedOperationRequest<Request: Sendable>: Sendable {
         self.metadata = metadata
         self.request = request
     }
+    #else
+    init(
+        requestID: UInt64,
+        metadata: OperationRequestMetadata,
+        request: Request
+    ) {
+        self.requestID = requestID
+        self.metadata = metadata
+        self.request = request
+    }
+    #endif
 }

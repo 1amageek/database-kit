@@ -117,7 +117,11 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
 
     public enum Response: WireValue {
         case rows(QueryRowPage)
+        #if DATABASE_KIT_MULTIPLE_BASES
         case boolean(QueryBooleanResult)
+        #else
+        case boolean(Bool)
+        #endif
         case rdfGraph(RDFGraphPage)
 
         func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
@@ -127,7 +131,11 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
                 try page.encode(into: &writer)
             case .boolean(let result):
                 writer.writeUInt8(2)
+                #if DATABASE_KIT_MULTIPLE_BASES
                 try result.encode(into: &writer)
+                #else
+                writer.writeBool(result)
+                #endif
             case .rdfGraph(let page):
                 writer.writeUInt8(3)
                 try page.encode(into: &writer)
@@ -137,7 +145,12 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
         init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             switch try reader.readUInt8() {
             case 1: self = .rows(try QueryRowPage(from: &reader))
-            case 2: self = .boolean(try QueryBooleanResult(from: &reader))
+            case 2:
+                #if DATABASE_KIT_MULTIPLE_BASES
+                self = .boolean(try QueryBooleanResult(from: &reader))
+                #else
+                self = .boolean(try reader.readBool())
+                #endif
             case 3: self = .rdfGraph(try RDFGraphPage(from: &reader))
             case let tag: throw .invalidResultPayload(tag)
             }

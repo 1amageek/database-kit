@@ -6,7 +6,7 @@ import DatabaseTypes
 /// This SPI does not create operation identifiers or envelopes. It allows
 /// runtime-owned continuations and persistent job state to share the canonical
 /// scalar representation and limits used by DatabaseWire.
-@_spi(DatabaseOperations)
+@_spi(DatabaseExecution)
 public enum DatabaseRuntimePayloadEncoder {
     public static func encode<Value: DatabaseRuntimePayloadValue>(
         _ value: Value,

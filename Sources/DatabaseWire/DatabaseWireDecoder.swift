@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-/// The directional boundary that validates and decodes canonical version 1
+/// The directional boundary that validates and decodes canonical
 /// DatabaseWire request and response frames.
 public struct DatabaseWireDecoder: Sendable {
     public let limits: DatabaseWireLimits
@@ -26,6 +26,7 @@ public struct DatabaseWireDecoder: Sendable {
         from frame: ByteString
     ) throws(DatabaseWireError) -> DecodedOperationRequest<Request> {
         let envelope = try decodeRequestEnvelope(frame)
+        #if DATABASE_KIT_MULTIPLE_BASES
         return DecodedOperationRequest(
             requestID: envelope.requestID,
             target: envelope.target,
@@ -35,6 +36,16 @@ public struct DatabaseWireDecoder: Sendable {
                 limits: limits
             )
         )
+        #else
+        return DecodedOperationRequest(
+            requestID: envelope.requestID,
+            metadata: envelope.metadata,
+            request: try operation.decodeRequest(
+                envelope,
+                limits: limits
+            )
+        )
+        #endif
     }
 
     public func decodeRequest<Request, Response>(

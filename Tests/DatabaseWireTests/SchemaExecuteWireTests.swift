@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseOperations) @testable import DatabaseWire
+@_spi(DatabaseExecution) @testable import DatabaseWire
 import Testing
 
 @Suite("Schema execute wire")
@@ -67,12 +67,20 @@ struct SchemaExecuteWireTests {
         ]
 
         for request in requests {
+            #if DATABASE_KIT_MULTIPLE_BASES
             let frame = try DatabaseWireEncoder().encodeRequest(
                 DatabaseOperationCatalog.schemaExecute,
                 requestID: 42,
                 target: .database,
                 request: request
             )
+            #else
+            let frame = try DatabaseWireEncoder().encodeRequest(
+                DatabaseOperationCatalog.schemaExecute,
+                requestID: 42,
+                request: request
+            )
+            #endif
             let decoded = try DatabaseWireDecoder().decodeRequest(
                 DatabaseOperationCatalog.schemaExecute,
                 from: frame
@@ -85,6 +93,7 @@ struct SchemaExecuteWireTests {
     @Test("plan, accepted, and applied responses preserve state")
     func responsesRoundTrip() throws {
         let fingerprint = try SchemaManifest(schema: makeSchema()).fingerprint()
+        #if DATABASE_KIT_MULTIPLE_BASES
         let job = JobIdentity(
             jobID: DatabaseTypes.UUID(
                 high: 0x0011_2233_4455_6677,
@@ -95,6 +104,17 @@ struct SchemaExecuteWireTests {
                 .identifier,
             target: .database
         )
+        #else
+        let job = JobIdentity(
+            jobID: DatabaseTypes.UUID(
+                high: 0x0011_2233_4455_6677,
+                low: 0x8899_AABB_CCDD_EEFF
+            ),
+            operation: try DatabaseOperationCatalog.schemaExecute
+                .resumableJob(kind: "database.schema-apply")
+                .identifier
+        )
+        #endif
         let responses: [SchemaExecuteOperation.Response] = [
             .plan(
                 .init(
@@ -168,12 +188,20 @@ struct SchemaExecuteWireTests {
                 "Schema apply idempotency key must not be empty"
             )
         ) {
+            #if DATABASE_KIT_MULTIPLE_BASES
             _ = try DatabaseWireEncoder().encodeRequest(
                 DatabaseOperationCatalog.schemaExecute,
                 requestID: 44,
                 target: .database,
                 request: request
             )
+            #else
+            _ = try DatabaseWireEncoder().encodeRequest(
+                DatabaseOperationCatalog.schemaExecute,
+                requestID: 44,
+                request: request
+            )
+            #endif
         }
     }
 

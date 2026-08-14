@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseKit
 
 /// A Boolean query result with explicit read consistency and optional
@@ -46,3 +47,4 @@ public struct QueryBooleanResult: WireValue, Sendable {
         )
     }
 }
+#endif

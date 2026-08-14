@@ -21,6 +21,7 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidReferenceCardinality(UInt8)
     case invalidReferenceDeleteRule(UInt8)
     case invalidOperationIdentifier(UInt16)
+    #if DATABASE_KIT_MULTIPLE_BASES
     case invalidOperationTarget(UInt8)
     case invalidBaseIdentifier(BaseIdentifierError)
     case invalidBaseComposition(BaseCompositionError)
@@ -48,6 +49,7 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case nonCanonicalGrantSet
     case invalidCompositionOrigin(UInt8)
     case invalidCompositionProvenance
+    #endif
     case unexpectedOperationIdentifier(
         expected: DatabaseOperationIdentifier,
         actual: DatabaseOperationIdentifier

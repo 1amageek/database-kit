@@ -60,12 +60,16 @@
 - Large binary paths use one owned buffer plus bounded ranges or views. Materialize a copy only at an explicit ownership or external API boundary.
 - A required copy must be documented at the implementation site and verified when described as a performance improvement.
 - Do not silently substitute defaults for malformed input. Return a typed DatabaseWire error.
-- This is protocol version 1. Do not add compatibility aliases, version negotiation, or deprecated duplicate models.
+- The standard Wire contract is version 2. `MultipleBases` replaces it with
+  target-bound version 3; it is not a compatibility layer or a version to
+  negotiate at runtime.
 
 ## Verification
 
 - Native verification uses `scripts/xcode-test-harness` with the pinned Swift
-  snapshot. The harness must execute exactly 649 tests with zero failures,
+  snapshot. The standard graph must execute exactly 635 tests. An isolated
+  `MultipleBases` graph uses `DATABASE_KIT_EXPECTED_TEST_COUNT=648` and must
+  execute exactly 648 tests. Both runs require zero failures,
   skips, expected failures, runtime warnings, compiler-plugin internal errors,
   profile errors, or debug-information verification warnings.
 - The harness uses the `database-kit-Package` scheme, separates

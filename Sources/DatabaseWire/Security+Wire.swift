@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseKit
 
 extension Security.Access: WireValue {
@@ -107,3 +108,5 @@ extension Security.Grant: WireValue {
         )
     }
 }
+
+#endif

@@ -29,7 +29,7 @@ public struct JobOperationIdentifier:
         self.kind = kind
     }
 
-    @_spi(DatabaseOperations)
+    @_spi(DatabaseExecution)
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
@@ -43,7 +43,7 @@ public struct JobOperationIdentifier:
         try writer.writeString(kind)
     }
 
-    @_spi(DatabaseOperations)
+    @_spi(DatabaseExecution)
     public init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
@@ -69,7 +69,6 @@ public struct JobOperationIdentifier:
     ) -> Bool {
         switch family {
         case .schemaExecute,
-             .baseExecute,
              .queryExecute,
              .mutationExecute,
              .graphAlgorithm,
@@ -78,15 +77,22 @@ public struct JobOperationIdentifier:
              .commandExecute,
              .maintenanceExecute:
             return true
+        #if DATABASE_KIT_MULTIPLE_BASES
+        case .baseExecute:
+            return true
+        #endif
         case .capabilitiesDescribe,
              .schemaDescribe,
-             .compositionExecute,
-             .grantExecute,
              .jobStart,
              .jobStatus,
              .jobResult,
              .jobCancel:
             return false
+        #if DATABASE_KIT_MULTIPLE_BASES
+        case .compositionExecute,
+             .grantExecute:
+            return false
+        #endif
         }
     }
 

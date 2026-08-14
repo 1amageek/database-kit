@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseKit
 
 public enum BaseExecuteOperation: DatabaseOperationDeclaration {
@@ -98,14 +99,12 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
             case activate = 2
             case delete = 3
             case move = 4
-            case migrateLegacyLayout = 5
         }
 
         public let action: Action
         public let currentRevision: UInt64
         public let resultingRevision: UInt64
         public let destinationPlacementID: Base.Placement.ID?
-        public let layoutFingerprint: DatabaseLayoutFingerprint?
         public let requiresJob: Bool
 
         public init(
@@ -113,7 +112,6 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
             currentRevision: UInt64,
             resultingRevision: UInt64,
             destinationPlacementID: Base.Placement.ID? = nil,
-            layoutFingerprint: DatabaseLayoutFingerprint? = nil,
             requiresJob: Bool
         ) throws(DatabaseWireError) {
             guard resultingRevision > currentRevision else {
@@ -122,15 +120,10 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
             guard (action == .move) == (destinationPlacementID != nil) else {
                 throw .invalidBaseExecutionPlan
             }
-            guard (action == .migrateLegacyLayout)
-                    == (layoutFingerprint != nil) else {
-                throw .invalidBaseExecutionPlan
-            }
             self.action = action
             self.currentRevision = currentRevision
             self.resultingRevision = resultingRevision
             self.destinationPlacementID = destinationPlacementID
-            self.layoutFingerprint = layoutFingerprint
             self.requiresJob = requiresJob
         }
 
@@ -143,10 +136,6 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
             writer.writeBool(destinationPlacementID != nil)
             if let destinationPlacementID {
                 try destinationPlacementID.encode(into: &writer)
-            }
-            writer.writeBool(layoutFingerprint != nil)
-            if let layoutFingerprint {
-                try layoutFingerprint.encode(into: &writer)
             }
             writer.writeBool(requiresJob)
         }
@@ -164,9 +153,6 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
                 resultingRevision: try reader.readUInt64(),
                 destinationPlacementID: try reader.readBool()
                     ? try Base.Placement.ID(from: &reader)
-                    : nil,
-                layoutFingerprint: try reader.readBool()
-                    ? try DatabaseLayoutFingerprint(from: &reader)
                     : nil,
                 requiresJob: try reader.readBool()
             )
@@ -193,19 +179,6 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
         )
         case placementApply(
             destination: Base.Placement.ID,
-            expectedRevision: UInt64,
-            idempotencyKey: String
-        )
-        case legacyMigrationPlan(
-            baseID: Base.ID,
-            placementID: Base.Placement.ID,
-            initialGrants: [Security.Grant]
-        )
-        case legacyMigrationApply(
-            baseID: Base.ID,
-            placementID: Base.Placement.ID,
-            initialGrants: [Security.Grant],
-            expectedLayoutFingerprint: DatabaseLayoutFingerprint,
             expectedRevision: UInt64,
             idempotencyKey: String
         )
@@ -268,38 +241,6 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
             ):
                 writer.writeUInt8(8)
                 try destination.encode(into: &writer)
-                writer.writeUInt64(expectedRevision)
-                try Self.encodeIdempotencyKey(idempotencyKey, into: &writer)
-            case .legacyMigrationPlan(
-                let baseID,
-                let placementID,
-                let initialGrants
-            ):
-                writer.writeUInt8(9)
-                try baseID.encode(into: &writer)
-                try placementID.encode(into: &writer)
-                try Self.encodeInitialGrants(
-                    initialGrants,
-                    for: baseID,
-                    into: &writer
-                )
-            case .legacyMigrationApply(
-                let baseID,
-                let placementID,
-                let initialGrants,
-                let expectedLayoutFingerprint,
-                let expectedRevision,
-                let idempotencyKey
-            ):
-                writer.writeUInt8(10)
-                try baseID.encode(into: &writer)
-                try placementID.encode(into: &writer)
-                try Self.encodeInitialGrants(
-                    initialGrants,
-                    for: baseID,
-                    into: &writer
-                )
-                try expectedLayoutFingerprint.encode(into: &writer)
                 writer.writeUInt64(expectedRevision)
                 try Self.encodeIdempotencyKey(idempotencyKey, into: &writer)
             }
@@ -369,36 +310,6 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
                 self.init(
                     invocation: .placementApply(
                         destination: try Base.Placement.ID(from: &reader),
-                        expectedRevision: try reader.readUInt64(),
-                        idempotencyKey: try Self.decodeIdempotencyKey(
-                            from: &reader
-                        )
-                    )
-                )
-            case 9:
-                let baseID = try Base.ID(from: &reader)
-                self.init(
-                    invocation: .legacyMigrationPlan(
-                        baseID: baseID,
-                        placementID: try Base.Placement.ID(from: &reader),
-                        initialGrants: try Self.decodeInitialGrants(
-                            for: baseID,
-                            from: &reader
-                        )
-                    )
-                )
-            case 10:
-                let baseID = try Base.ID(from: &reader)
-                self.init(
-                    invocation: .legacyMigrationApply(
-                        baseID: baseID,
-                        placementID: try Base.Placement.ID(from: &reader),
-                        initialGrants: try Self.decodeInitialGrants(
-                            for: baseID,
-                            from: &reader
-                        ),
-                        expectedLayoutFingerprint:
-                            try DatabaseLayoutFingerprint(from: &reader),
                         expectedRevision: try reader.readUInt64(),
                         idempotencyKey: try Self.decodeIdempotencyKey(
                             from: &reader
@@ -573,3 +484,5 @@ public enum BaseExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 }
+
+#endif

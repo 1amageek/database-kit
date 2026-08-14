@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseOperations) @testable import DatabaseWire
+@_spi(DatabaseExecution) @testable import DatabaseWire
 import Testing
 
 @Suite("Owner-retaining query result pages")
@@ -8,7 +8,7 @@ struct QueryResultPageTests {
     @Test("row page retains one frame range and materializes rows on demand")
     func rowPageRetainsFrameRange() throws {
         let response = QueryExecuteOperation.Response.rows(
-            try QueryRowPage(
+            try makeTestQueryRowPage(
                 columns: [
                     QueryColumn(number: 1, name: "payload"),
                 ],
@@ -17,8 +17,7 @@ struct QueryResultPageTests {
                     QueryRow(values: [.bytes([5, 6, 7, 8])]),
                 ],
                 continuation: [9, 10],
-                provenance: nil,
-                consistency: try consistency(version: 21)
+                snapshotVersion: 21
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
@@ -68,11 +67,10 @@ struct QueryResultPageTests {
             )
         )
         let response = QueryExecuteOperation.Response.rdfGraph(
-            try RDFGraphPage(
+            try makeTestRDFGraphPage(
                 quads: [quad, quad],
                 continuation: [1],
-                provenance: nil,
-                consistency: try consistency(version: 34)
+                snapshotVersion: 34
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
@@ -102,14 +100,13 @@ struct QueryResultPageTests {
     @Test("row structural failures are rejected before iteration")
     func rowPageRejectsInvalidValueTagDuringAcceptance() throws {
         let response = QueryExecuteOperation.Response.rows(
-            try QueryRowPage(
+            try makeTestQueryRowPage(
                 columns: [QueryColumn(number: 1, name: "marker")],
                 rows: [
                     QueryRow(values: [.uint64(0x8877_6655_4433_2211)]),
                 ],
                 continuation: nil,
-                provenance: nil,
-                consistency: try consistency()
+                snapshotVersion: 1
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
@@ -136,12 +133,11 @@ struct QueryResultPageTests {
 
     @Test("materialization requires an explicit independent limit")
     func materializationLimit() throws {
-        let page = try QueryRowPage(
+        let page = try makeTestQueryRowPage(
             columns: [],
             rows: [QueryRow(values: []), QueryRow(values: [])],
             continuation: nil,
-            provenance: nil,
-            consistency: try consistency()
+            snapshotVersion: 1
         )
 
         #expect(
@@ -157,12 +153,11 @@ struct QueryResultPageTests {
     @Test("retained rows cannot bypass stricter encoding limits")
     func retainedRowsRespectSelectedEncodingLimits() throws {
         let response = QueryExecuteOperation.Response.rows(
-            try QueryRowPage(
+            try makeTestQueryRowPage(
                 columns: [QueryColumn(number: 1, name: "v")],
                 rows: [QueryRow(values: [.string("long value")])],
                 continuation: nil,
-                provenance: nil,
-                consistency: try consistency()
+                snapshotVersion: 1
             )
         )
         let frame = try DatabaseWireEncoder().encodeResponse(
@@ -221,17 +216,6 @@ struct QueryResultPageTests {
             }
         )
         #expect(ownerRange.contains(childAddress))
-    }
-
-    private func consistency(
-        version: UInt64 = 1
-    ) throws -> DatabaseReadConsistency {
-        .transactional(
-            try DomainReadPoint(
-                domainID: "primary",
-                position: .version(version)
-            )
-        )
     }
 
     private func firstIndex(

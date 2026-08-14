@@ -11,7 +11,11 @@ public struct DatabaseWireEncodedResponse: Sendable {
 }
 
 enum EnvelopeWireFormat {
-    static let protocolVersion: UInt16 = 1
+    #if DATABASE_KIT_MULTIPLE_BASES
+    static let protocolVersion: UInt16 = 3
+    #else
+    static let protocolVersion: UInt16 = 2
+    #endif
     private static let magic: [UInt8] = [0x44, 0x42, 0x57, 0x52]
     private static let envelopeHeaderByteCount = 17
     private static let successResponseFixedByteCount = 22
@@ -25,12 +29,15 @@ enum EnvelopeWireFormat {
             writeHeader(kind: .request, into: &writer)
             writer.writeUInt64(request.requestID)
             request.operation.encode(into: &writer)
+            #if DATABASE_KIT_MULTIPLE_BASES
             try request.target.encode(into: &writer)
+            #endif
             try request.metadata.encode(into: &writer)
             try writer.writeBytes(request.payload)
         }
     }
 
+    #if DATABASE_KIT_MULTIPLE_BASES
     static func encodeRequest<Request>(
         identifier: DatabaseOperationIdentifier,
         requestID: UInt64,
@@ -47,7 +54,9 @@ enum EnvelopeWireFormat {
             writeHeader(kind: .request, into: &writer)
             writer.writeUInt64(requestID)
             identifier.encode(into: &writer)
+            #if DATABASE_KIT_MULTIPLE_BASES
             try target.encode(into: &writer)
+            #endif
             try metadata.encode(into: &writer)
             try writer.writeLengthPrefixed {
                 (payloadWriter: inout DatabaseWireWriter) throws(DatabaseWireError) in
@@ -55,6 +64,30 @@ enum EnvelopeWireFormat {
             }
         }
     }
+    #else
+    static func encodeRequest<Request>(
+        identifier: DatabaseOperationIdentifier,
+        requestID: UInt64,
+        metadata: OperationRequestMetadata,
+        request: Request,
+        limits: DatabaseWireLimits,
+        encode:
+            (Request, inout DatabaseWireWriter)
+                throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) -> ByteString {
+        try encodeMeasured(limits: limits) {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            writeHeader(kind: .request, into: &writer)
+            writer.writeUInt64(requestID)
+            identifier.encode(into: &writer)
+            try metadata.encode(into: &writer)
+            try writer.writeLengthPrefixed {
+                (payloadWriter: inout DatabaseWireWriter) throws(DatabaseWireError) in
+                try encode(request, &payloadWriter)
+            }
+        }
+    }
+    #endif
 
     static func decodeRequest(
         _ bytes: ByteString,
@@ -62,16 +95,28 @@ enum EnvelopeWireFormat {
     ) throws(DatabaseWireError) -> DatabaseWireRequestEnvelope {
         var reader = DatabaseWireReader(bytes, limits: limits)
         try validateHeader(kind: .request, reader: &reader)
+        let requestID = try reader.readUInt64()
+        let operation = try DatabaseOperationIdentifier(from: &reader)
+        #if DATABASE_KIT_MULTIPLE_BASES
         let envelope = DatabaseWireRequestEnvelope(
-            requestID: try reader.readUInt64(),
-            operation: try DatabaseOperationIdentifier(from: &reader),
+            requestID: requestID,
+            operation: operation,
             target: try DatabaseOperationTarget(from: &reader),
             metadata: try OperationRequestMetadata(from: &reader),
             payload: try reader.readBytes()
         )
+        #else
+        let envelope = DatabaseWireRequestEnvelope(
+            requestID: requestID,
+            operation: operation,
+            metadata: try OperationRequestMetadata(from: &reader),
+            payload: try reader.readBytes()
+        )
+        #endif
         try reader.ensureFullyRead()
         return envelope
     }
+
 
     /// Decodes only the fixed routing header without traversing metadata or payload.
     static func decodeRequestHeader(

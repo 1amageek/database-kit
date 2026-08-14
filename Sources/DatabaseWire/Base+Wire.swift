@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseKit
 
 extension Base.ID: WireValue {
@@ -101,3 +102,5 @@ extension Base.Composition: WireValue {
         }
     }
 }
+
+#endif

@@ -17,6 +17,7 @@ public struct JobOperation<
         self.operation = operation
     }
 
+    #if DATABASE_KIT_MULTIPLE_BASES
     public func makeStartRequest(
         _ request: Request,
         target: DatabaseOperationTarget,
@@ -35,6 +36,24 @@ public struct JobOperation<
             retryPolicy: retryPolicy
         )
     }
+    #else
+    public func makeStartRequest(
+        _ request: Request,
+        maximumSliceWorkUnits: UInt64 = 100_000,
+        retryPolicy: JobStartOperation.RetryPolicy = .init(),
+        limits: DatabaseWireLimits = .default
+    ) throws(DatabaseWireError) -> JobStartOperation.Request {
+        JobStartOperation.Request(
+            operation: identifier,
+            requestPayload: try operation.encodeRequestPayload(
+                request,
+                limits: limits
+            ),
+            maximumSliceWorkUnits: maximumSliceWorkUnits,
+            retryPolicy: retryPolicy
+        )
+    }
+    #endif
 
     public func decodeStartRequest(
         _ payload: ByteString,

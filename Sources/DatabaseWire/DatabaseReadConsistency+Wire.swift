@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseKit
 import DatabaseTypes
 
@@ -103,3 +104,5 @@ extension DatabaseReadConsistency: WireValue {
         }
     }
 }
+
+#endif

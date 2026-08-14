@@ -6,9 +6,12 @@ protocol for the database ecosystem.
 The normative ownership and product contract is documented in
 [database-kit Responsibility Specification](Docs/DATABASE_KIT_SPECIFICATION.md).
 
-The package implements the version 1 semantic and Wire contract. Completion is
-verified through Native behavior tests, standard and Embedded WASM release
-builds, the Embedded macro-compilation fixture, and byte-owner identity tests.
+The package implements the target-free DatabaseWire v2 contract by default.
+The non-default `MultipleBases` trait adds Base, Composition, persisted Grant,
+target, provenance, and federated-consistency semantics as DatabaseWire v3.
+Completion is verified through Native behavior tests, standard and Embedded
+WASM release builds, the Embedded macro-compilation fixture, and byte-owner
+identity tests in both trait configurations.
 
 ## Overview
 
@@ -27,11 +30,8 @@ It provides:
 - `@OWLDataProperty` / `@OWLObjectProperty` macros for OWL property annotations
 - `IndexKind` protocol for extensible index type definitions
 - Foundation-independent identity, RDF, and `QueryIR` semantic models
-- native `Base`, `Base.Composition`, and `Security.Grant` boundaries for
-  data identity, authorization, placement, and provenance
 - bounded RDF term-role and structural validation without binary materialization
 - canonical binary `DatabaseWire` operations, envelopes, limits, and errors
-- an explicit database, Base, or Composition target on every Wire request
 - canonical schema manifests, SHA-256 fingerprints, and typed schema
   plan/apply requests through `schema.execute`
 - strict, lossless JSON adaptation for schema manifests in the optional
@@ -39,6 +39,14 @@ It provides:
 - one Foundation-independent semantic module
 - one canonical bounded binary protocol module
 - one optional native Foundation model-integration module
+
+With the non-default `MultipleBases` trait it additionally provides:
+
+- `Base`, `Base.Composition`, and persisted `Security.Grant` semantics;
+- database, Base, or Composition operation targets;
+- Base-qualified identity, placement, lifecycle, provenance, and federated
+  read consistency;
+- the `base.execute`, `composition.execute`, and `grant.execute` operations.
 
 ```
 database-client ────────┐
@@ -87,12 +95,24 @@ representable. DatabaseWire encoding measures the exact frame and writes
 directly into one final `ByteString` allocation; there is no public
 mutable-array writer path.
 
-`Base.ID`, `Base.Placement.ID`, and `Base.Composition.ID` are validated ASCII
-slugs. A Composition stores a nonempty, unique, canonically ordered Base set.
-Every request explicitly identifies its authorization and execution target;
-there is no Base-less default. Composition result pages encode their Base table
-once and attach ordinal provenance to each row or quad, together with the
-transactional or federated read points that fixed the result.
+The default graph has no Base declarations, target field, persisted Grant
+operations, provenance table, topology, or federated consistency payload. It
+represents one database and one execution root directly.
+
+When `MultipleBases` is enabled, `Base.ID`, `Base.Placement.ID`, and
+`Base.Composition.ID` are validated ASCII slugs. A Composition stores a
+nonempty, unique, canonically ordered Base set. Requests then carry an explicit
+database, Base, or Composition target. Composition result pages encode their
+Base table once and attach ordinal provenance to each row or quad, together
+with the transactional or federated read points that fixed the result.
+
+```swift
+.package(
+    url: "https://github.com/1amageek/database-kit.git",
+    from: "26.0809.5",
+    traits: [.trait(name: "MultipleBases")]
+)
+```
 
 See [Architecture and ownership](Docs/ARCHITECTURE.md) for the package boundary
 and dependency rules.
@@ -127,6 +147,9 @@ objects. Compiler diagnostics remain enabled.
 
 ```bash
 TOOLCHAINS=org.swift.64202607231a scripts/xcode-test-harness
+
+swift build --disable-default-traits --product DatabaseWire
+swift build --disable-default-traits --traits MultipleBases --product DatabaseWire
 
 swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseKit -c release -debug-info-format none
 swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseWire -c release -debug-info-format none

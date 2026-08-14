@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseKit
 
 public enum GrantExecuteOperation: DatabaseOperationDeclaration {
@@ -231,3 +232,5 @@ public enum GrantExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 }
+
+#endif

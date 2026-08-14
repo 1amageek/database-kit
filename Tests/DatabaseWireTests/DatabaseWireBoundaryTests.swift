@@ -1,19 +1,10 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseOperations) import DatabaseWire
+@_spi(DatabaseExecution) import DatabaseWire
 import Testing
 
 @Suite("Public DatabaseWire boundary")
 struct DatabaseWireBoundaryTests {
-    private func consistency() throws -> DatabaseReadConsistency {
-        .transactional(
-            try DomainReadPoint(
-                domainID: "primary",
-                position: .version(1)
-            )
-        )
-    }
-
     private let request = QueryExecuteOperation.Request(
         input: .text(
             language: .sparql,
@@ -25,10 +16,9 @@ struct DatabaseWireBoundaryTests {
     func requestRoundTrip() throws {
         let encoder = DatabaseWireEncoder()
         let decoder = DatabaseWireDecoder()
-        let frame = try encoder.encodeRequest(
+        let frame = try encoder.encodeTestDatabaseRequest(
             DatabaseOperationCatalog.queryExecute,
             requestID: 42,
-            target: .database,
             metadata: .init(
                 traceID: "trace-42",
                 idempotencyKey: "query-42"
@@ -48,10 +38,9 @@ struct DatabaseWireBoundaryTests {
 
     @Test("decoder accepts a borrowed frame view at an owner offset")
     func borrowedRequestFrameRoundTrip() throws {
-        let encoded = try DatabaseWireEncoder().encodeRequest(
+        let encoded = try DatabaseWireEncoder().encodeTestDatabaseRequest(
             DatabaseOperationCatalog.queryExecute,
             requestID: 43,
-            target: .database,
             request: request
         )
         var storageBytes: [UInt8] = [0xA5]
@@ -70,10 +59,9 @@ struct DatabaseWireBoundaryTests {
 
     @Test("a request cannot be decoded through another operation")
     func operationMismatch() throws {
-        let frame = try DatabaseWireEncoder().encodeRequest(
+        let frame = try DatabaseWireEncoder().encodeTestDatabaseRequest(
             DatabaseOperationCatalog.queryExecute,
             requestID: 7,
-            target: .database,
             request: request
         )
 
@@ -111,13 +99,7 @@ struct DatabaseWireBoundaryTests {
     func responseRoundTrip() throws {
         let encoder = DatabaseWireEncoder()
         let decoder = DatabaseWireDecoder()
-        let response = QueryExecuteOperation.Response.boolean(
-            try QueryBooleanResult(
-                value: true,
-                provenance: nil,
-                consistency: try consistency()
-            )
-        )
+        let response = try makeTestBooleanResponse(true)
         let frame = try encoder.encodeResponse(
             DatabaseOperationCatalog.queryExecute,
             requestID: 91,
@@ -133,7 +115,11 @@ struct DatabaseWireBoundaryTests {
             Issue.record("Expected a successful boolean response")
             return
         }
+        #if DATABASE_KIT_MULTIPLE_BASES
         #expect(value.value)
+        #else
+        #expect(value)
+        #endif
         #expect(
             throws: DatabaseWireError.unexpectedRequestIdentifier(
                 expected: 92,
@@ -179,13 +165,7 @@ struct DatabaseWireBoundaryTests {
         let encoded = try DatabaseWireEncoder().encodeResponseAndPayload(
             DatabaseOperationCatalog.queryExecute,
             requestID: 12,
-            response: QueryExecuteOperation.Response.boolean(
-                try QueryBooleanResult(
-                    value: true,
-                    provenance: nil,
-                    consistency: try consistency()
-                )
-            )
+            response: try makeTestBooleanResponse(true)
         )
         let frameAddress = try #require(
             encoded.frame.withUnsafeBytes { buffer in
@@ -205,13 +185,7 @@ struct DatabaseWireBoundaryTests {
     func persistedResponsePayloadRoundTrip() throws {
         let encoder = DatabaseWireEncoder()
         let decoder = DatabaseWireDecoder()
-        let response = QueryExecuteOperation.Response.boolean(
-            try QueryBooleanResult(
-                value: true,
-                provenance: nil,
-                consistency: try consistency()
-            )
-        )
+        let response = try makeTestBooleanResponse(true)
         let encoded = try encoder.encodeResponseAndPayload(
             DatabaseOperationCatalog.queryExecute,
             requestID: 20,
@@ -226,7 +200,11 @@ struct DatabaseWireBoundaryTests {
             Issue.record("Expected a boolean response payload")
             return
         }
+        #if DATABASE_KIT_MULTIPLE_BASES
         #expect(value.value)
+        #else
+        #expect(value)
+        #endif
 
         let replayedFrame = try encoder.encodeSuccessPayload(
             requestID: 21,
@@ -242,7 +220,11 @@ struct DatabaseWireBoundaryTests {
             Issue.record("Expected a replayed boolean response")
             return
         }
+        #if DATABASE_KIT_MULTIPLE_BASES
         #expect(replayedValue.value)
+        #else
+        #expect(replayedValue)
+        #endif
     }
 
     @Test("server payload SPI preserves opaque bounded state")

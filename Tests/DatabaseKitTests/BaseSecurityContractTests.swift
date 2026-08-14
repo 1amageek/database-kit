@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseKit
 import DatabaseTypes
 import Testing
@@ -70,3 +71,4 @@ struct BaseSecurityContractTests {
         #expect(companyA < companyB)
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseKit
 
 enum SecurityGrantCanonicalOrder {
@@ -68,3 +69,5 @@ enum SecurityGrantCanonicalOrder {
         }
     }
 }
+
+#endif

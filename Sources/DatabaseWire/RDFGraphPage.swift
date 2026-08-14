@@ -13,8 +13,12 @@ public struct RDFGraphPage: Sendable {
 
     public let quadCount: Int
     public let continuation: ByteString?
+    #if DATABASE_KIT_MULTIPLE_BASES
     public let provenance: CompositionPageProvenance?
     public let consistency: DatabaseReadConsistency
+    #else
+    public let snapshotVersion: Int64?
+    #endif
 
     private let storage: Storage
     private let limits: DatabaseWireLimits
@@ -26,9 +30,10 @@ public struct RDFGraphPage: Sendable {
         return bytes
     }
 
+    #if DATABASE_KIT_MULTIPLE_BASES
     public init(
         quads: consuming [RDFQuad],
-        continuation: ByteString?,
+        continuation: ByteString? = nil,
         provenance: CompositionPageProvenance?,
         consistency: DatabaseReadConsistency
     ) throws(DatabaseWireError) {
@@ -42,6 +47,19 @@ public struct RDFGraphPage: Sendable {
         self.storage = .materialized(quads)
         self.limits = .default
     }
+    #else
+    public init(
+        quads: consuming [RDFQuad],
+        continuation: ByteString? = nil,
+        snapshotVersion: Int64? = nil
+    ) {
+        self.quadCount = quads.count
+        self.continuation = continuation
+        self.snapshotVersion = snapshotVersion
+        self.storage = .materialized(quads)
+        self.limits = .default
+    }
+    #endif
 
     public func makeQuadIterator() -> RDFQuadIterator {
         switch storage {
@@ -105,6 +123,7 @@ public struct RDFGraphPage: Sendable {
             )
             writer.writeUnframedBytes(bytes)
         }
+        #if DATABASE_KIT_MULTIPLE_BASES
         writer.writeBool(provenance != nil)
         if let provenance {
             guard provenance.originCount == quadCount else {
@@ -114,6 +133,13 @@ public struct RDFGraphPage: Sendable {
         }
         try consistency.encode(into: &writer)
         try writer.writeOptionalBytes(continuation)
+        #else
+        try writer.writeOptionalBytes(continuation)
+        writer.writeBool(snapshotVersion != nil)
+        if let snapshotVersion {
+            writer.writeInt64(snapshotVersion)
+        }
+        #endif
     }
 
     init(
@@ -130,6 +156,7 @@ public struct RDFGraphPage: Sendable {
         )
 
         self.quadCount = quadCount
+        #if DATABASE_KIT_MULTIPLE_BASES
         self.provenance = try reader.readBool()
             ? try CompositionPageProvenance(from: &reader)
             : nil
@@ -138,6 +165,11 @@ public struct RDFGraphPage: Sendable {
         }
         self.consistency = try DatabaseReadConsistency(from: &reader)
         self.continuation = try reader.readOptionalBytes()
+        #else
+        self.continuation = try reader.readOptionalBytes()
+        self.snapshotVersion =
+            try reader.readBool() ? try reader.readInt64() : nil
+        #endif
         self.storage = .encoded(encodedQuads)
         self.limits = reader.limits
     }

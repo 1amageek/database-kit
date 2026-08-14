@@ -1,4 +1,4 @@
-/// Database and Base authorization vocabulary.
+/// Database authorization vocabulary.
 public enum Security {
     public struct Access: OptionSet, Sendable, Hashable {
         public let rawValue: UInt8
@@ -17,6 +17,7 @@ public enum Security {
         }
     }
 
+    #if DATABASE_KIT_MULTIPLE_BASES
     public enum Resource: Sendable, Hashable {
         case database
         case base(Base.ID)
@@ -42,4 +43,5 @@ public enum Security {
             self.access = access
         }
     }
+    #endif
 }

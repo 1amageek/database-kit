@@ -109,6 +109,7 @@ public struct DatabaseOperation<
         )
     }
 
+    #if DATABASE_KIT_MULTIPLE_BASES
     func encodeRequest(
         requestID: UInt64,
         target: DatabaseOperationTarget,
@@ -126,6 +127,23 @@ public struct DatabaseOperation<
             encode: encodeRequestBody
         )
     }
+    #else
+    func encodeRequest(
+        requestID: UInt64,
+        metadata: OperationRequestMetadata = OperationRequestMetadata(),
+        request: Request,
+        limits: DatabaseWireLimits = .default
+    ) throws(DatabaseWireError) -> ByteString {
+        try EnvelopeWireFormat.encodeRequest(
+            identifier: identifier,
+            requestID: requestID,
+            metadata: metadata,
+            request: request,
+            limits: limits,
+            encode: encodeRequestBody
+        )
+    }
+    #endif
 
     func decodeRequest(
         _ envelope: DatabaseWireRequestEnvelope,

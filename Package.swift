@@ -23,6 +23,9 @@ let package = Package(
             targets: ["DatabaseKitFoundation"]
         ),
     ],
+    traits: [
+        .trait(name: "MultipleBases"),
+    ],
     dependencies: [
         .package(
             url: "https://github.com/1amageek/database-types.git",
@@ -39,6 +42,12 @@ let package = Package(
             dependencies: [
                 "DatabaseKitMacros",
                 .product(name: "DatabaseTypes", package: "database-types"),
+            ],
+            swiftSettings: [
+                .define(
+                    "DATABASE_KIT_MULTIPLE_BASES",
+                    .when(traits: ["MultipleBases"])
+                ),
             ]
         ),
         .macro(
@@ -55,6 +64,12 @@ let package = Package(
             dependencies: [
                 "DatabaseKit",
                 .product(name: "DatabaseTypes", package: "database-types"),
+            ],
+            swiftSettings: [
+                .define(
+                    "DATABASE_KIT_MULTIPLE_BASES",
+                    .when(traits: ["MultipleBases"])
+                ),
             ]
         ),
         .target(
@@ -102,6 +117,12 @@ let package = Package(
                     name: "SwiftSyntaxMacrosTestSupport",
                     package: "swift-syntax"
                 ),
+            ],
+            swiftSettings: [
+                .define(
+                    "DATABASE_KIT_MULTIPLE_BASES",
+                    .when(traits: ["MultipleBases"])
+                ),
             ]
         ),
         .testTarget(
@@ -110,6 +131,12 @@ let package = Package(
                 "DatabaseKit",
                 "DatabaseWire",
                 .product(name: "DatabaseTypes", package: "database-types"),
+            ],
+            swiftSettings: [
+                .define(
+                    "DATABASE_KIT_MULTIPLE_BASES",
+                    .when(traits: ["MultipleBases"])
+                ),
             ]
         ),
         .testTarget(
@@ -118,6 +145,12 @@ let package = Package(
                 "DatabaseKit",
                 "DatabaseKitFoundation",
                 .product(name: "DatabaseTypes", package: "database-types"),
+            ],
+            swiftSettings: [
+                .define(
+                    "DATABASE_KIT_MULTIPLE_BASES",
+                    .when(traits: ["MultipleBases"])
+                ),
             ]
         ),
         .testTarget(
@@ -127,6 +160,12 @@ let package = Package(
                 "DatabaseSchemaJSON",
                 "DatabaseWire",
                 .product(name: "DatabaseTypes", package: "database-types"),
+            ],
+            swiftSettings: [
+                .define(
+                    "DATABASE_KIT_MULTIPLE_BASES",
+                    .when(traits: ["MultipleBases"])
+                ),
             ]
         ),
     ],

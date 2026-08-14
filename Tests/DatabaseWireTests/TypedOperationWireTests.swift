@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseOperations) @testable import DatabaseWire
+@_spi(DatabaseExecution) @testable import DatabaseWire
 import Testing
 
 @Suite("Typed operation family wire")
@@ -447,9 +447,9 @@ struct TypedOperationWireTests {
             ) == request
         )
 
-        let requestFrame = try DatabaseOperationCatalog.commandExecute.encodeRequest(
+        let requestFrame = try DatabaseOperationCatalog.commandExecute
+            .encodeTestDatabaseRequest(
             requestID: 17,
-            target: .database,
             metadata: .init(traceID: "command"),
             request: request
         )
@@ -536,10 +536,9 @@ struct TypedOperationWireTests {
     @Test("durable job lifecycle uses canonical identifiers and outcomes")
     func jobFamilyRoundTrips() throws {
         let jobOperation = JobOperations.maintenance.identifier
-        let job = JobIdentity(
+        let job = makeTestJobIdentity(
             jobID: jobID,
-            operation: jobOperation,
-            target: .database
+            operation: jobOperation
         )
         let responseDigest = try JobResultDigest(
             [UInt8](repeating: 0xaa, count: JobResultDigest.byteCount)
@@ -550,8 +549,7 @@ struct TypedOperationWireTests {
             nextChunkIndex: 1
         )
         try expectRoundTrip(
-            JobStartOperation.Request(
-                target: .database,
+            makeTestJobStartRequest(
                 operation: jobOperation,
                 requestPayload: [1, 2, 3],
                 maximumSliceWorkUnits: 100,
@@ -563,10 +561,9 @@ struct TypedOperationWireTests {
             )
         )
         try expectRoundTrip(
-            JobStartOperation.Response(
+            makeTestJobStartResponse(
                 jobID: jobID,
-                operation: jobOperation,
-                target: .database
+                operation: jobOperation
             )
         )
         try expectRoundTrip(JobStatusOperation.Request(job: job))
@@ -638,10 +635,9 @@ struct TypedOperationWireTests {
             family: .maintenanceExecute,
             kind: "database.test.status"
         )
-        let job = JobIdentity(
+        let job = makeTestJobIdentity(
             jobID: jobID,
-            operation: operation,
-            target: .database
+            operation: operation
         )
         let now = Timestamp(
             secondsSinceUnixEpoch: 1_784_131_200
@@ -741,10 +737,9 @@ struct TypedOperationWireTests {
             family: .maintenanceExecute,
             kind: "database.test.cancel"
         )
-        let job = JobIdentity(
+        let job = makeTestJobIdentity(
             jobID: jobID,
-            operation: operation,
-            target: .database
+            operation: operation
         )
 
         #expect(throws: DatabaseWireError.invalidJobCancellationResponse) {
@@ -829,10 +824,9 @@ struct TypedOperationWireTests {
     @Test("job result enforces digest, page, and continuation limits")
     func jobResultEnforcesFieldLimits() throws {
         let jobOperation = JobOperations.maintenance.identifier
-        let job = JobIdentity(
+        let job = makeTestJobIdentity(
             jobID: jobID,
-            operation: jobOperation,
-            target: .database
+            operation: jobOperation
         )
         #expect(
             throws: DatabaseWireError.invalidDigestLength(
@@ -883,21 +877,28 @@ struct TypedOperationWireTests {
 
     @Test("job result digest is canonical across page boundaries")
     func jobResultDigestIsCanonicalAcrossPageBoundaries() throws {
-        var accumulator = JobResultDigestAccumulator(
-            operation: JobOperations.maintenance.identifier,
-            target: .database
+        var accumulator = makeTestJobResultDigestAccumulator(
+            operation: JobOperations.maintenance.identifier
         )
         accumulator.update([0x01, 0x02])
         accumulator.update([0x03, 0x04, 0x05])
 
-        #expect(
-            accumulator.finalize().bytes.copyBytes() == [
-                0x65, 0xfc, 0x3a, 0x41, 0xe7, 0x47, 0x9e, 0x2b,
-                0x9c, 0xa3, 0x2b, 0x1a, 0x9f, 0x2f, 0xb3, 0xca,
-                0x1d, 0x5e, 0x5f, 0x79, 0xc9, 0x61, 0xfe, 0x24,
-                0xd9, 0x0f, 0x26, 0x2d, 0xdd, 0x6c, 0x69, 0x97,
-            ]
-        )
+        #if DATABASE_KIT_MULTIPLE_BASES
+        let expected: [UInt8] = [
+            0x65, 0xfc, 0x3a, 0x41, 0xe7, 0x47, 0x9e, 0x2b,
+            0x9c, 0xa3, 0x2b, 0x1a, 0x9f, 0x2f, 0xb3, 0xca,
+            0x1d, 0x5e, 0x5f, 0x79, 0xc9, 0x61, 0xfe, 0x24,
+            0xd9, 0x0f, 0x26, 0x2d, 0xdd, 0x6c, 0x69, 0x97,
+        ]
+        #else
+        let expected: [UInt8] = [
+            0xd7, 0x67, 0x5e, 0x66, 0x99, 0xfa, 0x0c, 0x28,
+            0x69, 0x8a, 0x17, 0x04, 0x80, 0x12, 0x42, 0xbc,
+            0x89, 0xe2, 0x54, 0xd5, 0xae, 0x45, 0xc6, 0x69,
+            0x6d, 0xd0, 0xef, 0xd3, 0x55, 0x7a, 0x83, 0x34,
+        ]
+        #endif
+        #expect(accumulator.finalize().bytes.copyBytes() == expected)
     }
 
     @Test("job result digest matches a multi-block golden vector")
@@ -905,22 +906,29 @@ struct TypedOperationWireTests {
         let payload = ByteString(
             (0..<1_000).map { UInt8(truncatingIfNeeded: $0) }
         )
-        var accumulator = JobResultDigestAccumulator(
-            operation: JobOperations.maintenance.identifier,
-            target: .database
+        var accumulator = makeTestJobResultDigestAccumulator(
+            operation: JobOperations.maintenance.identifier
         )
         accumulator.update(payload[0..<63])
         accumulator.update(payload[63..<511])
         accumulator.update(payload[511..<1_000])
 
-        #expect(
-            accumulator.finalize().bytes.copyBytes() == [
-                0x05, 0x52, 0xa1, 0x22, 0xbb, 0xfc, 0x43, 0xdd,
-                0xcc, 0x1b, 0xf5, 0x01, 0x7b, 0xba, 0x70, 0x4f,
-                0x5c, 0x67, 0x69, 0xf4, 0xfe, 0x3d, 0x73, 0x0a,
-                0x76, 0xf9, 0x5d, 0x11, 0xd2, 0xfb, 0x64, 0xca,
-            ]
-        )
+        #if DATABASE_KIT_MULTIPLE_BASES
+        let expected: [UInt8] = [
+            0x05, 0x52, 0xa1, 0x22, 0xbb, 0xfc, 0x43, 0xdd,
+            0xcc, 0x1b, 0xf5, 0x01, 0x7b, 0xba, 0x70, 0x4f,
+            0x5c, 0x67, 0x69, 0xf4, 0xfe, 0x3d, 0x73, 0x0a,
+            0x76, 0xf9, 0x5d, 0x11, 0xd2, 0xfb, 0x64, 0xca,
+        ]
+        #else
+        let expected: [UInt8] = [
+            0x53, 0x21, 0x1c, 0x8f, 0x6b, 0x47, 0x20, 0x81,
+            0x9b, 0xd0, 0x0b, 0xb8, 0x82, 0x01, 0x4e, 0x0b,
+            0xc2, 0xe1, 0x18, 0xb9, 0x51, 0xf7, 0x0a, 0xd6,
+            0x26, 0x5c, 0x28, 0xe6, 0x09, 0x13, 0xf5, 0xc6,
+        ]
+        #endif
+        #expect(accumulator.finalize().bytes.copyBytes() == expected)
     }
 
     @Test("job operation identifiers enforce their canonical bounded grammar")
@@ -984,14 +992,12 @@ struct TypedOperationWireTests {
             family: .maintenanceExecute,
             kind: "calendar.import.validate"
         )
-        var maintenanceDigest = JobResultDigestAccumulator(
-            operation: maintenance,
-            target: .database
+        var maintenanceDigest = makeTestJobResultDigestAccumulator(
+            operation: maintenance
         )
         maintenanceDigest.update([1, 2, 3])
-        var calendarDigest = JobResultDigestAccumulator(
-            operation: calendar,
-            target: .database
+        var calendarDigest = makeTestJobResultDigestAccumulator(
+            operation: calendar
         )
         calendarDigest.update([1, 2, 3])
         #expect(maintenanceDigest.finalize() != calendarDigest.finalize())
@@ -999,15 +1005,13 @@ struct TypedOperationWireTests {
         let digest = try JobResultDigest(
             [UInt8](repeating: 0, count: JobResultDigest.byteCount)
         )
-        let expectedJob = JobIdentity(
+        let expectedJob = makeTestJobIdentity(
             jobID: jobID,
-            operation: maintenance,
-            target: .database
+            operation: maintenance
         )
-        let otherJob = JobIdentity(
+        let otherJob = makeTestJobIdentity(
             jobID: DatabaseTypes.UUID(high: jobID.high ^ 1, low: jobID.low),
-            operation: maintenance,
-            target: .database
+            operation: maintenance
         )
         let continuation = try JobResultOperation.Continuation(
             job: otherJob,
@@ -1043,25 +1047,24 @@ struct TypedOperationWireTests {
             initialBackoffMilliseconds: 10,
             maximumBackoffMilliseconds: 20
         )
-        let start = try JobOperations.maintenance.makeStartRequest(
-            request,
-            target: .database,
+        let start = try makeTestJobOperationStartRequest(
+            JobOperations.maintenance,
+            request: request,
             maximumSliceWorkUnits: 77,
             retryPolicy: retryPolicy
         )
-        let typedFrame = try DatabaseOperationCatalog.jobStart.encodeRequest(
+        let typedFrame = try DatabaseOperationCatalog.jobStart
+            .encodeTestDatabaseRequest(
             requestID: 91,
-            target: .database,
             metadata: OperationRequestMetadata(traceID: "declared-job"),
             request: start
         )
 
-        let canonicalFrame = try DatabaseOperationCatalog.jobStart.encodeRequest(
+        let canonicalFrame = try DatabaseOperationCatalog.jobStart
+            .encodeTestDatabaseRequest(
             requestID: 91,
-            target: .database,
             metadata: OperationRequestMetadata(traceID: "declared-job"),
-            request: JobStartOperation.Request(
-                target: .database,
+            request: makeTestJobStartRequest(
                 operation: JobOperations.maintenance.identifier,
                 requestPayload: try DatabaseOperationCatalog.maintenanceExecute
                     .encodeRequestPayload(request),

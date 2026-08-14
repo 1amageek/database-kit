@@ -1,4 +1,4 @@
-/// The complete version 1 operation catalog.
+/// The complete operation catalog for the selected runtime feature set.
 public enum DatabaseOperationCatalog {
     public static let capabilitiesDescribe = operation(
         CapabilitiesDescribeOperation.self
@@ -9,6 +9,7 @@ public enum DatabaseOperationCatalog {
     public static let schemaExecute = operation(
         SchemaExecuteOperation.self
     )
+    #if DATABASE_KIT_MULTIPLE_BASES
     public static let baseExecute = operation(
         BaseExecuteOperation.self
     )
@@ -18,6 +19,7 @@ public enum DatabaseOperationCatalog {
     public static let grantExecute = operation(
         GrantExecuteOperation.self
     )
+    #endif
     public static let queryExecute = operation(
         QueryExecuteOperation.self
     )

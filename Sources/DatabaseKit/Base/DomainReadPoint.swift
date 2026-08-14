@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseTypes
 
 /// A backend-defined read point whose ordering is meaningful only inside one
@@ -20,3 +21,5 @@ public struct DomainReadPoint: Sendable, Hashable {
         self.position = position
     }
 }
+
+#endif

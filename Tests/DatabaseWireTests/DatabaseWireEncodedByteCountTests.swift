@@ -1,7 +1,7 @@
 import DatabaseTypes
 import Synchronization
 import Testing
-@_spi(DatabaseOperations) @testable import DatabaseWire
+@_spi(DatabaseExecution) @testable import DatabaseWire
 
 @Suite("DatabaseWire encoded byte count")
 struct DatabaseWireEncodedByteCountTests {

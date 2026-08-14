@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseTypes
 
 /// The unambiguous address of an entity whose model identity is local to a Base.
@@ -17,3 +18,5 @@ public struct EntityAddress: Sendable, Hashable, Comparable {
         return lhs.entity < rhs.entity
     }
 }
+
+#endif

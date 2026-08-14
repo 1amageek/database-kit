@@ -1,21 +1,10 @@
 import DatabaseKit
 import DatabaseTypes
-@_spi(DatabaseOperations) @testable import DatabaseWire
+@_spi(DatabaseExecution) @testable import DatabaseWire
 import Testing
 
 @Suite("Canonical DatabaseWire")
 struct CanonicalDatabaseWireTests {
-    private func consistency(
-        version: UInt64
-    ) throws -> DatabaseReadConsistency {
-        .transactional(
-            try DomainReadPoint(
-                domainID: "primary",
-                position: .version(version)
-            )
-        )
-    }
-
     @Test("fixed request header decoding does not traverse an oversized payload")
     func requestHeaderDecodingIsIndependentOfPayloadLimits() throws {
         let payloadByteCount = DatabaseWireLimits.default.maximumFrameBytes
@@ -28,10 +17,9 @@ struct CanonicalDatabaseWireTests {
             maximumObjectCount: 1_024
         )
         let frame = try EnvelopeWireFormat.encode(
-            request: DatabaseWireRequestEnvelope(
+            request: makeTestDatabaseRequestEnvelope(
                 requestID: 0x0102_0304_0506_0708,
                 operation: .queryExecute,
-                target: .database,
                 payload: ByteString(
                     [UInt8](repeating: 0xa5, count: payloadByteCount)
                 )
@@ -51,10 +39,9 @@ struct CanonicalDatabaseWireTests {
     @Test("fixed response header validates message direction")
     func responseHeaderValidatesMessageDirection() throws {
         let request = try EnvelopeWireFormat.encode(
-            request: DatabaseWireRequestEnvelope(
+            request: makeTestDatabaseRequestEnvelope(
                 requestID: 7,
                 operation: .capabilitiesDescribe,
-                target: .database,
                 payload: []
             )
         )
@@ -68,18 +55,18 @@ struct CanonicalDatabaseWireTests {
 
     @Test("request envelope matches the canonical golden vector")
     func requestEnvelopeMatchesGoldenVector() throws {
-        let request = DatabaseWireRequestEnvelope(
+        let request = makeTestDatabaseRequestEnvelope(
             requestID: 0x0102_0304_0506_0708,
             operation: .capabilitiesDescribe,
-            target: .database,
             payload: []
         )
 
         let encoded = try EnvelopeWireFormat.encode(request: request)
 
+        #if DATABASE_KIT_MULTIPLE_BASES
         #expect(encoded == [
             0x44, 0x42, 0x57, 0x52,
-            0x01, 0x00,
+            0x03, 0x00,
             0x01,
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
             0x01, 0x01,
@@ -88,6 +75,18 @@ struct CanonicalDatabaseWireTests {
             0x00,
             0x00, 0x00, 0x00, 0x00,
         ])
+        #else
+        #expect(encoded == [
+            0x44, 0x42, 0x57, 0x52,
+            0x02, 0x00,
+            0x01,
+            0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
+            0x01, 0x01,
+            0x00,
+            0x00,
+            0x00, 0x00, 0x00, 0x00,
+        ])
+        #endif
         #expect(try EnvelopeWireFormat.decodeRequest(encoded) == request)
     }
 
@@ -300,7 +299,7 @@ struct CanonicalDatabaseWireTests {
     func queryResultsRoundTrip() throws {
         let results: [QueryExecuteOperation.Response] = [
             .rows(
-                try QueryRowPage(
+                try makeTestQueryRowPage(
                     columns: [
                         .init(number: 1, name: "title"),
                     ],
@@ -311,19 +310,12 @@ struct CanonicalDatabaseWireTests {
                         ),
                     ],
                     continuation: [1, 2, 3],
-                    provenance: nil,
-                    consistency: try consistency(version: 12)
+                    snapshotVersion: 12
                 )
             ),
-            .boolean(
-                try QueryBooleanResult(
-                    value: true,
-                    provenance: nil,
-                    consistency: consistency(version: 19)
-                )
-            ),
+            try makeTestBooleanResponse(true, snapshotVersion: 19),
             .rdfGraph(
-                try RDFGraphPage(
+                try makeTestRDFGraphPage(
                     quads: [
                         RDFQuad(
                             subject: .iri(try RDFIRI("urn:event:1")),
@@ -340,8 +332,7 @@ struct CanonicalDatabaseWireTests {
                         ),
                     ],
                     continuation: nil,
-                    provenance: nil,
-                    consistency: consistency(version: 27)
+                    snapshotVersion: 27
                 )
             ),
         ]
@@ -354,17 +345,25 @@ struct CanonicalDatabaseWireTests {
             )
             switch (result, decoded) {
             case (.boolean(let expected), .boolean(let actual)):
+                #if DATABASE_KIT_MULTIPLE_BASES
                 #expect(actual.value == expected.value)
                 #expect(actual.consistency == expected.consistency)
                 #expect(actual.provenance == nil)
                 #expect(expected.provenance == nil)
+                #else
+                #expect(actual == expected)
+                #endif
             case (.rows(let expected), .rows(let actual)):
                 #expect(actual.columns == expected.columns)
                 #expect(actual.rowCount == expected.rowCount)
                 #expect(actual.continuation == expected.continuation)
+                #if DATABASE_KIT_MULTIPLE_BASES
                 #expect(actual.consistency == expected.consistency)
                 #expect(actual.provenance == nil)
                 #expect(expected.provenance == nil)
+                #else
+                #expect(actual.snapshotVersion == expected.snapshotVersion)
+                #endif
                 #expect(
                     try actual.materializedRows(maximumCount: 10)
                         == expected.materializedRows(maximumCount: 10)
@@ -372,9 +371,13 @@ struct CanonicalDatabaseWireTests {
             case (.rdfGraph(let expected), .rdfGraph(let actual)):
                 #expect(actual.quadCount == expected.quadCount)
                 #expect(actual.continuation == expected.continuation)
+                #if DATABASE_KIT_MULTIPLE_BASES
                 #expect(actual.consistency == expected.consistency)
                 #expect(actual.provenance == nil)
                 #expect(expected.provenance == nil)
+                #else
+                #expect(actual.snapshotVersion == expected.snapshotVersion)
+                #endif
                 #expect(
                     try actual.materializedQuads(maximumCount: 10)
                         == expected.materializedQuads(maximumCount: 10)
@@ -448,17 +451,19 @@ struct CanonicalDatabaseWireTests {
 
     @Test("unknown versions and operation identifiers are rejected")
     func unknownHeaderValuesAreRejected() throws {
-        let request = DatabaseWireRequestEnvelope(
+        let request = makeTestDatabaseRequestEnvelope(
             requestID: 1,
             operation: .capabilitiesDescribe,
-            target: .database,
             payload: []
         )
         var unsupportedVersion = try EnvelopeWireFormat.encode(
             request: request
         ).copyBytes()
-        unsupportedVersion[4] = 2
-        #expect(throws: DatabaseWireError.unsupportedProtocolVersionValue(2)) {
+        unsupportedVersion[4] = 0xFF
+        unsupportedVersion[5] = 0xFF
+        #expect(
+            throws: DatabaseWireError.unsupportedProtocolVersionValue(0xFFFF)
+        ) {
             _ = try EnvelopeWireFormat.decodeRequest(
                 ByteString(unsupportedVersion)
             )

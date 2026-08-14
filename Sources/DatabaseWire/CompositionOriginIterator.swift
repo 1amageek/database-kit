@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseKit
 import DatabaseTypes
 
@@ -87,3 +88,5 @@ public struct CompositionOriginIterator {
         }
     }
 }
+
+#endif

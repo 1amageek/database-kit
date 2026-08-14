@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseKit
 
 public enum CompositionExecuteOperation: DatabaseOperationDeclaration {
@@ -286,3 +287,5 @@ public enum CompositionExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 }
+
+#endif

@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 /// A stable logical boundary for data, authorization, provenance, placement,
 /// and transactions.
 public struct Base: Sendable, Hashable {
@@ -146,3 +147,5 @@ public struct Base: Sendable, Hashable {
         self.id = id
     }
 }
+
+#endif

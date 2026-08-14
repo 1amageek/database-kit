@@ -1,6 +1,7 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 import DatabaseKit
 
-/// The mandatory database authorization and placement boundary of one request.
+/// The logical target selected by an invocation-capable runtime.
 public enum DatabaseOperationTarget: Sendable, Hashable {
     case database
     case base(Base.ID)
@@ -8,7 +9,7 @@ public enum DatabaseOperationTarget: Sendable, Hashable {
 }
 
 extension DatabaseOperationTarget: WireValue {
-    @_spi(DatabaseOperations)
+    @_spi(DatabaseExecution)
     public func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
@@ -24,7 +25,7 @@ extension DatabaseOperationTarget: WireValue {
         }
     }
 
-    @_spi(DatabaseOperations)
+    @_spi(DatabaseExecution)
     public init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
@@ -40,3 +41,4 @@ extension DatabaseOperationTarget: WireValue {
         }
     }
 }
+#endif

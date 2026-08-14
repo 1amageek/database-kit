@@ -1,3 +1,4 @@
+#if DATABASE_KIT_MULTIPLE_BASES
 /// A value returned through a Composition together with its complete origin.
 public struct CompositionResult<Value: Sendable>: Sendable {
     public typealias Origin = CompositionOrigin
@@ -22,3 +23,5 @@ public struct CompositionResult<Value: Sendable>: Sendable {
 
 extension CompositionResult: Equatable where Value: Equatable {}
 extension CompositionResult: Hashable where Value: Hashable {}
+
+#endif

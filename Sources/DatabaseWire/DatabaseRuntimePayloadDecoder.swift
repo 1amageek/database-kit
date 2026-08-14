@@ -2,7 +2,7 @@ import DatabaseKit
 import DatabaseTypes
 
 /// Bounded decoding for opaque state owned by database operation execution.
-@_spi(DatabaseOperations)
+@_spi(DatabaseExecution)
 public enum DatabaseRuntimePayloadDecoder {
     public static func decode<Value: DatabaseRuntimePayloadValue>(
         _ type: Value.Type,

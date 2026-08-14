@@ -1,6 +1,6 @@
 import DatabaseTypes
 
-/// The directional boundary that creates canonical version 1 DatabaseWire
+/// The directional boundary that creates canonical DatabaseWire
 /// request and response frames.
 public struct DatabaseWireEncoder: Sendable {
     public static let protocolVersion: UInt16 =
@@ -12,6 +12,7 @@ public struct DatabaseWireEncoder: Sendable {
         self.limits = limits
     }
 
+    #if DATABASE_KIT_MULTIPLE_BASES
     public func encodeRequest<Request, Response>(
         _ operation: DatabaseOperation<Request, Response>,
         requestID: UInt64,
@@ -27,6 +28,21 @@ public struct DatabaseWireEncoder: Sendable {
             limits: limits
         )
     }
+    #else
+    public func encodeRequest<Request, Response>(
+        _ operation: DatabaseOperation<Request, Response>,
+        requestID: UInt64,
+        metadata: OperationRequestMetadata = OperationRequestMetadata(),
+        request: Request
+    ) throws(DatabaseWireError) -> ByteString {
+        try operation.encodeRequest(
+            requestID: requestID,
+            metadata: metadata,
+            request: request,
+            limits: limits
+        )
+    }
+    #endif
 
     /// Encodes only the operation request body.
     ///
