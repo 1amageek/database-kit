@@ -1,7 +1,7 @@
 import DatabaseTypes
 /// @Persistable macro declaration
 ///
-/// Generates Persistable protocol conformance and static model metadata.
+/// Generates persistence conformance for models and raw-value enums.
 ///
 /// **Supports all data model layers**:
 /// - Entity layer (RDB): Structured entities with indexes
@@ -23,6 +23,18 @@ import DatabaseTypes
 /// }
 /// ```
 ///
+/// Raw-value enums use the same attribute. String- and Int-backed enums receive
+/// generated case enumeration plus the standard field-value and schema
+/// metadata implementation.
+///
+/// ```swift
+/// @Persistable
+/// enum Status: String {
+///     case active
+///     case inactive
+/// }
+/// ```
+///
 /// **With custom type name** (for renaming stability):
 /// ```swift
 /// @Persistable(type: "User")
@@ -33,7 +45,7 @@ import DatabaseTypes
 /// // persistableType = "User" (not "Member")
 /// ```
 ///
-/// **Generated code**:
+/// **Generated model code**:
 /// - `typealias ID` inferred from the declared `id` property
 /// - `static var persistableType: String`
 /// - `static var allFields: [String]`
@@ -42,7 +54,7 @@ import DatabaseTypes
 /// - `static func enumMetadata(for fieldName: String) -> EnumMetadata?`
 /// - `init(...)`
 @attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(owlObjectPropertyDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(init), arbitrary)
-@attached(extension, conformances: Persistable)
+@attached(extension, conformances: Persistable, PersistableEnum)
 public macro Persistable() = #externalMacro(module: "DatabaseKitMacros", type: "PersistableMacro")
 
 /// @Persistable macro with custom type name
@@ -56,8 +68,10 @@ public macro Persistable() = #externalMacro(module: "DatabaseKitMacros", type: "
 /// }
 /// // persistableType = "User"
 /// ```
+///
+/// The custom persisted type name applies only to model structs.
 @attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(owlObjectPropertyDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(init), arbitrary)
-@attached(extension, conformances: Persistable)
+@attached(extension, conformances: Persistable, PersistableEnum)
 public macro Persistable(type: String) = #externalMacro(module: "DatabaseKitMacros", type: "PersistableMacro")
 
 /// Resolves a stored-property key path to its generated typed field.

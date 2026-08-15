@@ -19,6 +19,7 @@ struct DeclarationCalendarEntry {
     var id: String
     var calendarID: String
     var startsAt: Int64
+    var status: DeclarationCalendarStatus
 
     @Relationship(deleteRule: .deny)
     var owner: PersistableReference<DeclarationPrincipal>

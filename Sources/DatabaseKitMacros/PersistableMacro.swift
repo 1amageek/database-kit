@@ -6,7 +6,7 @@ import SwiftDiagnostics
 
 /// @Persistable macro implementation
 ///
-/// Generates Persistable protocol conformance and static model metadata.
+/// Generates persistence conformance for models and raw-value enums.
 ///
 /// **Supports all layers**:
 /// - Entity layer (RDB): Structured entities with indexes
@@ -47,12 +47,91 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
+        if let enumDecl = declaration.as(EnumDeclSyntax.self) {
+            if let arguments = node.arguments?.as(LabeledExprListSyntax.self),
+               let typeArgument = arguments.first(where: {
+                   $0.label?.text == "type"
+               }) {
+                throw DiagnosticsError(diagnostics: [
+                    Diagnostic(
+                        node: Syntax(typeArgument),
+                        message: MacroExpansionErrorMessage(
+                            "@Persistable(type:) is only available for structs"
+                        )
+                    )
+                ])
+            }
+
+            var hasExplicitAllCases = false
+            var caseNames: [String] = []
+
+            for member in enumDecl.memberBlock.members {
+                if let variable = member.decl.as(VariableDeclSyntax.self),
+                   variable.modifiers.contains(where: {
+                       let name = $0.name.text
+                       return name == "static" || name == "class"
+                   }),
+                   variable.bindings.contains(where: { binding in
+                       binding.pattern.as(IdentifierPatternSyntax.self)?
+                           .identifier.text == "allCases"
+                   }) {
+                    hasExplicitAllCases = true
+                }
+
+                guard let enumCase = member.decl.as(EnumCaseDeclSyntax.self)
+                else { continue }
+
+                if let availabilityAttribute = enumCase.attributes.compactMap({
+                    element -> AttributeSyntax? in
+                    guard case .attribute(let attribute) = element,
+                          attribute.attributeName.trimmedDescription == "available"
+                    else {
+                        return nil
+                    }
+                    return attribute
+                }).first {
+                    throw DiagnosticsError(diagnostics: [
+                        Diagnostic(
+                            node: Syntax(availabilityAttribute),
+                            message: MacroExpansionErrorMessage(
+                                "@Persistable enum cases cannot have availability attributes"
+                            )
+                        )
+                    ])
+                }
+
+                for element in enumCase.elements {
+                    guard element.parameterClause == nil else {
+                        throw DiagnosticsError(diagnostics: [
+                            Diagnostic(
+                                node: Syntax(element),
+                                message: MacroExpansionErrorMessage(
+                                    "@Persistable enum cases cannot have associated values"
+                                )
+                            )
+                        ])
+                    }
+                    caseNames.append(element.name.trimmedDescription)
+                }
+            }
+
+            guard !hasExplicitAllCases else { return [] }
+
+            let allCases = caseNames.map { ".\($0)" }.joined(separator: ", ")
+            let allCasesDecl: DeclSyntax = """
+                public static var allCases: [Self] { [\(raw: allCases)] }
+                """
+            return [allCasesDecl]
+        }
+
         // Extract struct name
         guard let structDecl = declaration.as(StructDeclSyntax.self) else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: MacroExpansionErrorMessage("@Persistable can only be applied to structs")
+                    message: MacroExpansionErrorMessage(
+                        "@Persistable can only be applied to structs and enums"
+                    )
                 )
             ])
         }
@@ -1056,12 +1135,23 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
-        let requestedConformances = protocols.map { $0.trimmedDescription }
-        guard !requestedConformances.isEmpty else {
+        let requiredConformance: String
+        if declaration.is(StructDeclSyntax.self) {
+            requiredConformance = "Persistable"
+        } else if declaration.is(EnumDeclSyntax.self) {
+            requiredConformance = "PersistableEnum"
+        } else {
             return []
         }
+
+        let shouldAddConformance = protocols.contains { type in
+            type.trimmedDescription.split(separator: ".").last.map(String.init)
+                == requiredConformance
+        }
+        guard shouldAddConformance else { return [] }
+
         let conformanceExt: DeclSyntax = """
-            extension \(type.trimmed): \(raw: requestedConformances.joined(separator: ", ")) {}
+            extension \(type.trimmed): \(raw: requiredConformance) {}
             """
 
         if let extensionDecl = conformanceExt.as(ExtensionDeclSyntax.self) {

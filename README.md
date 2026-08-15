@@ -63,7 +63,7 @@ database-client ────────┐
 dependencies: [
     .package(
         url: "https://github.com/1amageek/database-kit.git",
-        from: "26.0814.0"
+        from: "26.0815.0"
     )
 ]
 ```
@@ -109,7 +109,7 @@ with the transactional or federated read points that fixed the result.
 ```swift
 .package(
     url: "https://github.com/1amageek/database-kit.git",
-    from: "26.0814.0",
+    from: "26.0815.0",
     traits: [.trait(name: "MultipleBases")]
 )
 ```
@@ -525,19 +525,27 @@ declarations expose only canonical `IndexKindMetadata`; runtime behavior remains
 outside this package. `IndexDescriptor` validates concrete generated fields and
 configuration before `Schema` exposes the catalog.
 
-## PersistableEnum
+## @Persistable enums
 
 ```swift
-enum Status: String, PersistableEnum {
+@Persistable
+enum Status: String {
     case active, inactive, pending
 }
 
 @Persistable
 struct Task {
+    var id: String
     var title: String
     var status: Status = .pending
 }
 ```
+
+Applying `@Persistable` to a raw-value enum generates its `PersistableEnum`
+conformance and case enumeration. String- and Int-backed enums receive
+canonical field encoding and case metadata. Availability-qualified cases are
+rejected so the persisted schema cannot vary by platform. `@Persistable(type:)`
+remains specific to model structs.
 
 ## @Relationship Macro
 

@@ -394,7 +394,8 @@ private struct FailingPersistedFieldInput: PersistedFieldInput {
     ) {}
 }
 
-private enum PersistableTestStatus: String, PersistableEnum {
+@Persistable
+private enum PersistableTestStatus: String {
     case active
     case inactive
 }

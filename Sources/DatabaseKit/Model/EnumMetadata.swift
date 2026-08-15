@@ -5,7 +5,8 @@ import DatabaseTypes
 ///
 /// **Usage**:
 /// ```swift
-/// enum Status: String, PersistableEnum {
+/// @Persistable
+/// enum Status: String {
 ///     case active
 ///     case inactive
 ///     case pending
@@ -50,13 +51,15 @@ public struct EnumMetadata: Sendable, Equatable {
 ///
 /// **Usage**:
 /// ```swift
-/// enum Status: String, PersistableEnum {
+/// @Persistable
+/// enum Status: String {
 ///     case active, inactive, pending
 /// }
 /// ```
 ///
-/// The `@Persistable` macro invokes this concrete type's static field-value
-/// contract. String- and Int-backed enums provide canonical case metadata.
+/// The `@Persistable` macro adds this conformance to enums and invokes the
+/// concrete type's static field-value contract. String- and Int-backed enums
+/// provide canonical case metadata.
 public protocol PersistableEnum:
     FieldValueEncodable,
     CaseIterable,

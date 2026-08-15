@@ -75,4 +75,22 @@ struct EnumMetadataTests {
 
         #expect(metadata.typeName == "Status")
     }
+
+    @Test("@Persistable Int enum uses canonical metadata and field value")
+    func persistableIntEnum() {
+        #expect(
+            PersistableIntStatus.fieldEnumMetadata(named: "PersistableIntStatus")
+                == EnumMetadata(
+                    typeName: "PersistableIntStatus",
+                    cases: ["1", "2"]
+                )
+        )
+        #expect(PersistableIntStatus.closed.encodeFieldValue() == .int64(2))
+    }
+}
+
+@Persistable
+private enum PersistableIntStatus: Int {
+    case open = 1
+    case closed = 2
 }

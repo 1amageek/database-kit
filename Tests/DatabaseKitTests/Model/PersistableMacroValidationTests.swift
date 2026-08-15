@@ -8,6 +8,173 @@ import DatabaseKitMacros
 /// Tests for @Persistable macro validation and edge cases
 @Suite("@Persistable Macro Validation Tests")
 struct ModelMacroValidationTests {
+    @Test("@Persistable selects PersistableEnum for enums")
+    func selectsPersistableEnumConformance() {
+        assertMacroExpansion(
+            """
+            @Persistable
+            enum Status: String {
+                case active
+                case inactive
+            }
+            """,
+            expandedSource: """
+            enum Status: String {
+                case active
+                case inactive
+
+                public static var allCases: [Self] {
+                    [.active, .inactive]
+                }
+            }
+
+            extension Status: PersistableEnum {
+            }
+            """,
+            macroSpecs: [
+                "Persistable": MacroSpec(
+                    type: PersistableMacro.self,
+                    conformances: ["Persistable", "PersistableEnum"]
+                )
+            ]
+        )
+    }
+
+    @Test("@Persistable type parameter rejects enums")
+    func rejectsEnumTypeParameter() {
+        assertMacroExpansion(
+            """
+            @Persistable(type: "StableStatus")
+            enum Status: String {
+                case active
+            }
+            """,
+            expandedSource: """
+            enum Status: String {
+                case active
+            }
+
+            extension Status: PersistableEnum {
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "@Persistable(type:) is only available for structs",
+                    line: 1,
+                    column: 14
+                )
+            ],
+            macroSpecs: [
+                "Persistable": MacroSpec(
+                    type: PersistableMacro.self,
+                    conformances: ["Persistable", "PersistableEnum"]
+                )
+            ]
+        )
+    }
+
+    @Test("@Persistable rejects enum case availability")
+    func rejectsEnumCaseAvailability() {
+        assertMacroExpansion(
+            """
+            @Persistable
+            enum Status: String {
+                @available(*, unavailable)
+                case retired
+            }
+            """,
+            expandedSource: """
+            enum Status: String {
+                @available(*, unavailable)
+                case retired
+            }
+
+            extension Status: PersistableEnum {
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "@Persistable enum cases cannot have availability attributes",
+                    line: 3,
+                    column: 5
+                )
+            ],
+            macroSpecs: [
+                "Persistable": MacroSpec(
+                    type: PersistableMacro.self,
+                    conformances: ["Persistable", "PersistableEnum"]
+                )
+            ]
+        )
+    }
+
+    @Test("@Persistable rejects enum associated values")
+    func rejectsEnumAssociatedValues() {
+        assertMacroExpansion(
+            """
+            @Persistable
+            enum Status: String {
+                case custom(String)
+            }
+            """,
+            expandedSource: """
+            enum Status: String {
+                case custom(String)
+            }
+
+            extension Status: PersistableEnum {
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "@Persistable enum cases cannot have associated values",
+                    line: 3,
+                    column: 10
+                )
+            ],
+            macroSpecs: [
+                "Persistable": MacroSpec(
+                    type: PersistableMacro.self,
+                    conformances: ["Persistable", "PersistableEnum"]
+                )
+            ]
+        )
+    }
+
+    @Test("@Persistable preserves explicit allCases")
+    func preservesExplicitAllCases() {
+        assertMacroExpansion(
+            """
+            @Persistable
+            enum Status: String {
+                case active
+
+                public static var allCases: [Self] {
+                    [.active]
+                }
+            }
+            """,
+            expandedSource: """
+            enum Status: String {
+                case active
+
+                public static var allCases: [Self] {
+                    [.active]
+                }
+            }
+
+            extension Status: PersistableEnum {
+            }
+            """,
+            macroSpecs: [
+                "Persistable": MacroSpec(
+                    type: PersistableMacro.self,
+                    conformances: ["Persistable", "PersistableEnum"]
+                )
+            ]
+        )
+    }
+
     @Test("@Persistable rejects platform-dependent integer storage")
     func rejectsPlatformDependentIntegerStorage() {
         assertMacroExpansion(
@@ -37,7 +204,7 @@ struct ModelMacroValidationTests {
             macroSpecs: [
                 "Persistable": MacroSpec(
                     type: PersistableMacro.self,
-                    conformances: ["Persistable"]
+                    conformances: ["Persistable", "PersistableEnum"]
                 )
             ]
         )
