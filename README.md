@@ -29,7 +29,8 @@ It provides:
 - `@OWLClass` macro for OWL ontology class mapping
 - `@OWLDataProperty` / `@OWLObjectProperty` macros for OWL property annotations
 - `IndexKind` protocol for extensible index type definitions
-- Foundation-independent identity, RDF, and `QueryIR` semantic models
+- Foundation-independent identity, schema fingerprints, execution budgets,
+  RDF, and `QueryIR` semantic models
 - bounded RDF term-role and structural validation without binary materialization
 - canonical binary `DatabaseWire` operations, envelopes, limits, and errors
 - canonical schema manifests, SHA-256 fingerprints, and typed schema
@@ -72,7 +73,7 @@ dependencies: [
 
 | Module | Description |
 |--------|-------------|
-| `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, SHACL, and shared streaming digest support |
+| `DatabaseKit` | Foundation-independent model, identity, schema fingerprint, execution budget, query, mutation, relationship, index, graph, ontology, SHACL, and shared streaming digest support |
 | `DatabaseWire` | Canonical binary envelopes, typed operations, bounded encoding and decoding, results, errors, and protocol-specific digest values |
 | `DatabaseSchemaJSON` | Native strict JSON adapter for `SchemaManifest`; rejects duplicate or unknown keys and preserves every `FieldValue` case without numeric inference |
 | `DatabaseKitFoundation` | Native-only participation of Foundation scalar types in `Persistable` field adaptation |
@@ -147,6 +148,9 @@ objects. Compiler diagnostics remain enabled.
 
 ```bash
 TOOLCHAINS=org.swift.64202607231a scripts/xcode-test-harness
+TOOLCHAINS=org.swift.64202607231a \
+  DATABASE_KIT_TEST_TRAITS=MultipleBases \
+  scripts/xcode-test-harness
 
 swift build --disable-default-traits --product DatabaseWire
 swift build --disable-default-traits --traits MultipleBases --product DatabaseWire
@@ -519,7 +523,7 @@ let schema = try Schema(
 )
 ```
 
-Server-side maintenance is implemented and registered by
+Index maintenance execution is implemented and registered by
 [database-framework](https://github.com/1amageek/database-framework). Custom
 declarations expose only canonical `IndexKindMetadata`; runtime behavior remains
 outside this package. `IndexDescriptor` validates concrete generated fields and
@@ -578,7 +582,7 @@ var ontology = OWLOntology(iri: "http://example.org/onto")
 ontology.classes = [OWLClass(iri: "ex:Person"), OWLClass(iri: "ex:Employee")]
 ontology.axioms = [.subClassOf(sub: .named("ex:Employee"), sup: .named("ex:Person"))]
 
-// Load and query (server-side, database-framework)
+// Load and query through database-framework execution
 try await context.ontology.load(ontology)
 let reasoner = try await context.ontology.reasoner(for: "http://example.org/onto")
 let superClasses = reasoner.superClasses(of: "ex:Employee")

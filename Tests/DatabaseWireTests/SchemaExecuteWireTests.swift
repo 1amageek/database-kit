@@ -38,6 +38,18 @@ struct SchemaExecuteWireTests {
         #expect(decoded.schema == schema)
         #expect(try decoded.canonicalBytes() == bytes)
         #expect(try decoded.fingerprint() == manifest.fingerprint())
+
+        let zeroByteLimits = try DatabaseWireLimits(
+            maximumFrameBytes: 0,
+            maximumStringBytes: 0,
+            maximumByteStringBytes: 0,
+            maximumCollectionCount: 0,
+            maximumNestingDepth: 0,
+            maximumObjectCount: 0
+        )
+        #expect(throws: SchemaFingerprintError.canonicalRepresentationUnavailable) {
+            _ = try emptyManifest.fingerprint(limits: zeroByteLimits)
+        }
     }
 
     @Test("plan and apply requests preserve the schema and concurrency guards")

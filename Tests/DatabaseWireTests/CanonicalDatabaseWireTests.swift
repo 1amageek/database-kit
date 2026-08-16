@@ -396,7 +396,7 @@ struct CanonicalDatabaseWireTests {
         )
         let request = MutationExecuteOperation.Request(
             input: .entities([
-                MutationExecuteOperation.Change(
+                EntityMutationChange(
                     kind: .update,
                     identity: identity,
                     fields: try FieldObject([
@@ -412,7 +412,7 @@ struct CanonicalDatabaseWireTests {
         let recordResponse = MutationExecuteOperation.Response(
             commitVersion: 4,
             result: .entities([
-                MutationExecuteOperation.EntityEffect(
+                EntityMutationEffect(
                     kind: .update,
                     identity: identity,
                     version: [1, 2, 3]
@@ -422,7 +422,7 @@ struct CanonicalDatabaseWireTests {
         let rdfResponse = MutationExecuteOperation.Response(
             commitVersion: 5,
             result: .rdf(
-                MutationExecuteOperation.RDFEffect(
+                RDFMutationEffect(
                     insertedQuads: 7,
                     deletedQuads: 3,
                     createdGraphs: 1,

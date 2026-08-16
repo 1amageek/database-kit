@@ -4,55 +4,8 @@ import DatabaseKit
 public enum MutationExecuteOperation: DatabaseOperationDeclaration {
     public static let identifier = DatabaseOperationIdentifier.mutationExecute
 
-    public enum Kind: UInt8, Sendable, Hashable {
-        case insert = 1
-        case update = 2
-        case upsert = 3
-        case delete = 4
-
-        fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-            let rawValue = try reader.readUInt8()
-            guard let value = Self(rawValue: rawValue) else {
-                throw .invalidValueTag(rawValue)
-            }
-            self = value
-        }
-    }
-
-    public struct Change: Sendable, Hashable {
-        public let kind: Kind
-        public let identity: EntityReference
-        public let fields: FieldObject
-
-        public init(
-            kind: Kind,
-            identity: EntityReference,
-            fields: FieldObject = FieldObject()
-        ) {
-            self.kind = kind
-            self.identity = identity
-            self.fields = fields
-        }
-
-        fileprivate func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
-            writer.writeUInt8(kind.rawValue)
-            try identity.encode(into: &writer)
-            try fields.encode(into: &writer)
-        }
-
-        fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-            let kind = try Kind(from: &reader)
-            let identity = try EntityReference(from: &reader)
-            self.init(
-                kind: kind,
-                identity: identity,
-                fields: try FieldObject(from: &reader)
-            )
-        }
-    }
-
     public enum Input: Sendable, Hashable {
-        case entities([Change])
+        case entities([EntityMutationChange])
         case statement(
             QueryExecuteOperation.Input,
             parameters: [QueryParameter]
@@ -76,9 +29,11 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
             switch try reader.readUInt8() {
             case 1:
                 let count = try reader.readCount()
-                var changes: [Change] = []
+                var changes: [EntityMutationChange] = []
                 changes.reserveCapacity(count)
-                for _ in 0..<count { changes.append(try Change(from: &reader)) }
+                for _ in 0..<count {
+                    changes.append(try EntityMutationChange(from: &reader))
+                }
                 self = .entities(changes)
             case 2:
                 let input = try QueryExecuteOperation.Input(from: &reader)
@@ -95,52 +50,15 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public enum Precondition: Sendable, Hashable {
-        case expectedVersion(identity: EntityReference, version: ByteString)
-        case mustExist(EntityReference)
-        case mustNotExist(EntityReference)
-
-        fileprivate func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
-            switch self {
-            case .expectedVersion(let identity, let version):
-                writer.writeUInt8(1)
-                try identity.encode(into: &writer)
-                try writer.writeBytes(version)
-            case .mustExist(let identity):
-                writer.writeUInt8(2)
-                try identity.encode(into: &writer)
-            case .mustNotExist(let identity):
-                writer.writeUInt8(3)
-                try identity.encode(into: &writer)
-            }
-        }
-
-        fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-            switch try reader.readUInt8() {
-            case 1:
-                self = .expectedVersion(
-                    identity: try EntityReference(from: &reader),
-                    version: try reader.readBytes()
-                )
-            case 2:
-                self = .mustExist(try EntityReference(from: &reader))
-            case 3:
-                self = .mustNotExist(try EntityReference(from: &reader))
-            case let tag:
-                throw .invalidValueTag(tag)
-            }
-        }
-    }
-
     public struct Request: WireValue, Hashable {
         public let input: Input
-        public let preconditions: [Precondition]
+        public let preconditions: [EntityMutationPrecondition]
         public let graphPartitions: FieldObject
         public let budget: ExecutionBudget
 
         public init(
             input: Input,
-            preconditions: [Precondition] = [],
+            preconditions: [EntityMutationPrecondition] = [],
             graphPartitions: FieldObject = FieldObject(),
             budget: ExecutionBudget = ExecutionBudget()
         ) {
@@ -161,9 +79,13 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
         init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let input = try Input(from: &reader)
             let count = try reader.readCount()
-            var preconditions: [Precondition] = []
+            var preconditions: [EntityMutationPrecondition] = []
             preconditions.reserveCapacity(count)
-            for _ in 0..<count { preconditions.append(try Precondition(from: &reader)) }
+            for _ in 0..<count {
+                preconditions.append(
+                    try EntityMutationPrecondition(from: &reader)
+                )
+            }
             self.init(
                 input: input,
                 preconditions: preconditions,
@@ -173,83 +95,9 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public struct EntityEffect: WireValue, Hashable {
-        public let kind: Kind
-        public let identity: EntityReference
-        public let version: ByteString?
-
-        public init(
-            kind: Kind,
-            identity: EntityReference,
-            version: ByteString? = nil
-        ) {
-            self.kind = kind
-            self.identity = identity
-            self.version = version
-        }
-
-        func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
-            writer.writeUInt8(kind.rawValue)
-            try identity.encode(into: &writer)
-            try writer.writeOptionalBytes(version)
-        }
-
-        init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-            self.init(
-                kind: try Kind(from: &reader),
-                identity: try EntityReference(from: &reader),
-                version: try reader.readOptionalBytes()
-            )
-        }
-    }
-
-    /// Aggregate effect of one atomic RDF dataset update.
-    ///
-    /// Counts describe physical logical quads and explicit graph catalog
-    /// entries. Duplicate INSERTs and deletes of absent quads do not increment
-    /// the corresponding count.
-    public struct RDFEffect: WireValue, Hashable {
-        public let insertedQuads: UInt64
-        public let deletedQuads: UInt64
-        public let createdGraphs: UInt64
-        public let droppedGraphs: UInt64
-
-        public init(
-            insertedQuads: UInt64 = 0,
-            deletedQuads: UInt64 = 0,
-            createdGraphs: UInt64 = 0,
-            droppedGraphs: UInt64 = 0
-        ) {
-            self.insertedQuads = insertedQuads
-            self.deletedQuads = deletedQuads
-            self.createdGraphs = createdGraphs
-            self.droppedGraphs = droppedGraphs
-        }
-
-        func encode(
-            into writer: inout DatabaseWireWriter
-        ) throws(DatabaseWireError) {
-            writer.writeUInt64(insertedQuads)
-            writer.writeUInt64(deletedQuads)
-            writer.writeUInt64(createdGraphs)
-            writer.writeUInt64(droppedGraphs)
-        }
-
-        init(
-            from reader: inout DatabaseWireReader
-        ) throws(DatabaseWireError) {
-            self.init(
-                insertedQuads: try reader.readUInt64(),
-                deletedQuads: try reader.readUInt64(),
-                createdGraphs: try reader.readUInt64(),
-                droppedGraphs: try reader.readUInt64()
-            )
-        }
-    }
-
     public enum Result: WireValue, Hashable {
-        case entities([EntityEffect])
-        case rdf(RDFEffect)
+        case entities([EntityMutationEffect])
+        case rdf(RDFMutationEffect)
 
         func encode(
             into writer: inout DatabaseWireWriter
@@ -273,14 +121,14 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
             switch try reader.readUInt8() {
             case 1:
                 let count = try reader.readCount()
-                var effects: [EntityEffect] = []
+                var effects: [EntityMutationEffect] = []
                 effects.reserveCapacity(count)
                 for _ in 0..<count {
-                    effects.append(try EntityEffect(from: &reader))
+                    effects.append(try EntityMutationEffect(from: &reader))
                 }
                 self = .entities(effects)
             case 2:
-                self = .rdf(try RDFEffect(from: &reader))
+                self = .rdf(try RDFMutationEffect(from: &reader))
             case let tag:
                 throw .invalidValueTag(tag)
             }
@@ -308,5 +156,108 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
                 result: try Result(from: &reader)
             )
         }
+    }
+}
+
+private extension RDFMutationEffect {
+    func encode(
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        writer.writeUInt64(insertedQuads)
+        writer.writeUInt64(deletedQuads)
+        writer.writeUInt64(createdGraphs)
+        writer.writeUInt64(droppedGraphs)
+    }
+
+    init(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) {
+        self.init(
+            insertedQuads: try reader.readUInt64(),
+            deletedQuads: try reader.readUInt64(),
+            createdGraphs: try reader.readUInt64(),
+            droppedGraphs: try reader.readUInt64()
+        )
+    }
+}
+
+private extension EntityMutationKind {
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        let rawValue = try reader.readUInt8()
+        guard let value = Self(rawValue: rawValue) else {
+            throw .invalidValueTag(rawValue)
+        }
+        self = value
+    }
+}
+
+private extension EntityMutationChange {
+    func encode(
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        writer.writeUInt8(kind.rawValue)
+        try identity.encode(into: &writer)
+        try fields.encode(into: &writer)
+    }
+
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        self.init(
+            kind: try EntityMutationKind(from: &reader),
+            identity: try EntityReference(from: &reader),
+            fields: try FieldObject(from: &reader)
+        )
+    }
+}
+
+private extension EntityMutationPrecondition {
+    func encode(
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        switch self {
+        case .expectedVersion(let identity, let version):
+            writer.writeUInt8(1)
+            try identity.encode(into: &writer)
+            try writer.writeBytes(version)
+        case .mustExist(let identity):
+            writer.writeUInt8(2)
+            try identity.encode(into: &writer)
+        case .mustNotExist(let identity):
+            writer.writeUInt8(3)
+            try identity.encode(into: &writer)
+        }
+    }
+
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        switch try reader.readUInt8() {
+        case 1:
+            self = .expectedVersion(
+                identity: try EntityReference(from: &reader),
+                version: try reader.readBytes()
+            )
+        case 2:
+            self = .mustExist(try EntityReference(from: &reader))
+        case 3:
+            self = .mustNotExist(try EntityReference(from: &reader))
+        case let tag:
+            throw .invalidValueTag(tag)
+        }
+    }
+}
+
+private extension EntityMutationEffect {
+    func encode(
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        writer.writeUInt8(kind.rawValue)
+        try identity.encode(into: &writer)
+        try writer.writeOptionalBytes(version)
+    }
+
+    init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
+        self.init(
+            kind: try EntityMutationKind(from: &reader),
+            identity: try EntityReference(from: &reader),
+            version: try reader.readOptionalBytes()
+        )
     }
 }

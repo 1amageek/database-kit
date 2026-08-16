@@ -68,8 +68,9 @@
 
 - Native verification uses `scripts/xcode-test-harness` with the pinned Swift
   snapshot. The standard graph must execute exactly 641 tests. An isolated
-  `MultipleBases` graph uses `DATABASE_KIT_EXPECTED_TEST_COUNT=654` and must
-  execute exactly 654 tests. Both runs require zero failures,
+  `MultipleBases` graph uses `DATABASE_KIT_TEST_TRAITS=MultipleBases` and must
+  execute exactly 654 tests. The harness selects the trait in an isolated source
+  copy and derives the expected count. Both runs require zero failures,
   skips, expected failures, runtime warnings, compiler-plugin internal errors,
   profile errors, or debug-information verification warnings.
 - The harness uses the `database-kit-Package` scheme, separates

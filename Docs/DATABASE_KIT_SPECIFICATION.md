@@ -30,6 +30,7 @@ It defines:
 - index declarations;
 - graph, RDF, ontology, and SHACL declarations;
 - query and mutation language models;
+- request-scoped execution budgets and canonical schema fingerprint values;
 - Foundation-independent streaming digest algorithms required by standard
   query semantics and canonical integrity checks;
 - operation request and response models;
@@ -78,7 +79,7 @@ native external-format adaptation have different reasons to change.
 
 | Product | Owns | Changes when |
 |---|---|---|
-| `DatabaseKit` | Persisted model and document meaning, identity, schema, query, mutation, relationship, index, graph, ontology, SHACL, and database-semantic digest support | Database semantics or their Foundation-independent support contracts change |
+| `DatabaseKit` | Persisted model and document meaning, identity, schema fingerprint, execution budget, query, mutation, relationship, index, graph, ontology, SHACL, and database-semantic digest support | Database semantics or their Foundation-independent support contracts change |
 | `DatabaseWire` | The canonical version 1 binary representation of database operations | The version 1 frame, operation, bound, or protocol-error contract changes |
 | `DatabaseSchemaJSON` | Strict native JSON adaptation of the canonical schema manifest | The human-readable manifest mapping, JSON validation, or native text boundary changes |
 | `DatabaseKitFoundation` | Native Foundation scalar participation in `DatabaseKit` model adaptation | Foundation APIs or the explicit canonical scalar-conversion boundary changes |
@@ -98,10 +99,11 @@ The number of consumers, portability, or passage across a process boundary does
 not determine ownership.
 
 ```text
-database-client ───────▶ DatabaseWire ───────▶ DatabaseKit ───────▶ DatabaseTypes
-                               ▲                    ▲
-                               │                    │
-database-framework ────────────┴────────────────────┘
+database-client ───────┐
+database-server ───────┴──────▶ DatabaseWire ───────▶ DatabaseKit ───────▶ DatabaseTypes
+                                      ▲                    ▲
+                                      │                    │
+database-framework ───────────────────┴────────────────────┘
 
 native application ────▶ DatabaseKitFoundation ────▶ DatabaseKit
                                   │
@@ -142,8 +144,8 @@ This includes:
 | Model and document | persistence contracts, field metadata, model adaptation contracts |
 | Identity | persisted identifiers, logical references, identity validation |
 | Boundary | Base identity, Composition membership, placement identity, Grant vocabulary, result provenance, and read consistency |
-| Schema | schema catalog, versions, constraints, migration declarations |
-| Query | SQL, SQL/PGQ, graph-pattern, and SPARQL intermediate representations |
+| Schema | schema catalog, versions, constraints, migration declarations, and canonical fingerprint values |
+| Query | SQL, SQL/PGQ, graph-pattern, and SPARQL intermediate representations plus request-scoped execution budgets |
 | Mutation | mutation statements, preconditions, and transaction intent |
 | Relationship | cardinality, relationship descriptors, and delete rules |
 | Index | scalar, aggregate, text, vector, geographic, rank, permutation, property-graph, and RDF-dataset index declarations |
@@ -565,6 +567,10 @@ Wire value. Its `SchemaFingerprint` is the SHA-256 digest of those canonical
 bytes, so optimistic concurrency and idempotent apply use one representation
 on every host. `plan` accepts an optional expected fingerprint; `apply`
 requires both the expected fingerprint and a non-empty idempotency key.
+`canonicalBytes` reports bounded codec failures as `DatabaseWireError`, while
+`fingerprint` translates an unavailable canonical representation to
+`SchemaFingerprintError`. The semantic fingerprint contract therefore does
+not make the Wire error type part of a local execution API.
 
 Decoding must deterministically reject:
 
@@ -669,12 +675,18 @@ owns:
 - index maintenance;
 - graph and SPARQL execution;
 - ontology and SHACL execution;
-- migrations, maintenance, algorithms, and jobs.
+- migrations, maintenance primitives, and algorithms.
 
 Stable hashes for statistics and physical encodings for RDF storage keys are
 execution and persistence contracts owned by `database-framework`. They are
 not extensions published by `DatabaseKit`, even when they consume
 `FieldValue` or `RDFTerm`.
+
+`database-server` consumes `DatabaseWire`, maps its operation DTOs into those
+framework APIs, and owns remote operation dispatch, schema-administration
+orchestration, and durable server jobs. Those server lifecycle contracts do not
+move into `database-framework` merely because their handlers invoke framework
+execution.
 
 `database-client` consumes `DatabaseKit` and `DatabaseWire`. It owns typed
 invocation, correlation, cancellation, timeout, pagination facades, and
@@ -715,8 +727,8 @@ The responsibility migration is complete only when all of the following hold:
 13. Swift 6.4 standard and Embedded WASM release builds validate both
     `DatabaseKit` and `DatabaseWire`.
 14. DatabaseWire golden vectors and round-trip tests cover every operation
-    family. Client and runtime repositories consume those unchanged vectors as
-    their separate integration gates.
+    family. `database-client` and `database-server` consume those unchanged
+    vectors as their separate integration gates.
 15. The `DatabaseKitDeclarationContract` fixture target compiles
     KeyPath-based model, index, field-selection, directory, and relationship
     declarations with Swift 6.4 Embedded WASM, while expanded runtime metadata

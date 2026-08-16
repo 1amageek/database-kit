@@ -32,7 +32,7 @@ The arrows point from a consumer to a dependency.
 
 | Module | Owns | Does not own |
 |---|---|---|
-| `DatabaseKit` | Foundation-independent model, identity, schema, query, mutation, relationship, index, graph, ontology, SHACL, and shared streaming digest support | Primitive values, Codable-based canonical persistence, execution, transport |
+| `DatabaseKit` | Foundation-independent model, identity, schema fingerprint, execution budget, query, mutation, relationship, index, graph, ontology, SHACL, and shared streaming digest support | Primitive values, Codable-based canonical persistence, execution, transport |
 | `DatabaseWire` | Version 1 envelopes, typed operations, bounded binary encoding and decoding, and protocol-specific digest values | Semantic meaning, network transport, or operation execution |
 | `DatabaseSchemaJSON` | Strict native JSON adaptation of `SchemaManifest` | Canonical schema meaning, Wire framing, execution, or Embedded behavior |
 | `DatabaseKitFoundation` | Native Foundation scalar participation in `Persistable` field adaptation | Primitive conversion rules, Wire, transport, or Embedded behavior |
@@ -111,6 +111,12 @@ Neither `Schema.Entity` nor `VersionedSchema` retains `Persistable` metatypes.
 Application-specific execution registries are composed separately by
 `database-framework`.
 
+`SchemaFingerprint` is a semantic `DatabaseKit` value. `SchemaManifest` owns
+the optional DatabaseWire representation used to derive it. Manifest byte
+encoding reports `DatabaseWireError`; fingerprint derivation translates an
+encoding failure to `SchemaFingerprintError` so a semantic fingerprint API
+does not expose the codec's failure type.
+
 Swift 6.4 KeyPath syntax is consumed by schema macros while the concrete root
 and value types are available. The macro resolves each selected property to a
 generated `Field<Model, Value>` containing stable identity and
@@ -147,6 +153,11 @@ meaning without owning parsing,
 planning, or execution. Text parsers and runtime execution belong to
 `database-framework`; both text and binary inputs must pass the same QueryIR
 structural and semantic validators.
+
+`ExecutionBudget` is a semantic request contract shared by local and remote
+execution. `DatabaseKit` owns its fields and defaults; `DatabaseWire` owns only
+its binary conformance. A local framework consumer therefore does not need a
+remote operation DTO merely to set execution limits.
 
 `LIMIT` and `OFFSET` use `UInt64`. Negative pagination is not representable,
 and a runtime that needs a platform-sized collection index performs a checked
@@ -238,12 +249,15 @@ declaring a second generic Wire conformance path.
 
 ## Runtime Boundary
 
-database-framework interprets the declarations and operations from this package.
-It owns transaction coordination, query execution, persistence, index
-maintenance, graph algorithms, ontology execution, SHACL execution, jobs, and
-migrations.
+database-framework interprets the semantic declarations from this package. It
+owns in-process transaction coordination, query and mutation execution,
+persistence, index maintenance, graph algorithms, ontology execution, SHACL
+execution, migrations, and maintenance primitives. It does not dispatch
+DatabaseWire operations or own durable server jobs.
 
-database-client owns request correlation, cancellation, timeout behavior,
-pagination facades, and transport adapters. storage-kit owns storage
-transactions and backend adapters. Neither responsibility belongs in
-database-kit.
+database-server maps DatabaseWire operations to those framework APIs and owns
+operation dispatch, remote commands, durable server jobs, schema administration,
+and native hosting. database-client owns request correlation, cancellation,
+timeout behavior, pagination facades, and transport adapters. storage-kit owns
+storage transactions and backend adapters. None of those responsibilities
+belongs in database-kit.

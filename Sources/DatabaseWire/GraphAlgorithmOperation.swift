@@ -1,3 +1,4 @@
+import DatabaseKit
 import DatabaseTypes
 
 public enum GraphAlgorithmOperation: DatabaseOperationDeclaration {

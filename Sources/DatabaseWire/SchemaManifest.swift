@@ -35,11 +35,13 @@ public struct SchemaManifest: Sendable, Hashable {
 
     public func fingerprint(
         limits: DatabaseWireLimits = .default
-    ) throws(DatabaseWireError) -> SchemaFingerprint {
-        let bytes = try canonicalBytes(limits: limits)
-        var accumulator = SHA256Accumulator()
-        accumulator.update(bytes)
-        return SchemaFingerprint(validatedBytes: accumulator.finalize())
+    ) throws(SchemaFingerprintError) -> SchemaFingerprint {
+        do {
+            let bytes = try canonicalBytes(limits: limits)
+            return SchemaFingerprint.hashing(canonicalBytes: bytes)
+        } catch {
+            throw .canonicalRepresentationUnavailable
+        }
     }
 
     func encode(
