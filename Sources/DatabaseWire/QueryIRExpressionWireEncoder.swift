@@ -751,6 +751,12 @@ private extension QueryIRExpressionWireEncoder {
             writer.writeUInt8(12)
             encodingSteps.append(.dataSource(rhs))
             encodingSteps.append(.dataSource(lhs))
+        #if DATABASE_KIT_MULTIPLE_BASES
+        case .base(let baseID, let source):
+            writer.writeUInt8(13)
+            try baseID.encode(into: &writer)
+            encodingSteps.append(.dataSource(source))
+        #endif
         }
     }
 

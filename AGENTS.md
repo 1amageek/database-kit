@@ -61,7 +61,7 @@
 - A required copy must be documented at the implementation site and verified when described as a performance improvement.
 - Do not silently substitute defaults for malformed input. Return a typed DatabaseWire error.
 - The standard Wire contract is version 2. `MultipleBases` replaces it with
-  target-bound version 3; it is not a compatibility layer or a version to
+  target-bound version 4; it is not a compatibility layer or a version to
   negotiate at runtime.
 
 ## Verification
@@ -69,7 +69,7 @@
 - Native verification uses `scripts/xcode-test-harness` with the pinned Swift
   snapshot. The standard graph must execute exactly 641 tests. An isolated
   `MultipleBases` graph uses `DATABASE_KIT_TEST_TRAITS=MultipleBases` and must
-  execute exactly 654 tests. The harness selects the trait in an isolated source
+  execute exactly 656 tests. The harness selects the trait in an isolated source
   copy and derives the expected count. Both runs require zero failures,
   skips, expected failures, runtime warnings, compiler-plugin internal errors,
   profile errors, or debug-information verification warnings.

@@ -3,19 +3,16 @@
 public struct CompositionResult<Value: Sendable>: Sendable {
     public typealias Origin = CompositionOrigin
 
-    public let compositionID: Base.Composition.ID
-    public let generation: UInt64
+    public let composition: CompositionResolution
     public let origin: Origin
     public let value: Value
 
     public init(
-        compositionID: Base.Composition.ID,
-        generation: UInt64,
+        composition: CompositionResolution,
         origin: Origin,
         value: consuming Value
     ) {
-        self.compositionID = compositionID
-        self.generation = generation
+        self.composition = composition
         self.origin = origin
         self.value = value
     }

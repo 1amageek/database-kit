@@ -12,7 +12,7 @@ public struct DatabaseWireEncodedResponse: Sendable {
 
 enum EnvelopeWireFormat {
     #if DATABASE_KIT_MULTIPLE_BASES
-    static let protocolVersion: UInt16 = 3
+    static let protocolVersion: UInt16 = 4
     #else
     static let protocolVersion: UInt16 = 2
     #endif
@@ -54,9 +54,7 @@ enum EnvelopeWireFormat {
             writeHeader(kind: .request, into: &writer)
             writer.writeUInt64(requestID)
             identifier.encode(into: &writer)
-            #if DATABASE_KIT_MULTIPLE_BASES
             try target.encode(into: &writer)
-            #endif
             try metadata.encode(into: &writer)
             try writer.writeLengthPrefixed {
                 (payloadWriter: inout DatabaseWireWriter) throws(DatabaseWireError) in

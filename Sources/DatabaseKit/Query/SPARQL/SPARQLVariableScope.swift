@@ -221,6 +221,10 @@ public enum SPARQLVariableScopeAnalyzer {
             return sources.reduce(.empty) { joining($0, scope(of: $1)) }
         case .except(let left, _):
             return scope(of: left)
+        #if DATABASE_KIT_MULTIPLE_BASES
+        case .base(_, let source):
+            return scope(of: source)
+        #endif
         case .table, .logical, .graphTable:
             return .empty
         }

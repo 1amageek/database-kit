@@ -17,7 +17,8 @@ struct BaseWireContractTests {
         let targets: [DatabaseOperationTarget] = [
             .database,
             .base(baseID),
-            .composition(compositionID),
+            .composition(.named(compositionID)),
+            .composition(try .derived([baseID])),
         ]
 
         for (index, target) in targets.enumerated() {
@@ -34,6 +35,78 @@ struct BaseWireContractTests {
             #expect(decoded.target == target)
             #expect(decoded.request == query)
         }
+    }
+
+    @Test("Composition targets have fixed v4 selection encodings")
+    func compositionTargetGoldenVectors() throws {
+        let baseA = try Base.ID("company-a")
+        let baseB = try Base.ID("company-b")
+        let compositionID = try Base.Composition.ID("shared")
+
+        #expect(
+            try EnvelopeWireFormat.encode(
+                DatabaseOperationTarget.composition(.named(compositionID))
+            ) == [
+                0x02,
+                0x00,
+                0x06, 0x00, 0x00, 0x00,
+                0x73, 0x68, 0x61, 0x72, 0x65, 0x64,
+            ]
+        )
+        #expect(
+            try EnvelopeWireFormat.encode(
+                DatabaseOperationTarget.composition(
+                    try .derived([baseB, baseA])
+                )
+            ) == [
+                0x02,
+                0x01,
+                0x02, 0x00, 0x00, 0x00,
+                0x09, 0x00, 0x00, 0x00,
+                0x63, 0x6f, 0x6d, 0x70, 0x61, 0x6e, 0x79, 0x2d, 0x61,
+                0x09, 0x00, 0x00, 0x00,
+                0x63, 0x6f, 0x6d, 0x70, 0x61, 0x6e, 0x79, 0x2d, 0x62,
+            ]
+        )
+    }
+
+    @Test("Composition provenance has fixed v4 resolution encodings")
+    func compositionResolutionGoldenVectors() throws {
+        let baseA = try Base.ID("company-a")
+        let baseB = try Base.ID("company-b")
+        let compositionID = try Base.Composition.ID("shared")
+
+        #expect(
+            try EnvelopeWireFormat.encode(
+                CompositionResolution.named(
+                    id: compositionID,
+                    generation: 12,
+                    bases: [baseA, baseB]
+                )
+            ) == [
+                0x00,
+                0x06, 0x00, 0x00, 0x00,
+                0x73, 0x68, 0x61, 0x72, 0x65, 0x64,
+                0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x02, 0x00, 0x00, 0x00,
+                0x09, 0x00, 0x00, 0x00,
+                0x63, 0x6f, 0x6d, 0x70, 0x61, 0x6e, 0x79, 0x2d, 0x61,
+                0x09, 0x00, 0x00, 0x00,
+                0x63, 0x6f, 0x6d, 0x70, 0x61, 0x6e, 0x79, 0x2d, 0x62,
+            ]
+        )
+        #expect(
+            try EnvelopeWireFormat.encode(
+                CompositionResolution.derived([baseA, baseB])
+            ) == [
+                0x01,
+                0x02, 0x00, 0x00, 0x00,
+                0x09, 0x00, 0x00, 0x00,
+                0x63, 0x6f, 0x6d, 0x70, 0x61, 0x6e, 0x79, 0x2d, 0x61,
+                0x09, 0x00, 0x00, 0x00,
+                0x63, 0x6f, 0x6d, 0x70, 0x61, 0x6e, 0x79, 0x2d, 0x62,
+            ]
+        )
     }
 
     @Test("A legacy Base-less request frame is rejected")
@@ -207,9 +280,11 @@ struct BaseWireContractTests {
         let baseB = try Base.ID("company-b")
         let compositionID = try Base.Composition.ID("shared")
         let provenance = try CompositionPageProvenance(
-            compositionID: compositionID,
-            generation: 12,
-            baseIDs: [baseA, baseB],
+            composition: try .named(
+                id: compositionID,
+                generation: 12,
+                bases: [baseA, baseB]
+            ),
             origins: [
                 .source(baseA),
                 .derived(contributors: [baseA, baseB]),
@@ -249,8 +324,8 @@ struct BaseWireContractTests {
             return
         }
         #expect(decoded.provenance?.baseIDs == [baseA, baseB])
-        #expect(decoded.provenance?.compositionID == compositionID)
-        #expect(decoded.provenance?.generation == 12)
+        #expect(decoded.provenance?.composition.namedID == compositionID)
+        #expect(decoded.provenance?.composition.generation == 12)
 
         var origins = try #require(decoded.provenance).makeOriginIterator()
         #expect(try origins.next() == .source(baseA))
@@ -272,10 +347,22 @@ struct BaseWireContractTests {
             operation: operation,
             target: .base(baseID)
         )
+        let secondBaseID = try Base.ID("company-b")
+        var oneMember = JobResultDigestAccumulator(
+            operation: operation,
+            target: .composition(try .derived([baseID]))
+        )
+        var twoMembers = JobResultDigestAccumulator(
+            operation: operation,
+            target: .composition(try .derived([baseID, secondBaseID]))
+        )
         database.update([1, 2, 3])
         base.update([1, 2, 3])
+        oneMember.update([1, 2, 3])
+        twoMembers.update([1, 2, 3])
 
         #expect(database.finalize() != base.finalize())
+        #expect(oneMember.finalize() != twoMembers.finalize())
     }
 
     private func expectRoundTrip<Value: WireValue & Equatable>(

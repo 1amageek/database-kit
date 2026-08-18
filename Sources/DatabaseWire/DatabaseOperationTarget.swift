@@ -5,7 +5,7 @@ import DatabaseKit
 public enum DatabaseOperationTarget: Sendable, Hashable {
     case database
     case base(Base.ID)
-    case composition(Base.Composition.ID)
+    case composition(CompositionSelection)
 }
 
 extension DatabaseOperationTarget: WireValue {
@@ -19,9 +19,9 @@ extension DatabaseOperationTarget: WireValue {
         case .base(let baseID):
             writer.writeUInt8(1)
             try baseID.encode(into: &writer)
-        case .composition(let compositionID):
+        case .composition(let selection):
             writer.writeUInt8(2)
-            try compositionID.encode(into: &writer)
+            try selection.encode(into: &writer)
         }
     }
 
@@ -35,7 +35,7 @@ extension DatabaseOperationTarget: WireValue {
         case 1:
             self = .base(try Base.ID(from: &reader))
         case 2:
-            self = .composition(try Base.Composition.ID(from: &reader))
+            self = .composition(try CompositionSelection(from: &reader))
         case let tag:
             throw .invalidOperationTarget(tag)
         }

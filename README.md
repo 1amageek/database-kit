@@ -8,7 +8,7 @@ The normative ownership and product contract is documented in
 
 The package implements the target-free DatabaseWire v2 contract by default.
 The non-default `MultipleBases` trait adds Base, Composition, persisted Grant,
-target, provenance, and federated-consistency semantics as DatabaseWire v3.
+target, provenance, and federated-consistency semantics as DatabaseWire v4.
 Completion is verified through Native behavior tests, standard and Embedded
 WASM release builds, the Embedded macro-compilation fixture, and byte-owner
 identity tests in both trait configurations.
@@ -44,6 +44,8 @@ It provides:
 With the non-default `MultipleBases` trait it additionally provides:
 
 - `Base`, `Base.Composition`, and persisted `Security.Grant` semantics;
+- `CompositionSelection` and `CompositionResolution` for named or derived
+  read-only Composition targets without synthetic identity;
 - database, Base, or Composition operation targets;
 - Base-qualified identity, placement, lifecycle, provenance, and federated
   read consistency;
@@ -64,7 +66,7 @@ database-client ────────┐
 dependencies: [
     .package(
         url: "https://github.com/1amageek/database-kit.git",
-        from: "26.0815.0"
+        from: "26.0818.0"
     )
 ]
 ```
@@ -103,14 +105,16 @@ represents one database and one execution root directly.
 When `MultipleBases` is enabled, `Base.ID`, `Base.Placement.ID`, and
 `Base.Composition.ID` are validated ASCII slugs. A Composition stores a
 nonempty, unique, canonically ordered Base set. Requests then carry an explicit
-database, Base, or Composition target. Composition result pages encode their
+database, Base, or Composition selection. A named selection resolves a catalog
+generation; a derived selection carries only its canonical Base set.
+Composition result pages encode their
 Base table once and attach ordinal provenance to each row or quad, together
 with the transactional or federated read points that fixed the result.
 
 ```swift
 .package(
     url: "https://github.com/1amageek/database-kit.git",
-    from: "26.0815.0",
+    from: "26.0818.0",
     traits: [.trait(name: "MultipleBases")]
 )
 ```

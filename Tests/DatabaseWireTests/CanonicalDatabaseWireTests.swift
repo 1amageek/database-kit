@@ -66,7 +66,7 @@ struct CanonicalDatabaseWireTests {
         #if DATABASE_KIT_MULTIPLE_BASES
         #expect(encoded == [
             0x44, 0x42, 0x57, 0x52,
-            0x03, 0x00,
+            0x04, 0x00,
             0x01,
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
             0x01, 0x01,
@@ -468,6 +468,21 @@ struct CanonicalDatabaseWireTests {
                 ByteString(unsupportedVersion)
             )
         }
+
+        #if DATABASE_KIT_MULTIPLE_BASES
+        var previousMultipleBasesVersion = try EnvelopeWireFormat.encode(
+            request: request
+        ).copyBytes()
+        previousMultipleBasesVersion[4] = 0x03
+        previousMultipleBasesVersion[5] = 0x00
+        #expect(
+            throws: DatabaseWireError.unsupportedProtocolVersionValue(3)
+        ) {
+            _ = try EnvelopeWireFormat.decodeRequest(
+                ByteString(previousMultipleBasesVersion)
+            )
+        }
+        #endif
 
         var unknownOperation = try EnvelopeWireFormat.encode(
             request: request

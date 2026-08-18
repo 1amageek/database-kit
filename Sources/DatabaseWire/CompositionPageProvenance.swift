@@ -9,8 +9,7 @@ public struct CompositionPageProvenance: Sendable {
         case encoded(ByteString)
     }
 
-    public let compositionID: Base.Composition.ID
-    public let generation: UInt64
+    public let composition: CompositionResolution
     public let baseIDs: [Base.ID]
     public let originCount: Int
 
@@ -18,11 +17,10 @@ public struct CompositionPageProvenance: Sendable {
     private let limits: DatabaseWireLimits
 
     public init(
-        compositionID: Base.Composition.ID,
-        generation: UInt64,
-        baseIDs: [Base.ID],
+        composition: CompositionResolution,
         origins: [CompositionOrigin]
     ) throws(DatabaseWireError) {
+        let baseIDs = composition.bases
         try Self.validateBaseIDs(baseIDs)
         var ordinals: [Base.ID: UInt32] = [:]
         ordinals.reserveCapacity(baseIDs.count)
@@ -56,8 +54,7 @@ public struct CompositionPageProvenance: Sendable {
             }
         }
 
-        self.compositionID = compositionID
-        self.generation = generation
+        self.composition = composition
         self.baseIDs = baseIDs
         self.originCount = origins.count
         self.storage = .materialized(encodedOrigins)
@@ -85,12 +82,7 @@ public struct CompositionPageProvenance: Sendable {
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         try Self.validateBaseIDs(baseIDs)
-        try compositionID.encode(into: &writer)
-        writer.writeUInt64(generation)
-        try writer.writeCount(baseIDs.count)
-        for baseID in baseIDs {
-            try baseID.encode(into: &writer)
-        }
+        try composition.encode(into: &writer)
         try writer.writeCount(originCount)
 
         switch storage {
@@ -121,14 +113,9 @@ public struct CompositionPageProvenance: Sendable {
     init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
-        let compositionID = try Base.Composition.ID(from: &reader)
-        let generation = try reader.readUInt64()
-        let baseCount = try reader.readCount()
-        var baseIDs: [Base.ID] = []
-        baseIDs.reserveCapacity(baseCount)
-        for _ in 0..<baseCount {
-            baseIDs.append(try Base.ID(from: &reader))
-        }
+        let composition = try CompositionResolution(from: &reader)
+        let baseIDs = composition.bases
+        let baseCount = baseIDs.count
         try Self.validateBaseIDs(baseIDs)
 
         let originCount = try reader.readCount()
@@ -141,8 +128,7 @@ public struct CompositionPageProvenance: Sendable {
         }
         let originsEnd = reader.consumedByteCount
 
-        self.compositionID = compositionID
-        self.generation = generation
+        self.composition = composition
         self.baseIDs = baseIDs
         self.originCount = originCount
         self.storage = .encoded(

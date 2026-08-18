@@ -354,6 +354,10 @@ extension SelectQuery {
         case .except(let left, let right):
             collectVariables(from: left, into: &vars)
             collectVariables(from: right, into: &vars)
+        #if DATABASE_KIT_MULTIPLE_BASES
+        case .base(_, let source):
+            collectVariables(from: source, into: &vars)
+        #endif
         case .table, .values, .graphTable, .logical:
             break
         }
@@ -456,6 +460,10 @@ extension SelectQuery {
         case .except(let left, let right):
             collectColumns(from: left, into: &cols)
             collectColumns(from: right, into: &cols)
+        #if DATABASE_KIT_MULTIPLE_BASES
+        case .base(_, let source):
+            collectColumns(from: source, into: &cols)
+        #endif
         default:
             break
         }
@@ -469,19 +477,76 @@ extension SelectQuery {
              .divide(let l, let r), .modulo(let l, let r), .equal(let l, let r),
              .notEqual(let l, let r), .lessThan(let l, let r), .lessThanOrEqual(let l, let r),
              .greaterThan(let l, let r), .greaterThanOrEqual(let l, let r),
-             .and(let l, let r), .or(let l, let r):
+             .and(let l, let r), .or(let l, let r), .nullIf(let l, let r):
             collectColumns(from: l, into: &cols)
             collectColumns(from: r, into: &cols)
         case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e):
             collectColumns(from: e, into: &cols)
+        case .like(let expression, _), .regex(let expression, _, _),
+             .cast(let expression, _), .isTriple(let expression),
+             .subject(let expression), .predicate(let expression),
+             .object(let expression):
+            collectColumns(from: expression, into: &cols)
+        case .between(let expression, let low, let high):
+            collectColumns(from: expression, into: &cols)
+            collectColumns(from: low, into: &cols)
+            collectColumns(from: high, into: &cols)
+        case .inList(let expression, let values),
+             .notInList(let expression, let values):
+            collectColumns(from: expression, into: &cols)
+            for value in values {
+                collectColumns(from: value, into: &cols)
+            }
+        case .inSubquery(let expression, let query):
+            collectColumns(from: expression, into: &cols)
+            cols.formUnion(query.referencedColumns)
+        case .aggregate(let aggregate):
+            collectColumns(from: aggregate, into: &cols)
         case .function(let call):
             for arg in call.arguments {
                 collectColumns(from: arg, into: &cols)
             }
-        case .subquery(let query), .exists(let query), .inSubquery(_, let query):
+        case .caseWhen(let cases, let elseResult):
+            for pair in cases {
+                collectColumns(from: pair.condition, into: &cols)
+                collectColumns(from: pair.result, into: &cols)
+            }
+            if let elseResult {
+                collectColumns(from: elseResult, into: &cols)
+            }
+        case .coalesce(let expressions):
+            for expression in expressions {
+                collectColumns(from: expression, into: &cols)
+            }
+        case .triple(let subject, let predicate, let object):
+            collectColumns(from: subject, into: &cols)
+            collectColumns(from: predicate, into: &cols)
+            collectColumns(from: object, into: &cols)
+        case .subquery(let query), .exists(let query):
             cols.formUnion(query.referencedColumns)
-        default:
+        case .literal, .variable, .parameter, .bound:
             break
+        }
+    }
+
+    private func collectColumns(
+        from aggregate: AggregateFunction,
+        into cols: inout Set<ColumnRef>
+    ) {
+        switch aggregate {
+        case .count(let expression, _):
+            if let expression {
+                collectColumns(from: expression, into: &cols)
+            }
+        case .sum(let expression, _), .avg(let expression, _),
+             .min(let expression), .max(let expression),
+             .groupConcat(let expression, _, _), .sample(let expression):
+            collectColumns(from: expression, into: &cols)
+        case .arrayAgg(let expression, let orderBy, _):
+            collectColumns(from: expression, into: &cols)
+            for key in orderBy ?? [] {
+                collectColumns(from: key.expression, into: &cols)
+            }
         }
     }
 }

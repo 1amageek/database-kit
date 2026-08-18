@@ -93,12 +93,10 @@ public struct JobResultDigestAccumulator: Sendable {
             sha256.update(bytes)
         }
         sha256.update(utf8: operation.kind)
-        #if DATABASE_KIT_MULTIPLE_BASES
         Self.targetDomain.withUnsafeBytes { bytes in
             sha256.update(bytes)
         }
         Self.update(target: target, accumulator: &sha256)
-        #endif
         Self.resultDomain.withUnsafeBytes { bytes in
             sha256.update(bytes)
         }
@@ -138,9 +136,33 @@ public struct JobResultDigestAccumulator: Sendable {
         case .base(let baseID):
             accumulator.update(1)
             update(identifier: baseID.value, accumulator: &accumulator)
-        case .composition(let compositionID):
+        case .composition(let selection):
             accumulator.update(2)
-            update(identifier: compositionID.value, accumulator: &accumulator)
+            switch selection.kind {
+            case .named:
+                accumulator.update(0)
+                guard let namedID = selection.namedID else {
+                    preconditionFailure("Named Composition selection is missing its identifier")
+                }
+                update(identifier: namedID.value, accumulator: &accumulator)
+            case .derived:
+                accumulator.update(1)
+                guard let bases = selection.bases else {
+                    preconditionFailure("Derived Composition selection is missing its Bases")
+                }
+                guard let count = UInt32(exactly: bases.count) else {
+                    preconditionFailure(
+                        "Derived Composition Base count exceeds the digest format"
+                    )
+                }
+                var baseCount = count.bigEndian
+                withUnsafeBytes(of: &baseCount) { bytes in
+                    accumulator.update(bytes)
+                }
+                for baseID in bases {
+                    update(identifier: baseID.value, accumulator: &accumulator)
+                }
+            }
         }
     }
 
