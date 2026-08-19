@@ -220,7 +220,7 @@ private extension QueryIRExpressionWireDecoder {
         case dataSourceGraphTableFinish
         case dataSourceNamedGraphFinish(String)
         case dataSourceServiceFinish(String)
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         case dataSourceBaseFinish(Base.ID)
         #endif
         case graphPatternAssembleBinary(GraphPatternBinaryKind)
@@ -880,7 +880,7 @@ private extension QueryIRExpressionWireDecoder {
                         silent: try reader.readBool()
                     )
                 )
-            #if DATABASE_KIT_MULTIPLE_BASES
+            #if DATABASE_KIT_MULTI_BASE
             case .dataSourceBaseFinish(let baseID):
                 dataSources.append(.base(baseID, try popDataSource()))
             #endif
@@ -1399,7 +1399,7 @@ private extension QueryIRExpressionWireDecoder {
                 decodingSteps.append(.dataSourceExceptFinish)
                 decodingSteps.append(.dataSource)
                 decodingSteps.append(.dataSource)
-            #if DATABASE_KIT_MULTIPLE_BASES
+            #if DATABASE_KIT_MULTI_BASE
             case 13:
                 decodingSteps.append(
                     .dataSourceBaseFinish(try Base.ID(from: &reader))

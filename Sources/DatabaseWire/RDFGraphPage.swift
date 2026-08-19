@@ -13,7 +13,7 @@ public struct RDFGraphPage: Sendable {
 
     public let quadCount: Int
     public let continuation: ByteString?
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     public let provenance: CompositionPageProvenance?
     public let consistency: DatabaseReadConsistency
     #else
@@ -30,7 +30,7 @@ public struct RDFGraphPage: Sendable {
         return bytes
     }
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     public init(
         quads: consuming [RDFQuad],
         continuation: ByteString? = nil,
@@ -123,7 +123,7 @@ public struct RDFGraphPage: Sendable {
             )
             writer.writeUnframedBytes(bytes)
         }
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         writer.writeBool(provenance != nil)
         if let provenance {
             guard provenance.originCount == quadCount else {
@@ -156,7 +156,7 @@ public struct RDFGraphPage: Sendable {
         )
 
         self.quadCount = quadCount
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         self.provenance = try reader.readBool()
             ? try CompositionPageProvenance(from: &reader)
             : nil

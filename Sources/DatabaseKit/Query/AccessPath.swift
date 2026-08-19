@@ -10,22 +10,19 @@ public enum AccessPath: Sendable, Equatable, Hashable {
     case fusion(FusionSource)
 }
 
-/// Type-erased description of an index-driven read.
-///
-/// The binder/runtime in `database-framework` is responsible for interpreting
-/// `kindIdentifier` and validating `parameters`.
+/// Description of an index-driven read.
 public struct IndexScanSource: Sendable, Equatable, Hashable {
     public let indexName: String
-    public let kindIdentifier: String
+    public let indexType: IndexType
     public let parameters: [String: FieldValue]
 
     public init(
         indexName: String,
-        kindIdentifier: String,
+        indexType: IndexType,
         parameters: [String: FieldValue] = [:]
     ) {
         self.indexName = indexName
-        self.kindIdentifier = kindIdentifier
+        self.indexType = indexType
         self.parameters = parameters
     }
 }

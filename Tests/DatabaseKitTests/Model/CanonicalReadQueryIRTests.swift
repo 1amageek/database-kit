@@ -27,14 +27,16 @@ struct CanonicalReadReport: CanonicalReadDocument {
 @Polymorphable
 @PolymorphicDirectory("indexed-canonical-read-documents")
 @PolymorphicIndex(
-    .scalar,
-    fields: ["title"],
-    name: "IndexedCanonicalReadDocument_title"
+    .ordered(
+        name: "IndexedCanonicalReadDocument_title",
+        keys: [.ascending("title")]
+    )
 )
 @PolymorphicIndex(
-    .scalar,
-    fields: ["id"],
-    name: "IndexedCanonicalReadDocument_id"
+    .ordered(
+        name: "IndexedCanonicalReadDocument_id",
+        keys: [.ascending("id")]
+    )
 )
 protocol IndexedCanonicalReadDocument:
     Polymorphable<IndexedCanonicalReadDocumentPolymorphicGroup>
@@ -118,8 +120,8 @@ struct CanonicalReadQueryIRTests {
             ).first
         )
 
-        #expect(first.kind.fields.map(\.number) == [1])
-        #expect(second.kind.fields.map(\.number) == [2])
+        #expect(first.keys.map(\.field.number) == [1])
+        #expect(second.keys.map(\.field.number) == [2])
         #expect(
             schema.polymorphicIndexCatalog(
                 identifier: "DifferentlyOrderedDocument"
@@ -144,7 +146,7 @@ struct CanonicalReadQueryIRTests {
             "IndexedCanonicalReadDocument_id",
         ])
         #expect(logicalDescriptors.map(\.fieldNames) == [["title"], ["id"]])
-        #expect(logicalDescriptors.map(\.kindIdentifier) == ["scalar", "scalar"])
+        #expect(logicalDescriptors.map(\.type) == [.ordered, .ordered])
 
         let articleDescriptors = schema.polymorphicIndexDescriptors(
             identifier: "IndexedCanonicalReadDocument",
@@ -164,15 +166,11 @@ struct CanonicalReadQueryIRTests {
         #expect(runtimeResolvedDescriptors == articleDescriptors)
         #expect(articleDescriptor.name == "IndexedCanonicalReadDocument_title")
         #expect(articleDescriptor.fieldNames == ["title"])
-        #expect(articleDescriptor.kind.identifier == "scalar")
-        #expect(articleDescriptor.kind.subspaceStructure == .flat)
-        #expect(articleDescriptor.kind.metadata.isEmpty)
+        #expect(articleDescriptor.type == .ordered)
 
         #expect(reportDescriptor.name == "IndexedCanonicalReadDocument_title")
         #expect(reportDescriptor.fieldNames == ["title"])
-        #expect(reportDescriptor.kind.identifier == "scalar")
-        #expect(reportDescriptor.kind.subspaceStructure == .flat)
-        #expect(reportDescriptor.kind.metadata.isEmpty)
+        #expect(reportDescriptor.type == .ordered)
     }
 
     @Test("Schema preserves all concrete polymorphic descriptors per member type")
@@ -205,17 +203,13 @@ struct CanonicalReadQueryIRTests {
         #expect(reportDescriptors.map(\.fieldNames) == [["title"], ["id"]])
 
         for descriptor in articleDescriptors {
-            #expect(descriptor.kind.identifier == "scalar")
-            #expect(descriptor.kind.subspaceStructure == .flat)
-            #expect(descriptor.kind.fieldNames == descriptor.fieldNames)
-            #expect(descriptor.kind.metadata.isEmpty)
+            #expect(descriptor.type == .ordered)
+            #expect(descriptor.keys.map(\.field.name) == descriptor.fieldNames)
         }
 
         for descriptor in reportDescriptors {
-            #expect(descriptor.kind.identifier == "scalar")
-            #expect(descriptor.kind.subspaceStructure == .flat)
-            #expect(descriptor.kind.fieldNames == descriptor.fieldNames)
-            #expect(descriptor.kind.metadata.isEmpty)
+            #expect(descriptor.type == .ordered)
+            #expect(descriptor.keys.map(\.field.name) == descriptor.fieldNames)
         }
     }
 
@@ -228,9 +222,14 @@ struct CanonicalReadQueryIRTests {
 
         #expect(try CanonicalReadIndexedSchema.allIndexDescriptors.isEmpty)
         #expect(try CanonicalReadIndexedSchema.indexNames == expectedNames)
-        #expect(try CanonicalReadIndexedSchema.indexChanges(
+        let changes = try CanonicalReadIndexedSchema.polymorphicIndexChanges(
             from: CanonicalReadUnindexedSchema.self
-        ).added == expectedNames)
+        )
+        #expect(Set(changes.map(\.identity.name)) == expectedNames)
+        #expect(changes.allSatisfy {
+            if case .added = $0 { return true }
+            return false
+        })
     }
 
     @Test("SelectQuery replacement operations preserve unrelated fields")
@@ -241,7 +240,7 @@ struct CanonicalReadQueryIRTests {
             accessPath: .index(
                 IndexScanSource(
                     indexName: "Document_vector_embedding",
-                    kindIdentifier: "vector"
+                    indexType: .vector
                 )
             ),
             filter: .equal(.column(ColumnRef("status")), .literal(.string("active"))),

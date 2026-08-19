@@ -109,7 +109,7 @@ public struct DatabaseOperation<
         )
     }
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     func encodeRequest(
         requestID: UInt64,
         target: DatabaseOperationTarget,

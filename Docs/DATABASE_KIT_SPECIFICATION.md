@@ -148,11 +148,12 @@ This includes:
 | Query | SQL, SQL/PGQ, graph-pattern, and SPARQL intermediate representations plus request-scoped execution budgets |
 | Mutation | mutation statements, preconditions, and transaction intent |
 | Relationship | cardinality, relationship descriptors, and delete rules |
-| Index | scalar, aggregate, text, vector, geographic, rank, permutation, property-graph, and RDF-dataset index declarations |
+| Index | ordered, aggregate, update-count, history, bitmap, leaderboard, vector, text, spatial, rank, graph, and custom index declarations |
 | Graph | RDF dataset meaning, term-role and resource validation, graph names, ontology declarations, and SHACL shapes |
 | Validation | intrinsic structural and semantic validation of declarations |
 
-Index declarations contain the logical fields, kind, and parameters required
+Index declarations contain the logical name, ordered keys, included fields,
+semantic type, and parameters required
 to preserve database meaning. Deployment-specific algorithm selection, memory
 budgets, physical subspaces, maintainer construction, and runtime index
 configuration are execution concerns owned by `database-framework`.
@@ -161,10 +162,10 @@ not properties of the semantic QueryIR.
 
 Property-graph and RDF-dataset indexes are distinct semantic declarations:
 
-| Declaration | Canonical kind | Required identity fields |
+| Declaration | Typed dispatch | Required identity fields |
 |---|---|---|
-| `IndexDefinition.propertyGraph` | `graph` | `String` source, optional field label, target, and optional namespace |
-| `IndexDefinition.rdfDataset` | `rdf_quad` | `RDFTerm` subject, predicate, object, and optional graph |
+| `IndexDefinition.graph(.property(...))` | `.graph(.property)` | `String` source, optional field label, target, and optional namespace |
+| `IndexDefinition.graph(.rdf(...))` | `.graph(.rdf)` | `RDFTerm` subject, predicate, object, and optional graph |
 
 The model selects the graph semantics explicitly. Schema validation checks the
 selected identity contract and does not infer or convert between graph models.
@@ -243,7 +244,7 @@ Swift Embedded.
 defined input, output, and typed failure. A public catch-all `Codec` abstraction
 is not part of the model-adaptation API.
 
-Relationship, vector, full-text, geographic, rank, permutation, graph,
+Relationship, vector, full-text, geographic, rank, graph,
 ontology, and SHACL are capabilities within the same semantic responsibility.
 They are source-directory classifications, not public module boundaries.
 
@@ -254,7 +255,8 @@ across process, WASM, and network boundaries.
 
 It owns:
 
-- protocol version 1 framing;
+- protocol version 3 framing in the standard build and version 5 framing in
+  the `MultiBase` build;
 - operation identifiers;
 - request and response envelopes;
 - request identifiers, trace metadata, and idempotency metadata;
@@ -344,12 +346,11 @@ Generated code must depend on public semantic contracts. It must not introduce
 a second DTO, implicit string-based schema, global registry, or runtime
 execution behavior.
 
-An index declaration is compiled into metadata that includes its canonical
-persisted entity name. This ownership survives conversion from
-`IndexDescriptor` to `IndexDescriptorMetadata`. `Schema.Entity` validates the
-owner before publishing the catalog, including metadata decoded from Wire or
-constructed manually. Matching field names alone never authorize attaching an
-index declared for another entity.
+An index declaration is compiled into an `IndexDescriptor` that includes its
+canonical persisted entity name and complete `IndexDefinition`.
+`Schema.Entity` validates the owner before publishing the catalog, including
+descriptors decoded from Wire or constructed manually. Matching field names
+alone never authorize attaching an index declared for another entity.
 
 ## Public Product Surface
 
@@ -374,7 +375,7 @@ product is published. In particular:
   `DatabaseTypes.FieldObject`;
 - there is no `DatabaseModel` or `DatabaseCodable`; application models conform
   to `Persistable`;
-- relationship, vector, full-text, geographic, rank, permutation, graph,
+- relationship, vector, full-text, geographic, rank, graph,
   ontology, and SHACL declarations remain in `DatabaseKit`;
 - streaming digest algorithms shared by database semantics and protocol
   integrity live in `DatabaseKit`; protocol-specific digest values remain in
@@ -395,13 +396,10 @@ Sources/
 │   ├── Relationship/
 │   ├── Security/
 │   ├── Index/
-│   │   ├── Scalar/
-│   │   ├── Aggregate/
 │   │   ├── FullText/
 │   │   ├── Vector/
 │   │   ├── Geospatial/
-│   │   ├── Rank/
-│   │   └── Permuted/
+│   │   └── Rank/
 │   ├── Graph/
 │   │   ├── RDF/
 │   │   ├── SPARQL/

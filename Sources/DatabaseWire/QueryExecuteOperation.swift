@@ -117,7 +117,7 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
 
     public enum Response: WireValue {
         case rows(QueryRowPage)
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         case boolean(QueryBooleanResult)
         #else
         case boolean(Bool)
@@ -131,7 +131,7 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
                 try page.encode(into: &writer)
             case .boolean(let result):
                 writer.writeUInt8(2)
-                #if DATABASE_KIT_MULTIPLE_BASES
+                #if DATABASE_KIT_MULTI_BASE
                 try result.encode(into: &writer)
                 #else
                 writer.writeBool(result)
@@ -146,7 +146,7 @@ public enum QueryExecuteOperation: DatabaseOperationDeclaration {
             switch try reader.readUInt8() {
             case 1: self = .rows(try QueryRowPage(from: &reader))
             case 2:
-                #if DATABASE_KIT_MULTIPLE_BASES
+                #if DATABASE_KIT_MULTI_BASE
                 self = .boolean(try QueryBooleanResult(from: &reader))
                 #else
                 self = .boolean(try reader.readBool())

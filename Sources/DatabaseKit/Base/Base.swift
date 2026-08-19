@@ -1,4 +1,4 @@
-#if DATABASE_KIT_MULTIPLE_BASES
+#if DATABASE_KIT_MULTI_BASE
 /// A stable logical boundary for data, authorization, provenance, placement,
 /// and transactions.
 public struct Base: Sendable, Hashable {

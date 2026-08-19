@@ -1,5 +1,5 @@
 extension FieldSchema {
-    package var indexScalarType: IndexScalarType? {
+    public var indexScalarType: IndexScalarType? {
         guard !isArray else {
             return nil
         }

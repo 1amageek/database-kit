@@ -6,13 +6,13 @@ public struct PolymorphicMembership: Sendable, Hashable {
     public let identifier: String
     public let directoryComponents: [DirectoryPathComponent]
     public let directoryLayer: DirectoryLayer
-    public let indexes: [PolymorphicIndexDefinition]
+    public let indexes: [IndexDeclaration<String>]
 
     public init(
         identifier: String,
         directoryComponents: [DirectoryPathComponent],
         directoryLayer: DirectoryLayer,
-        indexes: [PolymorphicIndexDefinition]
+        indexes: [IndexDeclaration<String>]
     ) {
         self.identifier = identifier
         self.directoryComponents = directoryComponents

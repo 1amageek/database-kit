@@ -111,7 +111,6 @@ struct PackageBoundaryTests {
             "IndexStatistics",
             "ModelDiff",
             "PlanType",
-            "PermutedIndexError",
             "QueryExecutionStats",
             "QueryPlan",
             "RelationshipSnapshot",

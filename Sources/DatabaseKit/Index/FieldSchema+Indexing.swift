@@ -25,15 +25,6 @@ extension FieldSchema {
         !isArray && valuesHaveCanonicalOrdering
     }
 
-    /// Whether a scalar index can represent this field.
-    ///
-    /// Scalar indexes admit one key for a scalar field or one key per element
-    /// for a single array field. Composite scalar indexes still require every
-    /// field to be scalar because an array product has no implicit semantics.
-    public var supportsScalarIndex: Bool {
-        valuesHaveCanonicalOrdering
-    }
-
     /// Whether the field is a scalar numeric value.
     public var isNumeric: Bool {
         guard !isArray else {

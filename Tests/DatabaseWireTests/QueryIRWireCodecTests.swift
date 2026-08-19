@@ -69,7 +69,7 @@ struct QueryIRWireFormatTests {
             accessPath: .index(
                 IndexScanSource(
                     indexName: "eventGraph",
-                    kindIdentifier: "graph",
+                    indexType: .graph(.property),
                     parameters: ["snapshot": .string("active")]
                 )
             ),

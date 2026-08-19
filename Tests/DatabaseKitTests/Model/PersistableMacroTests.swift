@@ -29,10 +29,9 @@ struct ModelMacroTests {
         #expect(indexes.count == 1)
 
         let emailIndex = indexes[0]
-        #expect(emailIndex.name == "IndexedUser_email")
+        #expect(emailIndex.name == "indexed_users_by_email")
         #expect(emailIndex.fieldNames == ["email"])
-        #expect(emailIndex.kind.fieldNames == ["email"])
-        #expect(emailIndex.kindIdentifier == "scalar")
+        #expect(emailIndex.type == .ordered)
         #expect(emailIndex.isUnique == true)
     }
 
@@ -45,18 +44,16 @@ struct ModelMacroTests {
 
         // First index: category
         let categoryIndex = indexes[0]
-        #expect(categoryIndex.name == "Product_category")
+        #expect(categoryIndex.name == "products_by_category")
         #expect(categoryIndex.fieldNames == ["category"])
-        #expect(categoryIndex.kind.fieldNames == ["category"])
-        #expect(categoryIndex.kindIdentifier == "scalar")
+        #expect(categoryIndex.type == .ordered)
         #expect(categoryIndex.isUnique == false)
 
         // Second index: category + price
         let compositeIndex = indexes[1]
-        #expect(compositeIndex.name == "Product_category_price")
+        #expect(compositeIndex.name == "products_by_category_and_price")
         #expect(compositeIndex.fieldNames == ["category", "price"])
-        #expect(compositeIndex.kind.fieldNames == ["category", "price"])
-        #expect(compositeIndex.kindIdentifier == "scalar")
+        #expect(compositeIndex.type == .ordered)
     }
 
     /// Test @Persistable with custom index name
@@ -108,21 +105,20 @@ struct ModelMacroTests {
         #expect(email.schema == FieldNumberUser.fieldSchemas[1])
     }
 
-    /// Test @Persistable with different IndexKinds
-    @Test("@Persistable with different IndexKind types")
-    func modelWithDifferentIndexKinds() throws {
-        // Verify different index kinds
+    /// Test @Persistable with different index definition families.
+    @Test("@Persistable with different index definition families")
+    func modelWithDifferentIndexDefinitionFamilies() throws {
         let indexes = try Analytics.indexDescriptors
         #expect(indexes.count == 3)
 
-        let scalarIndex = indexes[0]
-        #expect(scalarIndex.kindIdentifier == "scalar")
+        let orderedIndex = indexes[0]
+        #expect(orderedIndex.type == .ordered)
 
         let countIndex = indexes[1]
-        #expect(countIndex.kindIdentifier == "count")
+        #expect(countIndex.type == .aggregate(.count))
 
         let sumIndex = indexes[2]
-        #expect(sumIndex.kindIdentifier == "sum")
+        #expect(sumIndex.type == .aggregate(.sum))
     }
 
     @Test("@Persistable generates canonical field adaptation")
@@ -250,10 +246,8 @@ struct ModelMacroTests {
 
         #expect(articleDescriptor.fieldNames == ["title"])
         #expect(reportDescriptor.fieldNames == ["title"])
-        #expect(articleDescriptor.kind.identifier == "scalar")
-        #expect(reportDescriptor.kind.identifier == "scalar")
-        #expect(articleDescriptor.kind.fieldNames == ["title"])
-        #expect(reportDescriptor.kind.fieldNames == ["title"])
+        #expect(articleDescriptor.type == .ordered)
+        #expect(reportDescriptor.type == .ordered)
     }
 
     @Test("@Polymorphable macro participates in schema construction")
@@ -419,7 +413,11 @@ struct CommentedFieldModel {
 @Persistable
 struct IndexedUser {
     var id: String = "fixture-id"
-    #Index(.scalar, fields: [\IndexedUser.email], unique: true)
+    #Index(.ordered(
+        name: "indexed_users_by_email",
+        keys: [.ascending(\IndexedUser.email)],
+        unique: true
+    ))
 
     var email: String
     var name: String
@@ -428,8 +426,17 @@ struct IndexedUser {
 @Persistable
 struct Product {
     var id: String = "fixture-id"
-    #Index(.scalar, fields: [\Product.category])
-    #Index(.scalar, fields: [\Product.category, \Product.price])
+    #Index(.ordered(
+        name: "products_by_category",
+        keys: [.ascending(\Product.category)]
+    ))
+    #Index(.ordered(
+        name: "products_by_category_and_price",
+        keys: [
+            .ascending(\Product.category),
+            .ascending(\Product.price),
+        ]
+    ))
 
     var category: String
     var price: Double
@@ -440,9 +447,10 @@ struct Product {
 struct CustomNamedUser {
     var id: String = "fixture-id"
     #Index(
-        .scalar,
-        fields: [\CustomNamedUser.email],
-        name: "user_email_idx"
+        .ordered(
+            name: "user_email_idx",
+            keys: [.ascending(\CustomNamedUser.email)]
+        )
     )
 
     var email: String
@@ -471,13 +479,21 @@ struct FieldNumberUser {
 @Persistable
 struct Analytics {
     var id: String = "fixture-id"
-    #Index(.scalar, fields: [\Analytics.category])
-    #Index(.count, groupBy: [\Analytics.category])
-    #Index(
-        .sum,
-        groupBy: [\Analytics.category],
+    #Index(.ordered(
+        name: "analytics_by_category",
+        keys: [.ascending(\Analytics.category)]
+    ))
+    #Index(.aggregate(
+        name: "analytics_count_by_category",
+        function: .count,
+        groupBy: [.ascending(\Analytics.category)]
+    ))
+    #Index(.aggregate(
+        name: "analytics_sum_by_category",
+        function: .sum,
+        groupBy: [.ascending(\Analytics.category)],
         value: \Analytics.value
-    )
+    ))
 
     var category: String
     var value: Double
@@ -520,11 +536,10 @@ enum MacroPolymorphicDocumentGroup: PolymorphicGroupDeclaration {
         .staticPath("macro-polymorphic-documents")
     ]
     static let directoryLayer: DirectoryLayer = .default
-    static let indexes: [PolymorphicIndexDefinition] = [
-        PolymorphicIndexDefinition(
+    static let indexes: [IndexDeclaration<String>] = [
+        .ordered(
             name: "MacroPolymorphicDocument_title",
-            definition: .scalar,
-            fields: [.init(name: "title")]
+            keys: [.ascending("title")]
         )
     ]
 }

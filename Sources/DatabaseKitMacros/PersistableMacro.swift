@@ -26,7 +26,11 @@ import SwiftDiagnostics
 /// @Persistable
 /// struct User {
 ///     var id: String
-///     #Index(.scalar, fields: [\User.email], unique: true)
+///     #Index(.ordered(
+///         name: "users_by_email",
+///         keys: [.ascending(\User.email)],
+///         unique: true
+///     ))
 ///
 ///     var email: String
 ///     var name: String
@@ -411,7 +415,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             return "try input.decode(\(fieldType).self, for: Self.fields.\(fieldInfo.name).identity, entity: Self.persistableType)"
         }
 
-        // Extract #Index macro calls and generate typed declarations.
+        // Compile each complete index declaration into canonical field identity.
         var indexDescriptorInits: [String] = []
         var relationshipDescriptorInits: [String] = []
         var objectPropertyDescriptorInits: [String] = []
@@ -420,139 +424,32 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
                macroDecl.macroName.text == "Index" {
 
-                // Format: #Index(.scalar, fields: [\Model.field], ...)
-                // The macro owns the KeyPath-to-IndexField transition.
-                var fieldPathsByRole: [String: [String]] = [:]
-                var storedFieldKeyPaths: [String] = []
-                var fieldOrders: [String] = []
-                var definition: ParsedIndexDefinition?
-                var definitionExpression: String?
-                var isUnique = false
-                var indexName: String?
-
-                for arg in macroDecl.arguments {
-                    if arg.label == nil {
-                        definition = parseIndexDefinition(arg.expression)
-                        definitionExpression = arg.expression.description
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                    } else if let label = arg.label, label.text == "storedFields" {
-                        for keyPathString in collectKeyPathStrings(
-                            from: arg.expression
-                        ) {
-                            storedFieldKeyPaths.append(keyPathString)
-                        }
-                    } else if let label = arg.label, label.text == "orders" {
-                        if let orders = arg.expression.as(ArrayExprSyntax.self) {
-                            fieldOrders = orders.elements.map {
-                                $0.expression.description.trimmingCharacters(
-                                    in: .whitespacesAndNewlines
-                                )
-                            }
-                        }
-                    } else if let label = arg.label, label.text == "unique" {
-                        if let boolExpr = arg.expression.as(BooleanLiteralExprSyntax.self) {
-                            isUnique = boolExpr.literal.text == "true"
-                        }
-                    } else if let label = arg.label, label.text == "name" {
-                        if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self),
-                           let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
-                            indexName = segment.content.text
-                        }
-                    } else if let label = arg.label {
-                        fieldPathsByRole[label.text] = collectKeyPathStrings(
-                            from: arg.expression
-                        )
-                    }
-                }
-
-                guard let definition, let definitionExpression else {
+                guard macroDecl.arguments.count == 1,
+                      let argument = macroDecl.arguments.first,
+                      argument.label == nil else {
                     throw DiagnosticsError(diagnostics: [
                         Diagnostic(
                             node: Syntax(macroDecl),
                             message: MacroExpansionErrorMessage(
-                                "#Index requires an IndexDefinition case"
+                                "#Index accepts exactly one unlabeled IndexDeclaration"
                             )
                         )
                     ])
                 }
-
-                let keyPaths = try selectedIndexFieldPaths(
-                    definition: definition,
-                    roles: fieldPathsByRole,
-                    node: Syntax(macroDecl)
-                )
-                try validateIndexFieldOrders(
-                    definition: definition,
-                    roles: fieldPathsByRole,
-                    orders: fieldOrders,
-                    node: Syntax(macroDecl)
-                )
-                for keyPath in keyPaths {
-                    guard !keyPath.contains(".") else {
-                        throw DiagnosticsError(diagnostics: [
-                            Diagnostic(
-                                node: Syntax(macroDecl),
-                                message: MacroExpansionErrorMessage(
-                                    "Index field '\(keyPath)' must identify one persisted property"
-                                )
-                            )
-                        ])
-                    }
-                }
-
-                // Generate index name if not provided
-                // Use IndexKind-specific naming patterns
-                let finalIndexName: String
-                if let customName = indexName {
-                    finalIndexName = customName
-                } else {
-                    let flattenedKeyPaths = keyPaths.map { $0.replacingOccurrences(of: ".", with: "_") }
-                    finalIndexName = generateIndexName(
-                        typeName: typeName,
-                        definition: definition,
-                        fieldNames: flattenedKeyPaths
-                    )
-                }
-
-                let selectedFields = compiledIndexFieldMetadata(
-                    definition: definition,
-                    fieldPaths: keyPaths,
+                let declaration = try compileConcreteIndexDeclaration(
+                    argument.expression,
                     rootType: structName,
-                    fieldOrders: fieldOrders
+                    node: Syntax(macroDecl)
                 )
-                let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
-
-                let storedFields = storedFieldKeyPaths
-                    .map {
-                        "IndexFieldMetadata(identity: \(structName).fields.\($0).identity, order: .ascending)"
-                    }
-                    .joined(separator: ", ")
-
-                let descriptorInit: String
-                if storedFieldKeyPaths.isEmpty {
-                    descriptorInit = """
-                        IndexDescriptor(
-                            model: \(structName).self,
-                            name: "\(finalIndexName)",
-                            definition: \(definitionExpression),
-                            fields: \(selectedFields),
-                            commonOptions: \(optionsInit)
-                        )
+                indexDescriptorInits.append(
                     """
-                } else {
-                    descriptorInit = """
-                        IndexDescriptor(
-                            model: \(structName).self,
-                            name: "\(finalIndexName)",
-                            definition: \(definitionExpression),
-                            fields: \(selectedFields),
-                            commonOptions: \(optionsInit),
-                            storedFields: [\(storedFields)]
-                        )
+                    IndexDescriptor(
+                        entityName: \(structName).persistableType,
+                        declaration: \(declaration.trimmedDescription),
+                        fieldSchemas: \(structName).fieldSchemas
+                    )
                     """
-                }
-
-                indexDescriptorInits.append(descriptorInit)
+                )
             }
         }
 
@@ -660,16 +557,14 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                             let reverseIndexName = "\(typeName)_\(fieldName)"
                             let reverseIndexInit = """
                                 IndexDescriptor(
-                                    model: \(structName).self,
-                                    name: "\(reverseIndexName)",
-                                    definition: .scalar,
-                                    fields: [
-                                        IndexFieldMetadata(
-                                            identity: \(structName).fields.\(fieldName).identity,
-                                            order: .ascending
-                                        )
-                                    ],
-                                    commonOptions: .init()
+                                    entityName: \(structName).persistableType,
+                                    declaration: .ordered(
+                                        name: "\(reverseIndexName)",
+                                        keys: [
+                                            .ascending(\(structName).fields.\(fieldName).identity)
+                                        ]
+                                    ),
+                                    fieldSchemas: \(structName).fieldSchemas
                                 )
                             """
                             indexDescriptorInits.append(reverseIndexInit)
@@ -686,23 +581,18 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 let graphIndexName = "\(typeName)_graph_\(objPropInfo.fromField)_\(objPropInfo.toField)"
                 let graphIndexInit = """
                     IndexDescriptor(
-                        model: \(structName).self,
-                        name: "\(graphIndexName)",
-                        definition: .propertyGraph(
-                            strategy: .adjacency,
-                            label: .implicit
-                        ),
-                        fields: [
-                            IndexFieldMetadata(
-                                identity: \(structName).fields.\(objPropInfo.fromField).identity,
-                                order: .ascending
-                            ),
-                            IndexFieldMetadata(
-                                identity: \(structName).fields.\(objPropInfo.toField).identity,
-                                order: .ascending
+                        entityName: \(structName).persistableType,
+                        declaration: .graph(
+                            name: "\(graphIndexName)",
+                            definition: .property(
+                                source: \(structName).fields.\(objPropInfo.fromField).identity,
+                                label: .implicit,
+                                target: \(structName).fields.\(objPropInfo.toField).identity,
+                                graph: nil,
+                                strategy: .adjacency
                             )
-                        ],
-                        commonOptions: .init()
+                        ),
+                        fieldSchemas: \(structName).fieldSchemas
                     )
                 """
                 indexDescriptorInits.append(graphIndexInit)
@@ -1166,13 +1056,16 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 ///
 /// **Usage**:
 /// ```swift
-/// #Index(.scalar, fields: [\Product.email], unique: true)
-/// #Index(.count, groupBy: [\Product.category])
-/// #Index(
-///     .sum,
-///     groupBy: [\Product.category],
-///     value: \Product.price
-/// )
+/// #Index(.ordered(
+///     name: "products_by_email",
+///     keys: [.ascending(\Product.email)],
+///     unique: true
+/// ))
+/// #Index(.aggregate(
+///     name: "product_count_by_category",
+///     function: .count,
+///     groupBy: [.ascending(\Product.category)]
+/// ))
 /// ```
 ///
 /// This is a marker macro. Validation is performed, but no code is generated.
@@ -1182,42 +1075,22 @@ public struct IndexMacro: DeclarationMacro {
         of node: some FreestandingMacroExpansionSyntax,
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-        // The first argument selects index semantics. Field key paths are
-        // separate labeled arguments so the compiler can type-check them.
-        guard let firstArg = node.arguments.first else {
+        guard node.arguments.count == 1,
+              let argument = node.arguments.first,
+              argument.label == nil else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
                     message: MacroExpansionErrorMessage(
-                        "#Index requires an IndexDefinition case"
+                        "#Index accepts exactly one unlabeled IndexDeclaration"
                     )
                 )
             ])
         }
-
-        guard firstArg.label == nil else {
-            throw DiagnosticsError(diagnostics: [
-                Diagnostic(
-                    node: Syntax(firstArg),
-                    message: MacroExpansionErrorMessage(
-                        "The IndexDefinition must be the first unlabeled argument"
-                    )
-                )
-            ])
-        }
-
-        guard parseIndexDefinition(firstArg.expression) != nil else {
-            throw DiagnosticsError(diagnostics: [
-                Diagnostic(
-                    node: Syntax(firstArg.expression),
-                    message: MacroExpansionErrorMessage(
-                        "The first argument must be an IndexDefinition case such as '.scalar'"
-                    )
-                )
-            ])
-        }
-
-        // Marker macro - no code generation
+        try validateIndexDeclarationExpression(
+            argument.expression,
+            node: Syntax(argument.expression)
+        )
         return []
     }
 }
@@ -1282,285 +1155,6 @@ public struct TransientMacro: PeerMacro {
 }
 
 // MARK: - Helper Functions
-
-struct ParsedIndexDefinition {
-    let name: String
-    let arguments: [String: String]
-}
-
-func parseIndexDefinition(
-    _ expression: ExprSyntax
-) -> ParsedIndexDefinition? {
-    if let member = expression.as(MemberAccessExprSyntax.self) {
-        return ParsedIndexDefinition(
-            name: member.declName.baseName.text,
-            arguments: [:]
-        )
-    }
-    guard
-        let call = expression.as(FunctionCallExprSyntax.self),
-        let member = call.calledExpression.as(MemberAccessExprSyntax.self)
-    else {
-        return nil
-    }
-
-    var arguments: [String: String] = [:]
-    for argument in call.arguments {
-        guard let label = argument.label?.text else {
-            continue
-        }
-        arguments[label] = argument.expression.description
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    return ParsedIndexDefinition(
-        name: member.declName.baseName.text,
-        arguments: arguments
-    )
-}
-
-func selectedIndexFieldPaths(
-    definition: ParsedIndexDefinition,
-    roles: [String: [String]],
-    node: Syntax
-) throws -> [String] {
-    func one(_ role: String) throws -> String {
-        guard let fields = roles[role], fields.count == 1 else {
-            throw DiagnosticsError(diagnostics: [
-                Diagnostic(
-                    node: node,
-                    message: MacroExpansionErrorMessage(
-                        ".\(definition.name) requires exactly one '\(role)' field"
-                    )
-                )
-            ])
-        }
-        return fields[0]
-    }
-
-    let allowedRoles: Set<String>
-    switch definition.name {
-    case "scalar", "fullText", "autocomplete", "permuted":
-        allowedRoles = ["fields"]
-    case "count":
-        allowedRoles = ["groupBy"]
-    case "sum", "minimum", "maximum", "average",
-         "countNotNull", "distinct", "percentile":
-        allowedRoles = ["groupBy", "value"]
-    case "version", "countUpdates", "bitmap", "rank":
-        allowedRoles = ["field"]
-    case "timeWindowLeaderboard":
-        allowedRoles = ["groupBy", "field"]
-    case "vector":
-        allowedRoles = ["embedding"]
-    case "spatial":
-        allowedRoles = ["location"]
-    case "propertyGraph", "rdfDataset":
-        allowedRoles = ["from", "edge", "to", "graph"]
-    default:
-        throw DiagnosticsError(diagnostics: [
-            Diagnostic(
-                node: node,
-                message: MacroExpansionErrorMessage(
-                    "Unsupported IndexDefinition '.\(definition.name)'"
-                )
-            )
-        ])
-    }
-    for (role, fields) in roles
-    where !fields.isEmpty && !allowedRoles.contains(role) {
-        throw DiagnosticsError(diagnostics: [
-            Diagnostic(
-                node: node,
-                message: MacroExpansionErrorMessage(
-                    ".\(definition.name) does not accept '\(role)' fields"
-                )
-            )
-        ])
-    }
-
-    switch definition.name {
-    case "scalar", "fullText", "autocomplete", "permuted":
-        let fields = roles["fields"] ?? []
-        guard !fields.isEmpty else {
-            throw DiagnosticsError(diagnostics: [
-                Diagnostic(
-                    node: node,
-                    message: MacroExpansionErrorMessage(
-                        ".\(definition.name) requires at least one field"
-                    )
-                )
-            ])
-        }
-        return fields
-    case "count":
-        return roles["groupBy"] ?? []
-    case "sum", "minimum", "maximum", "average",
-         "countNotNull", "distinct", "percentile":
-        return (roles["groupBy"] ?? []) + [try one("value")]
-    case "version", "countUpdates", "bitmap", "rank":
-        return [try one("field")]
-    case "timeWindowLeaderboard":
-        return (roles["groupBy"] ?? []) + [try one("field")]
-    case "vector":
-        return [try one("embedding")]
-    case "spatial":
-        return [try one("location")]
-    case "propertyGraph":
-        let usesImplicitLabel =
-            definition.arguments["label"]?.contains("implicit") == true
-        var fields = [try one("from")]
-        if usesImplicitLabel {
-            guard roles["edge"]?.isEmpty != false else {
-                throw DiagnosticsError(diagnostics: [
-                    Diagnostic(
-                        node: node,
-                        message: MacroExpansionErrorMessage(
-                            ".graph(label: .implicit) does not accept an 'edge' field"
-                        )
-                    )
-                ])
-            }
-        } else {
-            fields.append(try one("edge"))
-        }
-        fields.append(try one("to"))
-        if let graph = roles["graph"], !graph.isEmpty {
-            guard graph.count == 1 else {
-                throw DiagnosticsError(diagnostics: [
-                    Diagnostic(
-                        node: node,
-                        message: MacroExpansionErrorMessage(
-                            ".graph accepts at most one 'graph' field"
-                        )
-                    )
-                ])
-            }
-            fields.append(graph[0])
-        }
-        return fields
-    case "rdfDataset":
-        var fields = [
-            try one("from"),
-            try one("edge"),
-            try one("to"),
-        ]
-        if let graph = roles["graph"], !graph.isEmpty {
-            guard graph.count == 1 else {
-                throw DiagnosticsError(diagnostics: [
-                    Diagnostic(
-                        node: node,
-                        message: MacroExpansionErrorMessage(
-                            ".rdfDataset accepts at most one 'graph' field"
-                        )
-                    )
-                ])
-            }
-            fields.append(graph[0])
-        }
-        return fields
-    default:
-        return []
-    }
-}
-
-func validateIndexFieldOrders(
-    definition: ParsedIndexDefinition,
-    roles: [String: [String]],
-    orders: [String],
-    node: Syntax
-) throws {
-    guard !orders.isEmpty else {
-        return
-    }
-    guard definition.name == "scalar" || definition.name == "permuted" else {
-        throw DiagnosticsError(diagnostics: [
-            Diagnostic(
-                node: node,
-                message: MacroExpansionErrorMessage(
-                    "'orders' is supported by scalar and permuted indexes"
-                )
-            )
-        ])
-    }
-    let fieldCount = roles["fields"]?.count ?? 0
-    guard orders.count == fieldCount else {
-        throw DiagnosticsError(diagnostics: [
-            Diagnostic(
-                node: node,
-                message: MacroExpansionErrorMessage(
-                    "'orders' must contain one value for each indexed field"
-                )
-            )
-        ])
-    }
-}
-
-private func compiledIndexFieldMetadata(
-    definition: ParsedIndexDefinition,
-    fieldPaths: [String],
-    rootType: String,
-    fieldOrders: [String]
-) -> String {
-    guard !fieldPaths.isEmpty else {
-        return "[IndexFieldMetadata]()"
-    }
-    let elements = fieldPaths.enumerated().map { offset, path in
-        let order: String
-        if !fieldOrders.isEmpty {
-            order = fieldOrders[offset]
-        } else if definition.name == "rank"
-                    || (definition.name == "timeWindowLeaderboard"
-                        && offset == fieldPaths.index(before: fieldPaths.endIndex)) {
-            order = ".descending"
-        } else {
-            order = ".ascending"
-        }
-        return "IndexFieldMetadata(identity: \(rootType).fields.\(path).identity, order: \(order))"
-    }
-    .joined(separator: ", ")
-    return "[\(elements)]"
-}
-
-/// Generates the default persisted index name from declaration semantics.
-func generateIndexName(
-    typeName: String,
-    definition: ParsedIndexDefinition,
-    fieldNames: [String]
-) -> String {
-    func prefixed(_ prefix: String) -> String {
-        if fieldNames.isEmpty {
-            return "\(typeName)_\(prefix)"
-        }
-        return "\(typeName)_\(prefix)_\(fieldNames.joined(separator: "_"))"
-    }
-
-    switch definition.name {
-    case "scalar":
-        return "\(typeName)_\(fieldNames.joined(separator: "_"))"
-    case "count": return prefixed("count")
-    case "sum": return prefixed("sum")
-    case "minimum": return prefixed("min")
-    case "maximum": return prefixed("max")
-    case "average": return prefixed("avg")
-    case "version": return prefixed("version")
-    case "countUpdates": return prefixed("updates")
-    case "countNotNull": return prefixed("notnull")
-    case "bitmap": return prefixed("bitmap")
-    case "timeWindowLeaderboard": return prefixed("leaderboard")
-    case "distinct": return prefixed("distinct")
-    case "percentile": return prefixed("percentile")
-    case "vector": return prefixed("vector")
-    case "fullText": return prefixed("fulltext")
-    case "autocomplete": return prefixed("autocomplete")
-    case "spatial": return prefixed("spatial")
-    case "rank": return prefixed("rank")
-    case "permuted": return prefixed("permuted")
-    case "propertyGraph": return prefixed("graph")
-    case "rdfDataset": return prefixed("rdf_quad")
-    default:
-        return prefixed(definition.name)
-    }
-}
 
 /// Maps a Swift type string to (FieldSchemaType expression, isOptional, isArray)
 ///

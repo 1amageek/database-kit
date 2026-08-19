@@ -281,7 +281,7 @@ private extension QueryParameterBindingTraversal {
             bindingSteps.append(.assembleSource(source))
             bindingSteps.append(.source(rhs))
             bindingSteps.append(.source(lhs))
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         case .base(_, let nested):
             bindingSteps.append(.assembleSource(source))
             bindingSteps.append(.source(nested))
@@ -890,7 +890,7 @@ private extension QueryParameterBindingTraversal {
                 value: changed ? .except(left.value, right.value) : source,
                 changed: changed
             )
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         case .base(let baseID, _):
             let nested = try popSource()
             bound = Bound(

@@ -11,10 +11,10 @@ public struct DatabaseWireEncodedResponse: Sendable {
 }
 
 enum EnvelopeWireFormat {
-    #if DATABASE_KIT_MULTIPLE_BASES
-    static let protocolVersion: UInt16 = 4
+    #if DATABASE_KIT_MULTI_BASE
+    static let protocolVersion: UInt16 = 5
     #else
-    static let protocolVersion: UInt16 = 2
+    static let protocolVersion: UInt16 = 3
     #endif
     private static let magic: [UInt8] = [0x44, 0x42, 0x57, 0x52]
     private static let envelopeHeaderByteCount = 17
@@ -29,7 +29,7 @@ enum EnvelopeWireFormat {
             writeHeader(kind: .request, into: &writer)
             writer.writeUInt64(request.requestID)
             request.operation.encode(into: &writer)
-            #if DATABASE_KIT_MULTIPLE_BASES
+            #if DATABASE_KIT_MULTI_BASE
             try request.target.encode(into: &writer)
             #endif
             try request.metadata.encode(into: &writer)
@@ -37,7 +37,7 @@ enum EnvelopeWireFormat {
         }
     }
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     static func encodeRequest<Request>(
         identifier: DatabaseOperationIdentifier,
         requestID: UInt64,
@@ -95,7 +95,7 @@ enum EnvelopeWireFormat {
         try validateHeader(kind: .request, reader: &reader)
         let requestID = try reader.readUInt64()
         let operation = try DatabaseOperationIdentifier(from: &reader)
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         let envelope = DatabaseWireRequestEnvelope(
             requestID: requestID,
             operation: operation,

@@ -147,25 +147,25 @@ public enum SchemaDescribeOperation: DatabaseOperationDeclaration {
 
     public struct Index: Sendable, Hashable {
         public let name: String
-        public let kind: String
+        public let type: IndexType
         public let fields: [UInt32]
         public let options: FieldObject
 
         public init(
             name: String,
-            kind: String,
+            type: IndexType,
             fields: [UInt32],
             options: FieldObject = FieldObject()
         ) {
             self.name = name
-            self.kind = kind
+            self.type = type
             self.fields = fields
             self.options = options
         }
 
         fileprivate func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
             try writer.writeString(name)
-            try writer.writeString(kind)
+            try IndexTypeWireCodec.encode(type, into: &writer)
             try writer.writeCount(fields.count)
             for field in fields { writer.writeUInt32(field) }
             try options.encode(into: &writer)
@@ -173,18 +173,19 @@ public enum SchemaDescribeOperation: DatabaseOperationDeclaration {
 
         fileprivate init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
             let name = try reader.readString()
-            let kind = try reader.readString()
+            let type = try IndexTypeWireCodec.decode(from: &reader)
             let fieldCount = try reader.readCount()
             var fields: [UInt32] = []
             fields.reserveCapacity(fieldCount)
             for _ in 0..<fieldCount { fields.append(try reader.readUInt32()) }
             self.init(
                 name: name,
-                kind: kind,
+                type: type,
                 fields: fields,
                 options: try FieldObject(from: &reader)
             )
         }
+
     }
 
     public struct Entity: Sendable, Hashable {

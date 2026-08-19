@@ -12,7 +12,7 @@ public struct DatabaseWireEncoder: Sendable {
         self.limits = limits
     }
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     public func encodeRequest<Request, Response>(
         _ operation: DatabaseOperation<Request, Response>,
         requestID: UInt64,

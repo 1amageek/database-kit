@@ -12,7 +12,7 @@ struct SchemaExecuteWireTests {
         )
         #expect(
             try emptyManifest.canonicalBytes() == ByteString([
-                0x01, 0x00,
+                0x02, 0x00,
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00,
@@ -21,10 +21,10 @@ struct SchemaExecuteWireTests {
         )
         #expect(
             try emptyManifest.fingerprint().bytes == ByteString([
-                0xaa, 0x25, 0xe1, 0xd5, 0x95, 0xa7, 0x7c, 0x37,
-                0x5b, 0x40, 0xb4, 0x79, 0x6e, 0xa4, 0xff, 0x04,
-                0x48, 0x90, 0xef, 0xee, 0xbd, 0x4b, 0xd1, 0x5d,
-                0x16, 0xd5, 0x43, 0x87, 0xa5, 0xa8, 0xfc, 0x37,
+                0x38, 0x92, 0xa8, 0x8a, 0x1c, 0x45, 0x4d, 0x52,
+                0xa2, 0x38, 0x34, 0x73, 0xb4, 0x82, 0x7c, 0xbf,
+                0xdb, 0x11, 0x00, 0xef, 0x18, 0x14, 0x97, 0x81,
+                0x60, 0x9c, 0x48, 0x51, 0xae, 0x54, 0xc0, 0xa5,
             ])
         )
 
@@ -79,7 +79,7 @@ struct SchemaExecuteWireTests {
         ]
 
         for request in requests {
-            #if DATABASE_KIT_MULTIPLE_BASES
+            #if DATABASE_KIT_MULTI_BASE
             let frame = try DatabaseWireEncoder().encodeRequest(
                 DatabaseOperationCatalog.schemaExecute,
                 requestID: 42,
@@ -105,7 +105,7 @@ struct SchemaExecuteWireTests {
     @Test("plan, accepted, and applied responses preserve state")
     func responsesRoundTrip() throws {
         let fingerprint = try SchemaManifest(schema: makeSchema()).fingerprint()
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         let job = JobIdentity(
             jobID: DatabaseTypes.UUID(
                 high: 0x0011_2233_4455_6677,
@@ -166,11 +166,16 @@ struct SchemaExecuteWireTests {
     func manifestRejectsNonCanonicalInput() throws {
         let encoded = try SchemaManifest(schema: makeSchema()).canonicalBytes()
         var unsupportedVersion = encoded.copyBytes()
-        unsupportedVersion[0] = 2
-        unsupportedVersion[1] = 0
+        let unsupportedFormatVersion = SchemaManifest.currentFormatVersion + 1
+        unsupportedVersion[0] = UInt8(truncatingIfNeeded: unsupportedFormatVersion)
+        unsupportedVersion[1] = UInt8(
+            truncatingIfNeeded: unsupportedFormatVersion >> 8
+        )
 
         #expect(
-            throws: DatabaseWireError.unsupportedSchemaManifestVersion(2)
+            throws: DatabaseWireError.unsupportedSchemaManifestVersion(
+                unsupportedFormatVersion
+            )
         ) {
             _ = try SchemaManifest(
                 canonicalBytes: ByteString(unsupportedVersion)
@@ -181,6 +186,51 @@ struct SchemaExecuteWireTests {
         trailing.append(0)
         #expect(throws: DatabaseWireError.self) {
             _ = try SchemaManifest(canonicalBytes: ByteString(trailing))
+        }
+    }
+
+    @Test("Manifest rejects duplicate field identities before index construction")
+    func manifestRejectsDuplicateFieldIdentity() throws {
+        let bytes = try DatabaseWireWriter.encode {
+            writer throws(DatabaseWireError) in
+            writer.writeUInt16(SchemaManifest.currentFormatVersion)
+            writer.writeUInt32(1)
+            writer.writeUInt32(0)
+            writer.writeUInt32(0)
+            try writer.writeCount(1)
+
+            try writer.writeString("Entry")
+            writer.writeUInt8(9)
+            try writer.writeCount(2)
+            for _ in 0..<2 {
+                try writer.writeString("value")
+                writer.writeInt64(1)
+                try writer.writeString(FieldSchemaType.string.rawValue)
+                writer.writeBool(false)
+                writer.writeBool(false)
+                writer.writeBool(false)
+            }
+            try writer.writeCount(0)
+            try writer.writeString(DirectoryLayer.default.rawValue)
+            try writer.writeCount(1)
+            try writer.writeString("Entry")
+            try writer.writeString("Entry_value")
+            writer.writeUInt8(0)
+            try writer.writeCount(1)
+            try writer.writeString("value")
+            writer.writeInt64(1)
+            writer.writeUInt8(0)
+            try writer.writeCount(0)
+            writer.writeBool(false)
+            try writer.writeCount(0)
+            try writer.writeCount(0)
+            try writer.writeCount(0)
+            writer.writeUInt8(0)
+            writer.writeBool(false)
+        }
+
+        #expect(throws: DatabaseWireError.self) {
+            _ = try SchemaManifest(canonicalBytes: bytes)
         }
     }
 
@@ -200,7 +250,7 @@ struct SchemaExecuteWireTests {
                 "Schema apply idempotency key must not be empty"
             )
         ) {
-            #if DATABASE_KIT_MULTIPLE_BASES
+            #if DATABASE_KIT_MULTI_BASE
             _ = try DatabaseWireEncoder().encodeRequest(
                 DatabaseOperationCatalog.schemaExecute,
                 requestID: 44,
@@ -235,49 +285,37 @@ struct SchemaExecuteWireTests {
                 ]
             )
         )
+        let eventFields = [
+            FieldSchema(name: "tenant", fieldNumber: 1, type: .string),
+            FieldSchema(name: "title", fieldNumber: 2, type: .string),
+            FieldSchema(
+                name: "venue",
+                fieldNumber: 3,
+                type: .reference,
+                isOptional: true,
+                referenceTargetEntity: "Venue"
+            ),
+            FieldSchema(name: "state", fieldNumber: 4, type: .enum),
+        ]
+        let eventIndex = try IndexDescriptor(
+            entityName: "Event",
+            declaration: .ordered(
+                name: "event_title",
+                keys: [.ascending(.init(name: "title", number: 2))],
+                includedFields: [.init(name: "state", number: 4)]
+            ),
+            fieldSchemas: eventFields
+        )
         let event = try Schema.Entity(
             name: "Event",
             identifierType: .composite([.string, .uint64]),
-            fields: [
-                FieldSchema(name: "tenant", fieldNumber: 1, type: .string),
-                FieldSchema(name: "title", fieldNumber: 2, type: .string),
-                FieldSchema(
-                    name: "venue",
-                    fieldNumber: 3,
-                    type: .reference,
-                    isOptional: true,
-                    referenceTargetEntity: "Venue"
-                ),
-                FieldSchema(name: "state", fieldNumber: 4, type: .enum),
-            ],
+            fields: eventFields,
             directoryComponents: [
                 .staticPath("events"),
                 .dynamicField(fieldName: "tenant"),
             ],
             directoryLayer: .partition,
-            indexes: [
-                IndexDescriptorMetadata(
-                    entityName: "Event",
-                    name: "event_title",
-                    kind: IndexKindMetadata(
-                        identifier: "scalar",
-                        subspaceStructure: .flat,
-                        fields: [
-                            .init(
-                                identity: .init(name: "title", number: 2),
-                                order: .ascending
-                            ),
-                        ],
-                        metadata: ["collation": .string("binary")]
-                    ),
-                    commonOptions: .init(
-                        unique: false,
-                        sparse: true,
-                        metadata: ["owner": "schema"]
-                    ),
-                    storedFieldNames: ["state"]
-                ),
-            ],
+            indexes: [eventIndex],
             relationships: [
                 RelationshipDescriptor(
                     ownerTypeName: "Event",
@@ -311,17 +349,10 @@ struct SchemaExecuteWireTests {
                 directoryComponents: [.staticPath("content")],
                 directoryLayer: .default,
                 indexes: [
-                    PolymorphicIndexDefinition(
+                    .ordered(
                         name: "content_title",
-                        definition: .scalar,
-                        fields: [
-                            PolymorphicIndexField(
-                                name: "title",
-                                order: .ascending
-                            ),
-                        ],
-                        commonOptions: .init(),
-                        storedFieldNames: ["state"]
+                        keys: [.ascending("title")],
+                        includedFields: ["state"]
                     ),
                 ]
             )

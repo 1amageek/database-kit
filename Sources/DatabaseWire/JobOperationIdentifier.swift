@@ -77,7 +77,7 @@ public struct JobOperationIdentifier:
              .commandExecute,
              .maintenanceExecute:
             return true
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         case .baseExecute:
             return true
         #endif
@@ -88,7 +88,7 @@ public struct JobOperationIdentifier:
              .jobResult,
              .jobCancel:
             return false
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         case .compositionExecute,
              .grantExecute:
             return false

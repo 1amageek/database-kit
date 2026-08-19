@@ -1,8 +1,11 @@
 import DatabaseTypes
 import Testing
+import SwiftDiagnostics
+import SwiftSyntax
+import SwiftSyntaxBuilder
 import SwiftSyntaxMacroExpansion
 import SwiftSyntaxMacrosTestSupport
-import DatabaseKitMacros
+@testable import DatabaseKitMacros
 @testable import DatabaseKit
 
 /// Tests for @Persistable macro validation and edge cases
@@ -210,15 +213,48 @@ struct ModelMacroValidationTests {
         )
     }
 
+    @Test("#Index rejects a key path rooted at another model")
+    func rejectsForeignIndexKeyPathRoot() {
+        let foreignType: ExprSyntax = """
+            .ordered(
+                name: "foreign_index",
+                keys: [.ascending(\\ForeignModel.email)]
+            )
+            """
+
+        #expect(throws: DiagnosticsError.self) {
+            _ = try compileConcreteIndexDeclaration(
+                foreignType,
+                rootType: "LocalModel",
+                node: Syntax(foreignType)
+            )
+        }
+
+        let sameLeafName: ExprSyntax = """
+            .ordered(
+                name: "foreign_namespace_index",
+                keys: [.ascending(\\ForeignNamespace.LocalModel.email)]
+            )
+            """
+
+        #expect(throws: DiagnosticsError.self) {
+            _ = try compileConcreteIndexDeclaration(
+                sameLeafName,
+                rootType: "LocalModel",
+                node: Syntax(sameLeafName)
+            )
+        }
+    }
+
     /// Test that indexDescriptors are correctly ordered
     @Test("Index descriptors maintain definition order")
     func indexDescriptorsOrder() throws {
         // Verify that indexes are in the order they were defined
         let descriptors = try OrderedIndexProduct.indexDescriptors
         #expect(descriptors.count == 3)
-        #expect(descriptors[0].name == "OrderedIndexProduct_category")
-        #expect(descriptors[1].name == "OrderedIndexProduct_price")
-        #expect(descriptors[2].name == "OrderedIndexProduct_name")
+        #expect(descriptors[0].name == "ordered_products_by_category")
+        #expect(descriptors[1].name == "ordered_products_by_price")
+        #expect(descriptors[2].name == "ordered_products_by_name")
     }
 
     /// Test that field numbers are stable
@@ -265,9 +301,18 @@ struct ModelMacroValidationTests {
 @Persistable
 struct OrderedIndexProduct {
     var id: String = "fixture-id"
-    #Index(.scalar, fields: [\OrderedIndexProduct.category])
-    #Index(.scalar, fields: [\OrderedIndexProduct.price])
-    #Index(.scalar, fields: [\OrderedIndexProduct.name])
+    #Index(.ordered(
+        name: "ordered_products_by_category",
+        keys: [.ascending(\OrderedIndexProduct.category)]
+    ))
+    #Index(.ordered(
+        name: "ordered_products_by_price",
+        keys: [.ascending(\OrderedIndexProduct.price)]
+    ))
+    #Index(.ordered(
+        name: "ordered_products_by_name",
+        keys: [.ascending(\OrderedIndexProduct.name)]
+    ))
 
     var category: String
     var price: Double

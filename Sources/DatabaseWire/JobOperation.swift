@@ -17,7 +17,7 @@ public struct JobOperation<
         self.operation = operation
     }
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     public func makeStartRequest(
         _ request: Request,
         target: DatabaseOperationTarget,

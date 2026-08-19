@@ -17,9 +17,10 @@ import SwiftDiagnostics
 /// @Polymorphable
 /// @PolymorphicDirectory("app", "documents")
 /// @PolymorphicIndex(
-///     .scalar,
-///     fields: ["title"],
-///     name: "Document_title"
+///     .ordered(
+///         name: "Document_title",
+///         keys: [.ascending("title")]
+///     )
 /// )
 /// protocol Document: Polymorphable<DocumentPolymorphicGroup> {
 ///     var id: String { get }
@@ -63,21 +64,6 @@ public struct PolymorphableMacro: PeerMacro {
             }
         }?.name.text
         let accessPrefix = access.map { "\($0) " } ?? ""
-        let protocolFieldNames: Set<String> = Set(
-            protocolDecl.memberBlock.members.compactMap { member -> String? in
-                guard
-                    let variable = member.decl.as(VariableDeclSyntax.self),
-                    let binding = variable.bindings.first,
-                    let identifier = binding.pattern.as(
-                        IdentifierPatternSyntax.self
-                    )
-                else {
-                    return nil
-                }
-                return identifier.identifier.text
-            }
-        )
-
         // Parse directory and polymorphic-index declarations.
         var directoryPathComponents: [String] = []
         var directoryLayerValue: String = ".default"
@@ -118,9 +104,7 @@ public struct PolymorphableMacro: PeerMacro {
                 indexDefinitions.append(
                     try parseIndexArguments(
                         arguments,
-                        node: Syntax(attribute),
-                        protocolName: protocolName,
-                        protocolFieldNames: protocolFieldNames
+                        node: Syntax(attribute)
                     )
                 )
             }
@@ -151,7 +135,7 @@ public struct PolymorphableMacro: PeerMacro {
 
                 \(raw: accessPrefix)static let directoryLayer: DatabaseKit.DirectoryLayer = \(raw: directoryLayerValue)
 
-                \(raw: accessPrefix)static let indexes: [DatabaseKit.PolymorphicIndexDefinition] = \(raw: indexesExpression)
+                \(raw: accessPrefix)static let indexes: [DatabaseKit.IndexDeclaration<String>] = \(raw: indexesExpression)
             }
             """
         return [declaration]
@@ -272,176 +256,25 @@ private func parseDirectoryArguments(
 /// Compile a protocol index declaration into a logical definition.
 private func parseIndexArguments(
     _ arguments: LabeledExprListSyntax,
-    node: Syntax,
-    protocolName: String,
-    protocolFieldNames: Set<String>
+    node: Syntax
 ) throws -> ExprSyntax {
-    var fieldsByRole: [String: [String]] = [:]
-    var storedFieldKeyPaths: [String] = []
-    var fieldOrders: [String] = []
-    var definition: ParsedIndexDefinition?
-    var definitionExpression: String?
-    var isUnique = false
-    var indexName: String?
-
-    for arg in arguments {
-        if arg.label == nil {
-            definition = parseIndexDefinition(arg.expression)
-            definitionExpression = arg.expression.description
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        } else if let label = arg.label,
-                  label.text == "storedFields"
-                    || label.text == "storedFieldNames" {
-            let stringFields = collectStringLiterals(from: arg.expression)
-            storedFieldKeyPaths.append(
-                contentsOf: stringFields.isEmpty
-                    ? collectKeyPathStrings(from: arg.expression)
-                    : stringFields
-            )
-        } else if let label = arg.label, label.text == "orders" {
-            if let orders = arg.expression.as(ArrayExprSyntax.self) {
-                fieldOrders = orders.elements.map {
-                    $0.expression.description.trimmingCharacters(
-                        in: .whitespacesAndNewlines
-                    )
-                }
-            }
-        } else if let label = arg.label, label.text == "unique" {
-            if let boolExpr = arg.expression.as(BooleanLiteralExprSyntax.self) {
-                isUnique = boolExpr.literal.text == "true"
-            }
-        } else if let label = arg.label, label.text == "name" {
-            if let stringLiteral = arg.expression.as(StringLiteralExprSyntax.self),
-               let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
-                indexName = segment.content.text
-            }
-        } else if let label = arg.label {
-            let role: String
-            switch label.text {
-            case "fieldNames": role = "fields"
-            case "groupByNames": role = "groupBy"
-            case "valueName": role = "value"
-            case "fieldName": role = "field"
-            case "embeddingName": role = "embedding"
-            case "locationName": role = "location"
-            case "fromName": role = "from"
-            case "edgeName": role = "edge"
-            case "toName": role = "to"
-            case "graphName": role = "graph"
-            default: role = label.text
-            }
-            let stringFields = collectStringLiterals(from: arg.expression)
-            fieldsByRole[role] = stringFields.isEmpty
-                ? collectKeyPathStrings(from: arg.expression)
-                : stringFields
-        }
-    }
-
-    guard let definition, let definitionExpression else {
+    guard arguments.count == 1,
+          let argument = arguments.first,
+          argument.label == nil else {
         throw DiagnosticsError(diagnostics: [
             Diagnostic(
                 node: node,
                 message: MacroExpansionErrorMessage(
-                    "@PolymorphicIndex requires an IndexDefinition case"
+                    "@PolymorphicIndex accepts exactly one unlabeled IndexDeclaration"
                 )
             )
         ])
     }
-    let keyPaths = try selectedIndexFieldPaths(
-        definition: definition,
-        roles: fieldsByRole,
+    try validatePolymorphicIndexDeclaration(
+        argument.expression,
         node: node
     )
-    try validateIndexFieldOrders(
-        definition: definition,
-        roles: fieldsByRole,
-        orders: fieldOrders,
-        node: node
-    )
-    for keyPath in keyPaths + storedFieldKeyPaths {
-        guard !keyPath.contains(".") else {
-            throw DiagnosticsError(diagnostics: [
-                Diagnostic(
-                    node: node,
-                    message: MacroExpansionErrorMessage(
-                        "Polymorphic index field '\(keyPath)' must identify one protocol property"
-                    )
-                )
-            ])
-        }
-        guard protocolFieldNames.contains(keyPath) else {
-            throw DiagnosticsError(diagnostics: [
-                Diagnostic(
-                    node: node,
-                    message: MacroExpansionErrorMessage(
-                        "Polymorphic index field '\(keyPath)' is not declared by protocol '\(protocolName)'"
-                    )
-                )
-            ])
-        }
-    }
-
-    let finalIndexName: String
-    if let customName = indexName {
-        finalIndexName = customName
-    } else {
-        let flattenedKeyPaths = keyPaths.map { $0.replacingOccurrences(of: ".", with: "_") }
-        finalIndexName = generateIndexName(
-            typeName: protocolName,
-            definition: definition,
-            fieldNames: flattenedKeyPaths
-        )
-    }
-
-    let compiledFields = keyPaths.enumerated().map { offset, fieldName in
-        let order: String
-        if !fieldOrders.isEmpty {
-            order = fieldOrders[offset]
-        } else if definition.name == "rank"
-                    || (definition.name == "timeWindowLeaderboard"
-                        && offset == keyPaths.index(before: keyPaths.endIndex)) {
-            order = ".descending"
-        } else {
-            order = ".ascending"
-        }
-        return "DatabaseKit.PolymorphicIndexField(name: \"\(fieldName)\", order: \(order))"
-    }
-    .joined(separator: ", ")
-    let optionsInit = isUnique ? ".init(unique: true)" : ".init()"
-    let storedFieldNames = storedFieldKeyPaths
-        .map { "\"\($0)\"" }
-        .joined(separator: ", ")
-    let expression: ExprSyntax = """
-        DatabaseKit.PolymorphicIndexDefinition(
-            name: "\(raw: finalIndexName)",
-            definition: \(raw: definitionExpression),
-            fields: [\(raw: compiledFields)],
-            commonOptions: \(raw: optionsInit),
-            storedFieldNames: [\(raw: storedFieldNames)]
-        )
-    """
-    return expression
-}
-
-private func collectStringLiterals(
-    from expression: ExprSyntax
-) -> [String] {
-    if let literal = expression.as(StringLiteralExprSyntax.self),
-       let segment = literal.segments.first?.as(StringSegmentSyntax.self) {
-        return [segment.content.text]
-    }
-    guard let array = expression.as(ArrayExprSyntax.self) else {
-        return []
-    }
-    return array.elements.compactMap { element in
-        guard
-            let literal = element.expression.as(StringLiteralExprSyntax.self),
-            let segment = literal.segments.first?.as(StringSegmentSyntax.self)
-        else {
-            return nil
-        }
-        return segment.content.text
-    }
+    return argument.expression
 }
 
 private func staticStringLiteralValue(_ expression: ExprSyntax) -> String? {

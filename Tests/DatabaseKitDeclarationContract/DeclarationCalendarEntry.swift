@@ -9,11 +9,13 @@ struct DeclarationCalendarEntry {
         layer: .partition
     )
     #Index(
-        .scalar,
-        fields: [
-            \DeclarationCalendarEntry.calendarID,
-            \DeclarationCalendarEntry.startsAt
-        ]
+        .ordered(
+            name: "calendar_entries_by_start",
+            keys: [
+                .ascending(\DeclarationCalendarEntry.calendarID),
+                .ascending(\DeclarationCalendarEntry.startsAt),
+            ]
+        )
     )
 
     var id: String

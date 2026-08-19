@@ -27,7 +27,7 @@ public enum JobStatusOperation: DatabaseOperationDeclaration {
 
         public var jobID: DatabaseTypes.UUID { job.jobID }
         public var operation: JobOperationIdentifier { job.operation }
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         public var target: DatabaseOperationTarget { job.target }
         #endif
 

@@ -13,11 +13,12 @@ struct PolymorphableMacroExpansionTests {
             @Polymorphable
             @PolymorphicDirectory("memory", "entities")
             @PolymorphicIndex(
-                .scalar,
-                fields: ["title"],
-                storedFields: ["id"],
-                unique: true,
-                name: "MacroEntity_title"
+                .ordered(
+                    name: "MacroEntity_title",
+                    keys: [.ascending("title")],
+                    includedFields: ["id"],
+                    unique: true
+                )
             )
             protocol MacroEntity: Polymorphable<MacroEntityPolymorphicGroup> {
                 var id: String { get }
@@ -37,13 +38,12 @@ struct PolymorphableMacroExpansionTests {
 
                 static let directoryLayer: DatabaseKit.DirectoryLayer = .default
 
-                static let indexes: [DatabaseKit.PolymorphicIndexDefinition] = [
-                    DatabaseKit.PolymorphicIndexDefinition(
+                static let indexes: [DatabaseKit.IndexDeclaration<String>] = [
+                    .ordered(
                             name: "MacroEntity_title",
-                            definition: .scalar,
-                            fields: [DatabaseKit.PolymorphicIndexField(name: "title", order: .ascending)],
-                            commonOptions: .init(unique: true),
-                            storedFieldNames: ["id"]
+                            keys: [.ascending("title")],
+                            includedFields: ["id"],
+                            unique: true
                         )
                 ]
             }
@@ -77,7 +77,7 @@ struct PolymorphableMacroExpansionTests {
 
                 static let directoryLayer: DatabaseKit.DirectoryLayer = .default
 
-                static let indexes: [DatabaseKit.PolymorphicIndexDefinition] = []
+                static let indexes: [DatabaseKit.IndexDeclaration<String>] = []
             }
             """,
             macros: [
@@ -119,8 +119,10 @@ struct PolymorphableMacroExpansionTests {
             """
             @Polymorphable
             @PolymorphicIndex(
-                .count,
-                groupBy: []
+                .aggregate(
+                    name: "GlobalCountEntity_count",
+                    function: .count
+                )
             )
             protocol GlobalCountEntity: Polymorphable<GlobalCountEntityPolymorphicGroup> {
                 var id: String { get }
@@ -138,13 +140,10 @@ struct PolymorphableMacroExpansionTests {
 
                 static let directoryLayer: DatabaseKit.DirectoryLayer = .default
 
-                static let indexes: [DatabaseKit.PolymorphicIndexDefinition] = [
-                    DatabaseKit.PolymorphicIndexDefinition(
+                static let indexes: [DatabaseKit.IndexDeclaration<String>] = [
+                    .aggregate(
                             name: "GlobalCountEntity_count",
-                            definition: .count,
-                            fields: [],
-                            commonOptions: .init(),
-                            storedFieldNames: []
+                            function: .count
                         )
                 ]
             }
@@ -181,12 +180,15 @@ struct PolymorphableMacroExpansionTests {
         )
     }
 
-    @Test("@Polymorphable rejects index fields absent from the protocol")
-    func rejectsUnknownProtocolIndexFields() {
+    @Test("@Polymorphable preserves fields for schema-time validation")
+    func preservesFieldsForSchemaValidation() {
         assertMacroExpansion(
             """
             @Polymorphable
-            @PolymorphicIndex(.scalar, fields: ["missing"])
+            @PolymorphicIndex(.ordered(
+                name: "macro_by_missing",
+                keys: [.ascending("missing")]
+            ))
             protocol MacroEntity: Polymorphable<MacroEntityPolymorphicGroup> {
                 var id: String { get }
             }
@@ -195,14 +197,22 @@ struct PolymorphableMacroExpansionTests {
             protocol MacroEntity: Polymorphable<MacroEntityPolymorphicGroup> {
                 var id: String { get }
             }
+
+            enum MacroEntityPolymorphicGroup: DatabaseKit.PolymorphicGroupDeclaration {
+                static let identifier = "MacroEntity"
+
+                static let directoryComponents: [DatabaseKit.DirectoryPathComponent] = [.staticPath(identifier)]
+
+                static let directoryLayer: DatabaseKit.DirectoryLayer = .default
+
+                static let indexes: [DatabaseKit.IndexDeclaration<String>] = [
+                    .ordered(
+                        name: "macro_by_missing",
+                        keys: [.ascending("missing")]
+                    )
+                ]
+            }
             """,
-            diagnostics: [
-                DiagnosticSpec(
-                    message: "Polymorphic index field 'missing' is not declared by protocol 'MacroEntity'",
-                    line: 2,
-                    column: 1
-                )
-            ],
             macros: [
                 "Polymorphable": PolymorphableMacro.self,
                 "PolymorphicIndex": PolymorphicDeclarationMarkerMacro.self,

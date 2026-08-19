@@ -3,7 +3,7 @@ public enum DatabaseOperationIdentifier: UInt16, Sendable, Hashable, CaseIterabl
     case capabilitiesDescribe = 0x0101
     case schemaDescribe = 0x0102
     case schemaExecute = 0x0103
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     case baseExecute = 0x0104
     case compositionExecute = 0x0105
     case grantExecute = 0x0106

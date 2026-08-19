@@ -27,9 +27,10 @@ import DatabaseTypes
 /// @Polymorphable
 /// @PolymorphicDirectory("app", "documents")
 /// @PolymorphicIndex(
-///     .scalar,
-///     fields: ["title"],
-///     name: "Document_title"
+///     .ordered(
+///         name: "Document_title",
+///         keys: [.ascending("title")]
+///     )
 /// )
 /// protocol Document: Polymorphable<DocumentPolymorphicGroup> {
 ///     var id: String { get }
@@ -110,7 +111,7 @@ public extension Polymorphable {
     }
 
     /// Logical indexes shared by every concrete model in this group.
-    static var polymorphicIndexes: [PolymorphicIndexDefinition] {
+    static var polymorphicIndexes: [IndexDeclaration<String>] {
         Group.indexes
     }
 }

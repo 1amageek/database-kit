@@ -138,7 +138,7 @@ extension QueryIRWireFormat {
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         try writer.writeString(source.indexName)
-        try writer.writeString(source.kindIdentifier)
+        try IndexTypeWireCodec.encode(source.indexType, into: &writer)
         try encodeParameters(source.parameters, into: &writer)
     }
 
@@ -147,7 +147,7 @@ extension QueryIRWireFormat {
     ) throws(DatabaseWireError) -> IndexScanSource {
         IndexScanSource(
             indexName: try reader.readString(),
-            kindIdentifier: try reader.readString(),
+            indexType: try IndexTypeWireCodec.decode(from: &reader),
             parameters: try decodeParameters(from: &reader)
         )
     }

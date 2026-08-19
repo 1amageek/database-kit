@@ -463,7 +463,7 @@ private extension QueryStructuralValidator {
                     case .except(let lhs, let rhs):
                         validationSteps.append(.source(rhs, depth: childDepth))
                         validationSteps.append(.source(lhs, depth: childDepth))
-                    #if DATABASE_KIT_MULTIPLE_BASES
+                    #if DATABASE_KIT_MULTI_BASE
                     case .base(_, let source):
                         validationSteps.append(
                             .source(source, depth: childDepth)

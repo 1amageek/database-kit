@@ -24,7 +24,7 @@ let package = Package(
         ),
     ],
     traits: [
-        .trait(name: "MultipleBases"),
+        .trait(name: "MultiBase"),
     ],
     dependencies: [
         .package(
@@ -45,8 +45,8 @@ let package = Package(
             ],
             swiftSettings: [
                 .define(
-                    "DATABASE_KIT_MULTIPLE_BASES",
-                    .when(traits: ["MultipleBases"])
+                    "DATABASE_KIT_MULTI_BASE",
+                    .when(traits: ["MultiBase"])
                 ),
             ]
         ),
@@ -67,8 +67,8 @@ let package = Package(
             ],
             swiftSettings: [
                 .define(
-                    "DATABASE_KIT_MULTIPLE_BASES",
-                    .when(traits: ["MultipleBases"])
+                    "DATABASE_KIT_MULTI_BASE",
+                    .when(traits: ["MultiBase"])
                 ),
             ]
         ),
@@ -109,6 +109,7 @@ let package = Package(
                 "DatabaseKitMacros",
                 .product(name: "DatabaseTypes", package: "database-types"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxBuilder", package: "swift-syntax"),
                 .product(
                     name: "SwiftSyntaxMacroExpansion",
                     package: "swift-syntax"
@@ -120,8 +121,8 @@ let package = Package(
             ],
             swiftSettings: [
                 .define(
-                    "DATABASE_KIT_MULTIPLE_BASES",
-                    .when(traits: ["MultipleBases"])
+                    "DATABASE_KIT_MULTI_BASE",
+                    .when(traits: ["MultiBase"])
                 ),
             ]
         ),
@@ -134,8 +135,8 @@ let package = Package(
             ],
             swiftSettings: [
                 .define(
-                    "DATABASE_KIT_MULTIPLE_BASES",
-                    .when(traits: ["MultipleBases"])
+                    "DATABASE_KIT_MULTI_BASE",
+                    .when(traits: ["MultiBase"])
                 ),
             ]
         ),
@@ -148,8 +149,8 @@ let package = Package(
             ],
             swiftSettings: [
                 .define(
-                    "DATABASE_KIT_MULTIPLE_BASES",
-                    .when(traits: ["MultipleBases"])
+                    "DATABASE_KIT_MULTI_BASE",
+                    .when(traits: ["MultiBase"])
                 ),
             ]
         ),
@@ -163,8 +164,8 @@ let package = Package(
             ],
             swiftSettings: [
                 .define(
-                    "DATABASE_KIT_MULTIPLE_BASES",
-                    .when(traits: ["MultipleBases"])
+                    "DATABASE_KIT_MULTI_BASE",
+                    .when(traits: ["MultiBase"])
                 ),
             ]
         ),

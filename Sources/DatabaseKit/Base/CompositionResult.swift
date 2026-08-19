@@ -1,4 +1,4 @@
-#if DATABASE_KIT_MULTIPLE_BASES
+#if DATABASE_KIT_MULTI_BASE
 /// A value returned through a Composition together with its complete origin.
 public struct CompositionResult<Value: Sendable>: Sendable {
     public typealias Origin = CompositionOrigin

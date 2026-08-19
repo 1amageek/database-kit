@@ -360,7 +360,19 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
         let owlRDFDecl: DeclSyntax = """
             public static var _owlRDFIndexDescriptors: [IndexDescriptor] {
                 get throws(IndexDeclarationError) {
-                    try [IndexDescriptor(name: \(raw: structName).persistableType + "_owl_rdf", kind: OWLClassRDFIndexKind<\(raw: structName)>(individualIRIBase: "\(raw: individualIRIBase)", graph: Self.ontologyGraph))]
+                    try [
+                        IndexDescriptor(
+                            entityName: \(raw: structName).persistableType,
+                            declaration: .graph(
+                                name: \(raw: structName).persistableType + "_owl_rdf",
+                                definition: .ontologyProjection(
+                                    individualIRIBase: "\(raw: individualIRIBase)",
+                                    graph: Self.ontologyGraph
+                                )
+                            ),
+                            fieldSchemas: \(raw: structName).fieldSchemas
+                        )
+                    ]
                 }
             }
             """

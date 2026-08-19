@@ -9,7 +9,7 @@ public enum DatabaseOperationCatalog {
     public static let schemaExecute = operation(
         SchemaExecuteOperation.self
     )
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     public static let baseExecute = operation(
         BaseExecuteOperation.self
     )

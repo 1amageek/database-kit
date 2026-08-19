@@ -22,10 +22,9 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
     )
     case emptyIndexName
     case duplicateIndexName(String)
-    case emptyIndexKindIdentifier(indexName: String)
     case emptyIndexFieldName(indexName: String)
     case unknownIndexField(indexName: String, fieldName: String)
-    case unknownStoredField(indexName: String, fieldName: String)
+    case unknownIncludedField(indexName: String, fieldName: String)
     case invalidIndexDeclaration(IndexDeclarationError)
     case unknownEnumField(String)
     case enumMetadataOnNonEnumField(String)
@@ -95,14 +94,12 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Index name must not be empty."
         case .duplicateIndexName(let indexName):
             return "Index name '\(indexName)' is declared more than once on the entity."
-        case .emptyIndexKindIdentifier(let indexName):
-            return "Index '\(indexName)' has an empty kind identifier."
         case .emptyIndexFieldName(let indexName):
             return "Index '\(indexName)' contains an empty field name."
         case .unknownIndexField(let indexName, let fieldName):
             return "Index '\(indexName)' references unknown field '\(fieldName)'."
-        case .unknownStoredField(let indexName, let fieldName):
-            return "Index '\(indexName)' stores unknown field '\(fieldName)'."
+        case .unknownIncludedField(let indexName, let fieldName):
+            return "Index '\(indexName)' includes unknown field '\(fieldName)'."
         case .invalidIndexDeclaration(let error):
             return error.description
         case .unknownEnumField(let fieldName):

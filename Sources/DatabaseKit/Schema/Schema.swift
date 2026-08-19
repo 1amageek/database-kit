@@ -59,7 +59,7 @@ public final class Schema: Sendable {
         public let directoryLayer: DirectoryLayer
 
         /// Canonical index declarations.
-        public let indexes: [IndexDescriptorMetadata]
+        public let indexes: [IndexDescriptor]
 
         /// Typed relationship declarations owned by this entity.
         public let relationships: [RelationshipDescriptor]
@@ -98,7 +98,7 @@ public final class Schema: Sendable {
 
         /// Validated concrete index declarations reconstructed from canonical metadata.
         public var indexDescriptors: [IndexDescriptor] {
-            indexes.map(IndexDescriptor.init(validatedMetadata:))
+            indexes
         }
 
         /// Whether this type has dynamic directory components requiring partition values
@@ -163,7 +163,7 @@ public final class Schema: Sendable {
                 fields: type.fieldSchemas,
                 directoryComponents: type.directoryPathComponents,
                 directoryLayer: type.directoryLayer,
-                indexes: indexDescriptors.map { IndexDescriptorMetadata($0) },
+                indexes: indexDescriptors,
                 relationships: type.relationshipDescriptors,
                 fieldAccessRules: type.fieldAccessRules,
                 enumMetadata: Self.extractEnumMetadata(from: type),
@@ -181,7 +181,7 @@ public final class Schema: Sendable {
             fields: [FieldSchema],
             directoryComponents: [DirectoryPathComponent] = [],
             directoryLayer: DirectoryLayer = .default,
-            indexes: [IndexDescriptorMetadata] = [],
+            indexes: [IndexDescriptor] = [],
             relationships: [RelationshipDescriptor] = [],
             fieldAccessRules: [FieldAccessRule] = [],
             enumMetadata: [String: [String]] = [:],
@@ -266,7 +266,7 @@ public final class Schema: Sendable {
             fields: [FieldSchema],
             directoryComponents: [DirectoryPathComponent],
             directoryLayer: DirectoryLayer,
-            indexes: [IndexDescriptorMetadata],
+            indexes: [IndexDescriptor],
             relationships: [RelationshipDescriptor],
             fieldAccessRules: [FieldAccessRule],
             enumMetadata: [String: [String]],
@@ -347,23 +347,30 @@ public final class Schema: Sendable {
                 guard indexNames.insert(index.name).inserted else {
                     throw .duplicateIndexName(index.name)
                 }
-                guard !index.kind.identifier.isEmpty else {
-                    throw .emptyIndexKindIdentifier(indexName: index.name)
+                do {
+                    try index.declaration.validate(fieldSchemas: fields)
+                } catch let validationError {
+                    throw .invalidIndexDeclaration(
+                        IndexDeclarationError(
+                            indexName: index.name,
+                            validationError: validationError
+                        )
+                    )
                 }
                 for fieldName in index.fieldNames {
                     try validateIndexField(
                         fieldName,
                         indexName: index.name,
                         fieldsByName: fieldsByName,
-                        stored: false
+                        included: false
                     )
                 }
-                for fieldName in index.storedFieldNames {
+                for fieldName in index.includedFieldNames {
                     try validateIndexField(
                         fieldName,
                         indexName: index.name,
                         fieldsByName: fieldsByName,
-                        stored: true
+                        included: true
                     )
                 }
             }
@@ -519,7 +526,7 @@ public final class Schema: Sendable {
             _ fieldName: String,
             indexName: String,
             fieldsByName: [String: FieldSchema],
-            stored: Bool
+            included: Bool
         ) throws(SchemaEntityError) {
             guard !fieldName.isEmpty else {
                 throw .emptyIndexFieldName(indexName: indexName)
@@ -530,8 +537,11 @@ public final class Schema: Sendable {
                 omittingEmptySubsequences: false
             )[0]
             guard fieldsByName[String(rootFieldName)] != nil else {
-                if stored {
-                    throw .unknownStoredField(indexName: indexName, fieldName: fieldName)
+                if included {
+                    throw .unknownIncludedField(
+                        indexName: indexName,
+                        fieldName: fieldName
+                    )
                 }
                 throw .unknownIndexField(indexName: indexName, fieldName: fieldName)
             }
@@ -680,7 +690,7 @@ public final class Schema: Sendable {
     ///
     /// Logical polymorphic metadata is validated across all concrete members at
     /// schema construction time.
-    public func polymorphicIndexCatalog(identifier: String) -> [PolymorphicIndexMetadata] {
+    public func polymorphicIndexCatalog(identifier: String) -> [IndexDeclaration<String>] {
         polymorphicGroupsByIdentifier[identifier]?.indexes ?? []
     }
 
@@ -793,7 +803,7 @@ public final class Schema: Sendable {
             let memberTypeNames = sortedMembers.map { $0.name }
             let allMemberNames = Set(memberTypeNames)
             var descriptorsByMemberName: [String: [IndexDescriptor]] = [:]
-            var logicalIndexByName: [String: PolymorphicIndexMetadata] = [:]
+            var logicalIndexByName: [String: IndexDeclaration<String>] = [:]
             var logicalIndexOrder: [String] = []
             var membersByIndexName: [String: Set<String>] = [:]
 
@@ -828,10 +838,7 @@ public final class Schema: Sendable {
                         )
                     }
 
-                    let logicalDescriptor = PolymorphicIndexMetadata(
-                        descriptor: descriptor,
-                        fields: definition.fields
-                    )
+                    let logicalDescriptor = definition
                     if let existing = logicalIndexByName[descriptor.name] {
                         guard existing == logicalDescriptor else {
                             throw .inconsistentPolymorphicIndex(

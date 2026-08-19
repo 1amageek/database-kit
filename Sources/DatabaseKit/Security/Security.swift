@@ -17,7 +17,7 @@ public enum Security {
         }
     }
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     public enum Resource: Sendable, Hashable {
         case database
         case base(Base.ID)

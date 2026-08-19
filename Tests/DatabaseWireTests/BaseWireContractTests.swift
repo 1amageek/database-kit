@@ -1,4 +1,4 @@
-#if DATABASE_KIT_MULTIPLE_BASES
+#if DATABASE_KIT_MULTI_BASE
 import DatabaseKit
 import DatabaseTypes
 @_spi(DatabaseExecution) @testable import DatabaseWire
@@ -37,7 +37,7 @@ struct BaseWireContractTests {
         }
     }
 
-    @Test("Composition targets have fixed v4 selection encodings")
+    @Test("Composition targets have fixed v5 selection encodings")
     func compositionTargetGoldenVectors() throws {
         let baseA = try Base.ID("company-a")
         let baseB = try Base.ID("company-b")
@@ -70,7 +70,7 @@ struct BaseWireContractTests {
         )
     }
 
-    @Test("Composition provenance has fixed v4 resolution encodings")
+    @Test("Composition provenance has fixed v5 resolution encodings")
     func compositionResolutionGoldenVectors() throws {
         let baseA = try Base.ID("company-a")
         let baseB = try Base.ID("company-b")

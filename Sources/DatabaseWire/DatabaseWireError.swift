@@ -21,7 +21,7 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidReferenceCardinality(UInt8)
     case invalidReferenceDeleteRule(UInt8)
     case invalidOperationIdentifier(UInt16)
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     case invalidOperationTarget(UInt8)
     case invalidBaseIdentifier(BaseIdentifierError)
     case invalidBaseComposition(BaseCompositionError)
@@ -67,6 +67,7 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidErrorCategory(UInt8)
     case invalidRetryability(UInt8)
     case invalidValueTag(UInt8)
+    case emptyCustomIndexIdentifier
     case invalidReferenceIdentifierTag(UInt8)
     case invalidReferenceIdentifier(ReferenceIdentifierValidationError)
     case invalidEntityReference(EntityReferenceError)

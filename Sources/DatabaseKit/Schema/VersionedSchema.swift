@@ -20,7 +20,11 @@ import DatabaseTypes
 ///         var name: String
 ///         var email: String
 ///
-///         #Index(.scalar, fields: [\User.email], unique: true)
+///         #Index(.ordered(
+///             name: "users_by_email",
+///             keys: [.ascending(\User.email)],
+///             unique: true
+///         ))
 ///     }
 ///
 ///     @Persistable
@@ -46,8 +50,15 @@ import DatabaseTypes
 ///         var email: String
 ///         var age: Int32 = 0  // New field
 ///
-///         #Index(.scalar, fields: [\User.email], unique: true)
-///         #Index(.scalar, fields: [\User.age])
+///         #Index(.ordered(
+///             name: "users_by_email",
+///             keys: [.ascending(\User.email)],
+///             unique: true
+///         ))
+///         #Index(.ordered(
+///             name: "users_by_age",
+///             keys: [.ascending(\User.age)]
+///         ))
 ///     }
 ///
 ///     // Order unchanged, can be re-exported
@@ -89,7 +100,12 @@ public protocol VersionedSchema: Sendable {
     /// Computes the index transition from another version.
     static func indexChanges(
         from other: any VersionedSchema.Type
-    ) throws(SchemaError) -> (added: Set<String>, removed: Set<String>)
+    ) throws(SchemaError) -> [IndexChange]
+
+    /// Computes polymorphic-index transitions from another version.
+    static func polymorphicIndexChanges(
+        from other: any VersionedSchema.Type
+    ) throws(SchemaError) -> [PolymorphicIndexChange]
 
     /// Determines whether migration from another version is metadata-only.
     static func canLightweightMigrate(
@@ -144,22 +160,25 @@ extension VersionedSchema {
 // MARK: - Schema Comparison Helpers
 
 extension VersionedSchema {
-    /// Compare indexes between two schema versions
+    /// Compare concrete indexes between two schema versions.
     ///
-    /// Returns the differences in indexes between this schema and another.
+    /// Logical polymorphic declarations are returned separately by
+    /// `polymorphicIndexChanges(from:)`.
     ///
     /// - Parameter other: Another VersionedSchema type
-    /// - Returns: Tuple of (added indexes, removed indexes)
+    /// - Returns: Added, removed, and replaced concrete declarations.
     public static func indexChanges(
         from other: any VersionedSchema.Type
-    ) throws(SchemaError) -> (added: Set<String>, removed: Set<String>) {
-        let currentIndexes = try Self.indexNames
-        let otherIndexes = try other.indexNames
+    ) throws(SchemaError) -> [IndexChange] {
+        try makeSchema().indexChanges(from: other.makeSchema())
+    }
 
-        let added = currentIndexes.subtracting(otherIndexes)
-        let removed = otherIndexes.subtracting(currentIndexes)
-
-        return (added: added, removed: removed)
+    public static func polymorphicIndexChanges(
+        from other: any VersionedSchema.Type
+    ) throws(SchemaError) -> [PolymorphicIndexChange] {
+        try makeSchema().polymorphicIndexChanges(
+            from: other.makeSchema()
+        )
     }
 
     /// Check if migration from another schema is a "lightweight" migration

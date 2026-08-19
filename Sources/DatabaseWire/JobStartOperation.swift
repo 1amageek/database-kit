@@ -38,7 +38,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
     }
 
     public struct Request: WireValue, Hashable {
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         public let target: DatabaseOperationTarget
         #endif
         public let operation: JobOperationIdentifier
@@ -46,7 +46,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
         public let maximumSliceWorkUnits: UInt64
         public let retryPolicy: RetryPolicy
 
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         public init(
             target: DatabaseOperationTarget,
             operation: JobOperationIdentifier,
@@ -77,7 +77,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
         func encode(
             into writer: inout DatabaseWireWriter
         ) throws(DatabaseWireError) {
-            #if DATABASE_KIT_MULTIPLE_BASES
+            #if DATABASE_KIT_MULTI_BASE
             try target.encode(into: &writer)
             #endif
             try operation.encode(into: &writer)
@@ -86,7 +86,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
             try retryPolicy.encode(into: &writer)
         }
 
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         init(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
@@ -117,7 +117,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
 
         public var jobID: DatabaseTypes.UUID { job.jobID }
         public var operation: JobOperationIdentifier { job.operation }
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         public var target: DatabaseOperationTarget { job.target }
         #endif
 
@@ -125,7 +125,7 @@ public enum JobStartOperation: DatabaseOperationDeclaration {
             self.job = job
         }
 
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         public init(
             jobID: DatabaseTypes.UUID,
             operation: JobOperationIdentifier,

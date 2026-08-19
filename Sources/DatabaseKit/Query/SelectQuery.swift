@@ -354,7 +354,7 @@ extension SelectQuery {
         case .except(let left, let right):
             collectVariables(from: left, into: &vars)
             collectVariables(from: right, into: &vars)
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         case .base(_, let source):
             collectVariables(from: source, into: &vars)
         #endif
@@ -460,7 +460,7 @@ extension SelectQuery {
         case .except(let left, let right):
             collectColumns(from: left, into: &cols)
             collectColumns(from: right, into: &cols)
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         case .base(_, let source):
             collectColumns(from: source, into: &cols)
         #endif

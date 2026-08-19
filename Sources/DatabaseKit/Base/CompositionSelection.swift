@@ -1,4 +1,4 @@
-#if DATABASE_KIT_MULTIPLE_BASES
+#if DATABASE_KIT_MULTI_BASE
 /// Selects either a durable named Composition or a request-scoped canonical
 /// set of Bases. A derived selection carries no synthetic catalog identity.
 public struct CompositionSelection: Sendable, Hashable {

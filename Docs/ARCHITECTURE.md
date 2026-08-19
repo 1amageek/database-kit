@@ -123,21 +123,21 @@ generated `Field<Model, Value>` containing stable identity and
 `FieldSchemaType`. `IndexDescriptor` stores those canonical field descriptions,
 not `KeyPath`, `PartialKeyPath`, `AnyKeyPath`, or `Any.Type`.
 
-Every concrete `IndexDescriptor` and `IndexDescriptorMetadata` also stores the
-canonical persisted entity name. Typed declarations derive it from
+Every concrete `IndexDescriptor` stores the canonical persisted entity name.
+Typed declarations derive it from
 `Model.persistableType`; polymorphic declarations bind it to each concrete
 member; manually constructed or decoded metadata must provide it explicitly.
 `Schema.Entity` rejects an index whose entity name does not match the
 containing entity. Type erasure therefore cannot detach a validated index from
 the schema that owns its selected fields.
 
-Construction evaluates both `IndexKind.validateFields` and
-`validateConfiguration`, and requires the selected generated fields to match
-the fields declared by the concrete kind. Invalid descriptors fail during
-construction; macro-generated descriptor accessors and `Schema` preserve that
-typed construction failure instead of storing an invalid descriptor. Runtime
-maintainers may therefore rely on a schema containing only type-compatible,
-configuration-valid declarations.
+Construction validates the complete `IndexDefinition`, including field count,
+field identity, canonical field type, ordering capability, uniqueness, and
+numeric configuration bounds. Invalid descriptors fail during construction;
+macro-generated descriptor accessors and `Schema` preserve that typed failure
+instead of storing an invalid descriptor. Runtime maintainers may therefore
+rely on a schema containing only type-compatible, configuration-valid
+declarations.
 
 An index declaration describes database meaning that is stable across
 deployments. Runtime algorithm selection, memory budgets, maintainer

@@ -63,10 +63,10 @@ struct CanonicalDatabaseWireTests {
 
         let encoded = try EnvelopeWireFormat.encode(request: request)
 
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         #expect(encoded == [
             0x44, 0x42, 0x57, 0x52,
-            0x04, 0x00,
+            0x05, 0x00,
             0x01,
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
             0x01, 0x01,
@@ -78,7 +78,7 @@ struct CanonicalDatabaseWireTests {
         #else
         #expect(encoded == [
             0x44, 0x42, 0x57, 0x52,
-            0x02, 0x00,
+            0x03, 0x00,
             0x01,
             0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,
             0x01, 0x01,
@@ -345,7 +345,7 @@ struct CanonicalDatabaseWireTests {
             )
             switch (result, decoded) {
             case (.boolean(let expected), .boolean(let actual)):
-                #if DATABASE_KIT_MULTIPLE_BASES
+                #if DATABASE_KIT_MULTI_BASE
                 #expect(actual.value == expected.value)
                 #expect(actual.consistency == expected.consistency)
                 #expect(actual.provenance == nil)
@@ -357,7 +357,7 @@ struct CanonicalDatabaseWireTests {
                 #expect(actual.columns == expected.columns)
                 #expect(actual.rowCount == expected.rowCount)
                 #expect(actual.continuation == expected.continuation)
-                #if DATABASE_KIT_MULTIPLE_BASES
+                #if DATABASE_KIT_MULTI_BASE
                 #expect(actual.consistency == expected.consistency)
                 #expect(actual.provenance == nil)
                 #expect(expected.provenance == nil)
@@ -371,7 +371,7 @@ struct CanonicalDatabaseWireTests {
             case (.rdfGraph(let expected), .rdfGraph(let actual)):
                 #expect(actual.quadCount == expected.quadCount)
                 #expect(actual.continuation == expected.continuation)
-                #if DATABASE_KIT_MULTIPLE_BASES
+                #if DATABASE_KIT_MULTI_BASE
                 #expect(actual.consistency == expected.consistency)
                 #expect(actual.provenance == nil)
                 #expect(expected.provenance == nil)
@@ -469,17 +469,43 @@ struct CanonicalDatabaseWireTests {
             )
         }
 
-        #if DATABASE_KIT_MULTIPLE_BASES
-        var previousMultipleBasesVersion = try EnvelopeWireFormat.encode(
+        #if DATABASE_KIT_MULTI_BASE
+        var previousMultiBaseVersion = try EnvelopeWireFormat.encode(
             request: request
         ).copyBytes()
-        previousMultipleBasesVersion[4] = 0x03
-        previousMultipleBasesVersion[5] = 0x00
+        previousMultiBaseVersion[4] = 0x04
+        previousMultiBaseVersion[5] = 0x00
+        #expect(
+            throws: DatabaseWireError.unsupportedProtocolVersionValue(4)
+        ) {
+            _ = try EnvelopeWireFormat.decodeRequest(
+                ByteString(previousMultiBaseVersion)
+            )
+        }
+
+        var standardVersion = try EnvelopeWireFormat.encode(
+            request: request
+        ).copyBytes()
+        standardVersion[4] = 0x03
+        standardVersion[5] = 0x00
         #expect(
             throws: DatabaseWireError.unsupportedProtocolVersionValue(3)
         ) {
             _ = try EnvelopeWireFormat.decodeRequest(
-                ByteString(previousMultipleBasesVersion)
+                ByteString(standardVersion)
+            )
+        }
+        #else
+        var previousStandardVersion = try EnvelopeWireFormat.encode(
+            request: request
+        ).copyBytes()
+        previousStandardVersion[4] = 0x02
+        previousStandardVersion[5] = 0x00
+        #expect(
+            throws: DatabaseWireError.unsupportedProtocolVersionValue(2)
+        ) {
+            _ = try EnvelopeWireFormat.decodeRequest(
+                ByteString(previousStandardVersion)
             )
         }
         #endif

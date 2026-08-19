@@ -4,11 +4,11 @@ import DatabaseTypes
 public struct JobIdentity: WireValue, Hashable {
     public let jobID: DatabaseTypes.UUID
     public let operation: JobOperationIdentifier
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     public let target: DatabaseOperationTarget
     #endif
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     public init(
         jobID: DatabaseTypes.UUID,
         operation: JobOperationIdentifier,
@@ -33,12 +33,12 @@ public struct JobIdentity: WireValue, Hashable {
     ) throws(DatabaseWireError) {
         try jobID.encode(into: &writer)
         try operation.encode(into: &writer)
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         try target.encode(into: &writer)
         #endif
     }
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {

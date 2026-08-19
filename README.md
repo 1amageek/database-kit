@@ -6,9 +6,9 @@ protocol for the database ecosystem.
 The normative ownership and product contract is documented in
 [database-kit Responsibility Specification](Docs/DATABASE_KIT_SPECIFICATION.md).
 
-The package implements the target-free DatabaseWire v2 contract by default.
-The non-default `MultipleBases` trait adds Base, Composition, persisted Grant,
-target, provenance, and federated-consistency semantics as DatabaseWire v4.
+The package implements the target-free DatabaseWire v3 contract by default.
+The non-default `MultiBase` trait adds Base, Composition, persisted Grant,
+target, provenance, and federated-consistency semantics as DatabaseWire v5.
 Completion is verified through Native behavior tests, standard and Embedded
 WASM release builds, the Embedded macro-compilation fixture, and byte-owner
 identity tests in both trait configurations.
@@ -28,7 +28,7 @@ It provides:
 - `@Polymorphable` macro for protocol-oriented polymorphic storage metadata
 - `@OWLClass` macro for OWL ontology class mapping
 - `@OWLDataProperty` / `@OWLObjectProperty` macros for OWL property annotations
-- `IndexKind` protocol for extensible index type definitions
+- one stable `#Index` macro surface backed by typed `IndexDeclaration` values
 - Foundation-independent identity, schema fingerprints, execution budgets,
   RDF, and `QueryIR` semantic models
 - bounded RDF term-role and structural validation without binary materialization
@@ -41,7 +41,7 @@ It provides:
 - one canonical bounded binary protocol module
 - one optional native Foundation model-integration module
 
-With the non-default `MultipleBases` trait it additionally provides:
+With the non-default `MultiBase` trait it additionally provides:
 
 - `Base`, `Base.Composition`, and persisted `Security.Grant` semantics;
 - `CompositionSelection` and `CompositionResolution` for named or derived
@@ -80,7 +80,7 @@ dependencies: [
 | `DatabaseSchemaJSON` | Native strict JSON adapter for `SchemaManifest`; rejects duplicate or unknown keys and preserves every `FieldValue` case without numeric inference |
 | `DatabaseKitFoundation` | Native-only participation of Foundation scalar types in `Persistable` field adaptation |
 
-Relationship, vector, full-text, geographic, rank, permutation, graph,
+Relationship, vector, full-text, geographic, rank, graph,
 ontology, and SHACL are source classifications within `DatabaseKit`, not
 separate products.
 
@@ -102,7 +102,7 @@ The default graph has no Base declarations, target field, persisted Grant
 operations, provenance table, topology, or federated consistency payload. It
 represents one database and one execution root directly.
 
-When `MultipleBases` is enabled, `Base.ID`, `Base.Placement.ID`, and
+When `MultiBase` is enabled, `Base.ID`, `Base.Placement.ID`, and
 `Base.Composition.ID` are validated ASCII slugs. A Composition stores a
 nonempty, unique, canonically ordered Base set. Requests then carry an explicit
 database, Base, or Composition selection. A named selection resolves a catalog
@@ -115,7 +115,7 @@ with the transactional or federated read points that fixed the result.
 .package(
     url: "https://github.com/1amageek/database-kit.git",
     from: "26.0818.0",
-    traits: [.trait(name: "MultipleBases")]
+    traits: [.trait(name: "MultiBase")]
 )
 ```
 
@@ -153,11 +153,11 @@ objects. Compiler diagnostics remain enabled.
 ```bash
 TOOLCHAINS=org.swift.64202607231a scripts/xcode-test-harness
 TOOLCHAINS=org.swift.64202607231a \
-  DATABASE_KIT_TEST_TRAITS=MultipleBases \
+  DATABASE_KIT_TEST_TRAITS=MultiBase \
   scripts/xcode-test-harness
 
 swift build --disable-default-traits --product DatabaseWire
-swift build --disable-default-traits --traits MultipleBases --product DatabaseWire
+swift build --disable-default-traits --traits MultiBase --product DatabaseWire
 
 swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseKit -c release -debug-info-format none
 swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseWire -c release -debug-info-format none
@@ -176,8 +176,15 @@ import DatabaseKit
 @Persistable
 struct User {
     #Directory<User>("app", "users")
-    #Index(.scalar, fields: [\User.email], unique: true)
-    #Index(.scalar, fields: [\User.createdAt])
+    #Index(.ordered(
+        name: "users_by_email",
+        keys: [.ascending(\User.email)],
+        unique: true
+    ))
+    #Index(.ordered(
+        name: "users_by_creation",
+        keys: [.ascending(\User.createdAt)]
+    ))
 
     var id: String
     var email: String
@@ -205,11 +212,18 @@ The `@Persistable` macro generates all required protocol conformances:
 ```swift
 @Persistable
 struct Product {
-    #Index(
-        .scalar,
-        fields: [\Product.category, \Product.price]
-    )
-    #Index(.scalar, fields: [\Product.name], unique: true)
+    #Index(.ordered(
+        name: "products_by_category_and_price",
+        keys: [
+            .ascending(\Product.category),
+            .ascending(\Product.price),
+        ]
+    ))
+    #Index(.ordered(
+        name: "products_by_name",
+        keys: [.ascending(\Product.name)],
+        unique: true
+    ))
 
     var id: String
     var name: String
@@ -261,10 +275,12 @@ The intended API is:
 ```swift
 @Polymorphable
 @PolymorphicDirectory("memory", "entities")
-@PolymorphicIndex(
-    .vector(dimensions: 256),
-    embedding: "embedding"
-)
+@PolymorphicIndex(.vector(
+    name: "Entity_embedding",
+    embedding: "embedding",
+    dimensions: 256,
+    metric: .cosine
+))
 public protocol Entity: Polymorphable<EntityPolymorphicGroup> {
     var label: String { get }
     var embedding: Vector { get set }
@@ -358,48 +374,78 @@ struct Message {
 }
 ```
 
-## Built-in Index Kinds
+## Index declarations
+
+See [Index Declaration Design](Docs/INDEX_DECLARATION_DESIGN.md) for the full
+algebra, validation, evolution, and runtime-boundary contract.
 
 Built-in indexes have one declaration surface: `IndexDefinition` through
-`#Index`. The generic `*IndexKind<Model>` duplicates are not part of version 1.
+`#Index`. The macro always accepts one `IndexDeclaration`; changing index
+semantics does not change the macro signature.
 
 ```swift
 @Persistable
 struct Event {
-    #Index(
-        .scalar,
-        fields: [\Event.calendarID, \Event.startsAt]
-    )
-    #Index(.count, groupBy: [\Event.calendarID])
-    #Index(
-        .sum,
-        groupBy: [\Event.calendarID],
+    #Index(.ordered(
+        name: "events_by_calendar_and_start",
+        keys: [
+            .ascending(\Event.calendarID),
+            .ascending(\Event.startsAt),
+        ]
+    ))
+    #Index(.aggregate(
+        name: "event_count_by_calendar",
+        function: .count,
+        groupBy: [.ascending(\Event.calendarID)]
+    ))
+    #Index(.aggregate(
+        name: "event_attendees_by_calendar",
+        function: .sum,
+        groupBy: [.ascending(\Event.calendarID)],
         value: \Event.attendeeCount
-    )
-    #Index(
-        .version(strategy: .keepAll),
-        field: \Event.id
-    )
-    #Index(
-        .vector(dimensions: 384, metric: .cosine),
-        embedding: \Event.embedding
-    )
-    #Index(
-        .fullText(tokenizer: .simple),
-        fields: [\Event.title, \Event.description]
-    )
-    #Index(
-        .autocomplete(minPrefixLength: 2, maxPrefixLength: 12),
-        fields: [\Event.title, \Event.searchTerms]
-    )
-    #Index(.spatial(), location: \Event.location)
-    #Index(.rank, field: \Event.attendeeCount)
-    #Index(
-        .propertyGraph(strategy: .adjacency),
-        from: \Event.sourceID,
-        edge: \Event.relationship,
-        to: \Event.targetID
-    )
+    ))
+    #Index(.history(
+        name: "event_history",
+        version: \Event.id,
+        retention: .keepAll
+    ))
+    #Index(.vector(
+        name: "event_embedding",
+        embedding: \Event.embedding,
+        dimensions: 384,
+        metric: .cosine
+    ))
+    #Index(.text(
+        name: "event_text",
+        fields: [\Event.title, \Event.description],
+        mode: .fullText(tokenizer: .simple)
+    ))
+    #Index(.text(
+        name: "event_autocomplete",
+        fields: [\Event.title, \Event.searchTerms],
+        mode: .autocomplete(
+            minimumPrefixLength: 2,
+            maximumPrefixLength: 12
+        )
+    ))
+    #Index(.spatial(
+        name: "event_location",
+        location: \Event.location
+    ))
+    #Index(.rank(
+        name: "event_attendee_rank",
+        score: \Event.attendeeCount
+    ))
+    #Index(.graph(
+        name: "event_relationships",
+        definition: .property(
+            source: \Event.sourceID,
+            label: .field(\Event.relationship),
+            target: \Event.targetID,
+            graph: nil,
+            strategy: .adjacency
+        )
+    ))
 
     var id: String
     var calendarID: String
@@ -430,13 +476,15 @@ subject, predicate, object, and optional graph fields:
 ```swift
 @Persistable
 struct Statement {
-    #Index(
-        .rdfDataset,
-        from: \Statement.subject,
-        edge: \Statement.predicate,
-        to: \Statement.object,
-        graph: \Statement.graph
-    )
+    #Index(.graph(
+        name: "statements_by_quad",
+        definition: .rdf(
+            subject: \Statement.subject,
+            predicate: \Statement.predicate,
+            object: \Statement.object,
+            graph: \Statement.graph
+        )
+    ))
 
     var id: String
     var subject: RDFTerm
@@ -446,92 +494,39 @@ struct Statement {
 }
 ```
 
-The canonical kind identifiers remain `graph` and `rdf_quad`, respectively.
-Schema validation never infers one graph model from the other.
+Their semantic types are `graph(.property)` and `graph(.rdf)`. Schema
+validation never infers one graph model from the other.
 
-## Custom Index Kinds
+## Custom indexes
 
-`IndexKind` is reserved for OWL-generated and third-party extension semantics
-that are not built into `IndexDefinition`. Property graph and RDF dataset
-declarations are built in and use `IndexDefinition`:
+Third-party semantics use `IndexDeclaration.custom`. DatabaseKit preserves a
+stable identifier, ordered keys, included fields, and canonical parameters;
+the runtime provider owns their execution meaning.
 
 ```swift
 import DatabaseKit
 
-public struct TimeSeriesIndexKind<Root: Persistable>: IndexKind {
-    public static var identifier: String { "com.mycompany.timeseries" }
-    public static var subspaceStructure: SubspaceStructure { .hierarchical }
-
-    public let indexFields: [IndexField<Root>]
-    public let resolution: TimeResolution
-
-    public var indexName: String {
-        "\(Root.persistableType)_timeseries_\(fieldNames.joined(separator: "_"))"
-    }
-
-    public var metadata: [String: FieldValue] {
-        ["resolution": .string(resolution.rawValue)]
-    }
-
-    public enum TimeResolution: String, Sendable, Hashable {
-        case second, minute, hour, day
-    }
-
-    public init(
-        fields: [IndexField<Root>],
-        resolution: TimeResolution = .minute
-    ) {
-        self.indexFields = fields
-        self.resolution = resolution
-    }
-
-    public static func validateFields(
-        _ fields: [FieldSchema]
-    ) throws(IndexValidationError) {
-        guard fields.count == 1 else {
-            throw .invalidFieldCount(
-                index: identifier,
-                expected: 1,
-                actual: fields.count
-            )
-        }
-        guard fields[0].type == .timestamp, !fields[0].isArray else {
-            throw .unsupportedField(
-                index: identifier,
-                field: fields[0],
-                reason: "Time-series fields must use timestamp values"
-            )
-        }
-    }
-}
-```
-
-Application use passes a generated field through the custom descriptor path:
-
-```swift
-let timeSeries = try IndexDescriptor(
-    name: "Event_timeseries_startsAt",
-    kind: TimeSeriesIndexKind<Event>(
-        fields: [Event.fields.startsAt.ascending],
-        resolution: .minute
-    )
-)
-
-let schema = try Schema(
-    entities: [
-        try Schema.Entity(
-            from: Event.self,
-            including: [timeSeries]
+@Persistable
+struct TimeSeriesEvent {
+    #Index(.custom(
+        name: "events_by_start_time",
+        definition: CustomIndexDefinition(
+            identifier: "com.mycompany.timeseries",
+            keys: [.ascending(\TimeSeriesEvent.startsAt)],
+            parameters: ["resolution": .string("minute")]
         )
-    ]
-)
+    ))
+
+    var id: String
+    var startsAt: Timestamp
+}
 ```
 
 Index maintenance execution is implemented and registered by
 [database-framework](https://github.com/1amageek/database-framework). Custom
-declarations expose only canonical `IndexKindMetadata`; runtime behavior remains
-outside this package. `IndexDescriptor` validates concrete generated fields and
-configuration before `Schema` exposes the catalog.
+declarations expose only canonical `CustomIndexDefinition` values; runtime
+behavior remains outside this package. `IndexDescriptor` validates concrete
+generated fields before `Schema` exposes the catalog.
 
 ## @Persistable enums
 

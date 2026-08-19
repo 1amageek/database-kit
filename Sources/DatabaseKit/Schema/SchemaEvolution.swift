@@ -84,6 +84,47 @@ public struct SchemaCompatibilityReport: Sendable, Equatable {
     }
 }
 
+/// A complete logical index transition between two schema generations.
+public enum IndexChange: Sendable, Hashable {
+    case added(IndexDescriptor)
+    case removed(IndexDescriptor)
+    case replaced(previous: IndexDescriptor, current: IndexDescriptor)
+
+    public var identity: IndexIdentity {
+        switch self {
+        case .added(let descriptor), .removed(let descriptor):
+            descriptor.identity
+        case .replaced(_, let current):
+            current.identity
+        }
+    }
+}
+
+/// A complete logical polymorphic-index transition between schema generations.
+public enum PolymorphicIndexChange: Sendable, Hashable {
+    case added(
+        identity: PolymorphicIndexIdentity,
+        declaration: IndexDeclaration<String>
+    )
+    case removed(
+        identity: PolymorphicIndexIdentity,
+        declaration: IndexDeclaration<String>
+    )
+    case replaced(
+        identity: PolymorphicIndexIdentity,
+        previous: IndexDeclaration<String>,
+        current: IndexDeclaration<String>
+    )
+
+    public var identity: PolymorphicIndexIdentity {
+        switch self {
+        case .added(let identity, _), .removed(let identity, _),
+             .replaced(let identity, _, _):
+            identity
+        }
+    }
+}
+
 extension Schema.Entity {
     public func compatibilityReport(from previous: Schema.Entity) -> EntitySchemaCompatibilityReport {
         var issues: [SchemaCompatibilityIssue] = []
@@ -186,6 +227,96 @@ extension Schema {
             entityReports: entityReports,
             issues: removedEntities
         )
+    }
+
+    /// Computes index changes by stable identity and full logical definition.
+    public func indexChanges(from previous: Schema) -> [IndexChange] {
+        var currentByIdentity: [IndexIdentity: IndexDescriptor] = [:]
+        var previousByIdentity: [IndexIdentity: IndexDescriptor] = [:]
+        for descriptor in indexDescriptors {
+            currentByIdentity[descriptor.identity] = descriptor
+        }
+        for descriptor in previous.indexDescriptors {
+            previousByIdentity[descriptor.identity] = descriptor
+        }
+
+        let identities = Set(currentByIdentity.keys)
+            .union(previousByIdentity.keys)
+            .sorted()
+        var changes: [IndexChange] = []
+        changes.reserveCapacity(identities.count)
+        for identity in identities {
+            switch (previousByIdentity[identity], currentByIdentity[identity]) {
+            case (nil, let current?):
+                changes.append(.added(current))
+            case (let previous?, nil):
+                changes.append(.removed(previous))
+            case (let previous?, let current?) where previous != current:
+                changes.append(.replaced(previous: previous, current: current))
+            case (.some, .some), (nil, nil):
+                break
+            }
+        }
+        return changes
+    }
+
+    /// Computes polymorphic index changes by group, name, and full definition.
+    public func polymorphicIndexChanges(
+        from previous: Schema
+    ) -> [PolymorphicIndexChange] {
+        var currentByIdentity:
+            [PolymorphicIndexIdentity: IndexDeclaration<String>] = [:]
+        var previousByIdentity:
+            [PolymorphicIndexIdentity: IndexDeclaration<String>] = [:]
+        for group in polymorphicGroups {
+            for declaration in group.indexes {
+                currentByIdentity[
+                    PolymorphicIndexIdentity(
+                        groupIdentifier: group.identifier,
+                        name: declaration.name
+                    )
+                ] = declaration
+            }
+        }
+        for group in previous.polymorphicGroups {
+            for declaration in group.indexes {
+                previousByIdentity[
+                    PolymorphicIndexIdentity(
+                        groupIdentifier: group.identifier,
+                        name: declaration.name
+                    )
+                ] = declaration
+            }
+        }
+
+        let identities = Set(currentByIdentity.keys)
+            .union(previousByIdentity.keys)
+            .sorted()
+        var changes: [PolymorphicIndexChange] = []
+        changes.reserveCapacity(identities.count)
+        for identity in identities {
+            switch (previousByIdentity[identity], currentByIdentity[identity]) {
+            case (nil, let current?):
+                changes.append(
+                    .added(identity: identity, declaration: current)
+                )
+            case (let previous?, nil):
+                changes.append(
+                    .removed(identity: identity, declaration: previous)
+                )
+            case (let previous?, let current?) where previous != current:
+                changes.append(
+                    .replaced(
+                        identity: identity,
+                        previous: previous,
+                        current: current
+                    )
+                )
+            case (.some, .some), (nil, nil):
+                break
+            }
+        }
+        return changes
     }
 }
 

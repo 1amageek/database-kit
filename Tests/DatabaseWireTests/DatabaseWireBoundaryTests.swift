@@ -115,7 +115,7 @@ struct DatabaseWireBoundaryTests {
             Issue.record("Expected a successful boolean response")
             return
         }
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         #expect(value.value)
         #else
         #expect(value)
@@ -200,7 +200,7 @@ struct DatabaseWireBoundaryTests {
             Issue.record("Expected a boolean response payload")
             return
         }
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         #expect(value.value)
         #else
         #expect(value)
@@ -220,7 +220,7 @@ struct DatabaseWireBoundaryTests {
             Issue.record("Expected a replayed boolean response")
             return
         }
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         #expect(replayedValue.value)
         #else
         #expect(replayedValue)

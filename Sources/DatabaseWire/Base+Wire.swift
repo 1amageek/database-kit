@@ -1,4 +1,4 @@
-#if DATABASE_KIT_MULTIPLE_BASES
+#if DATABASE_KIT_MULTI_BASE
 import DatabaseKit
 
 extension Base.ID: WireValue {

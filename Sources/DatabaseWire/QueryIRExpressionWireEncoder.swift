@@ -751,7 +751,7 @@ private extension QueryIRExpressionWireEncoder {
             writer.writeUInt8(12)
             encodingSteps.append(.dataSource(rhs))
             encodingSteps.append(.dataSource(lhs))
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         case .base(let baseID, let source):
             writer.writeUInt8(13)
             try baseID.encode(into: &writer)

@@ -4,234 +4,113 @@ import Testing
 
 @Suite("#Index Macro E2E Tests")
 struct IndexMacroE2ETests {
-
-    @Test("#Index builds descriptors for every database-kit index kind")
-    func buildsDescriptorsForEveryIndexKind() throws {
+    @Test("#Index preserves every built-in semantic index declaration")
+    func preservesBuiltInDeclarations() throws {
         let descriptors = try IndexMacroE2ERecord.indexDescriptors
-        #expect(descriptors.map(\.name) == Self.expectedSpecs.map(\.name))
+        #expect(descriptors.map(\.name) == Self.expected.map(\.name))
 
-        for spec in Self.expectedSpecs {
-            let descriptor = try Self.descriptor(named: spec.name)
-            #expect(descriptor.kindIdentifier == spec.kindIdentifier)
-            #expect(descriptor.fieldNames == spec.fieldNames)
-            #expect(descriptor.kind.fieldNames == spec.fieldNames)
-        }
-    }
-
-    @Test("#Index descriptors survive Schema catalog type erasure")
-    func descriptorsSurviveSchemaCatalogTypeErasure() throws {
-        let schema = try Schema(
-            entities: [try IndexMacroE2ERecord.schemaEntity]
-        )
-        let entity = try #require(schema.entity(for: IndexMacroE2ERecord.self))
-
-        #expect(entity.indexes.map(\.name) == Self.expectedSpecs.map(\.name))
-
-        for spec in Self.expectedSpecs {
-            let catalog = try #require(entity.indexes.first { $0.name == spec.name })
-            #expect(catalog.kindIdentifier == spec.kindIdentifier)
-            #expect(catalog.fieldNames == spec.fieldNames)
-        }
-
-        let scalar = try #require(entity.indexes.first { $0.name == "e2e_scalar_category" })
-        #expect(scalar.unique == true)
-        #expect(scalar.storedFieldNames == ["title"])
-    }
-
-    @Test("RDF dataset declarations retain RDF identity semantics")
-    func rdfDatasetRetainsRDFIdentitySemantics() throws {
-        let descriptor = try #require(
-            try RDFDatasetRecord.indexDescriptors.first
-        )
-        #expect(descriptor.kindIdentifier == "rdf_quad")
-        #expect(
-            descriptor.fieldNames
-                == ["subject", "predicate", "object", "graph"]
-        )
-        #expect(descriptor.kind.metadata.isEmpty)
-
-        let definition = try IndexDefinition(metadata: descriptor.kind)
-        #expect(definition == .rdfDataset)
-    }
-
-    @Test("#Index preserves kind-specific metadata")
-    func preservesKindSpecificMetadata() throws {
-        let scalar = try Self.descriptor(named: "e2e_scalar_category").kind
-        #expect(scalar.fieldNames == ["category", "status"])
-        #expect(scalar.fields.map(\.order) == [.ascending, .descending])
-        #expect(scalar.metadata.isEmpty)
-
-        for name in [
-            "e2e_sum_category_amount",
-            "e2e_min_category_amount",
-            "e2e_max_category_amount",
-            "e2e_average_category_amount",
-        ] {
-            let metadata = try AggregationIndexMetadata(
-                canonical: Self.descriptor(named: name).kind
+        for expected in Self.expected {
+            let descriptor = try #require(
+                descriptors.first { $0.name == expected.name }
             )
-            #expect(metadata.groupByFieldNames == ["category"])
-            #expect(metadata.valueFieldName == "amount")
-            #expect(metadata.valueType == .float64)
+            #expect(descriptor.type == expected.type)
+            #expect(descriptor.fieldNames == expected.fieldNames)
         }
 
-        let version = try Self.descriptor(named: "e2e_version_id").kind
-        #expect(version.metadata["strategy"]?.stringValue == "keepLast")
-        #expect(version.metadata["strategyCount"]?.int64Value == 5)
+        let ordered = try Self.descriptor(named: "e2e_ordered_category")
+        #expect(ordered.keys.map(\.order) == [.ascending, .descending])
+        #expect(ordered.includedFieldNames == ["title"])
+        #expect(ordered.isUnique)
 
-        let countNotNull = try Self.descriptor(
-            named: "e2e_count_not_null_category_optional_tag"
-        ).kind
-        #expect(countNotNull.fieldNames == ["category", "optionalTag"])
-        #expect(countNotNull.metadata.isEmpty)
+        let history = try Self.descriptor(named: "e2e_history_id")
+        guard case .history(_, .keepLast(let count)) =
+            history.declaration.definition else {
+            Issue.record("Expected history declaration")
+            return
+        }
+        #expect(count == 5)
 
-        let leaderboard = try IndexDefinition(
-            metadata: Self.descriptor(
-                named: "e2e_time_window_leaderboard_category_score"
-            ).kind
-        )
-        guard case .timeWindowLeaderboard(let window, let windowCount) = leaderboard else {
-            Issue.record("Expected time-window leaderboard definition")
+        let leaderboard = try Self.descriptor(named: "e2e_leaderboard")
+        guard case .leaderboard(_, _, let window, let windowCount) =
+            leaderboard.declaration.definition else {
+            Issue.record("Expected leaderboard declaration")
             return
         }
         #expect(window == .weekly)
         #expect(windowCount == 4)
 
-        let distinct = try AggregationIndexMetadata(
-            canonical: Self.descriptor(named: "e2e_distinct_category_user").kind
-        )
-        #expect(distinct.groupByFieldNames == ["category"])
-        #expect(distinct.valueFieldName == "userID")
-        #expect(distinct.precision == 12)
-
-        let percentile = try AggregationIndexMetadata(
-            canonical: Self.descriptor(
-                named: "e2e_percentile_category_latency"
-            ).kind
-        )
-        #expect(percentile.groupByFieldNames == ["category"])
-        #expect(percentile.valueFieldName == "latency")
-        #expect(percentile.compression == 50)
-
-        let vector = try IndexDefinition(
-            metadata: Self.descriptor(named: "e2e_vector_embedding").kind
-        )
-        guard case .vector(let dimensions, let metric) = vector else {
-            Issue.record("Expected vector definition")
+        let vector = try Self.descriptor(named: "e2e_vector_embedding")
+        guard case .vector(_, let dimensions, let metric) =
+            vector.declaration.definition else {
+            Issue.record("Expected vector declaration")
             return
         }
         #expect(dimensions == 3)
         #expect(metric == .cosine)
 
-        let fullText = try IndexDefinition(
-            metadata: Self.descriptor(named: "e2e_fulltext_title_body").kind
-        )
-        guard case .fullText(
-            let tokenizer,
-            let storePositions,
-            let ngramSize,
-            let minTermLength
-        ) = fullText else {
-            Issue.record("Expected full-text definition")
+        let text = try Self.descriptor(named: "e2e_text_title_body")
+        guard case .text(
+            _,
+            .fullText(
+                let tokenizer,
+                let storePositions,
+                let ngramSize,
+                let minimumTermLength
+            )
+        ) = text.declaration.definition else {
+            Issue.record("Expected full-text declaration")
             return
         }
         #expect(tokenizer == .ngram)
         #expect(storePositions == false)
         #expect(ngramSize == 2)
-        #expect(minTermLength == 1)
+        #expect(minimumTermLength == 1)
 
-        let autocomplete = try IndexDefinition(
-            metadata: Self.descriptor(
-                named: "e2e_autocomplete_title_search_terms"
-            ).kind
-        )
-        guard case .autocomplete(
-            let minimumPrefixLength,
-            let maximumPrefixLength
-        ) = autocomplete else {
-            Issue.record("Expected autocomplete definition")
-            return
-        }
-        #expect(minimumPrefixLength == 2)
-        #expect(maximumPrefixLength == 12)
-
-        let spatial = try IndexDefinition(
-            metadata: Self.descriptor(
-                named: "e2e_spatial_latitude_longitude"
-            ).kind
-        )
-        guard case .spatial(let encoding, let level) = spatial else {
-            Issue.record("Expected spatial definition")
-            return
-        }
-        #expect(encoding == .s2)
-        #expect(level == 12)
-
-        let rank = try Self.descriptor(named: "e2e_rank_score").kind
-        #expect(rank.fieldNames == ["score"])
-        #expect(try rank.requireScalarType("scoreType") == .int64)
-        #expect(rank.metadata.keys.sorted() == ["scoreType"])
-
-        let permuted = try IndexDefinition(
-            metadata: Self.descriptor(
-                named: "e2e_permuted_category_status_title"
-            ).kind
-        )
-        guard case .permuted(let pattern) = permuted else {
-            Issue.record("Expected permuted definition")
-            return
-        }
-        let permutation = try pattern.resolve()
-        #expect(permutation.indices == [1, 0, 2])
-
-        let graph = try IndexDefinition(
-            metadata: Self.descriptor(
-                named: "e2e_graph_subject_predicate_object_graph"
-            ).kind
-        )
-        guard case .propertyGraph(let strategy, let label) = graph else {
-            Issue.record("Expected graph definition")
-            return
-        }
-        #expect(strategy == .hexastore)
-        #expect(label == .field)
-
+        let graph = try Self.descriptor(named: "e2e_property_graph")
+        #expect(graph.includedFieldNames == ["title"])
     }
 
-    @Test("Every macro descriptor restores one built-in definition")
-    func restoresEveryBuiltInDefinition() throws {
-        for specification in Self.expectedSpecs {
-            let descriptor = try Self.descriptor(named: specification.name)
-            let definition = try IndexDefinition(metadata: descriptor.kind)
-            #expect(definition.identifier == specification.kindIdentifier)
-            #expect(
-                definition.subspaceStructure
-                    == descriptor.kind.subspaceStructure
-            )
-        }
+    @Test("Schema catalog retains the complete declarations")
+    func schemaCatalogRetainsDeclarations() throws {
+        let schema = try Schema(
+            entities: [try IndexMacroE2ERecord.schemaEntity]
+        )
+        let entity = try #require(schema.entity(for: IndexMacroE2ERecord.self))
+        let descriptors = try IndexMacroE2ERecord.indexDescriptors
+        #expect(entity.indexes == descriptors)
     }
 
-    private static let expectedSpecs: [ExpectedIndexSpec] = [
-        .init(name: "e2e_scalar_category", kindIdentifier: "scalar", fieldNames: ["category", "status"]),
-        .init(name: "e2e_count_category", kindIdentifier: "count", fieldNames: ["category"]),
-        .init(name: "e2e_sum_category_amount", kindIdentifier: "sum", fieldNames: ["category", "amount"]),
-        .init(name: "e2e_min_category_amount", kindIdentifier: "min", fieldNames: ["category", "amount"]),
-        .init(name: "e2e_max_category_amount", kindIdentifier: "max", fieldNames: ["category", "amount"]),
-        .init(name: "e2e_average_category_amount", kindIdentifier: "average", fieldNames: ["category", "amount"]),
-        .init(name: "e2e_version_id", kindIdentifier: "version", fieldNames: ["id"]),
-        .init(name: "e2e_count_updates_id", kindIdentifier: "count_updates", fieldNames: ["id"]),
-        .init(name: "e2e_count_not_null_category_optional_tag", kindIdentifier: "count_not_null", fieldNames: ["category", "optionalTag"]),
-        .init(name: "e2e_bitmap_status", kindIdentifier: "bitmap", fieldNames: ["status"]),
-        .init(name: "e2e_time_window_leaderboard_category_score", kindIdentifier: "time_window_leaderboard", fieldNames: ["category", "score"]),
-        .init(name: "e2e_distinct_category_user", kindIdentifier: "distinct", fieldNames: ["category", "userID"]),
-        .init(name: "e2e_percentile_category_latency", kindIdentifier: "percentile", fieldNames: ["category", "latency"]),
-        .init(name: "e2e_vector_embedding", kindIdentifier: "vector", fieldNames: ["embedding"]),
-        .init(name: "e2e_fulltext_title_body", kindIdentifier: "fulltext", fieldNames: ["title", "body"]),
-        .init(name: "e2e_autocomplete_title_search_terms", kindIdentifier: "autocomplete", fieldNames: ["title", "searchTerms"]),
-        .init(name: "e2e_spatial_latitude_longitude", kindIdentifier: "spatial", fieldNames: ["location"]),
-        .init(name: "e2e_rank_score", kindIdentifier: "rank", fieldNames: ["score"]),
-        .init(name: "e2e_permuted_category_status_title", kindIdentifier: "permuted", fieldNames: ["category", "status", "title"]),
-        .init(name: "e2e_graph_subject_predicate_object_graph", kindIdentifier: "graph", fieldNames: ["subject", "predicate", "object", "graphName"]),
+    @Test("RDF graph indexes retain RDF field identity")
+    func rdfGraphRetainsFieldIdentity() throws {
+        let descriptor = try #require(try RDFDatasetRecord.indexDescriptors.first)
+        #expect(descriptor.type == .graph(.rdf))
+        #expect(
+            descriptor.fieldNames
+                == ["subject", "predicate", "object", "graph"]
+        )
+    }
+
+    private static let expected: [ExpectedIndex] = [
+        .init("e2e_ordered_category", .ordered, ["category", "status"]),
+        .init("e2e_count_category", .aggregate(.count), ["category"]),
+        .init("e2e_sum_category_amount", .aggregate(.sum), ["category", "amount"]),
+        .init("e2e_min_category_amount", .aggregate(.minimum), ["category", "amount"]),
+        .init("e2e_max_category_amount", .aggregate(.maximum), ["category", "amount"]),
+        .init("e2e_average_category_amount", .aggregate(.average), ["category", "amount"]),
+        .init("e2e_history_id", .history, ["id"]),
+        .init("e2e_update_count_id", .updateCount, ["id"]),
+        .init("e2e_non_null_category_tag", .aggregate(.nonNullCount), ["category", "optionalTag"]),
+        .init("e2e_bitmap_status", .bitmap, ["status"]),
+        .init("e2e_leaderboard", .leaderboard, ["category", "score"]),
+        .init("e2e_distinct_category_user", .aggregate(.approximateDistinct), ["category", "userID"]),
+        .init("e2e_percentile_category_latency", .aggregate(.percentile), ["category", "latency"]),
+        .init("e2e_vector_embedding", .vector, ["embedding"]),
+        .init("e2e_text_title_body", .text(.fullText), ["title", "body"]),
+        .init("e2e_autocomplete_title", .text(.autocomplete), ["title"]),
+        .init("e2e_spatial_location", .spatial, ["location"]),
+        .init("e2e_rank_score", .rank, ["score"]),
+        .init("e2e_property_graph", .graph(.property), ["subject", "predicate", "object", "graphName"]),
+        .init("e2e_extension_factory", .ordered, ["category"]),
     ]
 
     private static func descriptor(named name: String) throws -> IndexDescriptor {
@@ -241,189 +120,184 @@ struct IndexMacroE2ETests {
     }
 }
 
-private struct ExpectedIndexSpec: Sendable {
+private struct ExpectedIndex: Sendable {
     let name: String
-    let kindIdentifier: String
+    let type: IndexType
     let fieldNames: [String]
 
-    init(name: String, kindIdentifier: String, fieldNames: [String]) {
+    init(_ name: String, _ type: IndexType, _ fieldNames: [String]) {
         self.name = name
-        self.kindIdentifier = kindIdentifier
+        self.type = type
         self.fieldNames = fieldNames
+    }
+}
+
+private extension IndexDeclaration {
+    static func namedLookup(
+        name: String,
+        field: FieldReference
+    ) -> Self {
+        .ordered(name: name, keys: [.ascending(field)])
     }
 }
 
 @Persistable
 private struct RDFDatasetRecord {
     #Directory<RDFDatasetRecord>("tests", "rdf-dataset")
-    #Index(
-        .rdfDataset,
-        from: \RDFDatasetRecord.subject,
-        edge: \RDFDatasetRecord.predicate,
-        to: \RDFDatasetRecord.object,
-        graph: \RDFDatasetRecord.graph
-    )
+    #Index(.graph(
+        name: "rdf_dataset",
+        definition: .rdf(
+            subject: \RDFDatasetRecord.subject,
+            predicate: \RDFDatasetRecord.predicate,
+            object: \RDFDatasetRecord.object,
+            graph: \RDFDatasetRecord.graph
+        )
+    ))
 
     var id: String
     var subject: RDFTerm
     var predicate: RDFTerm
     var object: RDFTerm
-    var graph: RDFTerm?
+    var graph: RDFTerm
 }
 
 @Persistable
 private struct IndexMacroE2ERecord {
     var id: String = "fixture-id"
-    #Index(
-        .scalar,
-        fields: [
-            \IndexMacroE2ERecord.category,
-            \IndexMacroE2ERecord.status,
+
+    #Index(.ordered(
+        name: "e2e_ordered_category",
+        keys: [
+            .ascending(\IndexMacroE2ERecord.category),
+            .descending(\IndexMacroE2ERecord.status),
         ],
-        orders: [.ascending, .descending],
-        storedFields: [\IndexMacroE2ERecord.title],
-        unique: true,
-        name: "e2e_scalar_category"
-    )
-    #Index(
-        .count,
-        groupBy: [\IndexMacroE2ERecord.category],
-        name: "e2e_count_category"
-    )
-    #Index(
-        .sum,
-        groupBy: [\IndexMacroE2ERecord.category],
-        value: \IndexMacroE2ERecord.amount,
-        name: "e2e_sum_category_amount"
-    )
-    #Index(
-        .minimum,
-        groupBy: [\IndexMacroE2ERecord.category],
-        value: \IndexMacroE2ERecord.amount,
-        name: "e2e_min_category_amount"
-    )
-    #Index(
-        .maximum,
-        groupBy: [\IndexMacroE2ERecord.category],
-        value: \IndexMacroE2ERecord.amount,
-        name: "e2e_max_category_amount"
-    )
-    #Index(
-        .average,
-        groupBy: [\IndexMacroE2ERecord.category],
-        value: \IndexMacroE2ERecord.amount,
-        name: "e2e_average_category_amount"
-    )
-    #Index(
-        .version(strategy: .keepLast(5)),
-        field: \IndexMacroE2ERecord.id,
-        name: "e2e_version_id"
-    )
-    #Index(
-        .countUpdates,
-        field: \IndexMacroE2ERecord.id,
-        name: "e2e_count_updates_id"
-    )
-    #Index(
-        .countNotNull,
-        groupBy: [\IndexMacroE2ERecord.category],
-        value: \IndexMacroE2ERecord.optionalTag,
-        name: "e2e_count_not_null_category_optional_tag"
-    )
-    #Index(
-        .bitmap,
-        field: \IndexMacroE2ERecord.status,
-        name: "e2e_bitmap_status"
-    )
-    #Index(
-        .timeWindowLeaderboard(
-            window: .weekly,
-            windowCount: 4
-        ),
-        groupBy: [\IndexMacroE2ERecord.category],
-        field: \IndexMacroE2ERecord.score,
-        name: "e2e_time_window_leaderboard_category_score"
-    )
-    #Index(
-        .distinct(precision: 12),
-        groupBy: [\IndexMacroE2ERecord.category],
-        value: \IndexMacroE2ERecord.userID,
-        name: "e2e_distinct_category_user"
-    )
-    #Index(
-        .percentile(compression: 50),
-        groupBy: [\IndexMacroE2ERecord.category],
-        value: \IndexMacroE2ERecord.latency,
-        name: "e2e_percentile_category_latency"
-    )
-    #Index(
-        .vector(
-            dimensions: 3,
-            metric: .cosine
-        ),
+        includedFields: [\IndexMacroE2ERecord.title],
+        unique: true
+    ))
+    #Index(.aggregate(
+        name: "e2e_count_category",
+        function: .count,
+        groupBy: [.ascending(\IndexMacroE2ERecord.category)]
+    ))
+    #Index(.aggregate(
+        name: "e2e_sum_category_amount",
+        function: .sum,
+        groupBy: [.ascending(\IndexMacroE2ERecord.category)],
+        value: \IndexMacroE2ERecord.amount
+    ))
+    #Index(.aggregate(
+        name: "e2e_min_category_amount",
+        function: .minimum,
+        groupBy: [.ascending(\IndexMacroE2ERecord.category)],
+        value: \IndexMacroE2ERecord.amount
+    ))
+    #Index(.aggregate(
+        name: "e2e_max_category_amount",
+        function: .maximum,
+        groupBy: [.ascending(\IndexMacroE2ERecord.category)],
+        value: \IndexMacroE2ERecord.amount
+    ))
+    #Index(.aggregate(
+        name: "e2e_average_category_amount",
+        function: .average,
+        groupBy: [.ascending(\IndexMacroE2ERecord.category)],
+        value: \IndexMacroE2ERecord.amount
+    ))
+    #Index(.history(
+        name: "e2e_history_id",
+        version: \IndexMacroE2ERecord.id,
+        retention: .keepLast(5)
+    ))
+    #Index(.updateCount(
+        name: "e2e_update_count_id",
+        field: \IndexMacroE2ERecord.id
+    ))
+    #Index(.aggregate(
+        name: "e2e_non_null_category_tag",
+        function: .nonNullCount,
+        groupBy: [.ascending(\IndexMacroE2ERecord.category)],
+        value: \IndexMacroE2ERecord.optionalTag
+    ))
+    #Index(.bitmap(
+        name: "e2e_bitmap_status",
+        field: \IndexMacroE2ERecord.status
+    ))
+    #Index(.leaderboard(
+        name: "e2e_leaderboard",
+        groupBy: [.ascending(\IndexMacroE2ERecord.category)],
+        score: \IndexMacroE2ERecord.score,
+        window: .weekly,
+        windowCount: 4
+    ))
+    #Index(.aggregate(
+        name: "e2e_distinct_category_user",
+        function: .approximateDistinct(precision: 12),
+        groupBy: [.ascending(\IndexMacroE2ERecord.category)],
+        value: \IndexMacroE2ERecord.userID
+    ))
+    #Index(.aggregate(
+        name: "e2e_percentile_category_latency",
+        function: .percentile(compression: 50),
+        groupBy: [.ascending(\IndexMacroE2ERecord.category)],
+        value: \IndexMacroE2ERecord.latency
+    ))
+    #Index(.vector(
+        name: "e2e_vector_embedding",
         embedding: \IndexMacroE2ERecord.embedding,
-        name: "e2e_vector_embedding"
-    )
-    #Index(
-        .fullText(
-            tokenizer: .ngram,
-            storePositions: false,
-            ngramSize: 2,
-            minTermLength: 1
-        ),
+        dimensions: 3,
+        metric: .cosine
+    ))
+    #Index(.text(
+        name: "e2e_text_title_body",
         fields: [
             \IndexMacroE2ERecord.title,
             \IndexMacroE2ERecord.body,
         ],
-        name: "e2e_fulltext_title_body"
-    )
-    #Index(
-        .autocomplete(
-            minPrefixLength: 2,
-            maxPrefixLength: 12
-        ),
-        fields: [
-            \IndexMacroE2ERecord.title,
-            \IndexMacroE2ERecord.searchTerms,
-        ],
-        name: "e2e_autocomplete_title_search_terms"
-    )
-    #Index(
-        .spatial(
-            encoding: .s2,
-            level: 12
-        ),
+        mode: .fullText(
+            tokenizer: .ngram,
+            storePositions: false,
+            ngramSize: 2,
+            minimumTermLength: 1
+        )
+    ))
+    #Index(.text(
+        name: "e2e_autocomplete_title",
+        fields: [\IndexMacroE2ERecord.title],
+        mode: .autocomplete(
+            minimumPrefixLength: 2,
+            maximumPrefixLength: 12
+        )
+    ))
+    #Index(.spatial(
+        name: "e2e_spatial_location",
         location: \IndexMacroE2ERecord.location,
-        name: "e2e_spatial_latitude_longitude"
-    )
-    #Index(
-        .rank,
-        field: \IndexMacroE2ERecord.score,
-        name: "e2e_rank_score"
-    )
-    #Index(
-        .permuted(.swapping(0, 1, size: 3)),
-        fields: [
-            \IndexMacroE2ERecord.category,
-            \IndexMacroE2ERecord.status,
-            \IndexMacroE2ERecord.title,
-        ],
-        name: "e2e_permuted_category_status_title"
-    )
-    #Index(
-        .propertyGraph(strategy: .hexastore),
-        from: \IndexMacroE2ERecord.subject,
-        edge: \IndexMacroE2ERecord.predicate,
-        to: \IndexMacroE2ERecord.object,
-        graph: \IndexMacroE2ERecord.graphName,
-        name: "e2e_graph_subject_predicate_object_graph"
-    )
+        encoding: .s2,
+        level: 12
+    ))
+    #Index(.rank(
+        name: "e2e_rank_score",
+        score: \IndexMacroE2ERecord.score
+    ))
+    #Index(.graph(
+        name: "e2e_property_graph",
+        definition: .property(
+            source: \IndexMacroE2ERecord.subject,
+            label: .field(\IndexMacroE2ERecord.predicate),
+            target: \IndexMacroE2ERecord.object,
+            graph: \IndexMacroE2ERecord.graphName,
+            strategy: .hexastore
+        ),
+        includedFields: [\IndexMacroE2ERecord.title]
+    ))
+    #Index(.namedLookup(
+        name: "e2e_extension_factory",
+        field: \IndexMacroE2ERecord.category
+    ))
 
     var category: String
     var status: String
     var title: String
     var body: String
-    var searchTerms: [String]
     var amount: Double
     var score: Int64
     var latency: Double
@@ -435,5 +309,4 @@ private struct IndexMacroE2ERecord {
     var predicate: String
     var object: String
     var graphName: String
-    var customerID: String?
 }

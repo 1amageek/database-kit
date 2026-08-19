@@ -14,7 +14,7 @@ public struct QueryRowPage: Sendable {
     public let columns: [QueryColumn]
     public let rowCount: Int
     public let continuation: ByteString?
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     public let provenance: CompositionPageProvenance?
     public let consistency: DatabaseReadConsistency
     #else
@@ -31,7 +31,7 @@ public struct QueryRowPage: Sendable {
         return bytes
     }
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     public init(
         columns: [QueryColumn],
         rows: [QueryRow],
@@ -152,7 +152,7 @@ public struct QueryRowPage: Sendable {
             )
             writer.writeUnframedBytes(bytes)
         }
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         writer.writeBool(provenance != nil)
         if let provenance {
             guard provenance.originCount == rowCount else {
@@ -196,7 +196,7 @@ public struct QueryRowPage: Sendable {
 
         self.columns = columns
         self.rowCount = rowCount
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         self.provenance = try reader.readBool()
             ? try CompositionPageProvenance(from: &reader)
             : nil

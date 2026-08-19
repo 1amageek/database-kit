@@ -5,7 +5,11 @@ import DatabaseTypes
 /// value format. The manifest contains every semantic `Schema` declaration;
 /// derived lookup maps and runtime registrations are rebuilt after decoding.
 public struct SchemaManifest: Sendable, Hashable {
-    public static let currentFormatVersion: UInt16 = 1
+    public static let currentFormatVersion: UInt16 = 2
+
+    // Physical index generations have their own canonical format lifecycle.
+    // Changing the full manifest codec must not rebuild every unchanged index.
+    private static let indexGenerationFormatVersion: UInt16 = 1
 
     public let formatVersion: UInt16
     public let schema: Schema
@@ -38,6 +42,68 @@ public struct SchemaManifest: Sendable, Hashable {
     ) throws(SchemaFingerprintError) -> SchemaFingerprint {
         do {
             let bytes = try canonicalBytes(limits: limits)
+            return SchemaFingerprint.hashing(canonicalBytes: bytes)
+        } catch {
+            throw .canonicalRepresentationUnavailable
+        }
+    }
+
+    /// Computes the canonical semantic fingerprint used to identify one
+    /// concrete index's physical storage generation.
+    public static func indexFingerprint(
+        _ descriptor: IndexDescriptor,
+        limits: DatabaseWireLimits = .default
+    ) throws(SchemaFingerprintError) -> SchemaFingerprint {
+        do {
+            let bytes = try DatabaseWireWriter.encode(limits: limits) {
+                writer throws(DatabaseWireError) in
+                try writer.writeString("database.index-generation")
+                writer.writeUInt16(indexGenerationFormatVersion)
+                try write(descriptor, into: &writer)
+                try writer.writeCount(descriptor.fieldSchemas.count)
+                for field in descriptor.fieldSchemas {
+                    try write(field, into: &writer)
+                }
+            }
+            return SchemaFingerprint.hashing(canonicalBytes: bytes)
+        } catch {
+            throw .canonicalRepresentationUnavailable
+        }
+    }
+
+    /// Computes the physical generation shared by one polymorphic declaration
+    /// and all of its validated concrete member projections.
+    public static func polymorphicIndexFingerprint(
+        groupIdentifier: String,
+        declaration: IndexDeclaration<String>,
+        memberDescriptors: [IndexDescriptor],
+        limits: DatabaseWireLimits = .default
+    ) throws(SchemaFingerprintError) -> SchemaFingerprint {
+        do {
+            let bytes = try DatabaseWireWriter.encode(limits: limits) {
+                writer throws(DatabaseWireError) in
+                try writer.writeString("database.polymorphic-index-generation")
+                writer.writeUInt16(indexGenerationFormatVersion)
+                try writer.writeString(groupIdentifier)
+                try write(
+                    declaration,
+                    into: &writer,
+                    writeField: { field, writer throws(DatabaseWireError) in
+                        try writer.writeString(field)
+                    }
+                )
+                let descriptors = memberDescriptors.sorted {
+                    ($0.entityName, $0.name) < ($1.entityName, $1.name)
+                }
+                try writer.writeCount(descriptors.count)
+                for descriptor in descriptors {
+                    try write(descriptor, into: &writer)
+                    try writer.writeCount(descriptor.fieldSchemas.count)
+                    for field in descriptor.fieldSchemas {
+                        try write(field, into: &writer)
+                    }
+                }
+            }
             return SchemaFingerprint.hashing(canonicalBytes: bytes)
         } catch {
             throw .canonicalRepresentationUnavailable
@@ -190,23 +256,17 @@ private extension SchemaManifest {
     }
 
     static func write(
-        _ index: IndexDescriptorMetadata,
+        _ index: IndexDescriptor,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         try writer.writeString(index.entityName)
-        try writer.writeString(index.name)
-        try writer.writeString(index.kind.identifier)
-        try writer.writeString(index.kind.subspaceStructure.rawValue)
-        try writer.writeCount(index.kind.fields.count)
-        for field in index.kind.fields {
-            try write(field.identity, into: &writer)
-            try writer.writeString(field.order.rawValue)
-        }
-        try writeFieldValueMap(index.kind.metadata, into: &writer)
-        writer.writeBool(index.commonOptions.unique)
-        writer.writeBool(index.commonOptions.sparse)
-        try writeStringMap(index.commonOptions.metadata, into: &writer)
-        try writeStringArray(index.storedFieldNames, into: &writer)
+        try write(
+            index.declaration,
+            into: &writer,
+            writeField: { field, writer throws(DatabaseWireError) in
+                try write(field, into: &writer)
+            }
+        )
     }
 
     static func write(
@@ -312,34 +372,85 @@ private extension SchemaManifest {
         )
         try writer.writeCount(membership.indexes.count)
         for index in membership.indexes {
-            try writer.writeString(index.name)
-            try write(index.definition, into: &writer)
-            try writer.writeCount(index.fields.count)
-            for field in index.fields {
-                try writer.writeString(field.name)
-                try writer.writeString(field.order.rawValue)
-            }
-            writer.writeBool(index.commonOptions.unique)
-            writer.writeBool(index.commonOptions.sparse)
-            try writeStringMap(index.commonOptions.metadata, into: &writer)
-            try writeStringArray(index.storedFieldNames, into: &writer)
+            try write(
+                index,
+                into: &writer,
+                writeField: { field, writer throws(DatabaseWireError) in
+                    try writer.writeString(field)
+                }
+            )
         }
     }
 
-    static func write(
-        _ definition: IndexDefinition,
-        into writer: inout DatabaseWireWriter
+    static func write<FieldReference>(
+        _ declaration: IndexDeclaration<FieldReference>,
+        into writer: inout DatabaseWireWriter,
+        writeField: (FieldReference, inout DatabaseWireWriter)
+            throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) {
+        try writer.writeString(declaration.name)
+        try write(
+            declaration.definition,
+            into: &writer,
+            writeField: writeField
+        )
+    }
+
+    static func write<FieldReference>(
+        _ definition: IndexDefinition<FieldReference>,
+        into writer: inout DatabaseWireWriter,
+        writeField: (FieldReference, inout DatabaseWireWriter)
+            throws(DatabaseWireError) -> Void
     ) throws(DatabaseWireError) {
         switch definition {
-        case .scalar: writer.writeUInt8(0)
-        case .count: writer.writeUInt8(1)
-        case .sum: writer.writeUInt8(2)
-        case .minimum: writer.writeUInt8(3)
-        case .maximum: writer.writeUInt8(4)
-        case .average: writer.writeUInt8(5)
-        case .version(let strategy):
-            writer.writeUInt8(6)
-            switch strategy {
+        case .ordered(let keys, let includedFields, let unique):
+            writer.writeUInt8(0)
+            try writeIndexKeys(
+                keys,
+                into: &writer,
+                writeField: writeField
+            )
+            try writeIndexFields(
+                includedFields,
+                into: &writer,
+                writeField: writeField
+            )
+            writer.writeBool(unique)
+
+        case .aggregate(let function, let groupBy, let value):
+            writer.writeUInt8(1)
+            switch function {
+            case .count: writer.writeUInt8(0)
+            case .sum: writer.writeUInt8(1)
+            case .minimum: writer.writeUInt8(2)
+            case .maximum: writer.writeUInt8(3)
+            case .average: writer.writeUInt8(4)
+            case .nonNullCount: writer.writeUInt8(5)
+            case .approximateDistinct(let precision):
+                writer.writeUInt8(6)
+                try write(precision, into: &writer)
+            case .percentile(let compression):
+                writer.writeUInt8(7)
+                writer.writeDouble(compression)
+            }
+            try writeIndexKeys(
+                groupBy,
+                into: &writer,
+                writeField: writeField
+            )
+            writer.writeBool(value != nil)
+            if let value {
+                try writeField(value, &writer)
+            }
+
+        case .updateCount(let field):
+            writer.writeUInt8(2)
+            try writeField(field, &writer)
+
+        case .history(let version, let retention):
+            writer.writeUInt8(3)
+            try writeField(version, &writer)
+            switch retention {
             case .keepAll:
                 writer.writeUInt8(0)
             case .keepLast(let count):
@@ -350,11 +461,19 @@ private extension SchemaManifest {
                 writer.writeInt64(duration.seconds)
                 writer.writeUInt32(duration.nanoseconds)
             }
-        case .countUpdates: writer.writeUInt8(7)
-        case .countNotNull: writer.writeUInt8(8)
-        case .bitmap: writer.writeUInt8(9)
-        case .timeWindowLeaderboard(let window, let windowCount):
-            writer.writeUInt8(10)
+
+        case .bitmap(let field):
+            writer.writeUInt8(4)
+            try writeField(field, &writer)
+
+        case .leaderboard(let groupBy, let score, let window, let windowCount):
+            writer.writeUInt8(5)
+            try writeIndexKeys(
+                groupBy,
+                into: &writer,
+                writeField: writeField
+            )
+            try writeField(score, &writer)
             switch window {
             case .hourly: writer.writeUInt8(0)
             case .daily: writer.writeUInt8(1)
@@ -365,61 +484,132 @@ private extension SchemaManifest {
                 writer.writeDouble(duration)
             }
             try write(windowCount, into: &writer)
-        case .distinct(let precision):
-            writer.writeUInt8(11)
-            try write(precision, into: &writer)
-        case .percentile(let compression):
-            writer.writeUInt8(12)
-            writer.writeDouble(compression)
-        case .vector(let dimensions, let metric):
-            writer.writeUInt8(13)
+
+        case .vector(let embedding, let dimensions, let metric):
+            writer.writeUInt8(6)
+            try writeField(embedding, &writer)
             try write(dimensions, into: &writer)
             try writer.writeString(metric.rawValue)
-        case .fullText(
-            let tokenizer,
-            let storePositions,
-            let ngramSize,
-            let minTermLength
-        ):
-            writer.writeUInt8(14)
-            try writer.writeString(tokenizer.rawValue)
-            writer.writeBool(storePositions)
-            try write(ngramSize, into: &writer)
-            try write(minTermLength, into: &writer)
-        case .spatial(let encoding, let level):
-            writer.writeUInt8(15)
+
+        case .text(let fields, let mode):
+            writer.writeUInt8(7)
+            try writeIndexFields(
+                fields,
+                into: &writer,
+                writeField: writeField
+            )
+            switch mode {
+            case .fullText(
+                let tokenizer,
+                let storePositions,
+                let ngramSize,
+                let minimumTermLength
+            ):
+                writer.writeUInt8(0)
+                try writer.writeString(tokenizer.rawValue)
+                writer.writeBool(storePositions)
+                try write(ngramSize, into: &writer)
+                try write(minimumTermLength, into: &writer)
+            case .autocomplete(
+                let minimumPrefixLength,
+                let maximumPrefixLength
+            ):
+                writer.writeUInt8(1)
+                try write(minimumPrefixLength, into: &writer)
+                try write(maximumPrefixLength, into: &writer)
+            }
+
+        case .spatial(let location, let encoding, let level):
+            writer.writeUInt8(8)
+            try writeField(location, &writer)
             try writer.writeString(encoding.rawValue)
             try write(level, into: &writer)
-        case .rank:
-            writer.writeUInt8(16)
-        case .permuted(let pattern):
-            writer.writeUInt8(17)
-            switch pattern {
-            case .identity(let size):
+
+        case .rank(let score):
+            writer.writeUInt8(9)
+            try writeField(score, &writer)
+
+        case .graph(let graph, let includedFields):
+            writer.writeUInt8(10)
+            switch graph {
+            case .property(let source, let label, let target, let graph, let strategy):
                 writer.writeUInt8(0)
-                try write(size, into: &writer)
-            case .swapping(let first, let second, let size):
+                try writeField(source, &writer)
+                switch label {
+                case .field(let field):
+                    writer.writeUInt8(0)
+                    try writeField(field, &writer)
+                case .implicit:
+                    writer.writeUInt8(1)
+                }
+                try writeField(target, &writer)
+                writer.writeBool(graph != nil)
+                if let graph {
+                    try writeField(graph, &writer)
+                }
+                try writer.writeString(strategy.rawValue)
+            case .rdf(let subject, let predicate, let object, let graph):
                 writer.writeUInt8(1)
-                try write(first, into: &writer)
-                try write(second, into: &writer)
-                try write(size, into: &writer)
-            case .ordering(let indices):
+                try writeField(subject, &writer)
+                try writeField(predicate, &writer)
+                try writeField(object, &writer)
+                writer.writeBool(graph != nil)
+                if let graph {
+                    try writeField(graph, &writer)
+                }
+            case .ontologyProjection(let individualIRIBase, let graph):
                 writer.writeUInt8(2)
-                try writer.writeCount(indices.count)
-                for index in indices {
-                    try write(index, into: &writer)
+                try writer.writeString(individualIRIBase)
+                writer.writeBool(graph != nil)
+                if let graph {
+                    try FieldValue.rdfTerm(graph.term).encode(into: &writer)
                 }
             }
-        case .propertyGraph(let strategy, let label):
-            writer.writeUInt8(18)
-            try writer.writeString(strategy.rawValue)
-            writer.writeUInt8(label == .field ? 0 : 1)
-        case .autocomplete(let minPrefixLength, let maxPrefixLength):
-            writer.writeUInt8(19)
-            try write(minPrefixLength, into: &writer)
-            try write(maxPrefixLength, into: &writer)
-        case .rdfDataset:
-            writer.writeUInt8(20)
+            try writeIndexFields(
+                includedFields,
+                into: &writer,
+                writeField: writeField
+            )
+
+        case .custom(let custom):
+            writer.writeUInt8(11)
+            try writer.writeString(custom.identifier)
+            try writeIndexKeys(
+                custom.keys,
+                into: &writer,
+                writeField: writeField
+            )
+            try writeIndexFields(
+                custom.includedFields,
+                into: &writer,
+                writeField: writeField
+            )
+            try writeFieldValueMap(custom.parameters, into: &writer)
+        }
+    }
+
+    static func writeIndexKeys<FieldReference>(
+        _ keys: [IndexKey<FieldReference>],
+        into writer: inout DatabaseWireWriter,
+        writeField: (FieldReference, inout DatabaseWireWriter)
+            throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) {
+        try writer.writeCount(keys.count)
+        for key in keys {
+            try writeField(key.field, &writer)
+            writer.writeUInt8(key.order == .ascending ? 0 : 1)
+        }
+    }
+
+    static func writeIndexFields<FieldReference>(
+        _ fields: [FieldReference],
+        into writer: inout DatabaseWireWriter,
+        writeField: (FieldReference, inout DatabaseWireWriter)
+            throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) {
+        try writer.writeCount(fields.count)
+        for field in fields {
+            try writeField(field, &writer)
         }
     }
 
@@ -516,10 +706,16 @@ private extension SchemaManifest {
         let directory = try readDirectory(from: &reader)
 
         let indexCount = try reader.readCount()
-        var indexes: [IndexDescriptorMetadata] = []
+        var indexes: [IndexDescriptor] = []
         indexes.reserveCapacity(indexCount)
         for _ in 0..<indexCount {
-            indexes.append(try readIndex(from: &reader))
+            indexes.append(
+                try readIndex(
+                    entityName: name,
+                    fieldSchemas: fields,
+                    from: &reader
+                )
+            )
         }
 
         let relationshipCount = try reader.readCount()
@@ -639,54 +835,32 @@ private extension SchemaManifest {
     }
 
     static func readIndex(
+        entityName: String,
+        fieldSchemas: [FieldSchema],
         from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> IndexDescriptorMetadata {
-        let entityName = try reader.readString()
-        let name = try reader.readString()
-        let identifier = try reader.readString()
-        let rawSubspace = try reader.readString()
-        guard let subspace = SubspaceStructure(rawValue: rawSubspace) else {
+    ) throws(DatabaseWireError) -> IndexDescriptor {
+        let encodedEntityName = try reader.readString()
+        guard encodedEntityName == entityName else {
             throw .invalidSchemaManifest(
-                "Unknown SubspaceStructure '\(rawSubspace)'"
+                "Index entity '\(encodedEntityName)' does not match '\(entityName)'"
             )
         }
-        let fieldCount = try reader.readCount()
-        var fields: [IndexFieldMetadata] = []
-        fields.reserveCapacity(fieldCount)
-        for _ in 0..<fieldCount {
-            let identity = try readFieldIdentity(from: &reader)
-            let rawOrder = try reader.readString()
-            guard let order = IndexFieldOrder(rawValue: rawOrder) else {
-                throw .invalidSchemaManifest(
-                    "Unknown IndexFieldOrder '\(rawOrder)'"
-                )
-            }
-            fields.append(IndexFieldMetadata(identity: identity, order: order))
-        }
-        let metadata = try readFieldValueMap(
-            context: "index kind metadata",
-            from: &reader
-        )
-        let options = CommonIndexOptions(
-            unique: try reader.readBool(),
-            sparse: try reader.readBool(),
-            metadata: try readStringMap(
-                context: "index common metadata",
-                from: &reader
+        let declaration: IndexDeclaration<FieldIdentity> =
+            try readIndexDeclaration(
+                from: &reader,
+                readField: { reader throws(DatabaseWireError) in
+                    try readFieldIdentity(from: &reader)
+                }
             )
-        )
-        return IndexDescriptorMetadata(
-            entityName: entityName,
-            name: name,
-            kind: IndexKindMetadata(
-                identifier: identifier,
-                subspaceStructure: subspace,
-                fields: fields,
-                metadata: metadata
-            ),
-            commonOptions: options,
-            storedFieldNames: try readStringArray(from: &reader)
-        )
+        do {
+            return try IndexDescriptor(
+                entityName: entityName,
+                declaration: declaration,
+                fieldSchemas: fieldSchemas
+            )
+        } catch {
+            throw .invalidSchemaManifest(String(describing: error))
+        }
     }
 
     static func readRelationship(
@@ -801,40 +975,15 @@ private extension SchemaManifest {
         let identifier = try reader.readString()
         let directory = try readDirectory(from: &reader)
         let count = try reader.readCount()
-        var indexes: [PolymorphicIndexDefinition] = []
+        var indexes: [IndexDeclaration<String>] = []
         indexes.reserveCapacity(count)
         for _ in 0..<count {
-            let name = try reader.readString()
-            let definition = try readIndexDefinition(from: &reader)
-            let fieldCount = try reader.readCount()
-            var fields: [PolymorphicIndexField] = []
-            fields.reserveCapacity(fieldCount)
-            for _ in 0..<fieldCount {
-                let fieldName = try reader.readString()
-                let rawOrder = try reader.readString()
-                guard let order = IndexFieldOrder(rawValue: rawOrder) else {
-                    throw .invalidSchemaManifest(
-                        "Unknown IndexFieldOrder '\(rawOrder)'"
-                    )
-                }
-                fields.append(
-                    PolymorphicIndexField(name: fieldName, order: order)
-                )
-            }
             indexes.append(
-                PolymorphicIndexDefinition(
-                    name: name,
-                    definition: definition,
-                    fields: fields,
-                    commonOptions: CommonIndexOptions(
-                        unique: try reader.readBool(),
-                        sparse: try reader.readBool(),
-                        metadata: try readStringMap(
-                            context: "polymorphic index common metadata",
-                            from: &reader
-                        )
-                    ),
-                    storedFieldNames: try readStringArray(from: &reader)
+                try readIndexDeclaration(
+                    from: &reader,
+                    readField: { reader throws(DatabaseWireError) in
+                        try reader.readString()
+                    }
                 )
             )
         }
@@ -846,35 +995,86 @@ private extension SchemaManifest {
         )
     }
 
-    static func readIndexDefinition(
-        from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> IndexDefinition {
+    static func readIndexDeclaration<FieldReference>(
+        from reader: inout DatabaseWireReader,
+        readField: (inout DatabaseWireReader)
+            throws(DatabaseWireError) -> FieldReference
+    ) throws(DatabaseWireError) -> IndexDeclaration<FieldReference> {
+        IndexDeclaration(
+            name: try reader.readString(),
+            definition: try readIndexDefinition(
+                from: &reader,
+                readField: readField
+            )
+        )
+    }
+
+    static func readIndexDefinition<FieldReference>(
+        from reader: inout DatabaseWireReader,
+        readField: (inout DatabaseWireReader)
+            throws(DatabaseWireError) -> FieldReference
+    ) throws(DatabaseWireError) -> IndexDefinition<FieldReference> {
         switch try reader.readUInt8() {
-        case 0: return .scalar
-        case 1: return .count
-        case 2: return .sum
-        case 3: return .minimum
-        case 4: return .maximum
-        case 5: return .average
-        case 6:
+        case 0:
+            return .ordered(
+                keys: try readIndexKeys(
+                    from: &reader,
+                    readField: readField
+                ),
+                includedFields: try readIndexFields(
+                    from: &reader,
+                    readField: readField
+                ),
+                unique: try reader.readBool()
+            )
+        case 1:
+            let function: AggregateIndexFunction
             switch try reader.readUInt8() {
-            case 0: return .version(strategy: .keepAll)
+            case 0: function = .count
+            case 1: function = .sum
+            case 2: function = .minimum
+            case 3: function = .maximum
+            case 4: function = .average
+            case 5: function = .nonNullCount
+            case 6:
+                function = .approximateDistinct(
+                    precision: try readInt(from: &reader, field: "precision")
+                )
+            case 7:
+                function = .percentile(compression: try reader.readDouble())
+            case let tag:
+                throw .invalidValueTag(tag)
+            }
+            let groupBy = try readIndexKeys(
+                from: &reader,
+                readField: readField
+            )
+            let value = try reader.readBool() ? readField(&reader) : nil
+            return .aggregate(
+                function: function,
+                groupBy: groupBy,
+                value: value
+            )
+        case 2:
+            return .updateCount(field: try readField(&reader))
+        case 3:
+            let version = try readField(&reader)
+            let retention: VersionHistoryStrategy
+            switch try reader.readUInt8() {
+            case 0:
+                retention = .keepAll
             case 1:
-                return .version(
-                    strategy: .keepLast(
-                        try readInt(from: &reader, field: "versionCount")
-                    )
+                retention = .keepLast(
+                    try readInt(from: &reader, field: "versionCount")
                 )
             case 2:
                 let seconds = try reader.readInt64()
                 let nanoseconds = try reader.readUInt32()
                 do {
-                    return .version(
-                        strategy: .keepForDuration(
-                            try TimeSpan(
-                                seconds: seconds,
-                                nanoseconds: nanoseconds
-                            )
+                    retention = .keepForDuration(
+                        try TimeSpan(
+                            seconds: seconds,
+                            nanoseconds: nanoseconds
                         )
                     )
                 } catch {
@@ -885,10 +1085,15 @@ private extension SchemaManifest {
             case let tag:
                 throw .invalidValueTag(tag)
             }
-        case 7: return .countUpdates
-        case 8: return .countNotNull
-        case 9: return .bitmap
-        case 10:
+            return .history(version: version, retention: retention)
+        case 4:
+            return .bitmap(field: try readField(&reader))
+        case 5:
+            let groupBy = try readIndexKeys(
+                from: &reader,
+                readField: readField
+            )
+            let score = try readField(&reader)
             let window: LeaderboardWindowType
             switch try reader.readUInt8() {
             case 0: window = .hourly
@@ -898,20 +1103,17 @@ private extension SchemaManifest {
             case 4: window = .custom(duration: try reader.readDouble())
             case let tag: throw .invalidValueTag(tag)
             }
-            return .timeWindowLeaderboard(
+            return .leaderboard(
+                groupBy: groupBy,
+                score: score,
                 window: window,
                 windowCount: try readInt(
                     from: &reader,
                     field: "windowCount"
                 )
             )
-        case 11:
-            return .distinct(
-                precision: try readInt(from: &reader, field: "precision")
-            )
-        case 12:
-            return .percentile(compression: try reader.readDouble())
-        case 13:
+        case 6:
+            let embedding = try readField(&reader)
             let dimensions = try readInt(from: &reader, field: "dimensions")
             let rawMetric = try reader.readString()
             guard let metric = VectorMetric(rawValue: rawMetric) else {
@@ -919,26 +1121,56 @@ private extension SchemaManifest {
                     "Unknown VectorMetric '\(rawMetric)'"
                 )
             }
-            return .vector(dimensions: dimensions, metric: metric)
-        case 14:
-            let rawTokenizer = try reader.readString()
-            guard let tokenizer = TokenizationStrategy(
-                rawValue: rawTokenizer
-            ) else {
-                throw .invalidSchemaManifest(
-                    "Unknown TokenizationStrategy '\(rawTokenizer)'"
-                )
-            }
-            return .fullText(
-                tokenizer: tokenizer,
-                storePositions: try reader.readBool(),
-                ngramSize: try readInt(from: &reader, field: "ngramSize"),
-                minTermLength: try readInt(
-                    from: &reader,
-                    field: "minTermLength"
-                )
+            return .vector(
+                embedding: embedding,
+                dimensions: dimensions,
+                metric: metric
             )
-        case 15:
+        case 7:
+            let fields = try readIndexFields(
+                from: &reader,
+                readField: readField
+            )
+            let mode: TextIndexMode
+            switch try reader.readUInt8() {
+            case 0:
+                let rawTokenizer = try reader.readString()
+                guard let tokenizer = TokenizationStrategy(
+                    rawValue: rawTokenizer
+                ) else {
+                    throw .invalidSchemaManifest(
+                        "Unknown TokenizationStrategy '\(rawTokenizer)'"
+                    )
+                }
+                mode = .fullText(
+                    tokenizer: tokenizer,
+                    storePositions: try reader.readBool(),
+                    ngramSize: try readInt(
+                        from: &reader,
+                        field: "ngramSize"
+                    ),
+                    minimumTermLength: try readInt(
+                        from: &reader,
+                        field: "minimumTermLength"
+                    )
+                )
+            case 1:
+                mode = .autocomplete(
+                    minimumPrefixLength: try readInt(
+                        from: &reader,
+                        field: "minimumPrefixLength"
+                    ),
+                    maximumPrefixLength: try readInt(
+                        from: &reader,
+                        field: "maximumPrefixLength"
+                    )
+                )
+            case let tag:
+                throw .invalidValueTag(tag)
+            }
+            return .text(fields: fields, mode: mode)
+        case 8:
+            let location = try readField(&reader)
             let rawEncoding = try reader.readString()
             guard let encoding = SpatialEncoding(rawValue: rawEncoding) else {
                 throw .invalidSchemaManifest(
@@ -946,70 +1178,141 @@ private extension SchemaManifest {
                 )
             }
             return .spatial(
+                location: location,
                 encoding: encoding,
                 level: try readInt(from: &reader, field: "level")
             )
-        case 16:
-            return .rank
-        case 17:
-            let pattern: PermutationPattern
+        case 9:
+            return .rank(score: try readField(&reader))
+        case 10:
+            let graphDefinition: GraphIndexDefinition<FieldReference>
             switch try reader.readUInt8() {
             case 0:
-                pattern = .identity(
-                    size: try readInt(from: &reader, field: "size")
-                )
-            case 1:
-                pattern = .swapping(
-                    try readInt(from: &reader, field: "first"),
-                    try readInt(from: &reader, field: "second"),
-                    size: try readInt(from: &reader, field: "size")
-                )
-            case 2:
-                let count = try reader.readCount()
-                var indices: [Int] = []
-                indices.reserveCapacity(count)
-                for _ in 0..<count {
-                    indices.append(
-                        try readInt(from: &reader, field: "permutation")
+                let source = try readField(&reader)
+                let label: PropertyGraphLabel<FieldReference>
+                switch try reader.readUInt8() {
+                case 0: label = .field(try readField(&reader))
+                case 1: label = .implicit
+                case let tag: throw .invalidValueTag(tag)
+                }
+                let target = try readField(&reader)
+                let graph = try reader.readBool() ? readField(&reader) : nil
+                let rawStrategy = try reader.readString()
+                guard let strategy = PropertyGraphIndexStrategy(
+                    rawValue: rawStrategy
+                ) else {
+                    throw .invalidSchemaManifest(
+                        "Unknown PropertyGraphIndexStrategy '\(rawStrategy)'"
                     )
                 }
-                pattern = .ordering(indices)
+                graphDefinition = .property(
+                    source: source,
+                    label: label,
+                    target: target,
+                    graph: graph,
+                    strategy: strategy
+                )
+            case 1:
+                let subject = try readField(&reader)
+                let predicate = try readField(&reader)
+                let object = try readField(&reader)
+                let graph = try reader.readBool() ? readField(&reader) : nil
+                graphDefinition = .rdf(
+                    subject: subject,
+                    predicate: predicate,
+                    object: object,
+                    graph: graph
+                )
+            case 2:
+                let individualIRIBase = try reader.readString()
+                let graph: RDFGraphName?
+                if try reader.readBool() {
+                    let value = try FieldValue(from: &reader)
+                    guard case .rdfTerm(let term) = value else {
+                        throw .invalidSchemaManifest(
+                            "Ontology projection graph must be an RDF term"
+                        )
+                    }
+                    do {
+                        graph = try RDFGraphName(term)
+                    } catch {
+                        throw .invalidSchemaManifest(
+                            "Ontology projection graph is invalid"
+                        )
+                    }
+                } else {
+                    graph = nil
+                }
+                graphDefinition = .ontologyProjection(
+                    individualIRIBase: individualIRIBase,
+                    graph: graph
+                )
             case let tag:
                 throw .invalidValueTag(tag)
             }
-            return .permuted(pattern)
-        case 18:
-            let rawStrategy = try reader.readString()
-            guard let strategy = PropertyGraphIndexStrategy(
-                rawValue: rawStrategy
-            ) else {
-                throw .invalidSchemaManifest(
-                    "Unknown PropertyGraphIndexStrategy '\(rawStrategy)'"
-                )
-            }
-            let label: PropertyGraphLabelSource
-            switch try reader.readUInt8() {
-            case 0: label = .field
-            case 1: label = .implicit
-            case let tag: throw .invalidValueTag(tag)
-            }
-            return .propertyGraph(strategy: strategy, label: label)
-        case 19:
-            return .autocomplete(
-                minPrefixLength: try readInt(
+            return .graph(
+                graphDefinition,
+                includedFields: try readIndexFields(
                     from: &reader,
-                    field: "minPrefixLength"
-                ),
-                maxPrefixLength: try readInt(
-                    from: &reader,
-                    field: "maxPrefixLength"
+                    readField: readField
                 )
             )
-        case 20:
-            return .rdfDataset
+        case 11:
+            return .custom(
+                CustomIndexDefinition(
+                    identifier: try reader.readString(),
+                    keys: try readIndexKeys(
+                        from: &reader,
+                        readField: readField
+                    ),
+                    includedFields: try readIndexFields(
+                        from: &reader,
+                        readField: readField
+                    ),
+                    parameters: try readFieldValueMap(
+                        context: "custom index parameters",
+                        from: &reader
+                    )
+                )
+            )
         case let tag:
             throw .invalidValueTag(tag)
         }
+    }
+
+    static func readIndexKeys<FieldReference>(
+        from reader: inout DatabaseWireReader,
+        readField: (inout DatabaseWireReader)
+            throws(DatabaseWireError) -> FieldReference
+    ) throws(DatabaseWireError) -> [IndexKey<FieldReference>] {
+        let count = try reader.readCount()
+        var keys: [IndexKey<FieldReference>] = []
+        keys.reserveCapacity(count)
+        for _ in 0..<count {
+            let field = try readField(&reader)
+            let order: IndexFieldOrder
+            switch try reader.readUInt8() {
+            case 0: order = .ascending
+            case 1: order = .descending
+            case let tag: throw .invalidValueTag(tag)
+            }
+            keys.append(IndexKey(field, order: order))
+        }
+        return keys
+    }
+
+    static func readIndexFields<FieldReference>(
+        from reader: inout DatabaseWireReader,
+        readField: (inout DatabaseWireReader)
+            throws(DatabaseWireError) -> FieldReference
+    ) throws(DatabaseWireError) -> [FieldReference] {
+        let count = try reader.readCount()
+        var fields: [FieldReference] = []
+        fields.reserveCapacity(count)
+        for _ in 0..<count {
+            fields.append(try readField(&reader))
+        }
+        return fields
     }
 
     static func readFieldValueMap(

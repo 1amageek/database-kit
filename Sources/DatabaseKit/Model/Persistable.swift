@@ -22,7 +22,11 @@ import DatabaseTypes
 ///     var id: String
 ///
 ///     #Directory<User>("users")
-///     #Index(.scalar, fields: [\User.email], unique: true)
+///     #Index(.ordered(
+///         name: "users_by_email",
+///         keys: [.ascending(\User.email)],
+///         unique: true
+///     ))
 ///
 ///     var email: String
 ///     var name: String

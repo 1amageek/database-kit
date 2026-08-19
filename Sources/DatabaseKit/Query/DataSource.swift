@@ -234,7 +234,7 @@ public indirect enum DataSource: Sendable, Equatable, Hashable {
     /// JOIN operation
     case join(JoinClause)
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     /// Explicitly binds a Base-local relational source for a bounded
     /// cross-Base Composition plan.
     case base(Base.ID, DataSource)

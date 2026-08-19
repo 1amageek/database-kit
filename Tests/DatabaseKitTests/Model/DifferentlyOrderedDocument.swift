@@ -1,11 +1,10 @@
 import DatabaseKit
 
 @Polymorphable
-@PolymorphicIndex(
-    .scalar,
-    fields: ["title"],
-    name: "DifferentlyOrderedDocument_title"
-)
+@PolymorphicIndex(.ordered(
+    name: "DifferentlyOrderedDocument_title",
+    keys: [.ascending("title")]
+))
 protocol DifferentlyOrderedDocument:
     Polymorphable<DifferentlyOrderedDocumentPolymorphicGroup>
 {

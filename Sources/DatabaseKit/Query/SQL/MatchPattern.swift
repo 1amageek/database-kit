@@ -853,7 +853,7 @@ extension DataSource {
 
         case .logical(let logicalSource):
             return SQLEscape.identifier(logicalSource.effectiveName)
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         case .base(let baseID, let source):
             return "/* BASE \(baseID.value) */ \(source.toSQL())"
         #endif

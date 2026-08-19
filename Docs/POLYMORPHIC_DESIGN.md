@@ -21,10 +21,12 @@ The public contract is:
 ```swift
 @Polymorphable
 @PolymorphicDirectory("memory", "entities")
-@PolymorphicIndex(
-    .vector(dimensions: 256),
-    embedding: "embedding"
-)
+@PolymorphicIndex(.vector(
+    name: "Entity_embedding",
+    embedding: "embedding",
+    dimensions: 256,
+    metric: .cosine
+))
 public protocol Entity: Polymorphable<EntityPolymorphicGroup> {
     var label: String { get }
     var entityType: String { get }
@@ -167,19 +169,23 @@ names through `@PolymorphicIndex`.
 Accepted shape:
 
 ```swift
-@PolymorphicIndex(
-    .vector(dimensions: 256),
-    embedding: "embedding"
-)
+@PolymorphicIndex(.vector(
+    name: "Entity_embedding",
+    embedding: "embedding",
+    dimensions: 256,
+    metric: .cosine
+))
 ```
 
 Concrete `@Persistable` models use the separate KeyPath-based declaration:
 
 ```swift
-#Index(
-    .vector(dimensions: 256),
-    embedding: \Person.embedding
-)
+#Index(.vector(
+    name: "Person_embedding",
+    embedding: \Person.embedding,
+    dimensions: 256,
+    metric: .cosine
+))
 ```
 
 Swift 6.4 cannot form `KeyPath<Self, Value>` while the protocol containing the

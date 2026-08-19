@@ -26,48 +26,36 @@ struct SchemaJSONCodecTests {
                 FieldSchema(name: "name", fieldNumber: 1, type: .string),
             ]
         )
+        let articleFields = [
+            FieldSchema(name: "title", fieldNumber: 1, type: .string),
+            FieldSchema(
+                name: "owner",
+                fieldNumber: 2,
+                type: .reference,
+                referenceTargetEntity: "Account"
+            ),
+            FieldSchema(name: "status", fieldNumber: 3, type: .enum),
+        ]
+        let articleIndex = try IndexDescriptor(
+            entityName: "Article",
+            declaration: .ordered(
+                name: "Article_title",
+                keys: [.ascending(.init(name: "title", number: 1))],
+                includedFields: [.init(name: "status", number: 3)],
+                unique: true
+            ),
+            fieldSchemas: articleFields
+        )
         let article = try Schema.Entity(
             name: "Article",
             identifierType: .composite([.string, .uint64]),
-            fields: [
-                FieldSchema(name: "title", fieldNumber: 1, type: .string),
-                FieldSchema(
-                    name: "owner",
-                    fieldNumber: 2,
-                    type: .reference,
-                    referenceTargetEntity: "Account"
-                ),
-                FieldSchema(name: "status", fieldNumber: 3, type: .enum),
-            ],
+            fields: articleFields,
             directoryComponents: [
                 .staticPath("articles"),
                 .dynamicField(fieldName: "status"),
             ],
             directoryLayer: .partition,
-            indexes: [
-                IndexDescriptorMetadata(
-                    entityName: "Article",
-                    name: "Article_title",
-                    kind: IndexKindMetadata(
-                        identifier: "scalar",
-                        subspaceStructure: .flat,
-                        fields: [
-                            IndexFieldMetadata(
-                                identity: FieldIdentity(name: "title", number: 1)
-                            ),
-                        ],
-                        metadata: [
-                            "label": .string("primary"),
-                            "weights": .array([.uint8(1), .uint8(2)]),
-                        ]
-                    ),
-                    commonOptions: CommonIndexOptions(
-                        unique: true,
-                        metadata: ["owner": "catalog"]
-                    ),
-                    storedFieldNames: ["status"]
-                ),
-            ],
+            indexes: [articleIndex],
             relationships: [
                 RelationshipDescriptor(
                     ownerTypeName: "Article",
@@ -102,12 +90,10 @@ struct SchemaJSONCodecTests {
                 directoryComponents: [.staticPath("content")],
                 directoryLayer: .default,
                 indexes: [
-                    PolymorphicIndexDefinition(
+                    .ordered(
                         name: "Content_title",
-                        definition: .scalar,
-                        fields: [PolymorphicIndexField(name: "title")],
-                        commonOptions: CommonIndexOptions(sparse: true),
-                        storedFieldNames: ["status"]
+                        keys: [.ascending("title")],
+                        includedFields: ["status"]
                     ),
                 ]
             )
@@ -127,9 +113,9 @@ struct SchemaJSONCodecTests {
     }
 
     @Test("Duplicate, unknown, and missing fields fail explicitly", arguments: [
-        #"{"formatVersion":1,"formatVersion":1,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[]}"#,
-        #"{"formatVersion":1,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[],"unknown":true}"#,
-        #"{"formatVersion":1,"schemaVersion":{"major":1,"minor":0,"patch":0}}"#,
+        #"{"formatVersion":2,"formatVersion":2,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[]}"#,
+        #"{"formatVersion":2,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[],"unknown":true}"#,
+        #"{"formatVersion":2,"schemaVersion":{"major":1,"minor":0,"patch":0}}"#,
     ])
     func malformedDocumentFails(_ json: String) {
         #expect(throws: SchemaJSONError.self) {
@@ -141,8 +127,17 @@ struct SchemaJSONCodecTests {
     func unsupportedVersionFails() {
         #expect(throws: SchemaJSONError.self) {
             try SchemaJSONCodec().decode(
-                #"{"formatVersion":2,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[]}"#
+                #"{"formatVersion":3,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[]}"#
             )
+        }
+    }
+
+    @Test("Duplicate field identities fail before index construction")
+    func duplicateFieldIdentityFails() {
+        let json = #"{"formatVersion":2,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[{"name":"Entry","identifierType":{"kind":"string"},"fields":[{"name":"value","number":1,"type":"string","optional":false,"array":false,"referenceTargetEntity":null},{"name":"value","number":1,"type":"string","optional":false,"array":false,"referenceTargetEntity":null}],"directory":{"components":[],"layer":"default"},"indexes":[{"entity":"Entry","declaration":{"name":"Entry_value","definition":{"kind":"ordered","keys":[{"field":{"name":"value","number":1},"order":"ascending"}],"includedFields":[],"unique":false}}}],"relationships":[],"fieldAccessRules":[],"enumMetadata":{},"ontology":null,"polymorphicMembership":null}]}"#
+
+        #expect(throws: SchemaJSONError.self) {
+            _ = try SchemaJSONCodec().decode(json)
         }
     }
 }
@@ -209,31 +204,118 @@ private func fieldValueRoundTrip(_ fixture: FieldValueFixture) throws {
 private func indexDefinitionRoundTrip() throws {
     let codec = SchemaJSONCodec()
     let duration = try TimeSpan(seconds: 5, nanoseconds: 6)
-    let values: [IndexDefinition] = [
-        .scalar, .count, .sum, .minimum, .maximum, .average,
-        .version(strategy: .keepAll),
-        .version(strategy: .keepLast(3)),
-        .version(strategy: .keepForDuration(duration)),
-        .countUpdates, .countNotNull, .bitmap,
-        .timeWindowLeaderboard(window: .hourly, windowCount: 4),
-        .timeWindowLeaderboard(window: .custom(duration: 2.5), windowCount: 2),
-        .distinct(precision: 10),
-        .percentile(compression: 55.5),
-        .vector(dimensions: 8, metric: .dotProduct),
-        .fullText(tokenizer: .ngram, storePositions: false, ngramSize: 2, minTermLength: 1),
-        .autocomplete(minPrefixLength: 2, maxPrefixLength: 9),
-        .spatial(encoding: .morton, level: 7),
-        .rank,
-        .permuted(.identity(size: 3)),
-        .permuted(.swapping(0, 2, size: 3)),
-        .permuted(.ordering([2, 0, 1])),
-        .propertyGraph(strategy: .adjacency, label: .implicit),
-        .rdfDataset,
+    let values: [IndexDefinition<String>] = [
+        .ordered(
+            keys: [.ascending("title"), .descending("createdAt")],
+            includedFields: ["status"],
+            unique: true
+        ),
+        .aggregate(function: .count, groupBy: [.ascending("region")], value: nil),
+        .aggregate(function: .sum, groupBy: [.ascending("region")], value: "amount"),
+        .aggregate(function: .minimum, groupBy: [], value: "amount"),
+        .aggregate(function: .maximum, groupBy: [], value: "amount"),
+        .aggregate(function: .average, groupBy: [], value: "amount"),
+        .aggregate(function: .nonNullCount, groupBy: [], value: "note"),
+        .aggregate(
+            function: .approximateDistinct(precision: 10),
+            groupBy: [],
+            value: "customer"
+        ),
+        .aggregate(
+            function: .percentile(compression: 55.5),
+            groupBy: [],
+            value: "latency"
+        ),
+        .updateCount(field: "id"),
+        .history(version: "revision", retention: .keepAll),
+        .history(version: "revision", retention: .keepLast(3)),
+        .history(version: "revision", retention: .keepForDuration(duration)),
+        .bitmap(field: "status"),
+        .leaderboard(
+            groupBy: [.ascending("region")],
+            score: "score",
+            window: .hourly,
+            windowCount: 4
+        ),
+        .leaderboard(
+            groupBy: [],
+            score: "score",
+            window: .custom(duration: 2.5),
+            windowCount: 2
+        ),
+        .vector(embedding: "embedding", dimensions: 8, metric: .dotProduct),
+        .text(
+            fields: ["body"],
+            mode: .fullText(
+                tokenizer: .ngram,
+                storePositions: false,
+                ngramSize: 2,
+                minimumTermLength: 1
+            )
+        ),
+        .text(
+            fields: ["title"],
+            mode: .autocomplete(
+                minimumPrefixLength: 2,
+                maximumPrefixLength: 9
+            )
+        ),
+        .spatial(location: "location", encoding: .morton, level: 7),
+        .rank(score: "score"),
+        .graph(
+            .property(
+                source: "source",
+                label: .implicit,
+                target: "target",
+                graph: "graph",
+                strategy: .adjacency
+            ),
+            includedFields: ["weight"]
+        ),
+        .graph(
+            .rdf(
+                subject: "subject",
+                predicate: "predicate",
+                object: "object",
+                graph: "graph"
+            ),
+            includedFields: []
+        ),
+        .graph(
+            .ontologyProjection(
+                individualIRIBase: "urn:test:",
+                graph: try RDFGraphName(iri: "urn:test:graph")
+            ),
+            includedFields: []
+        ),
+        .custom(
+            CustomIndexDefinition(
+                identifier: "example.custom",
+                keys: [.ascending("value")],
+                includedFields: ["metadata"],
+                parameters: ["mode": .string("exact")]
+            )
+        ),
     ]
 
     for (index, value) in values.enumerated() {
-        let node = try codec.encodeIndexDefinition(value)
-        let decoded = try codec.decodeIndexDefinition(node, path: "definitions[\(index)]")
+        let node = try codec.encodeIndexDefinition(
+            value,
+            encodeField: JSONValue.string
+        )
+        let decoded: IndexDefinition<String> = try codec.decodeIndexDefinition(
+            node,
+            path: "definitions[\(index)]",
+            decodeField: { value, path in
+                guard case .string(let field) = value else {
+                    throw SchemaJSONError.invalidValue(
+                        path: path,
+                        reason: "Expected a field name"
+                    )
+                }
+                return field
+            }
+        )
         #expect(decoded == value)
     }
 }

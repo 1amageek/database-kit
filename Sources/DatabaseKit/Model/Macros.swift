@@ -16,7 +16,11 @@ import DatabaseTypes
 ///     var id: String
 ///
 ///     #Directory<User>("users")
-///     #Index(.scalar, fields: [\User.email], unique: true)
+///     #Index(.ordered(
+///         name: "users_by_email",
+///         keys: [.ascending(\User.email)],
+///         unique: true
+///     ))
 ///
 ///     var email: String
 ///     var name: String
@@ -88,7 +92,7 @@ public macro `field`<Root, Value>(
 
 /// #Index macro declaration
 ///
-/// Declares built-in index semantics and source-level field selections.
+/// Declares one complete, explicitly named index value.
 ///
 /// **Usage**:
 /// ```swift
@@ -96,20 +100,33 @@ public macro `field`<Root, Value>(
 /// struct Product {
 ///     var id: String
 ///
-///     // Scalar index for sorting and range queries
-///     #Index(.scalar, fields: [\Product.email], unique: true)
 ///     #Index(
-///         .scalar,
-///         fields: [\Product.category, \Product.price]
+///         .ordered(
+///             name: "products_by_email",
+///             keys: [.ascending(\Product.email)],
+///             unique: true
+///         )
 ///     )
+///     #Index(.ordered(
+///         name: "products_by_category_and_price",
+///         keys: [
+///             .ascending(\Product.category),
+///             .ascending(\Product.price),
+///         ]
+///     ))
 ///
 ///     // Aggregation indexes
-///     #Index(.count, groupBy: [\Product.category])
-///     #Index(
-///         .sum,
-///         groupBy: [\Product.category],
+///     #Index(.aggregate(
+///         name: "product_count_by_category",
+///         function: .count,
+///         groupBy: [.ascending(\Product.category)]
+///     ))
+///     #Index(.aggregate(
+///         name: "product_price_sum_by_category",
+///         function: .sum,
+///         groupBy: [.ascending(\Product.category)],
 ///         value: \Product.price
-///     )
+///     ))
 ///
 ///     var email: String
 ///     var category: String
@@ -120,11 +137,9 @@ public macro `field`<Root, Value>(
 /// This is a marker macro. The @Persistable macro reads the #Index declaration
 /// and generates the indexDescriptors array.
 ///
-/// The attached model macro validates field roles, generates stable field
-/// identities, and constructs key-path-free descriptors.
-/// - Scalar definition: `{TypeName}_{field1}_{field2}`
-/// - Count definition: `{TypeName}_count_{field1}_{field2}`
-/// - Sum definition: `{TypeName}_sum_{groupFields}_{valueField}`
+/// The attached model macro validates the declaration name, rewrites source
+/// key paths into stable field identities, and constructs a key-path-free
+/// descriptor. Index names are always explicit persisted identities.
 ///
 /// **How it works**:
 /// 1. The declaration macro reads the source KeyPath literals.
@@ -132,46 +147,17 @@ public macro `field`<Root, Value>(
 /// 3. Runtime metadata retains field identities, never KeyPaths.
 @freestanding(declaration)
 public macro Index(
-    _ definition: IndexDefinition,
-    fields: [AnyKeyPath] = [],
-    groupBy: [AnyKeyPath] = [],
-    value: AnyKeyPath? = nil,
-    field: AnyKeyPath? = nil,
-    embedding: AnyKeyPath? = nil,
-    location: AnyKeyPath? = nil,
-    from: AnyKeyPath? = nil,
-    edge: AnyKeyPath? = nil,
-    to: AnyKeyPath? = nil,
-    graph: AnyKeyPath? = nil,
-    orders: [IndexFieldOrder] = [],
-    storedFields: [AnyKeyPath] = [],
-    unique: Bool = false,
-    name: String? = nil
+    _ declaration: IndexDeclaration<AnyKeyPath>
 ) = #externalMacro(module: "DatabaseKitMacros", type: "IndexMacro")
 
 /// Declares one logical index on an `@Polymorphable` protocol.
 ///
 /// Swift cannot form `\Self.member` while the protocol itself is being
-/// declared. Field names are therefore validated by `@Polymorphable` against
-/// the protocol's declared properties and later resolved against every
-/// concrete member schema.
+/// declared. Field names are therefore retained as logical references and
+/// resolved against every concrete member when `Schema` is constructed.
 @attached(peer)
 public macro PolymorphicIndex(
-    _ definition: IndexDefinition,
-    fields: [String] = [],
-    groupBy: [String] = [],
-    value: String? = nil,
-    field: String? = nil,
-    embedding: String? = nil,
-    location: String? = nil,
-    from: String? = nil,
-    edge: String? = nil,
-    to: String? = nil,
-    graph: String? = nil,
-    orders: [IndexFieldOrder] = [],
-    storedFields: [String] = [],
-    unique: Bool = false,
-    name: String? = nil
+    _ declaration: IndexDeclaration<String>
 ) = #externalMacro(
     module: "DatabaseKitMacros",
     type: "PolymorphicDeclarationMarkerMacro"
@@ -229,11 +215,10 @@ public enum DirectoryLayer: String, Sendable, Hashable {
 /// ```swift
 /// @Polymorphable
 /// @PolymorphicDirectory("app", "documents")
-/// @PolymorphicIndex(
-///     .scalar,
-///     fields: ["title"],
-///     name: "Document_title"
-/// )
+/// @PolymorphicIndex(.ordered(
+///     name: "Document_title",
+///     keys: [.ascending("title")]
+/// ))
 /// protocol Document: Polymorphable<DocumentPolymorphicGroup> {
 ///     var id: String { get }
 ///     var title: String { get }

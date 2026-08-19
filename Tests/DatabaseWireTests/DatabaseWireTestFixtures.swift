@@ -8,7 +8,7 @@ func makeTestDatabaseRequestEnvelope(
     metadata: OperationRequestMetadata = OperationRequestMetadata(),
     payload: ByteString
 ) -> DatabaseWireRequestEnvelope {
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     DatabaseWireRequestEnvelope(
         requestID: requestID,
         operation: operation,
@@ -33,7 +33,7 @@ extension DatabaseWireEncoder {
         metadata: OperationRequestMetadata = OperationRequestMetadata(),
         request: Request
     ) throws(DatabaseWireError) -> ByteString {
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         try encodeRequest(
             operation,
             requestID: requestID,
@@ -59,7 +59,7 @@ extension DatabaseOperation {
         request: Request,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> ByteString {
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         try encodeRequest(
             requestID: requestID,
             target: .database,
@@ -82,7 +82,7 @@ func makeTestJobIdentity(
     jobID: DatabaseTypes.UUID,
     operation: JobOperationIdentifier
 ) -> JobIdentity {
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     JobIdentity(jobID: jobID, operation: operation, target: .database)
     #else
     JobIdentity(jobID: jobID, operation: operation)
@@ -95,7 +95,7 @@ func makeTestJobStartRequest(
     maximumSliceWorkUnits: UInt64 = 100_000,
     retryPolicy: JobStartOperation.RetryPolicy = .init()
 ) -> JobStartOperation.Request {
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     JobStartOperation.Request(
         target: .database,
         operation: operation,
@@ -117,7 +117,7 @@ func makeTestJobStartResponse(
     jobID: DatabaseTypes.UUID,
     operation: JobOperationIdentifier
 ) -> JobStartOperation.Response {
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     JobStartOperation.Response(
         jobID: jobID,
         operation: operation,
@@ -131,7 +131,7 @@ func makeTestJobStartResponse(
 func makeTestJobResultDigestAccumulator(
     operation: JobOperationIdentifier
 ) -> JobResultDigestAccumulator {
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     JobResultDigestAccumulator(operation: operation, target: .database)
     #else
     JobResultDigestAccumulator(operation: operation)
@@ -145,7 +145,7 @@ func makeTestJobOperationStartRequest<Request, Response>(
     retryPolicy: JobStartOperation.RetryPolicy = .init(),
     limits: DatabaseWireLimits = .default
 ) throws(DatabaseWireError) -> JobStartOperation.Request {
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     try operation.makeStartRequest(
         request,
         target: .database,
@@ -163,7 +163,7 @@ func makeTestJobOperationStartRequest<Request, Response>(
     #endif
 }
 
-#if DATABASE_KIT_MULTIPLE_BASES
+#if DATABASE_KIT_MULTI_BASE
 func makeTestReadConsistency(
     version: UInt64 = 1
 ) throws -> DatabaseReadConsistency {
@@ -182,7 +182,7 @@ func makeTestQueryRowPage(
     continuation: ByteString? = nil,
     snapshotVersion: UInt64? = nil
 ) throws -> QueryRowPage {
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     try QueryRowPage(
         columns: columns,
         rows: rows,
@@ -207,7 +207,7 @@ func makeTestRDFGraphPage(
     continuation: ByteString? = nil,
     snapshotVersion: Int64? = nil
 ) throws -> RDFGraphPage {
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     return try RDFGraphPage(
         quads: quads,
         continuation: continuation,
@@ -229,7 +229,7 @@ func makeTestBooleanResponse(
     _ value: Bool,
     snapshotVersion: UInt64 = 1
 ) throws -> QueryExecuteOperation.Response {
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     .boolean(
         try QueryBooleanResult(
             value: value,
@@ -250,7 +250,7 @@ func testBooleanValue(
     guard case .boolean(let boolean) = value else {
         return nil
     }
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     return boolean.value
     #else
     return boolean

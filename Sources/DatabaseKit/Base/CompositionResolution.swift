@@ -1,4 +1,4 @@
-#if DATABASE_KIT_MULTIPLE_BASES
+#if DATABASE_KIT_MULTI_BASE
 /// Immutable Composition identity and member set fixed for one execution.
 /// Derived Compositions deliberately have neither an ID nor a generation.
 public struct CompositionResolution: Sendable, Hashable {

@@ -1,4 +1,4 @@
-#if DATABASE_KIT_MULTIPLE_BASES
+#if DATABASE_KIT_MULTI_BASE
 import DatabaseTypes
 
 /// The unambiguous address of an entity whose model identity is local to a Base.

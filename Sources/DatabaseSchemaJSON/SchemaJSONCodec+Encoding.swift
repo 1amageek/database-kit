@@ -140,43 +140,16 @@ extension SchemaJSONCodec {
         ])
     }
 
-    private func encodeIndex(_ index: IndexDescriptorMetadata) throws -> JSONValue {
+    private func encodeIndex(_ index: IndexDescriptor) throws -> JSONValue {
         .object([
             ("entity", .string(index.entityName)),
-            ("name", .string(index.name)),
             (
-                "kind",
-                .object([
-                    ("identifier", .string(index.kind.identifier)),
-                    ("subspace", .string(index.kind.subspaceStructure.rawValue)),
-                    (
-                        "fields",
-                        .array(index.kind.fields.map(encodeIndexField))
-                    ),
-                    (
-                        "metadata",
-                        try encodeFieldValueMap(index.kind.metadata)
-                    ),
-                ])
+                "declaration",
+                try encodeIndexDeclaration(
+                    index.declaration,
+                    encodeField: encodeFieldIdentity
+                )
             ),
-            ("options", encodeCommonOptions(index.commonOptions)),
-            ("storedFields", .array(index.storedFieldNames.map(JSONValue.string))),
-        ])
-    }
-
-    private func encodeIndexField(_ field: IndexFieldMetadata) -> JSONValue {
-        .object([
-            ("name", .string(field.identity.name)),
-            ("number", .number(String(field.identity.number))),
-            ("order", .string(field.order.rawValue)),
-        ])
-    }
-
-    private func encodeCommonOptions(_ options: CommonIndexOptions) -> JSONValue {
-        .object([
-            ("unique", .bool(options.unique)),
-            ("sparse", .bool(options.sparse)),
-            ("metadata", encodeStringMap(options.metadata)),
         ])
     }
 
@@ -269,33 +242,22 @@ extension SchemaJSONCodec {
     }
 
     private func encodePolymorphicIndex(
-        _ value: PolymorphicIndexDefinition
+        _ value: IndexDeclaration<String>
     ) throws -> JSONValue {
-        .object([
-            ("name", .string(value.name)),
-            ("definition", try encodeIndexDefinition(value.definition)),
-            (
-                "fields",
-                .array(value.fields.map { field in
-                    .object([
-                        ("name", .string(field.name)),
-                        ("order", .string(field.order.rawValue)),
-                    ])
-                })
-            ),
-            ("options", encodeCommonOptions(value.commonOptions)),
-            ("storedFields", .array(value.storedFieldNames.map(JSONValue.string))),
-        ])
+        try encodeIndexDeclaration(
+            value,
+            encodeField: { .string($0) }
+        )
     }
 
-    private func encodeFieldValueMap(
+    func encodeFieldValueMap(
         _ values: [String: DatabaseTypes.FieldValue]
     ) throws -> JSONValue {
         .object(
             try values.keys.sorted().map { key in
                 guard let value = values[key] else {
                     throw SchemaJSONError.invalidValue(
-                        path: "index.kind.metadata.\(key)",
+                        path: "index.definition.parameters.\(key)",
                         reason: "value disappeared while encoding"
                     )
                 }

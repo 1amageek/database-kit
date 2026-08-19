@@ -772,7 +772,7 @@ private struct QueryScopeState {
                     try validateValuesLiteral(literal)
                 }
             }
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         case .base(_, let source):
             try validate(
                 source,

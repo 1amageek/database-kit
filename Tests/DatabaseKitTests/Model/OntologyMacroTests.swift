@@ -66,7 +66,10 @@ struct OntNamedGraphEntity {
 )
 struct OntProduct {
     var id: String = "fixture-id"
-    #Index(.scalar, fields: [\OntProduct.category])
+    #Index(.ordered(
+        name: "ont_products_by_category",
+        keys: [.ascending(\OntProduct.category)]
+    ))
 
     @OWLDataProperty("https://example.org/onto#productName")
     var productName: String
@@ -143,7 +146,10 @@ struct OntFullDepartment {
 )
 struct OntFullProduct {
     var id: String = "fixture-id"
-    #Index(.scalar, fields: [\OntFullProduct.category])
+    #Index(.ordered(
+        name: "ont_full_products_by_category",
+        keys: [.ascending(\OntFullProduct.category)]
+    ))
 
     @OWLDataProperty("http://example.org/onto#productName")
     var productName: String
@@ -657,7 +663,7 @@ struct TypedMetadataOwnershipTests {
         let indexes = try OntEmployee._owlRDFIndexDescriptors
         #expect(indexes.count == 1)
         #expect(indexes[0].name == "OntEmployee_owl_rdf")
-        #expect(indexes[0].kindIdentifier == "owl_class_rdf")
+        #expect(indexes[0].type == .graph(.ontologyProjection))
     }
 
     @Test("Non-OWL type has no OWL RDF index descriptor")
@@ -665,7 +671,9 @@ struct TypedMetadataOwnershipTests {
         // OntPlainModel is @Persistable but NOT @OWLClass
         // The protocol requirement is unavailable without @OWLClass conformance.
         let indexDescs = try OntPlainModel.indexDescriptors
-        let owlRDF = indexDescs.first { $0.kindIdentifier == "owl_class_rdf" }
+        let owlRDF = indexDescs.first {
+            $0.type == .graph(.ontologyProjection)
+        }
         #expect(owlRDF == nil)
     }
 
@@ -675,10 +683,12 @@ struct TypedMetadataOwnershipTests {
         let indexes = try OntProduct.indexDescriptors
 
         // The model index and RDF projection are both registered.
-        let scalar = indexes.first { $0.kindIdentifier == "scalar" }
-        let owlRDF = indexes.first { $0.kindIdentifier == "owl_class_rdf" }
+        let ordered = indexes.first { $0.type == .ordered }
+        let owlRDF = indexes.first {
+            $0.type == .graph(.ontologyProjection)
+        }
 
-        #expect(scalar != nil, "Should contain scalar index from #Index")
+        #expect(ordered != nil, "Should contain ordered index from #Index")
         #expect(owlRDF != nil, "Should contain RDF projection from @OWLClass")
     }
 
@@ -689,37 +699,18 @@ struct TypedMetadataOwnershipTests {
         #expect(indexes == persistableIndexes)
     }
 
-    // -- OWLClassRDFIndexKind --
-
-    @Test("OWLClassRDFIndexKind has canonical metadata")
-    func owlRDFIndexKindProperties() {
-        let kind = OWLClassRDFIndexKind<OntEmployee>(
-            individualIRIBase: "https://example.org/individual/"
+    @Test("OWLClass emits its ontology projection declaration")
+    func owlRDFIndexDefinition() throws {
+        let descriptor = try #require(
+            try OntEmployee._owlRDFIndexDescriptors.first
         )
-        #expect(OWLClassRDFIndexKind<OntEmployee>.identifier == "owl_class_rdf")
-        #expect(OWLClassRDFIndexKind<OntEmployee>.subspaceStructure == .hierarchical)
-        #expect(kind.indexName == "OntEmployee_owl_rdf")
-        #expect(kind.graph == nil)
-        #expect(kind.individualIRIBase == "https://example.org/individual/")
-    }
-
-    @Test("OWLClassRDFIndexKind supports a fixed named graph")
-    func owlRDFIndexKindNamedGraph() throws {
-        let graph = try RDFGraphName(iri: "https://example.org/graph/people")
-        let kind = OWLClassRDFIndexKind<OntEmployee>(
-            individualIRIBase: "https://example.org/individual/",
-            graph: graph
-        )
-        #expect(kind.graph == graph)
-    }
-
-    @Test("OWLClassRDFIndexKind Hashable")
-    func owlRDFIndexKindHashable() {
-        let a = OWLClassRDFIndexKind<OntEmployee>(individualIRIBase: "https://example.org/a/")
-        let b = OWLClassRDFIndexKind<OntEmployee>(individualIRIBase: "https://example.org/a/")
-        let c = OWLClassRDFIndexKind<OntEmployee>(individualIRIBase: "https://example.org/b/")
-        #expect(a == b)
-        #expect(a != c)
-        #expect(a.hashValue == b.hashValue)
+        guard case .graph(
+            .ontologyProjection(let individualIRIBase, let graph), _
+        ) = descriptor.declaration.definition else {
+            Issue.record("Expected ontology projection index")
+            return
+        }
+        #expect(individualIRIBase == "https://example.org/individual/")
+        #expect(graph == nil)
     }
 }

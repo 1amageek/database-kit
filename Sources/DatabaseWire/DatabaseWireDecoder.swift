@@ -26,7 +26,7 @@ public struct DatabaseWireDecoder: Sendable {
         from frame: ByteString
     ) throws(DatabaseWireError) -> DecodedOperationRequest<Request> {
         let envelope = try decodeRequestEnvelope(frame)
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         return DecodedOperationRequest(
             requestID: envelope.requestID,
             target: envelope.target,

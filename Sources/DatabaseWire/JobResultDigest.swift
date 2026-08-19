@@ -63,18 +63,18 @@ extension JobResultDigest: WireValue {}
 /// Incrementally computes the canonical digest used by `job.result`.
 ///
 /// The digest input is the ASCII domain `JOPI`, the job family in big-endian
-/// order, the kind UTF-8 length and bytes, the optional MultipleBases target,
+/// order, the kind UTF-8 length and bytes, the optional MultiBase target,
 /// the ASCII domain `JRST`, and the response payload bytes in page order.
 public struct JobResultDigestAccumulator: Sendable {
     private static let identifierDomain: ByteString = [0x4a, 0x4f, 0x50, 0x49]
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     private static let targetDomain: ByteString = [0x4a, 0x54, 0x47, 0x54]
     #endif
     private static let resultDomain: ByteString = [0x4a, 0x52, 0x53, 0x54]
 
     private var sha256: SHA256Accumulator
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     public init(
         operation: JobOperationIdentifier,
         target: DatabaseOperationTarget
@@ -125,7 +125,7 @@ public struct JobResultDigestAccumulator: Sendable {
     }
     #endif
 
-    #if DATABASE_KIT_MULTIPLE_BASES
+    #if DATABASE_KIT_MULTI_BASE
     private static func update(
         target: DatabaseOperationTarget,
         accumulator: inout SHA256Accumulator

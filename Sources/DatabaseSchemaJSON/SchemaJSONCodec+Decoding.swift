@@ -67,28 +67,35 @@ private extension SchemaJSONCodec {
             object.required("directory"),
             path: object.child("directory")
         )
+        let entityName = try object.required("name").string(
+            path: object.child("name")
+        )
+        let fields = try fieldNodes.enumerated().map {
+            try decodeField(
+                $0.element,
+                path: "\(object.child("fields"))[\($0.offset)]"
+            )
+        }
+        let indexes = try indexNodes.enumerated().map {
+            try decodeIndex(
+                $0.element,
+                entityName: entityName,
+                fieldSchemas: fields,
+                path: "\(object.child("indexes"))[\($0.offset)]"
+            )
+        }
         do {
             return try Schema.Entity(
-                name: object.required("name").string(path: object.child("name")),
+                name: entityName,
                 identifierType: try decodeIdentifierType(
                     object.required("identifierType"),
                     path: object.child("identifierType"),
                     depth: 0
                 ),
-                fields: try fieldNodes.enumerated().map {
-                    try decodeField(
-                        $0.element,
-                        path: "\(object.child("fields"))[\($0.offset)]"
-                    )
-                },
+                fields: fields,
                 directoryComponents: directory.components,
                 directoryLayer: directory.layer,
-                indexes: try indexNodes.enumerated().map {
-                    try decodeIndex(
-                        $0.element,
-                        path: "\(object.child("indexes"))[\($0.offset)]"
-                    )
-                },
+                indexes: indexes,
                 relationships: try relationshipNodes.enumerated().map {
                     try decodeRelationship(
                         $0.element,
@@ -212,78 +219,41 @@ private extension SchemaJSONCodec {
         return (components, layer)
     }
 
-    func decodeIndex(_ node: JSONValue, path: String) throws -> IndexDescriptorMetadata {
+    func decodeIndex(
+        _ node: JSONValue,
+        entityName: String,
+        fieldSchemas: [FieldSchema],
+        path: String
+    ) throws -> IndexDescriptor {
         let object = try JSONObject(node, path: path)
-        try object.validateKeys(["entity", "name", "kind", "options", "storedFields"])
-        let kindObject = try JSONObject(object.required("kind"), path: object.child("kind"))
-        try kindObject.validateKeys(["identifier", "subspace", "fields", "metadata"])
-        let rawSubspace = try kindObject.required("subspace").string(
-            path: kindObject.child("subspace")
+        try object.validateKeys(["entity", "declaration"])
+        let encodedEntity = try object.required("entity").string(
+            path: object.child("entity")
         )
-        guard let subspace = SubspaceStructure(rawValue: rawSubspace) else {
-            throw invalidEnum(kindObject.child("subspace"), rawSubspace)
-        }
-        let fieldNodes = try kindObject.required("fields").array(
-            path: kindObject.child("fields")
-        )
-        try requireCollection(fieldNodes.count, path: kindObject.child("fields"))
-        return IndexDescriptorMetadata(
-            entityName: try object.required("entity").string(path: object.child("entity")),
-            name: try object.required("name").string(path: object.child("name")),
-            kind: IndexKindMetadata(
-                identifier: try kindObject.required("identifier").string(
-                    path: kindObject.child("identifier")
-                ),
-                subspaceStructure: subspace,
-                fields: try fieldNodes.enumerated().map {
-                    try decodeIndexField(
-                        $0.element,
-                        path: "\(kindObject.child("fields"))[\($0.offset)]"
-                    )
-                },
-                metadata: try decodeFieldValueMap(
-                    kindObject.required("metadata"),
-                    path: kindObject.child("metadata")
-                )
-            ),
-            commonOptions: try decodeCommonOptions(
-                object.required("options"),
-                path: object.child("options")
-            ),
-            storedFieldNames: try stringArray(
-                object.required("storedFields"),
-                path: object.child("storedFields")
+        guard encodedEntity == entityName else {
+            throw SchemaJSONError.invalidValue(
+                path: object.child("entity"),
+                reason: "index entity '\(encodedEntity)' does not match '\(entityName)'"
             )
-        )
-    }
-
-    func decodeIndexField(_ node: JSONValue, path: String) throws -> IndexFieldMetadata {
-        let object = try JSONObject(node, path: path)
-        try object.validateKeys(["name", "number", "order"])
-        let rawOrder = try object.required("order").string(path: object.child("order"))
-        guard let order = IndexFieldOrder(rawValue: rawOrder) else {
-            throw invalidEnum(object.child("order"), rawOrder)
         }
-        return IndexFieldMetadata(
-            identity: FieldIdentity(
-                name: try object.required("name").string(path: object.child("name")),
-                number: try integer(object, "number")
-            ),
-            order: order
-        )
-    }
-
-    func decodeCommonOptions(_ node: JSONValue, path: String) throws -> CommonIndexOptions {
-        let object = try JSONObject(node, path: path)
-        try object.validateKeys(["unique", "sparse", "metadata"])
-        return CommonIndexOptions(
-            unique: try object.required("unique").bool(path: object.child("unique")),
-            sparse: try object.required("sparse").bool(path: object.child("sparse")),
-            metadata: try decodeStringMap(
-                object.required("metadata"),
-                path: object.child("metadata")
+        let declaration: IndexDeclaration<FieldIdentity> =
+            try decodeIndexDeclaration(
+                object.required("declaration"),
+                path: object.child("declaration"),
+                decodeField: decodeFieldIdentity
             )
-        )
+        do {
+            return try IndexDescriptor(
+                entityName: entityName,
+                declaration: declaration,
+                fieldSchemas: fieldSchemas
+            )
+        } catch {
+            throw SchemaJSONError.invalidValue(
+                path: object.child("declaration"),
+                reason: String(describing: error)
+            )
+        }
     }
 
     func decodeRelationship(_ node: JSONValue, path: String) throws -> RelationshipDescriptor {
@@ -446,38 +416,13 @@ private extension SchemaJSONCodec {
     func decodePolymorphicIndex(
         _ node: JSONValue,
         path: String
-    ) throws -> PolymorphicIndexDefinition {
-        let object = try JSONObject(node, path: path)
-        try object.validateKeys(["name", "definition", "fields", "options", "storedFields"])
-        let fieldNodes = try object.required("fields").array(path: object.child("fields"))
-        try requireCollection(fieldNodes.count, path: object.child("fields"))
-        return PolymorphicIndexDefinition(
-            name: try object.required("name").string(path: object.child("name")),
-            definition: try decodeIndexDefinition(
-                object.required("definition"),
-                path: object.child("definition")
-            ),
-            fields: try fieldNodes.enumerated().map {
-                let itemPath = "\(object.child("fields"))[\($0.offset)]"
-                let field = try JSONObject($0.element, path: itemPath)
-                try field.validateKeys(["name", "order"])
-                let rawOrder = try field.required("order").string(path: field.child("order"))
-                guard let order = IndexFieldOrder(rawValue: rawOrder) else {
-                    throw invalidEnum(field.child("order"), rawOrder)
-                }
-                return PolymorphicIndexField(
-                    name: try field.required("name").string(path: field.child("name")),
-                    order: order
-                )
-            },
-            commonOptions: try decodeCommonOptions(
-                object.required("options"),
-                path: object.child("options")
-            ),
-            storedFieldNames: try stringArray(
-                object.required("storedFields"),
-                path: object.child("storedFields")
-            )
+    ) throws -> IndexDeclaration<String> {
+        try decodeIndexDeclaration(
+            node,
+            path: path,
+            decodeField: { node, path in
+                try node.string(path: path)
+            }
         )
     }
 }

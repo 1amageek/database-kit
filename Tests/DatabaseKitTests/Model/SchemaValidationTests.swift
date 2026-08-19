@@ -13,9 +13,10 @@ private struct SchemaValidationEntity {
 private struct ArrayScalarIndexEntity {
     var id: String = "fixture-id"
     #Index(
-        .scalar,
-        fields: [\ArrayScalarIndexEntity.tags],
-        name: "tags"
+        .ordered(
+            name: "tags",
+            keys: [.ascending(\ArrayScalarIndexEntity.tags)]
+        )
     )
 
     var tags: [String]
@@ -25,12 +26,13 @@ private struct ArrayScalarIndexEntity {
 private struct CompositeArrayScalarIndexEntity {
     var id: String = "fixture-id"
     #Index(
-        .scalar,
-        fields: [
-            \CompositeArrayScalarIndexEntity.category,
-            \CompositeArrayScalarIndexEntity.tags,
-        ],
-        name: "category_tags"
+        .ordered(
+            name: "category_tags",
+            keys: [
+                .ascending(\CompositeArrayScalarIndexEntity.category),
+                .ascending(\CompositeArrayScalarIndexEntity.tags),
+            ]
+        )
     )
 
     var category: String
@@ -41,9 +43,11 @@ private struct CompositeArrayScalarIndexEntity {
 private struct InvalidVectorConfigurationEntity {
     var id: String = "fixture-id"
     #Index(
-        .vector(dimensions: 0),
-        embedding: \InvalidVectorConfigurationEntity.embedding,
-        name: "invalid_vector"
+        .vector(
+            name: "invalid_vector",
+            embedding: \InvalidVectorConfigurationEntity.embedding,
+            dimensions: 0
+        )
     )
 
     var embedding: Vector
@@ -53,9 +57,10 @@ private struct InvalidVectorConfigurationEntity {
 private struct OptionalScalarIndexEntity {
     var id: String = "fixture-id"
     #Index(
-        .scalar,
-        fields: [\OptionalScalarIndexEntity.value],
-        name: "optional_scalar"
+        .ordered(
+            name: "optional_scalar",
+            keys: [.ascending(\OptionalScalarIndexEntity.value)]
+        )
     )
 
     var value: String?
@@ -254,25 +259,27 @@ struct SchemaValidationTests {
     @Test("Duplicate index names fail schema construction")
     func duplicateIndexNamesFailConstruction() throws {
         let first = try IndexDescriptor(
-            name: "duplicate_index",
-            definition: .scalar,
-            fields: [SchemaValidationEntity.fields.first.ascending]
+            entityName: "FirstIndexedEntity",
+            declaration: .ordered(
+                name: "duplicate_index",
+                keys: [.ascending(SchemaValidationEntity.fields.first.identity)]
+            ),
+            fieldSchemas: SchemaValidationEntity.fieldSchemas
         )
         let second = try IndexDescriptor(
-            name: "duplicate_index",
-            definition: .scalar,
-            fields: [SchemaValidationEntity.fields.second.ascending]
+            entityName: "SecondIndexedEntity",
+            declaration: .ordered(
+                name: "duplicate_index",
+                keys: [.ascending(SchemaValidationEntity.fields.second.identity)]
+            ),
+            fieldSchemas: SchemaValidationEntity.fieldSchemas
         )
         let firstEntity = try Schema.Entity(
             name: "FirstIndexedEntity",
             identifierType: .string,
             fields: SchemaValidationEntity.fieldSchemas,
             indexes: [
-                IndexDescriptorMetadata(
-                    entityName: "FirstIndexedEntity",
-                    name: first.name,
-                    kind: first.kind
-                )
+                first
             ]
         )
         let secondEntity = try Schema.Entity(
@@ -280,11 +287,7 @@ struct SchemaValidationTests {
             identifierType: .string,
             fields: SchemaValidationEntity.fieldSchemas,
             indexes: [
-                IndexDescriptorMetadata(
-                    entityName: "SecondIndexedEntity",
-                    name: second.name,
-                    kind: second.kind
-                )
+                second
             ]
         )
 
@@ -304,9 +307,12 @@ struct SchemaValidationTests {
     @Test("Index metadata must belong to its containing entity")
     func indexMetadataMustBelongToContainingEntity() throws {
         let descriptor = try IndexDescriptor(
-            name: "owned_index",
-            definition: .scalar,
-            fields: [SchemaValidationEntity.fields.first.ascending]
+            entityName: "SchemaValidationEntity",
+            declaration: .ordered(
+                name: "owned_index",
+                keys: [.ascending(SchemaValidationEntity.fields.first.identity)]
+            ),
+            fieldSchemas: SchemaValidationEntity.fieldSchemas
         )
 
         #expect(descriptor.entityName == "SchemaValidationEntity")
@@ -321,7 +327,101 @@ struct SchemaValidationTests {
                 name: "DifferentEntity",
                 identifierType: .string,
                 fields: SchemaValidationEntity.fieldSchemas,
-                indexes: [IndexDescriptorMetadata(descriptor)]
+                indexes: [descriptor]
+            )
+        }
+    }
+
+    @Test("Changing a named index definition is one replacement")
+    func changedNamedIndexIsReplacement() throws {
+        let fields = SchemaValidationEntity.fieldSchemas
+        let previousIndex = try IndexDescriptor(
+            entityName: "EvolvingIndexEntity",
+            declaration: .ordered(
+                name: "evolving_index",
+                keys: [.ascending(SchemaValidationEntity.fields.first.identity)]
+            ),
+            fieldSchemas: fields
+        )
+        let currentIndex = try IndexDescriptor(
+            entityName: "EvolvingIndexEntity",
+            declaration: .ordered(
+                name: "evolving_index",
+                keys: [.descending(SchemaValidationEntity.fields.first.identity)]
+            ),
+            fieldSchemas: fields
+        )
+        let previous = try Schema(
+            entities: [
+                Schema.Entity(
+                    name: "EvolvingIndexEntity",
+                    identifierType: .string,
+                    fields: fields,
+                    indexes: [previousIndex]
+                )
+            ],
+            version: Schema.Version(1, 0, 0)
+        )
+        let current = try Schema(
+            entities: [
+                Schema.Entity(
+                    name: "EvolvingIndexEntity",
+                    identifierType: .string,
+                    fields: fields,
+                    indexes: [currentIndex]
+                )
+            ],
+            version: Schema.Version(2, 0, 0)
+        )
+
+        #expect(
+            current.indexChanges(from: previous) == [
+                .replaced(previous: previousIndex, current: currentIndex)
+            ]
+        )
+    }
+
+    @Test("Changing a named polymorphic index is one replacement")
+    func changedNamedPolymorphicIndexIsReplacement() throws {
+        let previousDeclaration = IndexDeclaration<String>.ordered(
+            name: "evolving_polymorphic_index",
+            keys: [.ascending("first")]
+        )
+        let currentDeclaration = IndexDeclaration<String>.ordered(
+            name: "evolving_polymorphic_index",
+            keys: [.descending("first")]
+        )
+        let previous = try polymorphicSchema(
+            declaration: previousDeclaration,
+            version: Schema.Version(1, 0, 0)
+        )
+        let current = try polymorphicSchema(
+            declaration: currentDeclaration,
+            version: Schema.Version(2, 0, 0)
+        )
+        let identity = PolymorphicIndexIdentity(
+            groupIdentifier: "EvolvingGroup",
+            name: "evolving_polymorphic_index"
+        )
+
+        #expect(
+            current.polymorphicIndexChanges(from: previous) == [
+                .replaced(
+                    identity: identity,
+                    previous: previousDeclaration,
+                    current: currentDeclaration
+                )
+            ]
+        )
+
+        let missingFieldDeclaration = IndexDeclaration<String>.ordered(
+            name: "missing_polymorphic_field",
+            keys: [.ascending("missing")]
+        )
+        #expect(throws: SchemaError.self) {
+            _ = try polymorphicSchema(
+                declaration: missingFieldDeclaration,
+                version: Schema.Version(3, 0, 0)
             )
         }
     }
@@ -338,11 +438,11 @@ struct SchemaValidationTests {
         #expect(schema.allIndexNames.isEmpty)
     }
 
-    @Test("Single array scalar indexes use the ordered element domain")
-    func singleArrayScalarIndexesAreAccepted() throws {
-        let entity = try ArrayScalarIndexEntity.schemaEntity
-
-        #expect(entity.indexes.map(\.name) == ["tags"])
+    @Test("Ordered indexes reject implicit array expansion")
+    func orderedIndexesRejectArrays() {
+        #expect(throws: SchemaEntityError.self) {
+            _ = try ArrayScalarIndexEntity.schemaEntity
+        }
     }
 
     @Test("Composite scalar indexes reject implicit array products")
@@ -352,14 +452,14 @@ struct SchemaValidationTests {
                 IndexDeclarationError(
                     indexName: "category_tags",
                     validationError: .unsupportedField(
-                        index: "scalar",
+                            index: "category_tags",
                         field: FieldSchema(
                             name: "tags",
                             fieldNumber: 3,
                             type: .string,
                             isArray: true
                         ),
-                        reason: "Composite scalar indexes require scalar fields with canonical ordering"
+                        reason: "Ordered indexes require canonical ordering"
                     )
                 )
             )
@@ -375,7 +475,7 @@ struct SchemaValidationTests {
                 IndexDeclarationError(
                     indexName: "invalid_vector",
                     validationError: .invalidConfiguration(
-                        index: "vector",
+                        index: "invalid_vector",
                         reason: "Vector dimensions must be positive"
                     )
                 )
@@ -394,26 +494,62 @@ struct SchemaValidationTests {
         #expect(schema.allIndexNames == ["optional_scalar"])
     }
 
+    @Test("Ontology projections reject fields the runtime cannot maintain")
+    func ontologyProjectionRejectsIncludedFields() {
+        let field = FieldSchema(
+            name: "first",
+            fieldNumber: 1,
+            type: .string
+        )
+        #expect(
+            throws: IndexDeclarationError(
+                indexName: "ontology_projection",
+                validationError: .invalidConfiguration(
+                    index: "ontology_projection",
+                    reason: "Ontology projection requires an IRI base and no fields"
+                )
+            )
+        ) {
+            try IndexDescriptor(
+                entityName: "OntologyProjectionEntity",
+                declaration: .graph(
+                    name: "ontology_projection",
+                    definition: .ontologyProjection(
+                        individualIRIBase: "urn:entity:",
+                        graph: nil
+                    ),
+                    includedFields: [
+                        FieldIdentity(
+                            name: field.name,
+                            number: field.fieldNumber
+                        )
+                    ]
+                ),
+                fieldSchemas: [field]
+            )
+        }
+    }
+
     @Test("Descriptor field identities must match the static schema")
     func descriptorFieldIdentitiesMustMatchSchema() {
         #expect(
             throws: IndexDeclarationError(
                 indexName: "mismatched_descriptor",
                 validationError: .invalidConfiguration(
-                    index: "scalar",
-                    reason: "Field identity 'first#3' is absent from the static schema"
+                    index: "mismatched_descriptor",
+                    reason: "Field identity 'first#3' is absent from the entity schema"
                 )
             )
         ) {
             try IndexDescriptor(
-                name: "mismatched_descriptor",
-                definition: .scalar,
-                fields: [
-                    Field<SchemaValidationEntity, String>(
-                        identity: FieldIdentity(name: "first", number: 3),
-                        type: .string
-                    ).ascending
-                ]
+                entityName: "SchemaValidationEntity",
+                declaration: .ordered(
+                    name: "mismatched_descriptor",
+                    keys: [.ascending(
+                        FieldIdentity(name: "first", number: 3)
+                    )]
+                ),
+                fieldSchemas: SchemaValidationEntity.fieldSchemas
             )
         }
     }
@@ -536,5 +672,29 @@ struct SchemaValidationTests {
         )
 
         _ = try Schema(entities: [source, target])
+    }
+
+    private func polymorphicSchema(
+        declaration: IndexDeclaration<String>,
+        version: Schema.Version
+    ) throws -> Schema {
+        try Schema(
+            entities: [
+                Schema.Entity(
+                    name: "EvolvingPolymorphicEntity",
+                    identifierType: .string,
+                    fields: SchemaValidationEntity.fieldSchemas,
+                    polymorphicMembership: PolymorphicMembership(
+                        identifier: "EvolvingGroup",
+                        directoryComponents: [
+                            .staticPath("evolving-polymorphic")
+                        ],
+                        directoryLayer: .default,
+                        indexes: [declaration]
+                    )
+                )
+            ],
+            version: version
+        )
     }
 }

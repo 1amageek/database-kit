@@ -14,5 +14,5 @@ public protocol PolymorphicGroupDeclaration: Sendable {
     static var directoryLayer: DirectoryLayer { get }
 
     /// Logical indexes shared by every concrete model in the group.
-    static var indexes: [PolymorphicIndexDefinition] { get }
+    static var indexes: [IndexDeclaration<String>] { get }
 }

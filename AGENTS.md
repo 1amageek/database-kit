@@ -5,7 +5,7 @@
 - This package consumes primitive representations from `DatabaseTypes` and owns
   the Foundation-independent database semantic model above those primitives:
   model and document metadata, logical identity, schema, relationships, index
-  and graph declarations, QueryIR, and the canonical DatabaseWire v1 contract.
+  and graph declarations, QueryIR, and the canonical DatabaseWire v3 contract.
 - It does not own transport, database execution, storage, application schemas, or platform adapters.
 - A declaration does not move to `DatabaseTypes` merely because multiple
   database packages consume it. Query, schema, identity, operation, and wire
@@ -60,16 +60,16 @@
 - Large binary paths use one owned buffer plus bounded ranges or views. Materialize a copy only at an explicit ownership or external API boundary.
 - A required copy must be documented at the implementation site and verified when described as a performance improvement.
 - Do not silently substitute defaults for malformed input. Return a typed DatabaseWire error.
-- The standard Wire contract is version 2. `MultipleBases` replaces it with
-  target-bound version 4; it is not a compatibility layer or a version to
+- The standard Wire contract is version 3. `MultiBase` replaces it with
+  target-bound version 5; it is not a compatibility layer or a version to
   negotiate at runtime.
 
 ## Verification
 
 - Native verification uses `scripts/xcode-test-harness` with the pinned Swift
-  snapshot. The standard graph must execute exactly 641 tests. An isolated
-  `MultipleBases` graph uses `DATABASE_KIT_TEST_TRAITS=MultipleBases` and must
-  execute exactly 656 tests. The harness selects the trait in an isolated source
+  snapshot. The standard graph must execute exactly 625 tests. An isolated
+  `MultiBase` graph uses `DATABASE_KIT_TEST_TRAITS=MultiBase` and must
+  execute exactly 640 tests. The harness selects the trait in an isolated source
   copy and derives the expected count. Both runs require zero failures,
   skips, expected failures, runtime warnings, compiler-plugin internal errors,
   profile errors, or debug-information verification warnings.

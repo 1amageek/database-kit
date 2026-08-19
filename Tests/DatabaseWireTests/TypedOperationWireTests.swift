@@ -883,7 +883,7 @@ struct TypedOperationWireTests {
         accumulator.update([0x01, 0x02])
         accumulator.update([0x03, 0x04, 0x05])
 
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         let expected: [UInt8] = [
             0x65, 0xfc, 0x3a, 0x41, 0xe7, 0x47, 0x9e, 0x2b,
             0x9c, 0xa3, 0x2b, 0x1a, 0x9f, 0x2f, 0xb3, 0xca,
@@ -913,7 +913,7 @@ struct TypedOperationWireTests {
         accumulator.update(payload[63..<511])
         accumulator.update(payload[511..<1_000])
 
-        #if DATABASE_KIT_MULTIPLE_BASES
+        #if DATABASE_KIT_MULTI_BASE
         let expected: [UInt8] = [
             0x05, 0x52, 0xa1, 0x22, 0xbb, 0xfc, 0x43, 0xdd,
             0xcc, 0x1b, 0xf5, 0x01, 0x7b, 0xba, 0x70, 0x4f,

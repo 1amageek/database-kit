@@ -1,7 +1,13 @@
 import SwiftSyntax
 
+struct CollectedKeyPath {
+    let rootType: String?
+    let fieldPath: String
+}
+
 final class KeyPathCollector: SyntaxVisitor {
     private(set) var fieldPaths: [String] = []
+    private(set) var keyPaths: [CollectedKeyPath] = []
 
     override func visit(_ node: KeyPathExprSyntax) -> SyntaxVisitorContinueKind {
         let fieldPath = node.components.compactMap { component in
@@ -15,6 +21,12 @@ final class KeyPathCollector: SyntaxVisitor {
 
         if !fieldPath.isEmpty {
             fieldPaths.append(fieldPath)
+            keyPaths.append(
+                CollectedKeyPath(
+                    rootType: node.root?.trimmedDescription,
+                    fieldPath: fieldPath
+                )
+            )
         }
         return .skipChildren
     }
