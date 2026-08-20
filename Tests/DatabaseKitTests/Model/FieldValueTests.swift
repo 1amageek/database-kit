@@ -97,6 +97,90 @@ struct FieldValueTests {
         )
     }
 
+    @Test("Query numeric ordering uses exact finite values recursively")
+    func queryNumericOrderingIsExact() throws {
+        let decimalOnePointFive = FieldValue.decimal(
+            ExactDecimal(coefficient: 15, scale: 1)
+        )
+        let floatOnePointFive = FieldValue.float64(1.5)
+        #expect(decimalOnePointFive.compare(to: floatOnePointFive) == .equal)
+
+        let normalizedLargeFloat: Double = 95_367_431_640_625 * 0x1p100
+        let normalizedLargeDecimal = FieldValue.decimal(
+            ExactDecimal(
+                coefficient: Int128(1) << 80,
+                scale: -20
+            )
+        )
+        #expect(
+            normalizedLargeDecimal.compare(
+                to: .float64(normalizedLargeFloat)
+            ) == .equal
+        )
+
+        let lowerRoundedToPointOne = FieldValue.decimal(
+            ExactDecimal(
+                coefficient: 1_000_000_000_000_000_055,
+                scale: 19
+            )
+        )
+        let upperRoundedToPointOne = FieldValue.decimal(
+            ExactDecimal(
+                coefficient: 1_000_000_000_000_000_056,
+                scale: 19
+            )
+        )
+        let binaryPointOne = FieldValue.float64(0.1)
+        let decimalPointOne = FieldValue.decimal(
+            ExactDecimal(coefficient: 1, scale: 1)
+        )
+
+        #expect(lowerRoundedToPointOne.compare(to: binaryPointOne) == .lessThan)
+        #expect(binaryPointOne.compare(to: upperRoundedToPointOne) == .lessThan)
+        #expect(decimalPointOne.compare(to: binaryPointOne) == .lessThan)
+
+        let decimalArray = FieldValue.array([decimalOnePointFive])
+        let floatingArray = FieldValue.array([floatOnePointFive])
+        #expect(decimalArray.compare(to: floatingArray) == .equal)
+        #expect(floatingArray.compare(to: decimalArray) == .equal)
+        #expect(
+            FieldValue.array([lowerRoundedToPointOne]).compare(
+                to: .array([binaryPointOne])
+            ) == .lessThan
+        )
+        #expect(
+            FieldValue.array([binaryPointOne]).compare(
+                to: .array([lowerRoundedToPointOne])
+            ) == .greaterThan
+        )
+
+        let decimalObject = FieldValue.object(
+            try FieldObject([
+                (key: "value", value: decimalOnePointFive),
+            ])
+        )
+        let floatingObject = FieldValue.object(
+            try FieldObject([
+                (key: "value", value: floatOnePointFive),
+            ])
+        )
+        #expect(decimalObject.compare(to: floatingObject) == .equal)
+        #expect(floatingObject.compare(to: decimalObject) == .equal)
+
+        let lowerObject = FieldValue.object(
+            try FieldObject([
+                (key: "value", value: lowerRoundedToPointOne),
+            ])
+        )
+        let binaryObject = FieldValue.object(
+            try FieldObject([
+                (key: "value", value: binaryPointOne),
+            ])
+        )
+        #expect(lowerObject.compare(to: binaryObject) == .lessThan)
+        #expect(binaryObject.compare(to: lowerObject) == .greaterThan)
+    }
+
     @Test("UInt64 upper boundary has exact ordering")
     func uint64UpperBoundaryOrderingIsExact() {
         let penultimate = FieldValue.uint64(UInt64.max - 1)

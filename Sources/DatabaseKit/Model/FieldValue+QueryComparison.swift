@@ -85,12 +85,9 @@ extension FieldValue {
         case (.uuid(let left), .uuid(let right)):
             return order(left, right)
         case (.array(let left), .array(let right)):
-            if left == right { return .equal }
-            return left.lexicographicallyPrecedes(right)
-                ? .lessThan
-                : .greaterThan
+            return compareArrays(left, right)
         case (.object(let left), .object(let right)):
-            return order(left, right)
+            return compareObjects(left, right)
         case (.reference(let left), .reference(let right)):
             return order(left, right)
         case (.rdfTerm(let left), .rdfTerm(let right)):
@@ -100,7 +97,47 @@ extension FieldValue {
         }
     }
 
+    private func compareArrays(
+        _ left: [FieldValue],
+        _ right: [FieldValue]
+    ) -> QueryComparison? {
+        for (leftValue, rightValue) in zip(left, right) {
+            guard let comparison = leftValue.compare(to: rightValue) else {
+                return nil
+            }
+            if comparison != .equal { return comparison }
+        }
+        return order(left.count, right.count)
+    }
+
+    private func compareObjects(
+        _ left: FieldObject,
+        _ right: FieldObject
+    ) -> QueryComparison? {
+        let leftFields = left.fields
+        let rightFields = right.fields
+        for (leftField, rightField) in zip(leftFields, rightFields) {
+            if !utf8Equal(leftField.key, rightField.key) {
+                return utf8LessThan(leftField.key, rightField.key)
+                    ? .lessThan
+                    : .greaterThan
+            }
+            guard let comparison = leftField.value.compare(
+                to: rightField.value
+            ) else {
+                return nil
+            }
+            if comparison != .equal { return comparison }
+        }
+        return order(leftFields.count, rightFields.count)
+    }
+
     private func compareNumeric(to other: FieldValue) -> QueryComparison? {
+        if let left = QueryExactNumericValue(self),
+           let right = QueryExactNumericValue(other) {
+            return comparisonResult(left.compare(to: right))
+        }
+
         let leftValue = widenedNumericValue
         let rightValue = other.widenedNumericValue
         switch (leftValue, rightValue) {
@@ -125,17 +162,12 @@ extension FieldValue {
             return Self.compare(left, to: right)
         case (.float64(let left), .uint64(let right)):
             return Self.compare(right, to: left)?.reversed
-        case (.decimal(let left), .decimal(let right)):
-            return comparisonResult(left.compare(to: right))
-        case (.decimal, .int64), (.decimal, .uint64),
-             (.int64, .decimal), (.uint64, .decimal):
-            guard let left = exactDecimalValue,
-                  let right = other.exactDecimalValue else {
-                return Self.compareFiniteNumericFallback(self, other)
-            }
-            return comparisonResult(left.compare(to: right))
-        case (.decimal, .float64), (.float64, .decimal):
-            return Self.compareFiniteNumericFallback(leftValue, rightValue)
+        case (.decimal, .float64(let right)):
+            guard !right.isNaN else { return nil }
+            return right == .infinity ? .lessThan : .greaterThan
+        case (.float64(let left), .decimal):
+            guard !left.isNaN else { return nil }
+            return left == .infinity ? .greaterThan : .lessThan
         default:
             return nil
         }
@@ -213,46 +245,6 @@ extension FieldValue {
         if integer > truncated { return .greaterThan }
         if value > Double(truncated) { return .lessThan }
         return .equal
-    }
-
-    private static func compareFiniteNumericFallback(
-        _ left: FieldValue,
-        _ right: FieldValue
-    ) -> QueryComparison? {
-        guard let left = left.queryNumericDoubleValue,
-              let right = right.queryNumericDoubleValue,
-              left.isFinite,
-              right.isFinite else {
-            return nil
-        }
-        if left < right { return .lessThan }
-        if left > right { return .greaterThan }
-        return .equal
-    }
-
-    private var exactDecimalValue: ExactDecimal? {
-        switch self {
-        case .int8(let value):
-            return ExactDecimal(coefficient: Int128(value), scale: 0)
-        case .int16(let value):
-            return ExactDecimal(coefficient: Int128(value), scale: 0)
-        case .int32(let value):
-            return ExactDecimal(coefficient: Int128(value), scale: 0)
-        case .int64(let value):
-            return ExactDecimal(coefficient: Int128(value), scale: 0)
-        case .uint8(let value):
-            return ExactDecimal(coefficient: Int128(value), scale: 0)
-        case .uint16(let value):
-            return ExactDecimal(coefficient: Int128(value), scale: 0)
-        case .uint32(let value):
-            return ExactDecimal(coefficient: Int128(value), scale: 0)
-        case .uint64(let value):
-            return ExactDecimal(coefficient: Int128(value), scale: 0)
-        case .decimal(let value):
-            return value
-        default:
-            return nil
-        }
     }
 
     private var queryNumericDoubleValue: Double? {
