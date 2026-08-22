@@ -342,11 +342,13 @@ extension IndexDefinition where FieldReference == FieldIdentity {
         case .leaderboard(let groupBy, _, let window, let windowCount):
             try requireMinimumCount(1)
             guard windowCount > 0,
-                  window.durationSeconds.isFinite,
-                  window.durationSeconds > 0 else {
+                  let durationSeconds = Int64(
+                    exactly: window.durationSeconds
+                  ),
+                  durationSeconds > 0 else {
                 throw .invalidConfiguration(
                     index: indexName,
-                    reason: "Leaderboard window and count must be finite and positive"
+                    reason: "Leaderboard windows require a positive whole-second duration representable by Int64 and a positive count"
                 )
             }
             try requireOrdered(
