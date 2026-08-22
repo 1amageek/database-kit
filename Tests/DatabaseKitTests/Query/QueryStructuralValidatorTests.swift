@@ -207,6 +207,44 @@ struct QueryStructuralValidatorTests {
         }
     }
 
+    @Test("Fusion inputs and weights share the collection ledger")
+    func fusionCollectionOverflow() {
+        let query = SelectQuery(
+            projection: .all,
+            source: .table(TableRef("documents")),
+            accessPath: .fusion(
+                FusionSource(
+                    inputs: [
+                        IndexScanSource(
+                            indexName: "text",
+                            indexType: .text(.fullText)
+                        ),
+                        IndexScanSource(
+                            indexName: "vector",
+                            indexType: .vector
+                        ),
+                    ],
+                    strategy: .weighted([0.25, 0.75])
+                )
+            )
+        )
+
+        #expect(
+            throws: QueryStructuralValidationError.resourceLimitExceeded(
+                resource: .collectionElements,
+                actual: 4,
+                maximum: 3
+            )
+        ) {
+            try QueryStructuralValidator.validate(
+                query,
+                limits: QueryStructuralLimits(
+                    maximumCollectionElements: 3
+                )
+            )
+        }
+    }
+
     @Test("Total node accounting includes SQL mutation payloads")
     func sqlMutationTotalNodeBoundary() throws {
         let statement = QueryStatement.insert(

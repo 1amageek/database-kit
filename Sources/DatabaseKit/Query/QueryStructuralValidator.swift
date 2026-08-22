@@ -477,11 +477,9 @@ private extension QueryStructuralValidator {
                         validationSteps.append(.indexSource(source, depth: childDepth))
                     case .fusion(let source):
                         try consumeCollection(source.inputs.count)
-                        try appendParameters(
-                            source.parameters,
-                            depth: childDepth,
-                            to: &validationSteps
-                        )
+                        if case .weighted(let weights) = source.strategy {
+                            try consumeCollection(weights.count)
+                        }
                         for input in source.inputs.reversed() {
                             validationSteps.append(.indexSource(input, depth: childDepth))
                         }

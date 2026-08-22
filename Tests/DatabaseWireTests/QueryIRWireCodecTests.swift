@@ -5,6 +5,49 @@ import Testing
 
 @Suite("QueryIR wire codec")
 struct QueryIRWireFormatTests {
+    @Test("fusion access strategies round-trip through the canonical codec")
+    func fusionAccessStrategiesRoundTrip() throws {
+        let strategies: [FusionStrategy] = [
+            .reciprocalRank(rankConstant: 42),
+            .sum,
+            .maximum,
+            .weighted([0.25, 0.75]),
+        ]
+
+        for strategy in strategies {
+            let statement = QueryStatement.select(
+                SelectQuery(
+                    projection: .all,
+                    source: .table(TableRef(table: "Document")),
+                    accessPath: .fusion(
+                        FusionSource(
+                            inputs: [
+                                IndexScanSource(
+                                    indexName: "Document_text",
+                                    indexType: .text(.fullText),
+                                    parameters: ["terms": .array([.string("swift")])]
+                                ),
+                                IndexScanSource(
+                                    indexName: "Document_vector",
+                                    indexType: .vector,
+                                    parameters: ["k": .int64(20)]
+                                ),
+                            ],
+                            strategy: strategy,
+                            identityField: "id"
+                        )
+                    )
+                )
+            )
+
+            #expect(
+                try QueryIRWireFormat.decode(
+                    QueryIRWireFormat.encode(statement)
+                ) == statement
+            )
+        }
+    }
+
     @Test("mixed basic graph patterns round-trip without splitting blank-node scope")
     func mixedBasicGraphPatternRoundTrips() throws {
         let pathPredicate = try RDFPredicateIRI("urn:calendar:related")
