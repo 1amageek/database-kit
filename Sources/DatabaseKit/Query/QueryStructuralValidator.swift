@@ -131,6 +131,7 @@ private extension QueryStructuralValidator {
         case fusionStage(FusionStageSource, depth: UInt64)
         case fusionInput(FusionInput, depth: UInt64)
         case fusionIndexSource(FusionIndexSource, depth: UInt64)
+        case fusionConnectedSource(FusionConnectedSource, depth: UInt64)
         case graphTableSource(GraphTableSource, depth: UInt64)
         case graphTableColumn(GraphTableColumn, depth: UInt64)
         case matchPattern(MatchPattern, depth: UInt64)
@@ -507,6 +508,10 @@ private extension QueryStructuralValidator {
                         validationSteps.append(
                             .fusionIndexSource(source, depth: childDepth)
                         )
+                    case .connected(let source):
+                        validationSteps.append(
+                            .fusionConnectedSource(source, depth: childDepth)
+                        )
                     case .filter(let expression):
                         validationSteps.append(.expression(expression, depth: childDepth))
                     case .order(let keys):
@@ -523,6 +528,17 @@ private extension QueryStructuralValidator {
                         depth: childDepth,
                         to: &validationSteps
                     )
+
+                case .fusionConnectedSource(let source, _):
+                    if case .matching(_, let fields, _) = source.selection {
+                        try consumeCollection(fields.count)
+                    }
+                    try consumeCollection(source.edgePartitions.count)
+                    for field in source.edgePartitions.fields.reversed() {
+                        validationSteps.append(
+                            .fieldValue(field.value, depth: childDepth)
+                        )
+                    }
 
                 case .graphTableSource(let source, _):
                     if let columns = source.columns {
@@ -1068,6 +1084,7 @@ private extension QueryStructuralValidator {
                  .accessPath(_, let depth), .indexSource(_, let depth),
                  .fusionStage(_, let depth), .fusionInput(_, let depth),
                  .fusionIndexSource(_, let depth),
+                 .fusionConnectedSource(_, let depth),
                  .graphTableSource(_, let depth),
                  .graphTableColumn(_, let depth),
                  .matchPattern(_, let depth), .pathPattern(_, let depth),

@@ -5,6 +5,51 @@ import Testing
 
 @Suite("QueryIR wire codec")
 struct QueryIRWireFormatTests {
+    @Test("cross-entity Fusion traversal round-trips")
+    func connectedFusionSourceRoundTrips() throws {
+        let connected = FusionConnectedSource(
+            edgeEntity: "Follow",
+            edgePartitions: try FieldObject([
+                (key: "tenant", value: .string("acme")),
+            ]),
+            selection: .named(
+                name: "follow_graph",
+                type: .graph(.property)
+            ),
+            resultField: FieldIdentity(name: "userID", number: 2),
+            origin: "alice",
+            edgeLabel: "follows",
+            direction: .both,
+            maximumHops: 4
+        )
+        let original = QueryStatement.select(
+            SelectQuery(
+                projection: .all,
+                source: .table(TableRef("Person")),
+                accessPath: .fusion(
+                    FusionSource(
+                        stages: [
+                            FusionStageSource(inputs: [
+                                FusionInput(
+                                    operation: .connected(connected),
+                                    scoring: .annotation(
+                                        name: "hops",
+                                        order: .lowerIsBetter
+                                    )
+                                ),
+                            ]),
+                        ]
+                    )
+                )
+            )
+        )
+
+        let encoded = try QueryIRWireFormat.encode(original)
+        let decoded = try QueryIRWireFormat.decode(encoded)
+
+        #expect(decoded == original)
+    }
+
     @Test("staged Fusion access paths round-trip without losing semantics")
     func stagedFusionAccessPathRoundTrips() throws {
         let source = FusionSource(
@@ -52,6 +97,8 @@ struct QueryIRWireFormatTests {
                             )
                         )
                     ),
+                ]),
+                FusionStageSource(inputs: [
                     FusionInput(
                         operation: .order([
                             SortKey(.column(ColumnRef("createdAt")), direction: .descending),
@@ -62,9 +109,7 @@ struct QueryIRWireFormatTests {
                     ),
                 ]),
             ],
-            strategy: .weighted([0.7, 0.2, 0.1]),
-            identityField: "id",
-            scoreAnnotation: "fusion.score"
+            strategy: .weighted([0.7, 0.2, 0.1])
         )
         let original = QueryStatement.select(
             SelectQuery(

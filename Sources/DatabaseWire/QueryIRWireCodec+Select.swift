@@ -27,8 +27,6 @@ extension QueryIRWireFormat {
             writer.writeUInt8(1)
             try writeArray(source.stages, into: &writer, encode: encodeFusionStage)
             try encodeFusionStrategy(source.strategy, into: &writer)
-            try writer.writeString(source.identityField)
-            try writer.writeString(source.scoreAnnotation)
         }
     }
 
@@ -42,9 +40,7 @@ extension QueryIRWireFormat {
             return .fusion(
                 FusionSource(
                     stages: try readArray(from: &reader, decode: decodeFusionStage),
-                    strategy: try decodeFusionStrategy(from: &reader),
-                    identityField: try reader.readString(),
-                    scoreAnnotation: try reader.readString()
+                    strategy: try decodeFusionStrategy(from: &reader)
                 )
             )
         case let tag:
@@ -202,6 +198,9 @@ extension QueryIRWireFormat {
         case .index(let source):
             writer.writeUInt8(0)
             try encodeFusionIndexSource(source, into: &writer)
+        case .connected(let source):
+            writer.writeUInt8(3)
+            try encodeFusionConnectedSource(source, into: &writer)
         case .filter(let expression):
             writer.writeUInt8(1)
             try encodeExpression(expression, into: &writer)
@@ -221,6 +220,10 @@ extension QueryIRWireFormat {
             return .filter(try decodeExpression(from: &reader))
         case 2:
             return .order(try readArray(from: &reader, decode: decodeSortKey))
+        case 3:
+            return .connected(
+                try decodeFusionConnectedSource(from: &reader)
+            )
         case let tag:
             throw .invalidValueTag(tag)
         }
@@ -230,7 +233,15 @@ extension QueryIRWireFormat {
         _ source: FusionIndexSource,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
-        switch source.selection {
+        try encodeFusionIndexSelection(source.selection, into: &writer)
+        try encodeParameters(source.parameters, into: &writer)
+    }
+
+    private static func encodeFusionIndexSelection(
+        _ selection: FusionIndexSelection,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        switch selection {
         case .named(let name, let type):
             writer.writeUInt8(0)
             try writer.writeString(name)
@@ -245,16 +256,24 @@ extension QueryIRWireFormat {
             }
             writer.writeUInt8(fieldMatch.rawValue)
         }
-        try encodeParameters(source.parameters, into: &writer)
     }
 
     private static func decodeFusionIndexSource(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) -> FusionIndexSource {
-        let selection: FusionIndexSelection
+        let selection = try decodeFusionIndexSelection(from: &reader)
+        return FusionIndexSource(
+            selection: selection,
+            parameters: try decodeParameters(from: &reader)
+        )
+    }
+
+    private static func decodeFusionIndexSelection(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> FusionIndexSelection {
         switch try reader.readUInt8() {
         case 0:
-            selection = .named(
+            return .named(
                 name: try reader.readString(),
                 type: try IndexTypeWireCodec.decode(from: &reader)
             )
@@ -271,7 +290,7 @@ extension QueryIRWireFormat {
             guard let fieldMatch = FusionIndexFieldMatch(rawValue: tag) else {
                 throw .invalidValueTag(tag)
             }
-            selection = .matching(
+            return .matching(
                 type: type,
                 fields: fields,
                 fieldMatch: fieldMatch
@@ -279,9 +298,50 @@ extension QueryIRWireFormat {
         case let tag:
             throw .invalidValueTag(tag)
         }
-        return FusionIndexSource(
+    }
+
+    private static func encodeFusionConnectedSource(
+        _ source: FusionConnectedSource,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        try writer.writeString(source.edgeEntity)
+        try source.edgePartitions.encode(into: &writer)
+        try encodeFusionIndexSelection(source.selection, into: &writer)
+        try writer.writeString(source.resultField.name)
+        try writeInt(source.resultField.number, into: &writer)
+        try writer.writeString(source.origin)
+        try writeOptionalString(source.edgeLabel, into: &writer)
+        writer.writeUInt8(source.direction.rawValue)
+        writer.writeUInt64(source.maximumHops)
+    }
+
+    private static func decodeFusionConnectedSource(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> FusionConnectedSource {
+        let edgeEntity = try reader.readString()
+        let edgePartitions = try FieldObject(from: &reader)
+        let selection = try decodeFusionIndexSelection(from: &reader)
+        let resultField = FieldIdentity(
+            name: try reader.readString(),
+            number: try readInt(from: &reader)
+        )
+        let origin = try reader.readString()
+        let edgeLabel = try readOptionalString(from: &reader)
+        let directionTag = try reader.readUInt8()
+        guard let direction = FusionConnectedDirection(
+            rawValue: directionTag
+        ) else {
+            throw .invalidValueTag(directionTag)
+        }
+        return FusionConnectedSource(
+            edgeEntity: edgeEntity,
+            edgePartitions: edgePartitions,
             selection: selection,
-            parameters: try decodeParameters(from: &reader)
+            resultField: resultField,
+            origin: origin,
+            edgeLabel: edgeLabel,
+            direction: direction,
+            maximumHops: try reader.readUInt64()
         )
     }
 

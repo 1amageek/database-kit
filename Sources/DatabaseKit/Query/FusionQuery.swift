@@ -19,9 +19,7 @@ public struct FusionQuery<Item: Persistable>: Sendable {
         Self(
             source: FusionSource(
                 stages: source.stages,
-                strategy: strategy,
-                identityField: source.identityField,
-                scoreAnnotation: source.scoreAnnotation
+                strategy: strategy
             ),
             resultLimit: resultLimit
         )

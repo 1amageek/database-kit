@@ -2,11 +2,19 @@
 public enum FusionPlanValidationError: Error, Sendable, Equatable {
     case noStages
     case emptyStage(index: Int)
-    case emptyIdentityField
-    case emptyScoreAnnotation
+    case mixedScoringStage(index: Int)
     case emptyIndexName(stage: Int, input: Int)
     case emptyMatchingFields(stage: Int, input: Int)
+    case emptyConnectedEdgeEntity(stage: Int, input: Int)
+    case emptyConnectedResultField(stage: Int, input: Int)
+    case emptyConnectedOrigin(stage: Int, input: Int)
+    case invalidConnectedIndex(stage: Int, input: Int)
+    case invalidConnectedScoring(stage: Int, input: Int)
+    case zeroConnectedMaximumHops(stage: Int, input: Int)
     case emptyOrdering(stage: Int, input: Int)
+    case invalidFilterScoring(stage: Int, input: Int)
+    case invalidOrderScoring(stage: Int, input: Int)
+    case orderRequiresCandidates(stage: Int, input: Int)
     case emptyScoringAnnotation(stage: Int, input: Int)
     case candidatesRequiredInFirstStage(input: Int)
     case noScoredInputs
@@ -18,12 +26,14 @@ extension FusionSource {
     /// Validates semantics that do not require a schema or runtime context.
     public func validate() throws(FusionPlanValidationError) {
         guard !stages.isEmpty else { throw .noStages }
-        guard !identityField.isEmpty else { throw .emptyIdentityField }
-        guard !scoreAnnotation.isEmpty else { throw .emptyScoreAnnotation }
 
         var scoredInputCount = 0
         for (stageIndex, stage) in stages.enumerated() {
             guard !stage.inputs.isEmpty else { throw .emptyStage(index: stageIndex) }
+            let stageIsScored = stage.inputs[0].scoring != nil
+            guard stage.inputs.allSatisfy({ ($0.scoring != nil) == stageIsScored }) else {
+                throw .mixedScoringStage(index: stageIndex)
+            }
             for (inputIndex, input) in stage.inputs.enumerated() {
                 if stageIndex == 0, input.requirement == .candidates {
                     throw .candidatesRequiredInFirstStage(input: inputIndex)
@@ -40,11 +50,79 @@ extension FusionSource {
                             throw .emptyMatchingFields(stage: stageIndex, input: inputIndex)
                         }
                     }
+                case .connected(let source):
+                    guard !source.edgeEntity.isEmpty else {
+                        throw .emptyConnectedEdgeEntity(
+                            stage: stageIndex,
+                            input: inputIndex
+                        )
+                    }
+                    guard !source.resultField.name.isEmpty else {
+                        throw .emptyConnectedResultField(
+                            stage: stageIndex,
+                            input: inputIndex
+                        )
+                    }
+                    guard !source.origin.isEmpty else {
+                        throw .emptyConnectedOrigin(
+                            stage: stageIndex,
+                            input: inputIndex
+                        )
+                    }
+                    guard source.maximumHops > 0 else {
+                        throw .zeroConnectedMaximumHops(
+                            stage: stageIndex,
+                            input: inputIndex
+                        )
+                    }
+                    switch source.selection {
+                    case .named(let name, let type):
+                        guard !name.isEmpty,
+                              type == .graph(.property) else {
+                            throw .invalidConnectedIndex(
+                                stage: stageIndex,
+                                input: inputIndex
+                            )
+                        }
+                    case .matching(let type, let fields, _):
+                        guard type == .graph(.property), !fields.isEmpty else {
+                            throw .invalidConnectedIndex(
+                                stage: stageIndex,
+                                input: inputIndex
+                            )
+                        }
+                    }
+                    guard input.scoring == .annotation(
+                        name: "hops",
+                        order: .lowerIsBetter
+                    ) else {
+                        throw .invalidConnectedScoring(
+                            stage: stageIndex,
+                            input: inputIndex
+                        )
+                    }
                 case .filter:
-                    break
+                    guard input.scoring == nil else {
+                        throw .invalidFilterScoring(
+                            stage: stageIndex,
+                            input: inputIndex
+                        )
+                    }
                 case .order(let keys):
                     guard !keys.isEmpty else {
                         throw .emptyOrdering(stage: stageIndex, input: inputIndex)
+                    }
+                    guard input.scoring == .position else {
+                        throw .invalidOrderScoring(
+                            stage: stageIndex,
+                            input: inputIndex
+                        )
+                    }
+                    guard input.requirement == .candidates else {
+                        throw .orderRequiresCandidates(
+                            stage: stageIndex,
+                            input: inputIndex
+                        )
                     }
                 }
                 if case .annotation(let name, _) = input.scoring, name.isEmpty {

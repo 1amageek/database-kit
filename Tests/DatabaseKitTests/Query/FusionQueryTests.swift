@@ -94,7 +94,14 @@ struct FusionQueryTests {
             stages: [
                 FusionStageSource(inputs: [
                     FusionInput(
-                        operation: .order([SortKey(.col("title"))]),
+                        operation: .index(
+                            FusionIndexSource(
+                                selection: .named(
+                                    name: "documents_vector",
+                                    type: .vector
+                                )
+                            )
+                        ),
                         scoring: .position
                     ),
                 ]),
@@ -105,6 +112,139 @@ struct FusionQueryTests {
             throws: FusionPlanValidationError.weightCount(expected: 1, actual: 2)
         ) {
             try invalidWeights.validate()
+        }
+
+        let invalidTraversal = FusionSource(
+            stages: [
+                FusionStageSource(inputs: [
+                    FusionInput(
+                        operation: .connected(
+                            FusionConnectedSource(
+                                edgeEntity: "Follow",
+                                selection: .named(
+                                    name: "follow_graph",
+                                    type: .graph(.property)
+                                ),
+                                resultField: FieldIdentity(
+                                    name: "userID",
+                                    number: 2
+                                ),
+                                origin: "alice",
+                                maximumHops: 0
+                            )
+                        ),
+                        scoring: .annotation(
+                            name: "hops",
+                            order: .lowerIsBetter
+                        )
+                    ),
+                ]),
+            ]
+        )
+        #expect(
+            throws: FusionPlanValidationError.zeroConnectedMaximumHops(
+                stage: 0,
+                input: 0
+            )
+        ) {
+            try invalidTraversal.validate()
+        }
+
+        let mixedStage = FusionSource(
+            stages: [
+                FusionStageSource(inputs: [
+                    FusionInput(
+                        operation: .index(
+                            FusionIndexSource(
+                                selection: .named(
+                                    name: "documents_vector",
+                                    type: .vector
+                                )
+                            )
+                        ),
+                        scoring: .position
+                    ),
+                    FusionInput(
+                        operation: .filter(.literal(.bool(true)))
+                    ),
+                ]),
+            ]
+        )
+        #expect(
+            throws: FusionPlanValidationError.mixedScoringStage(index: 0)
+        ) {
+            try mixedStage.validate()
+        }
+    }
+
+    @Test("plan validation rejects operation and scoring mismatches")
+    func validationRejectsOperationScoringMismatches() {
+        let scoredFilter = FusionSource(stages: [
+            FusionStageSource(inputs: [
+                FusionInput(
+                    operation: .filter(.literal(.bool(true))),
+                    scoring: .position
+                ),
+            ]),
+        ])
+        #expect(
+            throws: FusionPlanValidationError.invalidFilterScoring(
+                stage: 0,
+                input: 0
+            )
+        ) {
+            try scoredFilter.validate()
+        }
+
+        let unorderedRank = FusionSource(stages: [
+            FusionStageSource(inputs: [
+                FusionInput(
+                    operation: .index(
+                        FusionIndexSource(
+                            selection: .named(
+                                name: "documents_vector",
+                                type: .vector
+                            )
+                        )
+                    ),
+                    scoring: .position
+                ),
+            ]),
+            FusionStageSource(inputs: [
+                FusionInput(
+                    operation: .order([SortKey(.col("title"))]),
+                    scoring: .annotation(
+                        name: "score",
+                        order: .higherIsBetter
+                    ),
+                    requirement: .candidates
+                ),
+            ]),
+        ])
+        #expect(
+            throws: FusionPlanValidationError.invalidOrderScoring(
+                stage: 1,
+                input: 0
+            )
+        ) {
+            try unorderedRank.validate()
+        }
+
+        let unrestrictedRank = FusionSource(stages: [
+            FusionStageSource(inputs: [
+                FusionInput(
+                    operation: .order([SortKey(.col("title"))]),
+                    scoring: .position
+                ),
+            ]),
+        ])
+        #expect(
+            throws: FusionPlanValidationError.orderRequiresCandidates(
+                stage: 0,
+                input: 0
+            )
+        ) {
+            try unrestrictedRank.validate()
         }
     }
 
@@ -125,13 +265,39 @@ struct FusionQueryTests {
                         ),
                         scoring: .position
                     ),
+                ]),
+                FusionStageSource(inputs: [
                     FusionInput(
                         operation: .filter(
                             .equal(.col("status"), .literal(.string("active")))
                         )
                     ),
+                ]),
+                FusionStageSource(inputs: [
                     FusionInput(
-                        operation: .order([SortKey(.col("createdAt"))])
+                        operation: .order([SortKey(.col("createdAt"))]),
+                        scoring: .position,
+                        requirement: .candidates
+                    ),
+                    FusionInput(
+                        operation: .connected(
+                            FusionConnectedSource(
+                                edgeEntity: "Follow",
+                                selection: .named(
+                                    name: "follow_graph",
+                                    type: .graph(.property)
+                                ),
+                                resultField: FieldIdentity(
+                                    name: "userID",
+                                    number: 5
+                                ),
+                                origin: "alice"
+                            )
+                        ),
+                        scoring: .annotation(
+                            name: "hops",
+                            order: .lowerIsBetter
+                        )
                     ),
                 ]),
             ]
@@ -146,6 +312,7 @@ struct FusionQueryTests {
             ColumnRef("body"),
             ColumnRef("status"),
             ColumnRef("createdAt"),
+            ColumnRef("userID"),
         ]))
     }
 }

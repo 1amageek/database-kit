@@ -460,6 +460,8 @@ extension SelectQuery {
                     }
                 case .index:
                     break
+                case .connected:
+                    break
                 }
             }
         }
@@ -564,6 +566,8 @@ extension SelectQuery {
                             cols.insert(ColumnRef(field.name))
                         }
                     }
+                case .connected(let connectedSource):
+                    cols.insert(ColumnRef(connectedSource.resultField.name))
                 case .filter(let expression):
                     collectColumns(from: expression, into: &cols)
                 case .order(let keys):

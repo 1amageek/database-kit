@@ -577,7 +577,7 @@ private extension QueryParameterBindingTraversal {
                     bindingSteps.append(.expression(expression))
                 case .order(let keys):
                     enqueueSortKeyBindings(keys)
-                case .index:
+                case .index, .connected:
                     break
                 }
             }
@@ -1708,7 +1708,7 @@ private extension QueryParameterBindingTraversal {
                 let input = inputs[inputIndex]
                 let operation: FusionInputOperation
                 switch input.operation {
-                case .index:
+                case .index, .connected:
                     continue
                 case .filter:
                     let expression = try popExpression()
@@ -1738,9 +1738,7 @@ private extension QueryParameterBindingTraversal {
             value: .fusion(
                 FusionSource(
                     stages: stages,
-                    strategy: source.strategy,
-                    identityField: source.identityField,
-                    scoreAnnotation: source.scoreAnnotation
+                    strategy: source.strategy
                 )
             ),
             changed: true
