@@ -25,10 +25,10 @@ extension QueryIRWireFormat {
             try encodeIndexScanSource(source, into: &writer)
         case .fusion(let source):
             writer.writeUInt8(1)
-            try writeArray(source.inputs, into: &writer, encode: encodeIndexScanSource)
-            try writer.writeString(source.strategyIdentifier)
-            try encodeParameters(source.parameters, into: &writer)
+            try writeArray(source.stages, into: &writer, encode: encodeFusionStage)
+            try encodeFusionStrategy(source.strategy, into: &writer)
             try writer.writeString(source.identityField)
+            try writer.writeString(source.scoreAnnotation)
         }
     }
 
@@ -41,10 +41,10 @@ extension QueryIRWireFormat {
         case 1:
             return .fusion(
                 FusionSource(
-                    inputs: try readArray(from: &reader, decode: decodeIndexScanSource),
-                    strategyIdentifier: try reader.readString(),
-                    parameters: try decodeParameters(from: &reader),
-                    identityField: try reader.readString()
+                    stages: try readArray(from: &reader, decode: decodeFusionStage),
+                    strategy: try decodeFusionStrategy(from: &reader),
+                    identityField: try reader.readString(),
+                    scoreAnnotation: try reader.readString()
                 )
             )
         case let tag:
@@ -150,6 +150,215 @@ extension QueryIRWireFormat {
             indexType: try IndexTypeWireCodec.decode(from: &reader),
             parameters: try decodeParameters(from: &reader)
         )
+    }
+
+    private static func encodeFusionStage(
+        _ stage: FusionStageSource,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        try writeArray(stage.inputs, into: &writer, encode: encodeFusionInput)
+    }
+
+    private static func decodeFusionStage(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> FusionStageSource {
+        FusionStageSource(
+            inputs: try readArray(from: &reader, decode: decodeFusionInput)
+        )
+    }
+
+    private static func encodeFusionInput(
+        _ input: FusionInput,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        try encodeFusionOperation(input.operation, into: &writer)
+        try writeOptional(input.scoring, into: &writer, encode: encodeFusionScoring)
+        writer.writeUInt8(input.requirement.rawValue)
+        writeOptionalUInt64(input.limit, into: &writer)
+    }
+
+    private static func decodeFusionInput(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> FusionInput {
+        let operation = try decodeFusionOperation(from: &reader)
+        let scoring = try readOptional(from: &reader, decode: decodeFusionScoring)
+        let requirementTag = try reader.readUInt8()
+        guard let requirement = FusionInputRequirement(rawValue: requirementTag) else {
+            throw .invalidValueTag(requirementTag)
+        }
+        return FusionInput(
+            operation: operation,
+            scoring: scoring,
+            requirement: requirement,
+            limit: try readOptionalUInt64(from: &reader)
+        )
+    }
+
+    private static func encodeFusionOperation(
+        _ operation: FusionInputOperation,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        switch operation {
+        case .index(let source):
+            writer.writeUInt8(0)
+            try encodeFusionIndexSource(source, into: &writer)
+        case .filter(let expression):
+            writer.writeUInt8(1)
+            try encodeExpression(expression, into: &writer)
+        case .order(let keys):
+            writer.writeUInt8(2)
+            try writeArray(keys, into: &writer, encode: encodeSortKey)
+        }
+    }
+
+    private static func decodeFusionOperation(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> FusionInputOperation {
+        switch try reader.readUInt8() {
+        case 0:
+            return .index(try decodeFusionIndexSource(from: &reader))
+        case 1:
+            return .filter(try decodeExpression(from: &reader))
+        case 2:
+            return .order(try readArray(from: &reader, decode: decodeSortKey))
+        case let tag:
+            throw .invalidValueTag(tag)
+        }
+    }
+
+    private static func encodeFusionIndexSource(
+        _ source: FusionIndexSource,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        switch source.selection {
+        case .named(let name, let type):
+            writer.writeUInt8(0)
+            try writer.writeString(name)
+            try IndexTypeWireCodec.encode(type, into: &writer)
+        case .matching(let type, let fields, let fieldMatch):
+            writer.writeUInt8(1)
+            try IndexTypeWireCodec.encode(type, into: &writer)
+            try writeArray(fields, into: &writer) {
+                (identity: FieldIdentity, writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+                try writer.writeString(identity.name)
+                try writeInt(identity.number, into: &writer)
+            }
+            writer.writeUInt8(fieldMatch.rawValue)
+        }
+        try encodeParameters(source.parameters, into: &writer)
+    }
+
+    private static func decodeFusionIndexSource(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> FusionIndexSource {
+        let selection: FusionIndexSelection
+        switch try reader.readUInt8() {
+        case 0:
+            selection = .named(
+                name: try reader.readString(),
+                type: try IndexTypeWireCodec.decode(from: &reader)
+            )
+        case 1:
+            let type = try IndexTypeWireCodec.decode(from: &reader)
+            let fields: [FieldIdentity] = try readArray(from: &reader) {
+                (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> FieldIdentity in
+                FieldIdentity(
+                    name: try reader.readString(),
+                    number: try readInt(from: &reader)
+                )
+            }
+            let tag = try reader.readUInt8()
+            guard let fieldMatch = FusionIndexFieldMatch(rawValue: tag) else {
+                throw .invalidValueTag(tag)
+            }
+            selection = .matching(
+                type: type,
+                fields: fields,
+                fieldMatch: fieldMatch
+            )
+        case let tag:
+            throw .invalidValueTag(tag)
+        }
+        return FusionIndexSource(
+            selection: selection,
+            parameters: try decodeParameters(from: &reader)
+        )
+    }
+
+    private static func encodeFusionScoring(
+        _ scoring: FusionScoring,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        switch scoring {
+        case .position:
+            writer.writeUInt8(0)
+        case .annotation(let name, let order):
+            writer.writeUInt8(1)
+            try writer.writeString(name)
+            writer.writeUInt8(order.rawValue)
+        }
+    }
+
+    private static func decodeFusionScoring(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> FusionScoring {
+        switch try reader.readUInt8() {
+        case 0:
+            return .position
+        case 1:
+            let name = try reader.readString()
+            let tag = try reader.readUInt8()
+            guard let order = FusionScoreOrder(rawValue: tag) else {
+                throw .invalidValueTag(tag)
+            }
+            return .annotation(name: name, order: order)
+        case let tag:
+            throw .invalidValueTag(tag)
+        }
+    }
+
+    private static func encodeFusionStrategy(
+        _ strategy: FusionStrategy,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        switch strategy {
+        case .reciprocalRank(let rankConstant):
+            writer.writeUInt8(0)
+            writer.writeUInt64(rankConstant)
+        case .sum:
+            writer.writeUInt8(1)
+        case .maximum:
+            writer.writeUInt8(2)
+        case .weighted(let weights):
+            writer.writeUInt8(3)
+            try writer.writeCount(weights.count)
+            for weight in weights {
+                writer.writeDouble(weight)
+            }
+        }
+    }
+
+    private static func decodeFusionStrategy(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> FusionStrategy {
+        switch try reader.readUInt8() {
+        case 0:
+            return .reciprocalRank(rankConstant: try reader.readUInt64())
+        case 1:
+            return .sum
+        case 2:
+            return .maximum
+        case 3:
+            let count = try reader.readCount()
+            var weights: [Double] = []
+            weights.reserveCapacity(count)
+            for _ in 0..<count {
+                weights.append(try reader.readDouble())
+            }
+            return .weighted(weights)
+        case let tag:
+            throw .invalidValueTag(tag)
+        }
     }
 
     private static func encodeParameters(

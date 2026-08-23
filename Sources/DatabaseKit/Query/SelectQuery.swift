@@ -294,6 +294,9 @@ extension SelectQuery {
                 collectVariables(from: key.expression, into: &vars)
             }
         }
+        if let accessPath {
+            collectVariables(from: accessPath, into: &vars)
+        }
         return vars
     }
 
@@ -325,6 +328,9 @@ extension SelectQuery {
             for key in orderBy {
                 collectColumns(from: key.expression, into: &cols)
             }
+        }
+        if let accessPath {
+            collectColumns(from: accessPath, into: &cols)
         }
         return cols
     }
@@ -441,6 +447,24 @@ extension SelectQuery {
         }
     }
 
+    private func collectVariables(from path: AccessPath, into vars: inout Set<String>) {
+        guard case .fusion(let source) = path else { return }
+        for stage in source.stages {
+            for input in stage.inputs {
+                switch input.operation {
+                case .filter(let expression):
+                    collectVariables(from: expression, into: &vars)
+                case .order(let keys):
+                    for key in keys {
+                        collectVariables(from: key.expression, into: &vars)
+                    }
+                case .index:
+                    break
+                }
+            }
+        }
+    }
+
     private func collectColumns(from source: DataSource, into cols: inout Set<ColumnRef>) {
         switch source {
         case .table:
@@ -526,6 +550,28 @@ extension SelectQuery {
             cols.formUnion(query.referencedColumns)
         case .literal, .variable, .parameter, .bound:
             break
+        }
+    }
+
+    private func collectColumns(from path: AccessPath, into cols: inout Set<ColumnRef>) {
+        guard case .fusion(let source) = path else { return }
+        for stage in source.stages {
+            for input in stage.inputs {
+                switch input.operation {
+                case .index(let indexSource):
+                    if case .matching(_, let fields, _) = indexSource.selection {
+                        for field in fields {
+                            cols.insert(ColumnRef(field.name))
+                        }
+                    }
+                case .filter(let expression):
+                    collectColumns(from: expression, into: &cols)
+                case .order(let keys):
+                    for key in keys {
+                        collectColumns(from: key.expression, into: &cols)
+                    }
+                }
+            }
         }
     }
 

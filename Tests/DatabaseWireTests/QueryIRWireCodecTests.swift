@@ -5,6 +5,82 @@ import Testing
 
 @Suite("QueryIR wire codec")
 struct QueryIRWireFormatTests {
+    @Test("staged Fusion access paths round-trip without losing semantics")
+    func stagedFusionAccessPathRoundTrips() throws {
+        let source = FusionSource(
+            stages: [
+                FusionStageSource(inputs: [
+                    FusionInput(
+                        operation: .index(
+                            FusionIndexSource(
+                                selection: .matching(
+                                    type: .text(.fullText),
+                                    fields: [FieldIdentity(name: "body", number: 2)],
+                                    fieldMatch: .contains
+                                ),
+                                parameters: ["query": .string("swift database")]
+                            )
+                        ),
+                        scoring: .annotation(
+                            name: "score",
+                            order: .higherIsBetter
+                        ),
+                        limit: 50
+                    ),
+                    FusionInput(
+                        operation: .index(
+                            FusionIndexSource(
+                                selection: .named(
+                                    name: "documents_vector",
+                                    type: .vector
+                                ),
+                                parameters: ["k": .uint64(50)]
+                            )
+                        ),
+                        scoring: .annotation(
+                            name: "distance",
+                            order: .lowerIsBetter
+                        )
+                    ),
+                ]),
+                FusionStageSource(inputs: [
+                    FusionInput(
+                        operation: .filter(
+                            .equal(
+                                .column(ColumnRef("status")),
+                                .parameter(.position(1))
+                            )
+                        )
+                    ),
+                    FusionInput(
+                        operation: .order([
+                            SortKey(.column(ColumnRef("createdAt")), direction: .descending),
+                        ]),
+                        scoring: .position,
+                        requirement: .candidates,
+                        limit: 20
+                    ),
+                ]),
+            ],
+            strategy: .weighted([0.7, 0.2, 0.1]),
+            identityField: "id",
+            scoreAnnotation: "fusion.score"
+        )
+        let original = QueryStatement.select(
+            SelectQuery(
+                projection: .all,
+                source: .table(TableRef("documents")),
+                accessPath: .fusion(source),
+                limit: 10
+            )
+        )
+
+        let encoded = try QueryIRWireFormat.encode(original)
+        let decoded = try QueryIRWireFormat.decode(encoded)
+
+        #expect(decoded == original)
+    }
+
     @Test("mixed basic graph patterns round-trip without splitting blank-node scope")
     func mixedBasicGraphPatternRoundTrips() throws {
         let pathPredicate = try RDFPredicateIRI("urn:calendar:related")

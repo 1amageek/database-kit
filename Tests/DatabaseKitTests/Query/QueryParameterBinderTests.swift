@@ -4,6 +4,51 @@ import Testing
 
 @Suite("Query parameter binding")
 struct QueryParameterBinderTests {
+    @Test("parameters bind inside Fusion filters and ordering")
+    func fusionParametersBind() throws {
+        let fusion = FusionSource(
+            stages: [
+                FusionStageSource(inputs: [
+                    FusionInput(
+                        operation: .filter(
+                            .equal(.col("status"), .parameter(.name("status")))
+                        )
+                    ),
+                    FusionInput(
+                        operation: .order([
+                            SortKey(.parameter(.position(2))),
+                        ]),
+                        scoring: .position
+                    ),
+                ]),
+            ]
+        )
+        let statement = QueryStatement.select(
+            SelectQuery(
+                projection: .all,
+                source: .table(TableRef("documents")),
+                accessPath: .fusion(fusion)
+            )
+        )
+        let binder = try QueryParameterBinder(parameters: [
+            QueryParameter(position: 1, name: "status", value: .string("active")),
+            QueryParameter(position: 2, value: .int64(42)),
+        ])
+
+        let bound = try binder.bind(statement)
+        guard case .select(let query) = bound,
+              case .fusion(let source) = query.accessPath else {
+            Issue.record("Expected a bound Fusion SELECT")
+            return
+        }
+        #expect(source.stages[0].inputs[0].operation == .filter(
+            .equal(.col("status"), .literal(.string("active")))
+        ))
+        #expect(source.stages[0].inputs[1].operation == .order([
+            SortKey(.literal(.int(42))),
+        ]))
+    }
+
     @Test("named and positional parameters bind throughout a statement")
     func namedAndPositionalParametersBind() throws {
         let statement = QueryStatement.select(

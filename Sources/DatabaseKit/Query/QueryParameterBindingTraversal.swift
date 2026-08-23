@@ -227,6 +227,7 @@ private extension QueryParameterBindingTraversal {
                 bindingSteps.append(.select(subquery.query))
             }
         }
+        enqueueAccessPathBindings(query.accessPath)
         if let orderBy = query.orderBy {
             enqueueSortKeyBindings(orderBy)
         }
@@ -565,6 +566,24 @@ private extension QueryParameterBindingTraversal {
         }
     }
 
+    mutating func enqueueAccessPathBindings(
+        _ accessPath: AccessPath?
+    ) {
+        guard case .fusion(let source) = accessPath else { return }
+        for stage in source.stages.reversed() {
+            for input in stage.inputs.reversed() {
+                switch input.operation {
+                case .filter(let expression):
+                    bindingSteps.append(.expression(expression))
+                case .order(let keys):
+                    enqueueSortKeyBindings(keys)
+                case .index:
+                    break
+                }
+            }
+        }
+    }
+
     mutating func enqueueExpressionBindings(
         _ expressions: [Expression]
     ) {
@@ -752,6 +771,7 @@ private extension QueryParameterBindingTraversal {
         _ query: SelectQuery
     ) throws(QueryParameterBindingError) {
         let subqueries = try popOptionalNamedSubqueries(query.subqueries)
+        let accessPath = try popAccessPath(query.accessPath)
         let orderBy = try popOptionalSortKeys(query.orderBy)
         let having = try popOptionalExpression(query.having)
         let groupBy = try popOptionalExpressions(query.groupBy)
@@ -760,7 +780,7 @@ private extension QueryParameterBindingTraversal {
         let projection = try popProjection(query.projection)
         let changed = subqueries.changed || orderBy.changed || having.changed
             || groupBy.changed || filter.changed || source.changed
-            || projection.changed
+            || projection.changed || accessPath.changed
 
         guard changed else {
             results.append(.select(Bound(value: query, changed: false)))
@@ -772,7 +792,7 @@ private extension QueryParameterBindingTraversal {
                     value: SelectQuery(
                         projection: projection.value,
                         source: source.value,
-                        accessPath: query.accessPath,
+                        accessPath: accessPath.value,
                         filter: filter.value,
                         groupBy: groupBy.value,
                         having: having.value,
@@ -1670,6 +1690,61 @@ private extension QueryParameterBindingTraversal {
         }
         let values = try popSortKeys(originals)
         return Bound(value: values.value, changed: values.changed)
+    }
+
+    mutating func popAccessPath(
+        _ original: AccessPath?
+    ) throws(QueryParameterBindingError) -> Bound<AccessPath?> {
+        guard case .fusion(let source) = original else {
+            return Bound(value: original, changed: false)
+        }
+
+        var stages = source.stages
+        var changed = false
+        for stageIndex in stages.indices.reversed() {
+            var inputs = stages[stageIndex].inputs
+            var stageChanged = false
+            for inputIndex in inputs.indices.reversed() {
+                let input = inputs[inputIndex]
+                let operation: FusionInputOperation
+                switch input.operation {
+                case .index:
+                    continue
+                case .filter:
+                    let expression = try popExpression()
+                    guard expression.changed else { continue }
+                    operation = .filter(expression.value)
+                case .order(let keys):
+                    let boundKeys = try popSortKeys(keys)
+                    guard boundKeys.changed else { continue }
+                    operation = .order(boundKeys.value)
+                }
+                inputs[inputIndex] = FusionInput(
+                    operation: operation,
+                    scoring: input.scoring,
+                    requirement: input.requirement,
+                    limit: input.limit
+                )
+                stageChanged = true
+            }
+            if stageChanged {
+                stages[stageIndex] = FusionStageSource(inputs: inputs)
+                changed = true
+            }
+        }
+
+        guard changed else { return Bound(value: original, changed: false) }
+        return Bound(
+            value: .fusion(
+                FusionSource(
+                    stages: stages,
+                    strategy: source.strategy,
+                    identityField: source.identityField,
+                    scoreAnnotation: source.scoreAnnotation
+                )
+            ),
+            changed: true
+        )
     }
 
     mutating func popOptionalNamedSubqueries(

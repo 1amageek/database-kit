@@ -128,6 +128,9 @@ private extension QueryStructuralValidator {
         case source(DataSource, depth: UInt64)
         case accessPath(AccessPath, depth: UInt64)
         case indexSource(IndexScanSource, depth: UInt64)
+        case fusionStage(FusionStageSource, depth: UInt64)
+        case fusionInput(FusionInput, depth: UInt64)
+        case fusionIndexSource(FusionIndexSource, depth: UInt64)
         case graphTableSource(GraphTableSource, depth: UInt64)
         case graphTableColumn(GraphTableColumn, depth: UInt64)
         case matchPattern(MatchPattern, depth: UInt64)
@@ -476,18 +479,45 @@ private extension QueryStructuralValidator {
                     case .index(let source):
                         validationSteps.append(.indexSource(source, depth: childDepth))
                     case .fusion(let source):
-                        try consumeCollection(source.inputs.count)
-                        try appendParameters(
-                            source.parameters,
-                            depth: childDepth,
-                            to: &validationSteps
-                        )
-                        for input in source.inputs.reversed() {
-                            validationSteps.append(.indexSource(input, depth: childDepth))
+                        try consumeCollection(source.stages.count)
+                        if case .weighted(let weights) = source.strategy {
+                            try consumeCollection(weights.count)
+                        }
+                        for stage in source.stages.reversed() {
+                            validationSteps.append(.fusionStage(stage, depth: childDepth))
                         }
                     }
 
                 case .indexSource(let source, _):
+                    try appendParameters(
+                        source.parameters,
+                        depth: childDepth,
+                        to: &validationSteps
+                    )
+
+                case .fusionStage(let stage, _):
+                    try consumeCollection(stage.inputs.count)
+                    for input in stage.inputs.reversed() {
+                        validationSteps.append(.fusionInput(input, depth: childDepth))
+                    }
+
+                case .fusionInput(let input, _):
+                    switch input.operation {
+                    case .index(let source):
+                        validationSteps.append(
+                            .fusionIndexSource(source, depth: childDepth)
+                        )
+                    case .filter(let expression):
+                        validationSteps.append(.expression(expression, depth: childDepth))
+                    case .order(let keys):
+                        try consumeCollection(keys.count)
+                        appendSortKeys(keys, depth: childDepth, to: &validationSteps)
+                    }
+
+                case .fusionIndexSource(let source, _):
+                    if case .matching(_, let fields, _) = source.selection {
+                        try consumeCollection(fields.count)
+                    }
                     try appendParameters(
                         source.parameters,
                         depth: childDepth,
@@ -1036,6 +1066,8 @@ private extension QueryStructuralValidator {
                  .labelExpression(_, let depth),
                  .propertiesSpec(_, let depth), .source(_, let depth),
                  .accessPath(_, let depth), .indexSource(_, let depth),
+                 .fusionStage(_, let depth), .fusionInput(_, let depth),
+                 .fusionIndexSource(_, let depth),
                  .graphTableSource(_, let depth),
                  .graphTableColumn(_, let depth),
                  .matchPattern(_, let depth), .pathPattern(_, let depth),

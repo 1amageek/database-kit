@@ -4,6 +4,54 @@ import Testing
 
 @Suite("Query structural validation")
 struct QueryStructuralValidatorTests {
+    @Test("Fusion stages, inputs, and schema fields consume structural limits")
+    func fusionCollectionsConsumeStructuralLimits() {
+        let query = SelectQuery(
+            projection: .all,
+            source: .table(TableRef("documents")),
+            accessPath: .fusion(
+                FusionSource(
+                    stages: [
+                        FusionStageSource(inputs: [
+                            FusionInput(
+                                operation: .index(
+                                    FusionIndexSource(
+                                        selection: .matching(
+                                            type: .vector,
+                                            fields: [
+                                                FieldIdentity(name: "embedding", number: 2),
+                                            ],
+                                            fieldMatch: .exact
+                                        )
+                                    )
+                                ),
+                                scoring: .position
+                            ),
+                            FusionInput(
+                                operation: .filter(
+                                    .equal(.col("active"), .literal(.bool(true)))
+                                )
+                            ),
+                        ]),
+                    ]
+                )
+            )
+        )
+
+        #expect(
+            throws: QueryStructuralValidationError.resourceLimitExceeded(
+                resource: .collectionElements,
+                actual: 4,
+                maximum: 3
+            )
+        ) {
+            try QueryStructuralValidator.validate(
+                query,
+                limits: QueryStructuralLimits(maximumCollectionElements: 3)
+            )
+        }
+    }
+
     @Test("SQL INSERT accepts the exact collection boundary")
     func sqlInsertCollectionBoundary() throws {
         let statement = QueryStatement.insert(
