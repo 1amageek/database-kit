@@ -6,6 +6,7 @@ import Testing
 private struct FusionPlanDocument {
     var id: String
     var title: String
+    var rank: Int64
 }
 
 private struct FusionPlanInput: FusionQueryInput {
@@ -16,6 +17,34 @@ private struct FusionPlanInput: FusionQueryInput {
 
 @Suite("Fusion query model")
 struct FusionQueryTests {
+    @Test("Filter and Rank lower to canonical QueryIR")
+    func filterAndRankLowerToCanonicalQueryIR() throws {
+        let filter = try Filter(
+            FusionPlanDocument.fields.title,
+            equals: "Database"
+        ).fusionInput
+        #expect(
+            filter.operation == .filter(
+                .equal(
+                    .col("title"),
+                    .literal(.string("Database"))
+                )
+            )
+        )
+
+        let rank = Rank(FusionPlanDocument.fields.rank)
+            .order(.ascending)
+            .fusionInput
+        #expect(
+            rank.operation == .order([
+                SortKey(.col("rank"), direction: .ascending),
+                SortKey(.col("id"), direction: .ascending),
+            ])
+        )
+        #expect(rank.scoring == .position)
+        #expect(rank.requirement == .candidates)
+    }
+
     @Test("builder preserves semantic stages and lowers to SelectQuery")
     func builderPreservesStages() throws {
         let search = FusionPlanInput(
