@@ -175,6 +175,28 @@ enum EnvelopeWireFormat {
         )
     }
 
+    static func successResponseByteCounts(
+        limits: DatabaseWireLimits = .default,
+        encodePayload: (
+            inout DatabaseWireWriter
+        ) throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) -> (frame: Int, payload: Int) {
+        let payloadByteCount = try DatabaseWireWriter.encodedByteCount(
+            limits: limits,
+            encodePayload
+        )
+        try validateSuccessResponsePayloadByteCount(
+            payloadByteCount,
+            limits: limits
+        )
+        let (frameByteCount, overflow) = successResponseFixedByteCount
+            .addingReportingOverflow(payloadByteCount)
+        guard !overflow else {
+            throw .byteCountOverflow
+        }
+        return (frameByteCount, payloadByteCount)
+    }
+
     static func encodeSuccessResponse(
         requestID: UInt64,
         operation: DatabaseOperationIdentifier,

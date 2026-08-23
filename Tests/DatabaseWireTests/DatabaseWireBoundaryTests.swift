@@ -162,10 +162,16 @@ struct DatabaseWireBoundaryTests {
 
     @Test("encoded response payload borrows the final frame allocation")
     func responsePayloadOwnership() throws {
-        let encoded = try DatabaseWireEncoder().encodeResponseAndPayload(
+        let encoder = DatabaseWireEncoder()
+        let response = try makeTestBooleanResponse(true)
+        let byteCounts = try encoder.responseByteCounts(
+            DatabaseOperationCatalog.queryExecute,
+            response: response
+        )
+        let encoded = try encoder.encodeResponseAndPayload(
             DatabaseOperationCatalog.queryExecute,
             requestID: 12,
-            response: try makeTestBooleanResponse(true)
+            response: response
         )
         let frameAddress = try #require(
             encoded.frame.withUnsafeBytes { buffer in
@@ -179,6 +185,8 @@ struct DatabaseWireBoundaryTests {
         )
 
         #expect(payloadAddress == frameAddress + 22)
+        #expect(byteCounts.frame == encoded.frame.count)
+        #expect(byteCounts.payload == encoded.payload.count)
     }
 
     @Test("a persisted success payload can be decoded and replayed")

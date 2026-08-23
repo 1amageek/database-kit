@@ -127,4 +127,19 @@ public struct DatabaseWireEncoder: Sendable {
             try operation.encodeResponseBody(response, into: &writer)
         }
     }
+
+    /// Measures the exact final-frame allocation and borrowed payload view
+    /// before either is allocated.
+    public func responseByteCounts<Request, Response>(
+        _ operation: DatabaseOperation<Request, Response>,
+        response: Response
+    ) throws(DatabaseWireError) -> (frame: Int, payload: Int) {
+        try EnvelopeWireFormat.successResponseByteCounts(
+            limits: limits
+        ) {
+            (writer: inout DatabaseWireWriter)
+                throws(DatabaseWireError) in
+            try operation.encodeResponseBody(response, into: &writer)
+        }
+    }
 }
