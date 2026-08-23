@@ -388,6 +388,91 @@ public indirect enum Expression: Sendable, Hashable {
     case exists(SelectQuery)
 }
 
+extension Expression {
+    /// Every SPARQL variable referenced by this expression, including variables
+    /// inside aggregate sort keys and nested query expressions.
+    public var referencedVariables: Set<String> {
+        var variables: Set<String> = []
+        var pending: [Expression] = [self]
+
+        while let expression = pending.popLast() {
+            switch expression {
+            case .variable(let variable), .bound(let variable):
+                variables.insert(variable.name)
+            case .add(let left, let right),
+                 .subtract(let left, let right),
+                 .multiply(let left, let right),
+                 .divide(let left, let right),
+                 .modulo(let left, let right),
+                 .equal(let left, let right),
+                 .notEqual(let left, let right),
+                 .lessThan(let left, let right),
+                 .lessThanOrEqual(let left, let right),
+                 .greaterThan(let left, let right),
+                 .greaterThanOrEqual(let left, let right),
+                 .and(let left, let right),
+                 .or(let left, let right),
+                 .nullIf(let left, let right):
+                pending.append(left)
+                pending.append(right)
+            case .negate(let nested), .not(let nested),
+                 .isNull(let nested), .isNotNull(let nested),
+                 .isTriple(let nested), .subject(let nested),
+                 .predicate(let nested), .object(let nested),
+                 .cast(let nested, _):
+                pending.append(nested)
+            case .like(let nested, _), .regex(let nested, _, _):
+                pending.append(nested)
+            case .between(let value, let low, let high):
+                pending.append(value)
+                pending.append(low)
+                pending.append(high)
+            case .inList(let value, let candidates),
+                 .notInList(let value, let candidates):
+                pending.append(value)
+                pending.append(contentsOf: candidates)
+            case .inSubquery(let value, let query):
+                pending.append(value)
+                variables.formUnion(query.referencedVariables)
+            case .aggregate(let aggregate):
+                switch aggregate {
+                case .count(let nested, _):
+                    if let nested { pending.append(nested) }
+                case .sum(let nested, _), .avg(let nested, _),
+                     .min(let nested), .max(let nested),
+                     .groupConcat(let nested, _, _), .sample(let nested):
+                    pending.append(nested)
+                case .arrayAgg(let nested, let orderBy, _):
+                    pending.append(nested)
+                    for key in orderBy ?? [] {
+                        pending.append(key.expression)
+                    }
+                }
+            case .function(let function):
+                pending.append(contentsOf: function.arguments)
+            case .caseWhen(let pairs, let fallback):
+                for pair in pairs {
+                    pending.append(pair.condition)
+                    pending.append(pair.result)
+                }
+                if let fallback { pending.append(fallback) }
+            case .coalesce(let expressions):
+                pending.append(contentsOf: expressions)
+            case .triple(let subject, let predicate, let object):
+                pending.append(subject)
+                pending.append(predicate)
+                pending.append(object)
+            case .subquery(let query), .exists(let query):
+                variables.formUnion(query.referencedVariables)
+            case .literal, .column, .parameter:
+                break
+            }
+        }
+
+        return variables
+    }
+}
+
 // MARK: - Expression Builder Helpers
 
 extension Expression {

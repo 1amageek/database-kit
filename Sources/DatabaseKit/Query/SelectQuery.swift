@@ -277,21 +277,29 @@ extension SelectQuery {
     /// Returns all variables referenced in the query (SPARQL)
     public var referencedVariables: Set<String> {
         var vars = Set<String>()
+        switch projection {
+        case .items(let items), .distinctItems(let items):
+            for item in items {
+                vars.formUnion(item.expression.referencedVariables)
+            }
+        case .all, .allFrom:
+            break
+        }
         collectVariables(from: source, into: &vars)
         if let filter = filter {
-            collectVariables(from: filter, into: &vars)
+            vars.formUnion(filter.referencedVariables)
         }
         if let groupBy = groupBy {
             for expr in groupBy {
-                collectVariables(from: expr, into: &vars)
+                vars.formUnion(expr.referencedVariables)
             }
         }
         if let having = having {
-            collectVariables(from: having, into: &vars)
+            vars.formUnion(having.referencedVariables)
         }
         if let orderBy = orderBy {
             for key in orderBy {
-                collectVariables(from: key.expression, into: &vars)
+                vars.formUnion(key.expression.referencedVariables)
             }
         }
         return vars
@@ -386,7 +394,7 @@ extension SelectQuery {
             collectVariables(from: right, into: &vars)
         case .filter(let pattern, let expr):
             collectVariables(from: pattern, into: &vars)
-            collectVariables(from: expr, into: &vars)
+            vars.formUnion(expr.referencedVariables)
         case .graph(_, let pattern):
             collectVariables(from: pattern, into: &vars)
         case .service(_, let pattern, _):
@@ -394,13 +402,23 @@ extension SelectQuery {
         case .bind(let pattern, let variable, let expr):
             collectVariables(from: pattern, into: &vars)
             vars.insert(variable)
-            collectVariables(from: expr, into: &vars)
+            vars.formUnion(expr.referencedVariables)
         case .values(let variables, _):
             vars.formUnion(variables)
         case .subquery(let query):
             vars.formUnion(query.referencedVariables)
-        case .groupBy(let pattern, _, _):
+        case .groupBy(let pattern, let expressions, let aggregates):
             collectVariables(from: pattern, into: &vars)
+            for expression in expressions {
+                vars.formUnion(expression.referencedVariables)
+            }
+            for aggregate in aggregates {
+                vars.insert(aggregate.variable)
+                vars.formUnion(
+                    Expression.aggregate(aggregate.aggregate)
+                        .referencedVariables
+                )
+            }
         }
     }
 
@@ -408,37 +426,6 @@ extension SelectQuery {
         if case .variable(let v) = triple.subject { vars.insert(v) }
         if case .variable(let v) = triple.predicate { vars.insert(v) }
         if case .variable(let v) = triple.object { vars.insert(v) }
-    }
-
-    private func collectVariables(from expr: Expression, into vars: inout Set<String>) {
-        switch expr {
-        case .variable(let v):
-            vars.insert(v.name)
-        case .add(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
-             .divide(let l, let r), .modulo(let l, let r), .equal(let l, let r),
-             .notEqual(let l, let r), .lessThan(let l, let r), .lessThanOrEqual(let l, let r),
-             .greaterThan(let l, let r), .greaterThanOrEqual(let l, let r),
-             .and(let l, let r), .or(let l, let r):
-            collectVariables(from: l, into: &vars)
-            collectVariables(from: r, into: &vars)
-        case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e),
-             .isTriple(let e), .subject(let e), .predicate(let e), .object(let e):
-            collectVariables(from: e, into: &vars)
-        case .bound(let v):
-            vars.insert(v.name)
-        case .function(let call):
-            for arg in call.arguments {
-                collectVariables(from: arg, into: &vars)
-            }
-        case .subquery(let query), .exists(let query), .inSubquery(_, let query):
-            vars.formUnion(query.referencedVariables)
-        case .triple(let s, let p, let o):
-            collectVariables(from: s, into: &vars)
-            collectVariables(from: p, into: &vars)
-            collectVariables(from: o, into: &vars)
-        default:
-            break
-        }
     }
 
     private func collectColumns(from source: DataSource, into cols: inout Set<ColumnRef>) {
