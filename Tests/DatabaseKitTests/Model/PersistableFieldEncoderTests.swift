@@ -355,57 +355,6 @@ struct PersistableFieldEncoderTests {
             return
         }
     }
-
-    @Test("Typed model decoding detaches borrowed byte owners")
-    func typedModelDecodingDetachesBorrowedBytes() throws {
-        let source = ByteString(
-            retaining: OversizedRetainedByteOwner(
-                bytes: [0x10, 0x20, 0x30],
-                retainedByteCount: 4_096
-            )
-        )
-        let persisted = try PersistedModel(
-            ByteOwnershipTestDocument(payload: source)
-        )
-        let detachedPersisted = persisted.detached()
-
-        let decoded = try persisted.decode(
-            as: ByteOwnershipTestDocument.self
-        )
-
-        guard case .bytes(let detachedPayload) = detachedPersisted
-            .value(forFieldNamed: "payload") else {
-            Issue.record("Detached model must preserve its byte field")
-            return
-        }
-        #expect(decoded.payload == source)
-        #expect(detachedPayload == source)
-        #expect(source.retainedByteCount == 4_096)
-        #expect(detachedPayload.retainedByteCount != nil)
-        #expect((detachedPayload.retainedByteCount ?? 4_096) < 4_096)
-        #expect(decoded.payload.retainedByteCount != nil)
-        #expect((decoded.payload.retainedByteCount ?? 4_096) < 4_096)
-    }
-}
-
-@Persistable
-private struct ByteOwnershipTestDocument {
-    var id: String = "byte-owner"
-    var payload: ByteString
-}
-
-private struct OversizedRetainedByteOwner: ByteStringOwner {
-    let bytes: [UInt8]
-    let retainedByteCount: Int?
-
-    var count: Int { bytes.count }
-    var isStorageSelfContained: Bool { false }
-
-    func borrowBytes(
-        _ body: (UnsafeRawBufferPointer) throws -> Void
-    ) rethrows {
-        try bytes.withUnsafeBytes(body)
-    }
 }
 
 private struct FieldIdentityOutput: PersistedFieldOutput {

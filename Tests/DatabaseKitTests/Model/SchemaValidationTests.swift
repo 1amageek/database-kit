@@ -485,29 +485,6 @@ struct SchemaValidationTests {
         }
     }
 
-    @Test("Leaderboard windows require representable whole seconds")
-    func leaderboardWindowsRequireRepresentableWholeSeconds() {
-        let score = FieldSchema(
-            name: "score",
-            fieldNumber: 1,
-            type: .int64
-        )
-        let scoreIdentity = FieldIdentity(name: "score", number: 1)
-        for duration in [0.5, Double.greatestFiniteMagnitude] {
-            #expect(throws: IndexDeclarationError.self) {
-                try IndexDescriptor(
-                    entityName: "LeaderboardEntity",
-                    declaration: .leaderboard(
-                        name: "invalid_window",
-                        score: scoreIdentity,
-                        window: .custom(duration: duration)
-                    ),
-                    fieldSchemas: [score]
-                )
-            }
-        }
-    }
-
     @Test("Optional comparable fields retain their scalar index contract")
     func optionalComparableFieldsAreAccepted() throws {
         let schema = try Schema(

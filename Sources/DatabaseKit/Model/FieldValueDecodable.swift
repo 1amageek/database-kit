@@ -195,9 +195,7 @@ extension ByteString: FieldValueDecodable {
         guard case .bytes(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "bytes")
         }
-        // Decoding into an application-owned model is an ownership boundary.
-        // A wire or storage slice must not keep its larger source frame alive.
-        return scalar.detached()
+        return scalar
     }
 }
 
@@ -317,7 +315,7 @@ extension DatabaseTypes.Vector: FieldValueDecodable {
         guard case .vector(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "a vector")
         }
-        return scalar.detached()
+        return scalar
     }
 }
 
@@ -329,7 +327,7 @@ extension FieldObject: FieldValueDecodable {
         guard case .object(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an object")
         }
-        return PersistedFieldValueOwnership.detached(scalar)
+        return scalar
     }
 }
 
@@ -341,7 +339,7 @@ extension EntityReference: FieldValueDecodable {
         guard case .reference(let scalar) = value else {
             throw PersistableDecodingError.invalidValue(field: field, expected: "an entity reference")
         }
-        return PersistedFieldValueOwnership.detached(scalar)
+        return scalar
     }
 }
 

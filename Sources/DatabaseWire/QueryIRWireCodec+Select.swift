@@ -26,7 +26,8 @@ extension QueryIRWireFormat {
         case .fusion(let source):
             writer.writeUInt8(1)
             try writeArray(source.inputs, into: &writer, encode: encodeIndexScanSource)
-            try encodeFusionStrategy(source.strategy, into: &writer)
+            try writer.writeString(source.strategyIdentifier)
+            try encodeParameters(source.parameters, into: &writer)
             try writer.writeString(source.identityField)
         }
     }
@@ -41,56 +42,11 @@ extension QueryIRWireFormat {
             return .fusion(
                 FusionSource(
                     inputs: try readArray(from: &reader, decode: decodeIndexScanSource),
-                    strategy: try decodeFusionStrategy(from: &reader),
+                    strategyIdentifier: try reader.readString(),
+                    parameters: try decodeParameters(from: &reader),
                     identityField: try reader.readString()
                 )
             )
-        case let tag:
-            throw .invalidValueTag(tag)
-        }
-    }
-
-    private static func encodeFusionStrategy(
-        _ strategy: FusionStrategy,
-        into writer: inout DatabaseWireWriter
-    ) throws(DatabaseWireError) {
-        switch strategy {
-        case .reciprocalRank(let rankConstant):
-            writer.writeUInt8(0)
-            writer.writeUInt64(rankConstant)
-        case .sum:
-            writer.writeUInt8(1)
-        case .maximum:
-            writer.writeUInt8(2)
-        case .weighted(let weights):
-            writer.writeUInt8(3)
-            try writer.writeCount(weights.count)
-            for weight in weights {
-                writer.writeDouble(weight)
-            }
-        }
-    }
-
-    private static func decodeFusionStrategy(
-        from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> FusionStrategy {
-        switch try reader.readUInt8() {
-        case 0:
-            return .reciprocalRank(
-                rankConstant: try reader.readUInt64()
-            )
-        case 1:
-            return .sum
-        case 2:
-            return .maximum
-        case 3:
-            let count = try reader.readCount()
-            var weights: [Double] = []
-            weights.reserveCapacity(count)
-            for _ in 0..<count {
-                weights.append(try reader.readDouble())
-            }
-            return .weighted(weights)
         case let tag:
             throw .invalidValueTag(tag)
         }

@@ -29,7 +29,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/1amageek/database-types.git",
-            revision: "6ff1742926d6618e44eb9f6c0ef2a2719c88c645"
+            from: "26.0730.0"
         ),
         .package(
             url: "https://github.com/swiftlang/swift-syntax.git",
