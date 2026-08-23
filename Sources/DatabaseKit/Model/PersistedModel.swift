@@ -78,4 +78,28 @@ public struct PersistedModel: PersistedEntityValue, Hashable {
         }
         return try type.decodePersistedFields(fields)
     }
+
+    /// Materializes byte and vector views into self-contained field owners.
+    /// Use this when the model must outlive the frame or storage value from
+    /// which its canonical fields were decoded.
+    public func detached() -> PersistedModel {
+        PersistedModel(
+            validatedEntity: entity,
+            fields: fields.map { field in
+                PersistableField(
+                    validatedNumber: field.number,
+                    validatedName: field.name,
+                    value: PersistedFieldValueOwnership.detached(field.value)
+                )
+            }
+        )
+    }
+
+    private init(
+        validatedEntity entity: String,
+        fields: consuming [PersistableField]
+    ) {
+        self.entity = entity
+        self.fields = fields
+    }
 }
