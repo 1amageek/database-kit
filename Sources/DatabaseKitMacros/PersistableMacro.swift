@@ -782,10 +782,24 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             ? "[]"
             : "[\n            \(fieldSchemaEntries.joined(separator: ",\n            "))\n        ]"
         let fieldSchemasStorageDecl: DeclSyntax = """
+            private static func _databaseKitCaptureFieldSchemas(
+                _ body: () throws(DatabaseKit.SchemaEntityError)
+                    -> [DatabaseKit.FieldSchema]
+            ) -> Result<
+                [DatabaseKit.FieldSchema],
+                DatabaseKit.SchemaEntityError
+            > {
+                do {
+                    return .success(try body())
+                } catch {
+                    return .failure(error)
+                }
+            }
+
             private static let _databaseKitFieldSchemas: Result<
                 [DatabaseKit.FieldSchema],
                 DatabaseKit.SchemaEntityError
-            > = DatabaseKit.PersistableFieldEncoder.captureSchemaFields {
+            > = _databaseKitCaptureFieldSchemas {
                 () throws(DatabaseKit.SchemaEntityError)
                     -> [DatabaseKit.FieldSchema] in
                 \(raw: fieldSchemasArray)
