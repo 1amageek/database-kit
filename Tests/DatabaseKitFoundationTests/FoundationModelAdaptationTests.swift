@@ -25,6 +25,12 @@ private struct InvalidFoundationDefaultDocument {
     var timestamp: Date = Date(timeIntervalSince1970: .nan)
 }
 
+@Persistable
+private struct RelativeFoundationDefaultDocument {
+    var id: String
+    var timestamp: Date = Date(timeIntervalSinceNow: 0)
+}
+
 @Suite("Foundation model adaptation")
 struct FoundationModelAdaptationTests {
     @Test("Foundation defaults use the persisted scalar conversion")
@@ -47,6 +53,13 @@ struct FoundationModelAdaptationTests {
         ) {
             _ = try InvalidFoundationDefaultDocument.schemaEntity
         }
+    }
+
+    @Test("Relative Foundation dates remain construction policy")
+    func relativeDatesDoNotBecomeSchemaDefaults() throws {
+        let schema = try RelativeFoundationDefaultDocument.schemaEntity
+
+        #expect(schema.fieldMapByName["timestamp"]?.defaultValue == nil)
     }
 
     @Test("Foundation scalar properties round-trip through canonical field values")

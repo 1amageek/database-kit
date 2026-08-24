@@ -150,6 +150,7 @@ public final class Schema: Sendable {
             from type: Model.Type,
             including additionalIndexes: [IndexDescriptor] = []
         ) throws(SchemaEntityError) {
+            let fields = try type.fieldSchemas
             var indexDescriptors: [IndexDescriptor]
             do {
                 indexDescriptors = try type.indexDescriptors
@@ -160,7 +161,7 @@ public final class Schema: Sendable {
             try self.init(
                 name: type.persistableType,
                 identifierType: type.persistableIdentifierType,
-                fields: try type.fieldSchemas,
+                fields: fields,
                 directoryComponents: type.directoryPathComponents,
                 directoryLayer: type.directoryLayer,
                 indexes: indexDescriptors,

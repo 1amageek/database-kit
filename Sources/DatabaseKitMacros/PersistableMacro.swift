@@ -19,7 +19,7 @@ import SwiftDiagnostics
 /// - `static var indexDescriptors: [IndexDescriptor]`
 /// - `static func fieldNumber(for fieldName: String) -> Int?`
 /// - `static func enumMetadata(for fieldName: String) -> EnumMetadata?`
-/// - `init(...)`
+/// - compiled field encoding and decoding
 ///
 /// **Usage**:
 /// ```swift
@@ -141,6 +141,19 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         }
 
         let structName = structDecl.name.text
+
+        if let initializer = structDecl.memberBlock.members.compactMap({
+            $0.decl.as(InitializerDeclSyntax.self)
+        }).first {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(initializer),
+                    message: MacroExpansionErrorMessage(
+                        "@Persistable structs use the compiler-synthesized memberwise initializer so persisted decoding never evaluates property defaults. Move custom construction policy to a static factory."
+                    )
+                )
+            ])
+        }
 
         // Extract custom type name from macro arguments
         var typeName: String = structName
@@ -413,10 +426,12 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             }
 
             let fieldType = normalizedTypeName(fieldInfo.type)
-            if fieldInfo.hasDefault {
+            if fieldInfo.canonicalDefaultValue != nil {
                 let decodedType = isOptionalType(fieldType) ? wrappedTypeName(for: fieldType) : fieldType
-                let fallback = defaultInitializationExpr(for: fieldInfo)
-                return "(try input.decodeIfPresent(\(decodedType).self, for: Self.fields.\(fieldInfo.name).identity, entity: Self.persistableType)) ?? \(fallback)"
+                let operation = isOptionalType(fieldType)
+                    ? "decodeIfPresent"
+                    : "decode"
+                return "try DatabaseKit.PersistedFieldDefaultDecoder.decode(from: &input, for: Self.fields.\(fieldInfo.name).identity, entity: Self.persistableType, defaultValue: { () throws(DatabaseKit.PersistableDecodingError) -> DatabaseTypes.FieldValue in try Self._persistedDefaultValue(for: Self.fields.\(fieldInfo.name).identity) }, decode: { (resolvedInput: inout DatabaseKit.PersistedFieldValueInput) throws(DatabaseKit.PersistableDecodingFailure<Never>) -> \(fieldType) in try resolvedInput.\(operation)(\(decodedType).self, for: Self.fields.\(fieldInfo.name).identity, entity: Self.persistableType) })"
             }
 
             if isOptionalType(fieldType) {
@@ -433,6 +448,8 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 .map { "\(structName).fields.\($0.name).schema" }
             return "[\(schemas.joined(separator: ", "))]"
         }()
+        let indexFieldSchemasExpression =
+            "try \(structName)._persistableIndexFieldSchemas"
 
         // Compile each complete index declaration into canonical field identity.
         var indexDescriptorInits: [String] = []
@@ -465,7 +482,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     IndexDescriptor(
                         entityName: \(structName).persistableType,
                         declaration: \(declaration.trimmedDescription),
-                        fieldSchemas: \(structuralFieldSchemasExpression)
+                        fieldSchemas: \(indexFieldSchemasExpression)
                     )
                     """
                 )
@@ -583,7 +600,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                             .ascending(\(structName).fields.\(fieldName).identity)
                                         ]
                                     ),
-                                    fieldSchemas: \(structuralFieldSchemasExpression)
+                                    fieldSchemas: \(indexFieldSchemasExpression)
                                 )
                             """
                             indexDescriptorInits.append(reverseIndexInit)
@@ -611,7 +628,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                 strategy: .adjacency
                             )
                         ),
-                        fieldSchemas: \(structuralFieldSchemasExpression)
+                        fieldSchemas: \(indexFieldSchemasExpression)
                     )
                 """
                 indexDescriptorInits.append(graphIndexInit)
@@ -914,26 +931,26 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(selectedFieldDecl)
 
-        let modelDecodeAssignments = fieldInfos
+        let modelDecodeValues = persistedFieldInfos
             .map { fieldInfo in
-                "self.\(fieldInfo.name) = \(persistableFieldDecodeExpr(for: fieldInfo))"
+                "let _databaseKitDecoded_\(fieldInfo.name) = \(persistableFieldDecodeExpr(for: fieldInfo))"
             }
             .joined(separator: "\n        ")
-        let persistedFieldInputInitDecl: DeclSyntax = """
-            private init<Input: DatabaseKit.PersistedFieldInput>(
-                _persistedFieldInput input: inout Input
-            ) throws(DatabaseKit.PersistableDecodingFailure<Input.Failure>) {
-                \(raw: modelDecodeAssignments)
-                try input.finish(entity: Self.persistableType)
+        let decodedModelArguments = persistedFieldInfos
+            .map { fieldInfo in
+                "\(fieldInfo.name): _databaseKitDecoded_\(fieldInfo.name)"
             }
-            """
-        decls.append(persistedFieldInputInitDecl)
+            .joined(separator: ",\n            ")
 
         let persistedFieldInputDecl: DeclSyntax = """
             public static func decodePersistedFields<Input: DatabaseKit.PersistedFieldInput>(
                 from input: inout Input
             ) throws(DatabaseKit.PersistableDecodingFailure<Input.Failure>) -> Self {
-                try Self(_persistedFieldInput: &input)
+                \(raw: modelDecodeValues)
+                try input.finish(entity: Self.persistableType)
+                return Self(
+                    \(raw: decodedModelArguments)
+                )
             }
             """
         decls.append(persistedFieldInputDecl)
@@ -950,7 +967,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 return try input.decode { (
                     input: inout DatabaseKit.PersistedFieldCollectionInput
                 ) throws(DatabaseKit.PersistableDecodingFailure<Never>) -> Self in
-                    try Self(_persistedFieldInput: &input)
+                    try Self.decodePersistedFields(from: &input)
                 }
             }
             """
@@ -968,7 +985,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 return try input.decode { (
                     input: inout DatabaseKit.PersistedObjectInput
                 ) throws(DatabaseKit.PersistableDecodingFailure<Never>) -> Self in
-                    try Self(_persistedFieldInput: &input)
+                    try Self.decodePersistedFields(from: &input)
                 }
             }
             """
@@ -1034,38 +1051,6 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             }
             """
         decls.append(enumMetadataDecl)
-
-        // Generate an initializer for all persisted fields.
-        let initParams = fieldInfos
-            .filter { !$0.isTransient }
-            .map { info -> String in
-                if info.hasDefault, let defaultValue = info.defaultValue {
-                    return "\(info.name): \(info.type) = \(defaultValue)"
-                } else {
-                    return "\(info.name): \(info.type)"
-                }
-            }
-            .joined(separator: ", ")
-
-        let initAssignments = fieldInfos
-            .filter { !$0.isTransient }
-            .map { "self.\($0.name) = \($0.name)" }
-            .joined(separator: "\n        ")
-
-        if !initAssignments.isEmpty {
-            let initDecl: DeclSyntax = """
-                public init(\(raw: initParams)) {
-                    \(raw: initAssignments)
-                }
-                """
-            decls.append(initDecl)
-        } else {
-            // A model with no persisted fields is rejected before this point.
-            let initDecl: DeclSyntax = """
-                public init() {}
-                """
-            decls.append(initDecl)
-        }
 
         return decls
     }
@@ -1242,24 +1227,177 @@ private func isPlatformIntegerPersistedType(_ rawType: String) -> Bool {
     return type == "Int" || type == "UInt"
 }
 
-/// Converts the declared Swift member default through the same canonical value
-/// cases used by persisted field encoding. The generated schema evaluates the
-/// original initializer expression with its declared Swift type, so schema and
-/// model decoding cannot drift onto separately authored defaults.
+/// Converts a value-stable Swift member initializer through the same canonical
+/// cases used by persisted field encoding. Executable initialization policies
+/// remain model-construction behavior and are not persisted as schema values.
 private func canonicalPersistedDefaultExpression(
     fieldName: String,
     for rawType: String,
     initializer: ExprSyntax?
 ) -> String? {
     let isOptional = mapToFieldSchemaType(rawType).isOptional
+    guard fieldName != "id" else { return nil }
     guard let initializer else {
         return isOptional ? "DatabaseTypes.FieldValue.null" : nil
     }
     if initializer.is(NilLiteralExprSyntax.self) {
         return isOptional ? "DatabaseTypes.FieldValue.null" : nil
     }
+    guard isCanonicalSchemaDefaultExpression(
+        initializer,
+        fieldType: rawType
+    ) else {
+        return nil
+    }
 
     return "try DatabaseKit.PersistableFieldEncoder.schemaDefault(from: ((\(initializer.trimmedDescription)) as \(rawType)), fieldName: \"\(fieldName)\")"
+}
+
+/// A schema default must denote the same value in every process. Swift permits
+/// arbitrary executable property initializers, so only syntax with an
+/// independently stable value is admitted to persisted schema metadata.
+private func isCanonicalSchemaDefaultExpression(
+    _ expression: ExprSyntax,
+    fieldType: String,
+    permitsUnqualifiedMember: Bool = false
+) -> Bool {
+    if expression.is(BooleanLiteralExprSyntax.self)
+        || expression.is(IntegerLiteralExprSyntax.self)
+        || expression.is(FloatLiteralExprSyntax.self)
+        || expression.is(NilLiteralExprSyntax.self) {
+        return true
+    }
+
+    if let string = expression.as(StringLiteralExprSyntax.self) {
+        return string.segments.allSatisfy {
+            $0.is(StringSegmentSyntax.self)
+        }
+    }
+
+    if let array = expression.as(ArrayExprSyntax.self) {
+        return array.elements.allSatisfy {
+            isCanonicalSchemaDefaultExpression(
+                $0.expression,
+                fieldType: fieldType,
+                permitsUnqualifiedMember: permitsUnqualifiedMember
+            )
+        }
+    }
+
+    if let prefix = expression.as(PrefixOperatorExprSyntax.self) {
+        guard prefix.operator.text == "-" || prefix.operator.text == "+" else {
+            return false
+        }
+        return isCanonicalSchemaDefaultExpression(
+            prefix.expression,
+            fieldType: fieldType,
+            permitsUnqualifiedMember: permitsUnqualifiedMember
+        )
+    }
+
+    if let member = expression.as(MemberAccessExprSyntax.self) {
+        guard member.base == nil,
+              permitsUnqualifiedMember
+                || isEnumLikePersistedType(fieldType) else {
+            return false
+        }
+        return !nonDeterministicMemberNames.contains(
+            member.declName.baseName.text
+        )
+    }
+
+    if let call = expression.as(FunctionCallExprSyntax.self) {
+        guard isStableValueConstructor(
+            call,
+            fieldType: fieldType
+        ) else {
+            return false
+        }
+        return call.arguments.allSatisfy {
+            isCanonicalSchemaDefaultExpression(
+                $0.expression,
+                fieldType: fieldType,
+                permitsUnqualifiedMember: true
+            )
+        }
+    }
+
+    return false
+}
+
+private let nonDeterministicMemberNames: Set<String> = [
+    "now", "today", "current", "autoupdatingCurrent",
+    "random", "randomElement"
+]
+
+private let stableZeroArgumentValueTypes: Set<String> = [
+    "String", "Bool",
+    "Int8", "Int16", "Int32", "Int64",
+    "UInt8", "UInt16", "UInt32", "UInt64",
+    "Float", "Double", "ByteString", "FieldObject"
+]
+
+private let stableConstructibleValueTypes: Set<String> = [
+    "String", "Bool",
+    "Int8", "Int16", "Int32", "Int64",
+    "UInt8", "UInt16", "UInt32", "UInt64",
+    "Float", "Double", "ByteString", "ExactDecimal",
+    "CivilDate", "CivilTime", "CivilDateTime", "Timestamp",
+    "TimeSpan", "CalendarPeriod", "GeographicPoint",
+    "GeographicPosition", "Vector", "UUID",
+    "Date"
+]
+
+private func isStableValueConstructor(
+    _ call: FunctionCallExprSyntax,
+    fieldType: String
+) -> Bool {
+    let constructorName: String
+    if let reference = call.calledExpression.as(DeclReferenceExprSyntax.self) {
+        constructorName = reference.baseName.text
+    } else if let member = call.calledExpression.as(MemberAccessExprSyntax.self) {
+        constructorName = member.declName.baseName.text
+    } else {
+        return false
+    }
+
+    let fieldTypeName = persistedElementType(fieldType)
+        .split(separator: ".")
+        .last
+        .map(String.init)
+    guard constructorName == fieldTypeName,
+          stableConstructibleValueTypes.contains(constructorName) else {
+        return false
+    }
+    guard !call.arguments.isEmpty else {
+        return stableZeroArgumentValueTypes.contains(constructorName)
+    }
+
+    let labels = call.arguments.map { $0.label?.text }
+    if constructorName == "Date" {
+        return labels == ["timeIntervalSince1970"]
+            || labels == ["timeIntervalSinceReferenceDate"]
+    }
+    if constructorName == "String" {
+        return labels == [nil]
+            || labels == ["repeating", "count"]
+    }
+    if [
+        "Bool", "Int8", "Int16", "Int32", "Int64",
+        "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"
+    ].contains(constructorName) {
+        return labels == [nil]
+    }
+    return true
+}
+
+private func isEnumLikePersistedType(_ rawType: String) -> Bool {
+    let type = persistedElementType(rawType)
+        .split(separator: ".")
+        .last
+        .map(String.init) ?? ""
+    return !stableConstructibleValueTypes.contains(type)
+        && type != "PersistableReference"
 }
 
 private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isOptional: Bool, isArray: Bool) {

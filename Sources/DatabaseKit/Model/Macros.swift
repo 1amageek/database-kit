@@ -56,8 +56,8 @@ import DatabaseTypes
 /// - `static var indexDescriptors: [IndexDescriptor]`
 /// - `static func fieldNumber(for fieldName: String) -> Int?`
 /// - `static func enumMetadata(for fieldName: String) -> EnumMetadata?`
-/// - `init(...)`
-@attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(owlObjectPropertyDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(init), arbitrary)
+/// - compiled field encoding and decoding
+@attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(owlObjectPropertyDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), arbitrary)
 @attached(extension, conformances: Persistable, PersistableEnum)
 public macro Persistable() = #externalMacro(module: "DatabaseKitMacros", type: "PersistableMacro")
 
@@ -74,7 +74,7 @@ public macro Persistable() = #externalMacro(module: "DatabaseKitMacros", type: "
 /// ```
 ///
 /// The custom persisted type name applies only to model structs.
-@attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(owlObjectPropertyDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), named(init), arbitrary)
+@attached(member, names: named(persistableType), named(allFields), named(fields), named(Fields), named(_persistableIndexDescriptors), named(indexDescriptors), named(relationshipDescriptors), named(owlObjectPropertyDescriptors), named(directoryPathComponents), named(directoryLayer), named(fieldNumber), named(enumMetadata), arbitrary)
 @attached(extension, conformances: Persistable, PersistableEnum)
 public macro Persistable(type: String) = #externalMacro(module: "DatabaseKitMacros", type: "PersistableMacro")
 

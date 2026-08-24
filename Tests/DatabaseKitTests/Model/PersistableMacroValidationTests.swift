@@ -213,6 +213,45 @@ struct ModelMacroValidationTests {
         )
     }
 
+    @Test("@Persistable rejects custom initializers")
+    func rejectsCustomInitializers() {
+        assertMacroExpansion(
+            """
+            @Persistable
+            struct CustomInitializationDocument {
+                var id: String
+                init(id: String) {
+                    self.id = id
+                }
+            }
+            """,
+            expandedSource: """
+            struct CustomInitializationDocument {
+                var id: String
+                init(id: String) {
+                    self.id = id
+                }
+            }
+
+            extension CustomInitializationDocument: Persistable {
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "@Persistable structs use the compiler-synthesized memberwise initializer so persisted decoding never evaluates property defaults. Move custom construction policy to a static factory.",
+                    line: 4,
+                    column: 5
+                )
+            ],
+            macroSpecs: [
+                "Persistable": MacroSpec(
+                    type: PersistableMacro.self,
+                    conformances: ["Persistable", "PersistableEnum"]
+                )
+            ]
+        )
+    }
+
     @Test("#Index rejects a key path rooted at another model")
     func rejectsForeignIndexKeyPathRoot() {
         let foreignType: ExprSyntax = """

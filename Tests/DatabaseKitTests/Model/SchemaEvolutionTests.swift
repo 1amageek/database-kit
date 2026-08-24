@@ -42,6 +42,23 @@ private struct SchemaEvolutionCachedDefaultItem {
 }
 
 @Persistable
+private struct SchemaEvolutionOptionalDefaultItem {
+    var id: String
+    var nickname: String? = "guest"
+}
+
+@Persistable
+private struct SchemaEvolutionIndexedDefaultItem {
+    #Index(.ordered(
+        name: "schema_evolution_by_score",
+        keys: [.ascending(\SchemaEvolutionIndexedDefaultItem.score)]
+    ))
+
+    var id: String
+    var score: Int32 = 0
+}
+
+@Persistable
 private enum SchemaEvolutionDefaultStatus: String {
     case active
     case inactive
@@ -122,14 +139,42 @@ enum SchemaEvolutionSchemaV2Renamed: VersionedSchema {
 
 @Suite("Schema Evolution Tests")
 struct SchemaEvolutionTests {
-    @Test("Schema defaults are captured once")
-    func schemaDefaultsAreCapturedOnce() throws {
+    @Test("Executable Swift initializers do not become schema defaults")
+    func executableInitializersRemainConstructionPolicy() throws {
+        let initialEvaluationCount = SchemaDefaultEvaluationCounter.value
         let first = try SchemaEvolutionCachedDefaultItem.schemaEntity
         let second = try SchemaEvolutionCachedDefaultItem.schemaEntity
 
         #expect(first == second)
-        #expect(first.fieldMapByName["value"]?.defaultValue == .int32(1))
-        #expect(SchemaDefaultEvaluationCounter.value == 1)
+        #expect(first.fieldMapByName["value"]?.defaultValue == nil)
+        #expect(
+            SchemaDefaultEvaluationCounter.value == initialEvaluationCount
+        )
+        #expect {
+            _ = try SchemaEvolutionCachedDefaultItem.decodePersistedFields([
+                try PersistableField(
+                    number: 1,
+                    name: "id",
+                    value: .string("stored")
+                ),
+            ])
+        } throws: { error in
+            guard let decodingError = error as? PersistableDecodingError,
+                  case .missingRequiredField("value") = decodingError else {
+                return false
+            }
+            return true
+        }
+        #expect(
+            SchemaDefaultEvaluationCounter.value == initialEvaluationCount
+        )
+
+        let item = SchemaEvolutionCachedDefaultItem(id: "constructed")
+        #expect(item.value == Int32(initialEvaluationCount + 1))
+        #expect(
+            SchemaDefaultEvaluationCounter.value
+                == initialEvaluationCount + 1
+        )
     }
 
     @Test("Append-only field additions remain lightweight-compatible")
@@ -148,15 +193,22 @@ struct SchemaEvolutionTests {
         #expect(try SchemaEvolutionSchemaV2AppendOnly.canLightweightMigrate(from: SchemaEvolutionSchemaV1.self))
     }
 
-    @Test("Schema defaults use the declared Swift initializer")
-    func runtimeComputedDefaultIsCanonicalized() throws {
+    @Test("Runtime-computed defaults require an explicit migration")
+    func runtimeComputedDefaultIsNotPersistedInSchema() throws {
         let current = try SchemaEvolutionSchemaV2RuntimeDefault.makeSchema()
         let previous = try SchemaEvolutionSchemaV1.makeSchema()
         let report = current.compatibilityReport(from: previous)
 
-        #expect(report.isLightweightCompatible)
-        #expect(report.allIssues.isEmpty)
-        #expect(report.entityReports[0].addedFields[0].defaultValue == .int32(42))
+        #expect(!report.isLightweightCompatible)
+        #expect(report.entityReports[0].addedFields[0].defaultValue == nil)
+        #expect(
+            report.allIssues.contains(
+                .addedFieldWithoutDefault(
+                    entityName: "SchemaEvolutionUser",
+                    fieldName: "age"
+                )
+            )
+        )
     }
 
     @Test("Enum defaults use the declared Swift initializer")
@@ -181,6 +233,47 @@ struct SchemaEvolutionTests {
         #expect(decoded.name == "Alice")
         #expect(decoded.email == "alice@example.com")
         #expect(decoded.age == 0)
+    }
+
+    @Test("A stored null is distinct from a missing optional field")
+    func explicitNullDoesNotUseTheSchemaDefault() throws {
+        let id = SchemaEvolutionOptionalDefaultItem.fields.id.identity
+        let nickname = SchemaEvolutionOptionalDefaultItem.fields.nickname.identity
+        let missing = try SchemaEvolutionOptionalDefaultItem.decodePersistedFields([
+            try PersistableField(
+                number: try #require(UInt32(exactly: id.number)),
+                name: id.name,
+                value: .string("missing")
+            ),
+        ])
+        let explicitNull = try SchemaEvolutionOptionalDefaultItem.decodePersistedFields([
+            try PersistableField(
+                number: try #require(UInt32(exactly: id.number)),
+                name: id.name,
+                value: .string("null")
+            ),
+            try PersistableField(
+                number: try #require(UInt32(exactly: nickname.number)),
+                name: nickname.name,
+                value: .null
+            ),
+        ])
+
+        #expect(missing.nickname == "guest")
+        #expect(explicitNull.nickname == nil)
+    }
+
+    @Test("Compiled index projections retain canonical field defaults")
+    func indexProjectionUsesCompleteFieldSchemas() throws {
+        let entity = try SchemaEvolutionIndexedDefaultItem.schemaEntity
+        let descriptor = try #require(entity.indexDescriptors.first)
+        let projected = try #require(descriptor.fieldSchemas.first)
+        let compiledDescriptors = try SchemaEvolutionIndexedDefaultItem
+            .indexDescriptors
+
+        #expect(projected.name == "score")
+        #expect(projected.defaultValue == .int32(0))
+        #expect(descriptor == compiledDescriptors.first)
     }
 
     @Test("Field reordering is rejected as incompatible")

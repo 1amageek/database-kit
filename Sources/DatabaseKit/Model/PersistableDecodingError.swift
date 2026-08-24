@@ -1,6 +1,7 @@
 import DatabaseTypes
 public enum PersistableDecodingError: Error, Sendable, CustomStringConvertible {
     case missingSchema(String)
+    case invalidSchemaDefault(entity: String, field: String)
     case missingCompiledDecoder(String)
     case duplicateSchemaFieldNumber(Int)
     case duplicateSchemaFieldName(String)
@@ -37,6 +38,8 @@ public enum PersistableDecodingError: Error, Sendable, CustomStringConvertible {
         switch self {
         case .missingSchema(let type):
             return "No static field schema is available for '\(type)'"
+        case .invalidSchemaDefault(let entity, let field):
+            return "Entity '\(entity)' cannot provide the canonical default for field '\(field)'"
         case .missingCompiledDecoder(let type):
             return "No macro-generated persistable decoder is available for '\(type)'"
         case .duplicateSchemaFieldNumber(let number):

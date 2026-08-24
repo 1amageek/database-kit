@@ -298,6 +298,52 @@ public extension Persistable {
         }
     }
 
+    /// Supplies the complete entity field metadata used to validate and retain
+    /// macro-generated index projections.
+    static var _persistableIndexFieldSchemas: [FieldSchema] {
+        get throws(IndexDeclarationError) {
+            do {
+                return try fieldSchemas
+            } catch let error {
+                throw IndexDeclarationError(
+                    indexName: persistableType,
+                    validationError: .invalidConfiguration(
+                        index: persistableType,
+                        reason: "Entity field schema is invalid: \(error.description)"
+                    )
+                )
+            }
+        }
+    }
+
+    /// Returns the captured canonical value for one generated field default.
+    static func _persistedDefaultValue(
+        for field: FieldIdentity
+    ) throws(PersistableDecodingError) -> FieldValue {
+        let schemas: [FieldSchema]
+        do {
+            schemas = try fieldSchemas
+        } catch {
+            throw .invalidSchemaDefault(
+                entity: persistableType,
+                field: field.name
+            )
+        }
+        guard let schema = schemas.first(where: {
+            $0.fieldNumber == field.number && $0.name == field.name
+        }) else {
+            throw .invalidFieldIdentity(
+                entity: persistableType,
+                number: field.number,
+                name: field.name
+            )
+        }
+        guard let defaultValue = schema.defaultValue else {
+            throw .missingRequiredField(field.name)
+        }
+        return defaultValue
+    }
+
     /// Default: no relationships.
     static var relationshipDescriptors: [RelationshipDescriptor] { [] }
 
