@@ -141,19 +141,9 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         }
 
         let structName = structDecl.name.text
-
-        if let initializer = structDecl.memberBlock.members.compactMap({
+        let customInitializer = structDecl.memberBlock.members.compactMap({
             $0.decl.as(InitializerDeclSyntax.self)
-        }).first {
-            throw DiagnosticsError(diagnostics: [
-                Diagnostic(
-                    node: Syntax(initializer),
-                    message: MacroExpansionErrorMessage(
-                        "@Persistable structs use the compiler-synthesized memberwise initializer so persisted decoding never evaluates property defaults. Move custom construction policy to a static factory."
-                    )
-                )
-            ])
-        }
+        }).first
 
         // Extract custom type name from macro arguments
         var typeName: String = structName
@@ -343,6 +333,20 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     node: Syntax(node),
                     message: MacroExpansionErrorMessage(
                         "@Persistable requires an explicit 'id' field whose type conforms to PersistableIdentifier"
+                    )
+                )
+            ])
+        }
+
+        if let customInitializer,
+           let defaultedField = fieldInfos.first(where: {
+               !$0.isTransient && $0.hasDefault
+           }) {
+            throw DiagnosticsError(diagnostics: [
+                Diagnostic(
+                    node: Syntax(customInitializer),
+                    message: MacroExpansionErrorMessage(
+                        "@Persistable cannot combine a custom initializer with persisted field default '\(defaultedField.name)' because decoding must not execute stored-property initializers. Move custom construction policy to a static factory."
                     )
                 )
             ])
@@ -938,9 +942,31 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             .joined(separator: "\n        ")
         let decodedModelArguments = persistedFieldInfos
             .map { fieldInfo in
-                "\(fieldInfo.name): _databaseKitDecoded_\(fieldInfo.name)"
+                let label = customInitializer == nil
+                    ? fieldInfo.name
+                    : "_databaseKitDecoded_\(fieldInfo.name)"
+                return "\(label): _databaseKitDecoded_\(fieldInfo.name)"
             }
             .joined(separator: ",\n            ")
+
+        if customInitializer != nil {
+            let decodedInitializerParameters = persistedFieldInfos
+                .map { fieldInfo in
+                    "_databaseKitDecoded_\(fieldInfo.name): \(fieldInfo.type)"
+                }
+                .joined(separator: ", ")
+            let decodedInitializerAssignments = persistedFieldInfos
+                .map { fieldInfo in
+                    "self.\(fieldInfo.name) = _databaseKitDecoded_\(fieldInfo.name)"
+                }
+                .joined(separator: "\n        ")
+            let decodedInitializerDecl: DeclSyntax = """
+                private init(\(raw: decodedInitializerParameters)) {
+                    \(raw: decodedInitializerAssignments)
+                }
+                """
+            decls.append(decodedInitializerDecl)
+        }
 
         let persistedFieldInputDecl: DeclSyntax = """
             public static func decodePersistedFields<Input: DatabaseKit.PersistedFieldInput>(

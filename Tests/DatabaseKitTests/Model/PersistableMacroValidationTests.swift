@@ -213,13 +213,14 @@ struct ModelMacroValidationTests {
         )
     }
 
-    @Test("@Persistable rejects custom initializers")
-    func rejectsCustomInitializers() {
+    @Test("@Persistable rejects custom initializers with persisted defaults")
+    func rejectsCustomInitializersWithPersistedDefaults() {
         assertMacroExpansion(
             """
             @Persistable
             struct CustomInitializationDocument {
                 var id: String
+                var name: String = "default"
                 init(id: String) {
                     self.id = id
                 }
@@ -228,6 +229,7 @@ struct ModelMacroValidationTests {
             expandedSource: """
             struct CustomInitializationDocument {
                 var id: String
+                var name: String = "default"
                 init(id: String) {
                     self.id = id
                 }
@@ -238,8 +240,8 @@ struct ModelMacroValidationTests {
             """,
             diagnostics: [
                 DiagnosticSpec(
-                    message: "@Persistable structs use the compiler-synthesized memberwise initializer so persisted decoding never evaluates property defaults. Move custom construction policy to a static factory.",
-                    line: 4,
+                    message: "@Persistable cannot combine a custom initializer with persisted field default 'name' because decoding must not execute stored-property initializers. Move custom construction policy to a static factory.",
+                    line: 5,
                     column: 5
                 )
             ],
@@ -333,6 +335,31 @@ struct ModelMacroValidationTests {
         #expect(model.id > 0)  // Auto-generated timestamp-based id
         #expect(UserDefinedIdModel.allFields.contains("id"))
     }
+
+    @Test("Custom construction labels do not affect persisted decoding")
+    func customConstructionLabelsRemainIndependent() throws {
+        let constructed = CustomInitializerModel(
+            externalID: "constructed",
+            externalValue: 7
+        )
+        let decoded = try CustomInitializerModel.decodePersistedFields([
+            try PersistableField(
+                number: 1,
+                name: "id",
+                value: .string("decoded")
+            ),
+            try PersistableField(
+                number: 2,
+                name: "value",
+                value: .int32(11)
+            ),
+        ])
+
+        #expect(constructed.id == "constructed")
+        #expect(constructed.value == 7)
+        #expect(decoded.id == "decoded")
+        #expect(decoded.value == 11)
+    }
 }
 
 // MARK: - Test Structs
@@ -364,6 +391,17 @@ struct StableFieldUser {
     var email: String
     var name: String
     var createdAt: Timestamp
+}
+
+@Persistable
+private struct CustomInitializerModel {
+    var id: String
+    var value: Int32
+
+    init(externalID: String, externalValue: Int32) {
+        self.id = externalID
+        self.value = externalValue
+    }
 }
 
 @Persistable
