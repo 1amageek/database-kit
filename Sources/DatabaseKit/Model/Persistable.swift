@@ -63,8 +63,12 @@ public protocol Persistable: FieldValueEncodable, PersistedEntityValue {
     /// Unique identifier for this instance
     ///
     /// The application declares this field and chooses its generation policy.
-    /// Macro-generated initializers include it unless the declaration supplies
-    /// a default value.
+    /// Swift's synthesized memberwise initializer includes it unless the
+    /// declaration supplies a default value. `@Persistable` does not replace
+    /// that initializer because a generated initializer would execute stored
+    /// property defaults while decoding. Public models expose construction
+    /// through an application-owned static factory when cross-module access is
+    /// required.
     var id: ID { get }
 
     /// Canonical identifier shape exposed to schema and wire declarations.
