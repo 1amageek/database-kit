@@ -11,6 +11,7 @@ public enum SchemaCompatibilityIssue: Error, Sendable, Equatable, CustomStringCo
     case renumberedField(entityName: String, fieldName: String, expected: Int, actual: Int)
     case changedFieldEncoding(entityName: String, fieldName: String, from: FieldSchema, to: FieldSchema)
     case nonAppendOnlyFieldAddition(entityName: String, fieldName: String, fieldNumber: Int, minimumAllowed: Int)
+    case addedFieldWithoutDefault(entityName: String, fieldName: String)
 
     public var description: String {
         switch self {
@@ -28,6 +29,8 @@ public enum SchemaCompatibilityIssue: Error, Sendable, Equatable, CustomStringCo
 
         case .nonAppendOnlyFieldAddition(let entityName, let fieldName, let fieldNumber, let minimumAllowed):
             return "Entity '\(entityName)' added field '\(fieldName)' at #\(fieldNumber), but append-only additions must use field numbers >= \(minimumAllowed)."
+        case .addedFieldWithoutDefault(let entityName, let fieldName):
+            return "Entity '\(entityName)' added field '\(fieldName)' without a canonical persisted default."
         }
     }
 }
@@ -179,6 +182,14 @@ extension Schema.Entity {
                     fieldName: field.name,
                     fieldNumber: field.fieldNumber,
                     minimumAllowed: maxPreviousFieldNumber + 1
+                )
+            )
+        }
+        for field in addedFields where field.defaultValue == nil {
+            issues.append(
+                .addedFieldWithoutDefault(
+                    entityName: name,
+                    fieldName: field.name
                 )
             )
         }

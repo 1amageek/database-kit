@@ -27,7 +27,12 @@ struct SchemaJSONCodecTests {
             ]
         )
         let articleFields = [
-            FieldSchema(name: "title", fieldNumber: 1, type: .string),
+            FieldSchema(
+                name: "title",
+                fieldNumber: 1,
+                type: .string,
+                defaultValue: .string("untitled")
+            ),
             FieldSchema(
                 name: "owner",
                 fieldNumber: 2,
@@ -110,12 +115,16 @@ struct SchemaJSONCodecTests {
 
         #expect(try decoded.canonicalBytes() == manifest.canonicalBytes())
         #expect(try decoded.fingerprint() == manifest.fingerprint())
+        #expect(
+            decoded.schema.entity(named: "Article")?.fields.first?.defaultValue
+                == .string("untitled")
+        )
     }
 
     @Test("Duplicate, unknown, and missing fields fail explicitly", arguments: [
-        #"{"formatVersion":2,"formatVersion":2,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[]}"#,
-        #"{"formatVersion":2,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[],"unknown":true}"#,
-        #"{"formatVersion":2,"schemaVersion":{"major":1,"minor":0,"patch":0}}"#,
+        #"{"formatVersion":3,"formatVersion":3,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[]}"#,
+        #"{"formatVersion":3,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[],"unknown":true}"#,
+        #"{"formatVersion":3,"schemaVersion":{"major":1,"minor":0,"patch":0}}"#,
     ])
     func malformedDocumentFails(_ json: String) {
         #expect(throws: SchemaJSONError.self) {
@@ -127,14 +136,14 @@ struct SchemaJSONCodecTests {
     func unsupportedVersionFails() {
         #expect(throws: SchemaJSONError.self) {
             try SchemaJSONCodec().decode(
-                #"{"formatVersion":3,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[]}"#
+                #"{"formatVersion":4,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[]}"#
             )
         }
     }
 
     @Test("Duplicate field identities fail before index construction")
     func duplicateFieldIdentityFails() {
-        let json = #"{"formatVersion":2,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[{"name":"Entry","identifierType":{"kind":"string"},"fields":[{"name":"value","number":1,"type":"string","optional":false,"array":false,"referenceTargetEntity":null},{"name":"value","number":1,"type":"string","optional":false,"array":false,"referenceTargetEntity":null}],"directory":{"components":[],"layer":"default"},"indexes":[{"entity":"Entry","declaration":{"name":"Entry_value","definition":{"kind":"ordered","keys":[{"field":{"name":"value","number":1},"order":"ascending"}],"includedFields":[],"unique":false}}}],"relationships":[],"fieldAccessRules":[],"enumMetadata":{},"ontology":null,"polymorphicMembership":null}]}"#
+        let json = #"{"formatVersion":3,"schemaVersion":{"major":1,"minor":0,"patch":0},"entities":[{"name":"Entry","identifierType":{"kind":"string"},"fields":[{"name":"value","number":1,"type":"string","optional":false,"array":false,"referenceTargetEntity":null,"defaultValue":null},{"name":"value","number":1,"type":"string","optional":false,"array":false,"referenceTargetEntity":null,"defaultValue":null}],"directory":{"components":[],"layer":"default"},"indexes":[{"entity":"Entry","declaration":{"name":"Entry_value","definition":{"kind":"ordered","keys":[{"field":{"name":"value","number":1},"order":"ascending"}],"includedFields":[],"unique":false}}} ,"relationships":[],"fieldAccessRules":[],"enumMetadata":{},"ontology":null,"polymorphicMembership":null}]}"#
 
         #expect(throws: SchemaJSONError.self) {
             _ = try SchemaJSONCodec().decode(json)

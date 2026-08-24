@@ -1,7 +1,10 @@
 import DatabaseTypes
 
 /// A typed model value that stores a canonical persistable identity.
-public protocol PersistableReferenceValue: FieldValueEncodable {
+public protocol PersistableReferenceValue:
+    FieldValueEncodable,
+    FieldValueRepresentable
+{
     var persistableIdentity: EntityReference { get }
 
     static func decodePersistedReference(
@@ -12,7 +15,9 @@ public protocol PersistableReferenceValue: FieldValueEncodable {
 public extension PersistableReferenceValue {
     static var fieldSchemaType: FieldSchemaType { .reference }
 
-    func encodeFieldValue() -> FieldValue {
+    var fieldValue: FieldValue {
         .reference(persistableIdentity)
     }
+
+    func encodeFieldValue() -> FieldValue { fieldValue }
 }

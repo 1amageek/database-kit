@@ -68,6 +68,24 @@ private struct OptionalScalarIndexEntity {
 
 @Suite("Schema Validation")
 struct SchemaValidationTests {
+    @Test("Field schema distinguishes absent defaults from canonical null")
+    func fieldSchemaDefaultIdentity() {
+        let required = FieldSchema(
+            name: "required",
+            fieldNumber: 1,
+            type: .string
+        )
+        let optional = FieldSchema(
+            name: "optional",
+            fieldNumber: 2,
+            type: .string,
+            isOptional: true
+        )
+
+        #expect(required.defaultValue == nil)
+        #expect(optional.defaultValue == .null)
+    }
+
     @Test("Duplicate entity names fail schema construction")
     func duplicateEntityNamesFailConstruction() throws {
         let entity = try Schema.Entity(

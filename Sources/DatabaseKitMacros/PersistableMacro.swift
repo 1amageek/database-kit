@@ -161,7 +161,14 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
 
         // Extract all stored properties (fields) and @Relationship declarations
         var allFields: [String] = []
-        var fieldInfos: [(name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)] = []
+        var fieldInfos: [(
+            name: String,
+            type: String,
+            hasDefault: Bool,
+            defaultValue: String?,
+            canonicalDefaultValue: String?,
+            isTransient: Bool
+        )] = []
         // Track @Restricted fields for static authorization declarations.
         var restrictedFields: [(
             fieldName: String,
@@ -260,6 +267,10 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                 ?? "Any"
                             let hasDefault = binding.initializer != nil
                             let defaultValue = binding.initializer?.value.description.trimmingCharacters(in: .whitespaces)
+                            let canonicalDefaultValue = canonicalPersistedDefaultExpression(
+                                for: fieldType,
+                                initializer: binding.initializer?.value
+                            )
 
                             if fieldName == "id" {
                                 hasUserDefinedId = true
@@ -286,7 +297,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                 ))
 
                                 allFields.append(fieldName)
-                                fieldInfos.append((name: fieldName, type: fieldType, hasDefault: hasDefault, defaultValue: defaultValue, isTransient: false))
+                                fieldInfos.append((name: fieldName, type: fieldType, hasDefault: hasDefault, defaultValue: defaultValue, canonicalDefaultValue: canonicalDefaultValue, isTransient: false))
                             }
                             // Regular field (not @Relationship)
                             else {
@@ -294,7 +305,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                 if !isTransient {
                                     allFields.append(fieldName)
                                 }
-                                fieldInfos.append((name: fieldName, type: fieldType, hasDefault: hasDefault, defaultValue: defaultValue, isTransient: isTransient))
+                                fieldInfos.append((name: fieldName, type: fieldType, hasDefault: hasDefault, defaultValue: defaultValue, canonicalDefaultValue: canonicalDefaultValue, isTransient: isTransient))
 
                                 // Track @Restricted fields for static rules.
                                 if let restricted = restrictedInfo {
@@ -362,7 +373,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         let identifierTypeName = normalizedTypeName(identifierField.type)
 
         func defaultInitializationExpr(
-            for fieldInfo: (name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)
+            for fieldInfo: (name: String, type: String, hasDefault: Bool, defaultValue: String?, canonicalDefaultValue: String?, isTransient: Bool)
         ) -> String {
             if let defaultValue = fieldInfo.defaultValue {
                 return defaultValue
@@ -394,7 +405,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
         }
 
         func persistableFieldDecodeExpr(
-            for fieldInfo: (name: String, type: String, hasDefault: Bool, defaultValue: String?, isTransient: Bool)
+            for fieldInfo: (name: String, type: String, hasDefault: Bool, defaultValue: String?, canonicalDefaultValue: String?, isTransient: Bool)
         ) -> String {
             if fieldInfo.isTransient {
                 return defaultInitializationExpr(for: fieldInfo)
@@ -751,8 +762,11 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 } else {
                     referenceTarget = ""
                 }
+                let defaultValue = fieldInfo.canonicalDefaultValue.map {
+                    ", defaultValue: \($0)"
+                } ?? ""
                 fieldSchemaEntries.append(
-                    "FieldSchema(name: \"\(fieldInfo.name)\", fieldNumber: \(schemaFieldIndex), type: \(schemaType), isOptional: \(isOptional), isArray: \(isArray)\(referenceTarget))"
+                    "FieldSchema(name: \"\(fieldInfo.name)\", fieldNumber: \(schemaFieldIndex), type: \(schemaType), isOptional: \(isOptional), isArray: \(isArray)\(referenceTarget)\(defaultValue))"
                 )
             }
         }
@@ -1188,6 +1202,25 @@ private func persistedElementType(_ rawType: String) -> String {
 private func isPlatformIntegerPersistedType(_ rawType: String) -> Bool {
     let type = persistedElementType(rawType)
     return type == "Int" || type == "UInt"
+}
+
+/// Converts the declared Swift member default through the same canonical value
+/// cases used by persisted field encoding. The generated schema evaluates the
+/// original initializer expression with its declared Swift type, so schema and
+/// model decoding cannot drift onto separately authored defaults.
+private func canonicalPersistedDefaultExpression(
+    for rawType: String,
+    initializer: ExprSyntax?
+) -> String? {
+    let isOptional = mapToFieldSchemaType(rawType).isOptional
+    guard let initializer else {
+        return isOptional ? "DatabaseTypes.FieldValue.null" : nil
+    }
+    if initializer.is(NilLiteralExprSyntax.self) {
+        return isOptional ? "DatabaseTypes.FieldValue.null" : nil
+    }
+
+    return "((\(initializer.trimmedDescription)) as \(rawType)).fieldValue"
 }
 
 private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isOptional: Bool, isArray: Bool) {

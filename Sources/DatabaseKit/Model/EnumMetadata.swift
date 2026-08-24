@@ -62,6 +62,7 @@ public struct EnumMetadata: Sendable, Equatable {
 /// provide canonical case metadata.
 public protocol PersistableEnum:
     FieldValueEncodable,
+    FieldValueRepresentable,
     CaseIterable,
     RawRepresentable
 where RawValue: FieldValueEncodable & FieldValueDecodable {}
@@ -78,9 +79,11 @@ extension PersistableEnum where RawValue == String {
         )
     }
 
-    public func encodeFieldValue() -> FieldValue {
+    public var fieldValue: FieldValue {
         .string(rawValue)
     }
+
+    public func encodeFieldValue() -> FieldValue { fieldValue }
 }
 
 extension PersistableEnum where RawValue == Int {
@@ -95,7 +98,9 @@ extension PersistableEnum where RawValue == Int {
         )
     }
 
-    public func encodeFieldValue() -> FieldValue {
+    public var fieldValue: FieldValue {
         .int64(Int64(rawValue))
     }
+
+    public func encodeFieldValue() -> FieldValue { fieldValue }
 }

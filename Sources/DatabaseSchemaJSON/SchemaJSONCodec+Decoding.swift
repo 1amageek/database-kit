@@ -174,10 +174,21 @@ private extension SchemaJSONCodec {
         let object = try JSONObject(node, path: path)
         try object.validateKeys([
             "name", "number", "type", "optional", "array", "referenceTargetEntity",
+            "defaultValue",
         ])
         let rawType = try object.required("type").string(path: object.child("type"))
         guard let type = FieldSchemaType(rawValue: rawType) else {
             throw invalidEnum(object.child("type"), rawType)
+        }
+        let defaultNode = try object.required("defaultValue")
+        let defaultValue: FieldValue?
+        if case .null = defaultNode {
+            defaultValue = nil
+        } else {
+            defaultValue = try fieldValueCodec.decode(
+                defaultNode,
+                path: object.child("defaultValue")
+            )
         }
         return FieldSchema(
             name: try object.required("name").string(path: object.child("name")),
@@ -188,7 +199,8 @@ private extension SchemaJSONCodec {
             referenceTargetEntity: try optionalString(
                 object.required("referenceTargetEntity"),
                 path: object.child("referenceTargetEntity")
-            )
+            ),
+            defaultValue: defaultValue
         )
     }
 

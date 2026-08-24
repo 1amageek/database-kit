@@ -12,6 +12,7 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
     case invalidReferenceTarget(fieldName: String)
     case missingReferenceTarget(fieldName: String)
     case referenceTargetOnNonReferenceField(fieldName: String)
+    case invalidFieldDefault(fieldName: String)
     case emptyDirectoryPathComponent(position: Int)
     case unknownDirectoryField(String)
     case partitionDirectoryRequiresDynamicField
@@ -82,6 +83,8 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Reference field '\(fieldName)' must declare its target entity."
         case .referenceTargetOnNonReferenceField(let fieldName):
             return "Non-reference field '\(fieldName)' declares a reference target entity."
+        case .invalidFieldDefault(let fieldName):
+            return "Field '\(fieldName)' declares a canonical default that does not match its schema."
         case .emptyDirectoryPathComponent(let position):
             return "Directory path component at position \(position) is empty."
         case .unknownDirectoryField(let fieldName):

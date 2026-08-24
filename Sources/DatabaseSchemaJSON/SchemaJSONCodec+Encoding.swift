@@ -32,7 +32,7 @@ extension SchemaJSONCodec {
             (
                 "fields",
                 .array(
-                    entity.fields
+                    try entity.fields
                         .sorted { ($0.fieldNumber, $0.name) < ($1.fieldNumber, $1.name) }
                         .map(encodeField)
                 )
@@ -103,7 +103,7 @@ extension SchemaJSONCodec {
         }
     }
 
-    private func encodeField(_ field: FieldSchema) -> JSONValue {
+    private func encodeField(_ field: FieldSchema) throws -> JSONValue {
         .object([
             ("name", .string(field.name)),
             ("number", .number(String(field.fieldNumber))),
@@ -111,6 +111,10 @@ extension SchemaJSONCodec {
             ("optional", .bool(field.isOptional)),
             ("array", .bool(field.isArray)),
             ("referenceTargetEntity", optionalString(field.referenceTargetEntity)),
+            (
+                "defaultValue",
+                try field.defaultValue.map(fieldValueCodec.encode) ?? .null
+            ),
         ])
     }
 

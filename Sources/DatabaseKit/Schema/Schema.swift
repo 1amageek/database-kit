@@ -312,6 +312,10 @@ public final class Schema: Sendable {
                         fieldName: field.name
                     )
                 }
+                if let defaultValue = field.defaultValue,
+                   !Self.accepts(defaultValue, for: field) {
+                    throw .invalidFieldDefault(fieldName: field.name)
+                }
             }
 
             var hasDynamicDirectoryField = false
@@ -520,6 +524,47 @@ public final class Schema: Sendable {
             }
 
             return (fieldsByName, fieldsByNumber)
+        }
+
+        private static func accepts(
+            _ value: FieldValue,
+            for field: FieldSchema
+        ) -> Bool {
+            if case .null = value {
+                return field.isOptional
+            }
+            if field.isArray {
+                guard case .array(let values) = value else { return false }
+                return values.allSatisfy {
+                    $0 != .null && acceptsScalar($0, as: field.type)
+                }
+            }
+            return acceptsScalar(value, as: field.type)
+        }
+
+        private static func acceptsScalar(
+            _ value: FieldValue,
+            as type: FieldSchemaType
+        ) -> Bool {
+            switch (type, value) {
+            case (.bool, .bool), (.int8, .int8), (.int16, .int16),
+                 (.int32, .int32), (.int64, .int64), (.uint8, .uint8),
+                 (.uint16, .uint16), (.uint32, .uint32), (.uint64, .uint64),
+                 (.float32, .float32), (.float64, .float64),
+                 (.decimal, .decimal), (.string, .string), (.bytes, .bytes),
+                 (.date, .date), (.time, .time), (.dateTime, .dateTime),
+                 (.timestamp, .timestamp), (.timeSpan, .timeSpan),
+                 (.calendarPeriod, .calendarPeriod),
+                 (.geographicPoint, .geographicPoint),
+                 (.geographicPosition, .geographicPosition),
+                 (.vector, .vector), (.uuid, .uuid), (.object, .object),
+                 (.nested, .object), (.rdfTerm, .rdfTerm),
+                 (.reference, .reference), (.enum, .string),
+                 (.enum, .int64):
+                return true
+            default:
+                return false
+            }
         }
 
         private static func validateIndexField(

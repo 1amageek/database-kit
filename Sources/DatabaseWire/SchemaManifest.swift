@@ -5,7 +5,7 @@ import DatabaseTypes
 /// value format. The manifest contains every semantic `Schema` declaration;
 /// derived lookup maps and runtime registrations are rebuilt after decoding.
 public struct SchemaManifest: Sendable, Hashable {
-    public static let currentFormatVersion: UInt16 = 2
+    public static let currentFormatVersion: UInt16 = 3
 
     // Physical index generations have their own canonical format lifecycle.
     // Changing the full manifest codec must not rebuild every unchanged index.
@@ -234,6 +234,10 @@ private extension SchemaManifest {
         writer.writeBool(field.isOptional)
         writer.writeBool(field.isArray)
         try writeOptionalString(field.referenceTargetEntity, into: &writer)
+        writer.writeBool(field.defaultValue != nil)
+        if let defaultValue = field.defaultValue {
+            try defaultValue.encode(into: &writer)
+        }
     }
 
     static func writeDirectory(
@@ -797,13 +801,23 @@ private extension SchemaManifest {
                 "Unknown FieldSchemaType '\(rawType)'"
             )
         }
+        let isOptional = try reader.readBool()
+        let isArray = try reader.readBool()
+        let referenceTargetEntity = try readOptionalString(from: &reader)
+        let defaultValue: FieldValue?
+        if try reader.readBool() {
+            defaultValue = try FieldValue(from: &reader)
+        } else {
+            defaultValue = Optional<FieldValue>.none
+        }
         return FieldSchema(
             name: name,
             fieldNumber: number,
             type: type,
-            isOptional: try reader.readBool(),
-            isArray: try reader.readBool(),
-            referenceTargetEntity: try readOptionalString(from: &reader)
+            isOptional: isOptional,
+            isArray: isArray,
+            referenceTargetEntity: referenceTargetEntity,
+            defaultValue: defaultValue
         )
     }
 

@@ -27,13 +27,19 @@ public struct FieldSchema: Sendable, Equatable, Hashable {
     /// Canonical target entity for a typed reference field.
     public let referenceTargetEntity: String?
 
+    /// Canonical value used when an older persisted row does not contain this
+    /// field. `nil` means that the omission requires an explicit migration;
+    /// `.some(.null)` is the distinct default for an optional field.
+    public let defaultValue: FieldValue?
+
     public init(
         name: String,
         fieldNumber: Int,
         type: FieldSchemaType,
         isOptional: Bool = false,
         isArray: Bool = false,
-        referenceTargetEntity: String? = nil
+        referenceTargetEntity: String? = nil,
+        defaultValue: FieldValue? = nil
     ) {
         self.name = name
         self.fieldNumber = fieldNumber
@@ -41,6 +47,13 @@ public struct FieldSchema: Sendable, Equatable, Hashable {
         self.isOptional = isOptional
         self.isArray = isArray
         self.referenceTargetEntity = referenceTargetEntity
+        if let defaultValue {
+            self.defaultValue = defaultValue
+        } else if isOptional {
+            self.defaultValue = FieldValue.null
+        } else {
+            self.defaultValue = nil
+        }
     }
 }
 

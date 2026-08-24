@@ -17,6 +17,28 @@ struct SchemaEvolutionUserV2AppendOnly {
     var age: Int32 = 0
 }
 
+private func runtimeComputedAge() -> Int32 { 42 }
+
+@Persistable
+private enum SchemaEvolutionDefaultStatus: String {
+    case active
+    case inactive
+}
+
+@Persistable
+private struct SchemaEvolutionEnumDefaultItem {
+    var id: String = "fixture-id"
+    var status: SchemaEvolutionDefaultStatus = .active
+}
+
+@Persistable(type: "SchemaEvolutionUser")
+struct SchemaEvolutionUserV2RuntimeDefault {
+    var id: String = "fixture-id"
+    var name: String
+    var email: String
+    var age: Int32 = runtimeComputedAge()
+}
+
 @Persistable(type: "SchemaEvolutionUser")
 struct SchemaEvolutionUserV2Reordered {
     var id: String = "fixture-id"
@@ -58,6 +80,15 @@ enum SchemaEvolutionSchemaV2Reordered: VersionedSchema {
     }
 }
 
+enum SchemaEvolutionSchemaV2RuntimeDefault: VersionedSchema {
+    static let versionIdentifier = Schema.Version(2, 0, 0)
+    static var entities: [Schema.Entity] {
+        get throws(SchemaEntityError) {
+            [try SchemaEvolutionUserV2RuntimeDefault.schemaEntity]
+        }
+    }
+}
+
 enum SchemaEvolutionSchemaV2Renamed: VersionedSchema {
     static let versionIdentifier = Schema.Version(2, 0, 0)
     static var entities: [Schema.Entity] {
@@ -80,8 +111,29 @@ struct SchemaEvolutionTests {
         #expect(report.issues.isEmpty)
         #expect(report.entityReports.count == 1)
         #expect(report.entityReports[0].addedFields.map(\.name) == ["age"])
+        #expect(report.entityReports[0].addedFields[0].defaultValue == .int32(0))
         #expect(report.entityReports[0].issues.isEmpty)
         #expect(try SchemaEvolutionSchemaV2AppendOnly.canLightweightMigrate(from: SchemaEvolutionSchemaV1.self))
+    }
+
+    @Test("Schema defaults use the declared Swift initializer")
+    func runtimeComputedDefaultIsCanonicalized() throws {
+        let current = try SchemaEvolutionSchemaV2RuntimeDefault.makeSchema()
+        let previous = try SchemaEvolutionSchemaV1.makeSchema()
+        let report = current.compatibilityReport(from: previous)
+
+        #expect(report.isLightweightCompatible)
+        #expect(report.allIssues.isEmpty)
+        #expect(report.entityReports[0].addedFields[0].defaultValue == .int32(42))
+    }
+
+    @Test("Enum defaults use the declared Swift initializer")
+    func enumDefaultIsCanonicalized() throws {
+        let entity = try SchemaEvolutionEnumDefaultItem.schemaEntity
+
+        #expect(
+            entity.fieldMapByName["status"]?.defaultValue == .string("active")
+        )
     }
 
     @Test("Append-only field additions decode missing fields using defaults")
