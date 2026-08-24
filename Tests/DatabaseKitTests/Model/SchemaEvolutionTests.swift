@@ -1,4 +1,5 @@
 import DatabaseTypes
+import Synchronization
 import Testing
 @testable import DatabaseKit
 
@@ -18,6 +19,27 @@ struct SchemaEvolutionUserV2AppendOnly {
 }
 
 private func runtimeComputedAge() -> Int32 { 42 }
+
+private enum SchemaDefaultEvaluationCounter {
+    private static let count = Mutex(0)
+
+    static func next() -> Int32 {
+        count.withLock { value in
+            value += 1
+            return Int32(value)
+        }
+    }
+
+    static var value: Int {
+        count.withLock { $0 }
+    }
+}
+
+@Persistable
+private struct SchemaEvolutionCachedDefaultItem {
+    var id: String
+    var value: Int32 = SchemaDefaultEvaluationCounter.next()
+}
 
 @Persistable
 private enum SchemaEvolutionDefaultStatus: String {
@@ -100,6 +122,16 @@ enum SchemaEvolutionSchemaV2Renamed: VersionedSchema {
 
 @Suite("Schema Evolution Tests")
 struct SchemaEvolutionTests {
+    @Test("Schema defaults are captured once")
+    func schemaDefaultsAreCapturedOnce() throws {
+        let first = try SchemaEvolutionCachedDefaultItem.schemaEntity
+        let second = try SchemaEvolutionCachedDefaultItem.schemaEntity
+
+        #expect(first == second)
+        #expect(first.fieldMapByName["value"]?.defaultValue == .int32(1))
+        #expect(SchemaDefaultEvaluationCounter.value == 1)
+    }
+
     @Test("Append-only field additions remain lightweight-compatible")
     func appendOnlyFieldAdditionIsCompatible() throws {
         let current = try SchemaEvolutionSchemaV2AppendOnly.makeSchema()
