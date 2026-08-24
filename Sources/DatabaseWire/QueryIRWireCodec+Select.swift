@@ -234,6 +234,11 @@ extension QueryIRWireFormat {
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
         try encodeFusionIndexSelection(source.selection, into: &writer)
+        try writeArray(source.referencedFields, into: &writer) {
+            (identity: FieldIdentity, writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try writer.writeString(identity.name)
+            try writeInt(identity.number, into: &writer)
+        }
         try encodeParameters(source.parameters, into: &writer)
     }
 
@@ -262,8 +267,16 @@ extension QueryIRWireFormat {
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) -> FusionIndexSource {
         let selection = try decodeFusionIndexSelection(from: &reader)
+        let referencedFields: [FieldIdentity] = try readArray(from: &reader) {
+            (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> FieldIdentity in
+            FieldIdentity(
+                name: try reader.readString(),
+                number: try readInt(from: &reader)
+            )
+        }
         return FusionIndexSource(
             selection: selection,
+            referencedFields: referencedFields,
             parameters: try decodeParameters(from: &reader)
         )
     }

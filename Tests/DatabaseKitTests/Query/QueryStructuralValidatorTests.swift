@@ -22,7 +22,13 @@ struct QueryStructuralValidatorTests {
                                                 FieldIdentity(name: "embedding", number: 2),
                                             ],
                                             fieldMatch: .exact
-                                        )
+                                        ),
+                                        referencedFields: [
+                                            FieldIdentity(
+                                                name: "embedding",
+                                                number: 2
+                                            ),
+                                        ]
                                     )
                                 ),
                                 scoring: .position
@@ -41,13 +47,13 @@ struct QueryStructuralValidatorTests {
         #expect(
             throws: QueryStructuralValidationError.resourceLimitExceeded(
                 resource: .collectionElements,
-                actual: 4,
-                maximum: 3
+                actual: 5,
+                maximum: 4
             )
         ) {
             try QueryStructuralValidator.validate(
                 query,
-                limits: QueryStructuralLimits(maximumCollectionElements: 3)
+                limits: QueryStructuralLimits(maximumCollectionElements: 4)
             )
         }
     }

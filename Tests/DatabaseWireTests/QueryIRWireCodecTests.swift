@@ -63,6 +63,9 @@ struct QueryIRWireFormatTests {
                                     fields: [FieldIdentity(name: "body", number: 2)],
                                     fieldMatch: .contains
                                 ),
+                                referencedFields: [
+                                    FieldIdentity(name: "body", number: 2),
+                                ],
                                 parameters: ["query": .string("swift database")]
                             )
                         ),
@@ -79,6 +82,9 @@ struct QueryIRWireFormatTests {
                                     name: "documents_vector",
                                     type: .vector
                                 ),
+                                referencedFields: [
+                                    FieldIdentity(name: "embedding", number: 3),
+                                ],
                                 parameters: ["k": .uint64(50)]
                             )
                         ),

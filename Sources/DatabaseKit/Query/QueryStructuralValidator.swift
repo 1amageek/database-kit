@@ -523,6 +523,7 @@ private extension QueryStructuralValidator {
                     if case .matching(_, let fields, _) = source.selection {
                         try consumeCollection(fields.count)
                     }
+                    try consumeCollection(source.referencedFields.count)
                     try appendParameters(
                         source.parameters,
                         depth: childDepth,
