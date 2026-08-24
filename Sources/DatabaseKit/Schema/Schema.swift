@@ -160,7 +160,7 @@ public final class Schema: Sendable {
             try self.init(
                 name: type.persistableType,
                 identifierType: type.persistableIdentifierType,
-                fields: type.fieldSchemas,
+                fields: try type.fieldSchemas,
                 directoryComponents: type.directoryPathComponents,
                 directoryLayer: type.directoryLayer,
                 indexes: indexDescriptors,

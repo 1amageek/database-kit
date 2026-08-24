@@ -2,6 +2,17 @@ import DatabaseTypes
 
 /// Entry points used by macro-generated, statically typed persistence code.
 public enum PersistableFieldEncoder {
+    public static func schemaDefault<Value: FieldValueEncodable>(
+        from value: borrowing Value,
+        fieldName: String
+    ) throws(SchemaEntityError) -> FieldValue {
+        do {
+            return try value.encodeFieldValue()
+        } catch {
+            throw .invalidFieldDefault(fieldName: fieldName)
+        }
+    }
+
     public static func fieldValue<Value: FieldValueEncodable>(
         from value: borrowing Value
     ) throws(PersistableEncodingError) -> FieldValue {

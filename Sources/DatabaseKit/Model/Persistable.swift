@@ -181,7 +181,9 @@ public protocol Persistable: FieldValueEncodable, PersistedEntityValue {
     /// //  FieldSchema(name: "email", fieldNumber: 2, type: .string, ...),
     /// //  FieldSchema(name: "age", fieldNumber: 3, type: .int32, ...)]
     /// ```
-    static var fieldSchemas: [FieldSchema] { get }
+    static var fieldSchemas: [FieldSchema] {
+        get throws(SchemaEntityError)
+    }
 
     /// Streams compiled fields from the concrete model to a caller-selected
     /// destination without existential storage or an intermediate model DTO.
@@ -331,7 +333,9 @@ public extension Persistable {
     static var directoryLayer: DirectoryLayer { .default }
 
     /// Default implementation returns empty array (no field schemas)
-    static var fieldSchemas: [FieldSchema] { [] }
+    static var fieldSchemas: [FieldSchema] {
+        get throws(SchemaEntityError) { [] }
+    }
 
     static func decodePersistedFields(
         _ fields: consuming [PersistableField]

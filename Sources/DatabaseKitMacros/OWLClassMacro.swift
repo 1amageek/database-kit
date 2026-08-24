@@ -370,7 +370,7 @@ public struct OWLClassMacro: MemberMacro, ExtensionMacro {
                                     graph: Self.ontologyGraph
                                 )
                             ),
-                            fieldSchemas: \(raw: structName).fieldSchemas
+                            fieldSchemas: []
                         )
                     ]
                 }

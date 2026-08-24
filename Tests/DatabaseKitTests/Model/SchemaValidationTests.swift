@@ -282,7 +282,7 @@ struct SchemaValidationTests {
                 name: "duplicate_index",
                 keys: [.ascending(SchemaValidationEntity.fields.first.identity)]
             ),
-            fieldSchemas: SchemaValidationEntity.fieldSchemas
+            fieldSchemas: try SchemaValidationEntity.fieldSchemas
         )
         let second = try IndexDescriptor(
             entityName: "SecondIndexedEntity",
@@ -290,12 +290,12 @@ struct SchemaValidationTests {
                 name: "duplicate_index",
                 keys: [.ascending(SchemaValidationEntity.fields.second.identity)]
             ),
-            fieldSchemas: SchemaValidationEntity.fieldSchemas
+            fieldSchemas: try SchemaValidationEntity.fieldSchemas
         )
         let firstEntity = try Schema.Entity(
             name: "FirstIndexedEntity",
             identifierType: .string,
-            fields: SchemaValidationEntity.fieldSchemas,
+            fields: try SchemaValidationEntity.fieldSchemas,
             indexes: [
                 first
             ]
@@ -303,7 +303,7 @@ struct SchemaValidationTests {
         let secondEntity = try Schema.Entity(
             name: "SecondIndexedEntity",
             identifierType: .string,
-            fields: SchemaValidationEntity.fieldSchemas,
+            fields: try SchemaValidationEntity.fieldSchemas,
             indexes: [
                 second
             ]
@@ -330,7 +330,7 @@ struct SchemaValidationTests {
                 name: "owned_index",
                 keys: [.ascending(SchemaValidationEntity.fields.first.identity)]
             ),
-            fieldSchemas: SchemaValidationEntity.fieldSchemas
+            fieldSchemas: try SchemaValidationEntity.fieldSchemas
         )
 
         #expect(descriptor.entityName == "SchemaValidationEntity")
@@ -344,7 +344,7 @@ struct SchemaValidationTests {
             try Schema.Entity(
                 name: "DifferentEntity",
                 identifierType: .string,
-                fields: SchemaValidationEntity.fieldSchemas,
+                fields: try SchemaValidationEntity.fieldSchemas,
                 indexes: [descriptor]
             )
         }
@@ -352,7 +352,7 @@ struct SchemaValidationTests {
 
     @Test("Changing a named index definition is one replacement")
     func changedNamedIndexIsReplacement() throws {
-        let fields = SchemaValidationEntity.fieldSchemas
+        let fields = try SchemaValidationEntity.fieldSchemas
         let previousIndex = try IndexDescriptor(
             entityName: "EvolvingIndexEntity",
             declaration: .ordered(
@@ -567,7 +567,7 @@ struct SchemaValidationTests {
                         FieldIdentity(name: "first", number: 3)
                     )]
                 ),
-                fieldSchemas: SchemaValidationEntity.fieldSchemas
+                fieldSchemas: try SchemaValidationEntity.fieldSchemas
             )
         }
     }
@@ -701,7 +701,7 @@ struct SchemaValidationTests {
                 Schema.Entity(
                     name: "EvolvingPolymorphicEntity",
                     identifierType: .string,
-                    fields: SchemaValidationEntity.fieldSchemas,
+                    fields: try SchemaValidationEntity.fieldSchemas,
                     polymorphicMembership: PolymorphicMembership(
                         identifier: "EvolvingGroup",
                         directoryComponents: [

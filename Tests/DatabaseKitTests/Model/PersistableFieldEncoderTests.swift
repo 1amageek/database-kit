@@ -283,7 +283,7 @@ struct PersistableFieldEncoderTests {
         )
 
         #expect(
-            PersistablePrimitiveTestDocument.fieldSchemas.map(\.type) == [
+            try PersistablePrimitiveTestDocument.fieldSchemas.map(\.type) == [
                 .string,
                 .decimal,
                 .bytes,
@@ -326,7 +326,7 @@ struct PersistableFieldEncoderTests {
     @Test("Timestamp uses the absolute timestamp schema")
     func timestampUsesTimestampSchema() throws {
         let occurredAtSchema = try #require(
-            PersistableFieldEncoderTestDocument.fieldSchemas.first {
+            try PersistableFieldEncoderTestDocument.fieldSchemas.first {
                 $0.name == "occurredAt"
             }
         )

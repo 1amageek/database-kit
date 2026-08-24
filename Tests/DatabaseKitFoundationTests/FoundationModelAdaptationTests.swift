@@ -13,8 +13,42 @@ private struct FoundationScalarDocument {
     var period: DateComponents
 }
 
+@Persistable
+private struct FoundationDefaultDocument {
+    var id: String
+    var timestamp: Date = Date(timeIntervalSince1970: 0)
+}
+
+@Persistable
+private struct InvalidFoundationDefaultDocument {
+    var id: String
+    var timestamp: Date = Date(timeIntervalSince1970: .nan)
+}
+
 @Suite("Foundation model adaptation")
 struct FoundationModelAdaptationTests {
+    @Test("Foundation defaults use the persisted scalar conversion")
+    func foundationDefaultsUsePersistedScalarConversion() throws {
+        let timestamp = try Timestamp(secondsSinceUnixEpoch: 0, nanoseconds: 0)
+        let schema = try FoundationDefaultDocument.schemaEntity
+
+        #expect(
+            schema.fieldMapByName["timestamp"]?.defaultValue
+                == .timestamp(timestamp)
+        )
+    }
+
+    @Test("Invalid Foundation defaults fail schema construction")
+    func invalidFoundationDefaultsFailSchemaConstruction() {
+        #expect(
+            throws: SchemaEntityError.invalidFieldDefault(
+                fieldName: "timestamp"
+            )
+        ) {
+            _ = try InvalidFoundationDefaultDocument.schemaEntity
+        }
+    }
+
     @Test("Foundation scalar properties round-trip through canonical field values")
     func scalarPropertiesRoundTrip() throws {
         let identifier = Foundation.UUID(

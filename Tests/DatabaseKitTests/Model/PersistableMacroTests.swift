@@ -93,7 +93,7 @@ struct ModelMacroTests {
     }
 
     @Test("generated fields carry typed canonical schema identity")
-    func generatedTypedFields() {
+    func generatedTypedFields() throws {
         let email: Field<FieldNumberUser, String> = FieldNumberUser.fields.email
         let resolved: Field<FieldNumberUser, String> = #field(
             \FieldNumberUser.email
@@ -102,7 +102,7 @@ struct ModelMacroTests {
         #expect(email == resolved)
         #expect(email.identity == FieldIdentity(name: "email", number: 2))
         #expect(email.type == .string)
-        #expect(email.schema == FieldNumberUser.fieldSchemas[1])
+        #expect(email.schema == (try FieldNumberUser.fieldSchemas)[1])
     }
 
     /// Test @Persistable with different index definition families.

@@ -268,6 +268,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                             let hasDefault = binding.initializer != nil
                             let defaultValue = binding.initializer?.value.description.trimmingCharacters(in: .whitespaces)
                             let canonicalDefaultValue = canonicalPersistedDefaultExpression(
+                                fieldName: fieldName,
                                 for: fieldType,
                                 initializer: binding.initializer?.value
                             )
@@ -426,6 +427,13 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             return "try input.decode(\(fieldType).self, for: Self.fields.\(fieldInfo.name).identity, entity: Self.persistableType)"
         }
 
+        let structuralFieldSchemasExpression: String = {
+            let schemas = fieldInfos
+                .filter { !$0.isTransient }
+                .map { "\(structName).fields.\($0.name).schema" }
+            return "[\(schemas.joined(separator: ", "))]"
+        }()
+
         // Compile each complete index declaration into canonical field identity.
         var indexDescriptorInits: [String] = []
         var relationshipDescriptorInits: [String] = []
@@ -457,7 +465,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     IndexDescriptor(
                         entityName: \(structName).persistableType,
                         declaration: \(declaration.trimmedDescription),
-                        fieldSchemas: \(structName).fieldSchemas
+                        fieldSchemas: \(structuralFieldSchemasExpression)
                     )
                     """
                 )
@@ -575,7 +583,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                             .ascending(\(structName).fields.\(fieldName).identity)
                                         ]
                                     ),
-                                    fieldSchemas: \(structName).fieldSchemas
+                                    fieldSchemas: \(structuralFieldSchemasExpression)
                                 )
                             """
                             indexDescriptorInits.append(reverseIndexInit)
@@ -603,7 +611,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                                 strategy: .adjacency
                             )
                         ),
-                        fieldSchemas: \(structName).fieldSchemas
+                        fieldSchemas: \(structuralFieldSchemasExpression)
                     )
                 """
                 indexDescriptorInits.append(graphIndexInit)
@@ -774,7 +782,11 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             ? "[]"
             : "[\n            \(fieldSchemaEntries.joined(separator: ",\n            "))\n        ]"
         let fieldSchemasDecl: DeclSyntax = """
-            public static var fieldSchemas: [FieldSchema] { \(raw: fieldSchemasArray) }
+            public static var fieldSchemas: [FieldSchema] {
+                get throws(DatabaseKit.SchemaEntityError) {
+                    \(raw: fieldSchemasArray)
+                }
+            }
             """
         decls.append(fieldSchemasDecl)
 
@@ -907,7 +919,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 var input = try DatabaseKit.PersistedFieldCollectionInput(
                     entity: Self.persistableType,
                     fields: fields,
-                    schemas: Self.fieldSchemas
+                    schemas: \(raw: structuralFieldSchemasExpression)
                 )
                 return try input.decode { (
                     input: inout DatabaseKit.PersistedFieldCollectionInput
@@ -925,7 +937,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                 var input = try DatabaseKit.PersistedObjectInput(
                     entity: Self.persistableType,
                     object: object,
-                    schemas: Self.fieldSchemas
+                    schemas: \(raw: structuralFieldSchemasExpression)
                 )
                 return try input.decode { (
                     input: inout DatabaseKit.PersistedObjectInput
@@ -1209,6 +1221,7 @@ private func isPlatformIntegerPersistedType(_ rawType: String) -> Bool {
 /// original initializer expression with its declared Swift type, so schema and
 /// model decoding cannot drift onto separately authored defaults.
 private func canonicalPersistedDefaultExpression(
+    fieldName: String,
     for rawType: String,
     initializer: ExprSyntax?
 ) -> String? {
@@ -1220,7 +1233,7 @@ private func canonicalPersistedDefaultExpression(
         return isOptional ? "DatabaseTypes.FieldValue.null" : nil
     }
 
-    return "((\(initializer.trimmedDescription)) as \(rawType)).fieldValue"
+    return "try DatabaseKit.PersistableFieldEncoder.schemaDefault(from: ((\(initializer.trimmedDescription)) as \(rawType)), fieldName: \"\(fieldName)\")"
 }
 
 private func mapToFieldSchemaType(_ rawType: String) -> (schemaType: String, isOptional: Bool, isArray: Bool) {
