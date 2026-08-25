@@ -127,4 +127,32 @@ public struct DatabaseWireEncoder: Sendable {
             try operation.encodeResponseBody(response, into: &writer)
         }
     }
+
+    /// Measures a canonical operation response body without allocating it.
+    @_spi(DatabaseExecution)
+    public func responsePayloadByteCount<Request, Response>(
+        _ operation: DatabaseOperation<Request, Response>,
+        response: Response
+    ) throws(DatabaseWireError) -> Int {
+        try DatabaseWireWriter.encodedByteCount(limits: limits) {
+            (writer: inout DatabaseWireWriter)
+                throws(DatabaseWireError) in
+            try operation.encodeResponseBody(response, into: &writer)
+        }
+    }
+
+    /// Initializes an exactly sized response-body destination in one pass.
+    /// The destination pointer cannot escape this synchronous boundary.
+    @_spi(DatabaseExecution)
+    public func encodeResponsePayload<Request, Response>(
+        _ operation: DatabaseOperation<Request, Response>,
+        response: Response,
+        into output: UnsafeMutableRawBufferPointer
+    ) throws(DatabaseWireError) {
+        try DatabaseWireWriter.encode(into: output, limits: limits) {
+            (writer: inout DatabaseWireWriter)
+                throws(DatabaseWireError) in
+            try operation.encodeResponseBody(response, into: &writer)
+        }
+    }
 }

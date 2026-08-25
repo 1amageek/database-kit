@@ -181,6 +181,60 @@ struct DatabaseWireBoundaryTests {
         #expect(payloadAddress == frameAddress + 22)
     }
 
+    @Test("measured response payload initializes one exact destination")
+    func measuredResponsePayloadMatchesCanonicalEncoding() throws {
+        let encoder = DatabaseWireEncoder()
+        let response = try makeTestBooleanResponse(true)
+        let expected = try encoder.encodeResponseAndPayload(
+            DatabaseOperationCatalog.queryExecute,
+            requestID: 12,
+            response: response
+        ).payload
+        let byteCount = try encoder.responsePayloadByteCount(
+            DatabaseOperationCatalog.queryExecute,
+            response: response
+        )
+
+        let actual = try ByteString.copying(count: byteCount) { output in
+            try encoder.encodeResponsePayload(
+                DatabaseOperationCatalog.queryExecute,
+                response: response,
+                into: output
+            )
+        }
+
+        #expect(actual == expected)
+    }
+
+    @Test("response payload encoding rejects non-exact destinations")
+    func responsePayloadEncodingRejectsNonExactDestinations() throws {
+        let encoder = DatabaseWireEncoder()
+        let response = try makeTestBooleanResponse(true)
+        let byteCount = try encoder.responsePayloadByteCount(
+            DatabaseOperationCatalog.queryExecute,
+            response: response
+        )
+
+        #expect(throws: DatabaseWireError.byteCountOverflow) {
+            _ = try ByteString.copying(count: byteCount - 1) { output in
+                try encoder.encodeResponsePayload(
+                    DatabaseOperationCatalog.queryExecute,
+                    response: response,
+                    into: output
+                )
+            }
+        }
+        #expect(throws: DatabaseWireError.byteCountOverflow) {
+            _ = try ByteString.copying(count: byteCount + 1) { output in
+                try encoder.encodeResponsePayload(
+                    DatabaseOperationCatalog.queryExecute,
+                    response: response,
+                    into: output
+                )
+            }
+        }
+    }
+
     @Test("a persisted success payload can be decoded and replayed")
     func persistedResponsePayloadRoundTrip() throws {
         let encoder = DatabaseWireEncoder()

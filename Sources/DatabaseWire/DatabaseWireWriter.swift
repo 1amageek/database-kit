@@ -125,6 +125,25 @@ public struct DatabaseWireWriter {
         }
     }
 
+    /// Initializes an exactly measured destination supplied by the caller.
+    /// The pointer is borrowed only for this synchronous call.
+    @_spi(DatabaseExecution)
+    public static func encode(
+        into output: UnsafeMutableRawBufferPointer,
+        limits: DatabaseWireLimits = .default,
+        _ encode: (inout DatabaseWireWriter) throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) {
+        var writer = DatabaseWireWriter(
+            fixedOutput: output,
+            limits: limits
+        )
+        try encode(&writer)
+        try writer.ensureNoDeferredError()
+        guard writer.writtenByteCount == output.count else {
+            throw .byteCountOverflow
+        }
+    }
+
     /// Measures first, calls `prepare` before any output, and then lends each
     /// encoded span directly to a synchronous consumer.
     ///
