@@ -12,6 +12,21 @@ public enum SchemaCompatibilityIssue: Error, Sendable, Equatable, CustomStringCo
     case changedFieldEncoding(entityName: String, fieldName: String, from: FieldSchema, to: FieldSchema)
     case nonAppendOnlyFieldAddition(entityName: String, fieldName: String, fieldNumber: Int, minimumAllowed: Int)
     case addedFieldWithoutDefault(entityName: String, fieldName: String)
+    /// Directory placement identity changed. `group` is `nil` for an entity's
+    /// own declaration and names the polymorphic group for a shared one.
+    case changedDirectoryComponents(
+        entityName: String,
+        group: String?,
+        from: [DirectoryPathComponent],
+        to: [DirectoryPathComponent]
+    )
+    case changedDirectoryLayer(
+        entityName: String,
+        group: String?,
+        from: DirectoryLayer,
+        to: DirectoryLayer
+    )
+    case changedPolymorphicGroup(entityName: String, from: String?, to: String?)
 
     public var description: String {
         switch self {
@@ -31,7 +46,33 @@ public enum SchemaCompatibilityIssue: Error, Sendable, Equatable, CustomStringCo
             return "Entity '\(entityName)' added field '\(fieldName)' at #\(fieldNumber), but append-only additions must use field numbers >= \(minimumAllowed)."
         case .addedFieldWithoutDefault(let entityName, let fieldName):
             return "Entity '\(entityName)' added field '\(fieldName)' without a canonical persisted default."
+
+        case .changedDirectoryComponents(let entityName, let group, let from, let to):
+            return "Entity '\(entityName)'\(Self.groupSuffix(group)) changed directory components from \(Self.describe(from)) to \(Self.describe(to)); placement changes require explicit data movement."
+
+        case .changedDirectoryLayer(let entityName, let group, let from, let to):
+            return "Entity '\(entityName)'\(Self.groupSuffix(group)) changed directory layer from '\(from.rawValue)' to '\(to.rawValue)'; placement changes require explicit data movement."
+
+        case .changedPolymorphicGroup(let entityName, let from, let to):
+            return "Entity '\(entityName)' changed polymorphic group from \(from.map { "'\($0)'" } ?? "none") to \(to.map { "'\($0)'" } ?? "none"); placement changes require explicit data movement."
         }
+    }
+
+    private static func groupSuffix(_ group: String?) -> String {
+        guard let group else { return "" }
+        return " polymorphic group '\(group)'"
+    }
+
+    private static func describe(_ components: [DirectoryPathComponent]) -> String {
+        let rendered = components.map { component in
+            switch component {
+            case .staticPath(let value):
+                return value
+            case .dynamicField(let fieldName):
+                return "{\(fieldName)}"
+            }
+        }
+        return "[\(rendered.joined(separator: "/"))]"
     }
 }
 
@@ -194,11 +235,87 @@ extension Schema.Entity {
             )
         }
 
+        issues.append(contentsOf: directoryPlacementIssues(from: previous))
+
         return EntitySchemaCompatibilityReport(
             entityName: name,
             addedFields: addedFields,
             issues: issues
         )
+    }
+
+    /// Reports every Directory and Partition placement change.
+    ///
+    /// Placement is persistent schema identity: the static component values and
+    /// their order, the dynamic field identity and its order, and the leaf
+    /// layer tag together select where an entity's rows live. A change to any
+    /// of them relocates existing data and is never lightweight evolution.
+    ///
+    /// A change to the declared kind of a dynamic component's field is reported
+    /// as a field encoding change, because the canonical textual form of a
+    /// component is injective only within one field kind.
+    private func directoryPlacementIssues(
+        from previous: Schema.Entity
+    ) -> [SchemaCompatibilityIssue] {
+        var issues: [SchemaCompatibilityIssue] = []
+
+        if directoryComponents != previous.directoryComponents {
+            issues.append(
+                .changedDirectoryComponents(
+                    entityName: name,
+                    group: nil,
+                    from: previous.directoryComponents,
+                    to: directoryComponents
+                )
+            )
+        }
+        if directoryLayer != previous.directoryLayer {
+            issues.append(
+                .changedDirectoryLayer(
+                    entityName: name,
+                    group: nil,
+                    from: previous.directoryLayer,
+                    to: directoryLayer
+                )
+            )
+        }
+
+        let previousGroup = previous.polymorphicMembership
+        let currentGroup = polymorphicMembership
+        guard previousGroup?.identifier == currentGroup?.identifier else {
+            issues.append(
+                .changedPolymorphicGroup(
+                    entityName: name,
+                    from: previousGroup?.identifier,
+                    to: currentGroup?.identifier
+                )
+            )
+            return issues
+        }
+        guard let previousGroup, let currentGroup else {
+            return issues
+        }
+        if currentGroup.directoryComponents != previousGroup.directoryComponents {
+            issues.append(
+                .changedDirectoryComponents(
+                    entityName: name,
+                    group: currentGroup.identifier,
+                    from: previousGroup.directoryComponents,
+                    to: currentGroup.directoryComponents
+                )
+            )
+        }
+        if currentGroup.directoryLayer != previousGroup.directoryLayer {
+            issues.append(
+                .changedDirectoryLayer(
+                    entityName: name,
+                    group: currentGroup.identifier,
+                    from: previousGroup.directoryLayer,
+                    to: currentGroup.directoryLayer
+                )
+            )
+        }
+        return issues
     }
 
     private func fieldSort(lhs: FieldSchema, rhs: FieldSchema) -> Bool {

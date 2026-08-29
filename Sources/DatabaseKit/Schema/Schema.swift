@@ -320,6 +320,7 @@ public final class Schema: Sendable {
             }
 
             var hasDynamicDirectoryField = false
+            var dynamicDirectoryFields = Set<String>()
             for (position, component) in directoryComponents.enumerated() {
                 switch component {
                 case .staticPath(let value):
@@ -328,8 +329,24 @@ public final class Schema: Sendable {
                     }
                 case .dynamicField(let fieldName):
                     hasDynamicDirectoryField = true
-                    guard fieldsByName[fieldName] != nil else {
+                    guard let field = fieldsByName[fieldName] else {
                         throw .unknownDirectoryField(fieldName)
+                    }
+                    // One field resolves one component, so repeating it would
+                    // make two positions carry the same value.
+                    guard dynamicDirectoryFields.insert(fieldName).inserted else {
+                        throw .duplicateDirectoryField(fieldName)
+                    }
+                    // A path component always exists, so an absent value has
+                    // no component to resolve to.
+                    guard !field.isOptional else {
+                        throw .optionalDirectoryField(fieldName)
+                    }
+                    guard !field.isArray, Self.resolvesToDirectoryComponent(field.type) else {
+                        throw .nonScalarDirectoryField(
+                            fieldName: fieldName,
+                            type: field.type
+                        )
                     }
                 }
             }
@@ -522,9 +539,37 @@ public final class Schema: Sendable {
                         throw .invalidPolymorphicDirectoryComponent(position: position)
                     }
                 }
+                // A polymorphic declaration carries static components only, so
+                // a partition leaf tag can never reach a dynamic component.
+                if polymorphicMembership.directoryLayer == .partition {
+                    throw .partitionDirectoryRequiresDynamicField
+                }
             }
 
             return (fieldsByName, fieldsByNumber)
+        }
+
+        /// Reports whether one value of this field kind resolves to exactly one
+        /// canonical Directory component.
+        ///
+        /// A component is a single path element, so a kind that carries a
+        /// nested record has no single element to resolve to. The textual form
+        /// itself belongs to the DatabaseFramework bridge.
+        private static func resolvesToDirectoryComponent(
+            _ type: FieldSchemaType
+        ) -> Bool {
+            switch type {
+            case .object, .nested:
+                return false
+            case .bool, .int8, .int16, .int32, .int64,
+                 .uint8, .uint16, .uint32, .uint64,
+                 .float32, .float64, .decimal,
+                 .string, .bytes,
+                 .date, .time, .dateTime, .timestamp, .timeSpan, .calendarPeriod,
+                 .geographicPoint, .geographicPosition,
+                 .vector, .uuid, .rdfTerm, .reference, .enum:
+                return true
+            }
         }
 
         private static func accepts(

@@ -374,6 +374,26 @@ struct Message {
 }
 ```
 
+### Dynamic component rules
+
+A dynamic component resolves one path element from one stored value, so every
+key path used in `#Directory` must reference an existing persisted field, be
+required rather than optional, carry a scalar rather than an array or nested
+value, and occur at most once in the declaration. `layer: .partition` requires
+at least one dynamic component; `@PolymorphicDirectory` declares static
+components only and therefore always resolves a plain Directory leaf. Each rule
+is a typed `SchemaEntityError` raised at entity construction.
+
+### Placement is schema identity
+
+The static component values and their order, the dynamic field identity and its
+order, and the leaf layer tag together select where an entity's rows live.
+`compatibilityReport(from:)` reports a change to any of them as
+`changedDirectoryComponents`, `changedDirectoryLayer`, or
+`changedPolymorphicGroup`, and a change to the declared kind of a dynamic
+component's field as `changedFieldEncoding`. None of these is lightweight
+evolution: each one relocates existing data and requires an explicit move.
+
 ## Index declarations
 
 See [Index Declaration Design](Docs/INDEX_DECLARATION_DESIGN.md) for the full

@@ -716,3 +716,172 @@ struct SchemaValidationTests {
         )
     }
 }
+
+@Suite("Directory Declaration Validation")
+struct DirectoryDeclarationValidationTests {
+    private static let identifier = FieldSchema(
+        name: "id",
+        fieldNumber: 1,
+        type: .string
+    )
+
+    private static let tenant = FieldSchema(
+        name: "tenantID",
+        fieldNumber: 2,
+        type: .string
+    )
+
+    private static func entity(
+        fields: [FieldSchema],
+        components: [DirectoryPathComponent],
+        layer: DirectoryLayer = .default,
+        membership: PolymorphicMembership? = nil
+    ) throws(SchemaEntityError) -> Schema.Entity {
+        try Schema.Entity(
+            name: "DirectoryDeclaration",
+            identifierType: .string,
+            fields: [identifier] + fields,
+            directoryComponents: components,
+            directoryLayer: layer,
+            polymorphicMembership: membership
+        )
+    }
+
+    @Test("A required scalar dynamic component resolves a partition leaf")
+    func requiredScalarDynamicComponentIsAccepted() throws {
+        let entity = try Self.entity(
+            fields: [Self.tenant],
+            components: [.staticPath("tenants"), .dynamicField(fieldName: "tenantID")],
+            layer: .partition
+        )
+        #expect(
+            entity.directoryComponents == [
+                .staticPath("tenants"),
+                .dynamicField(fieldName: "tenantID"),
+            ]
+        )
+        #expect(entity.directoryLayer == .partition)
+    }
+
+    @Test("An optional field cannot resolve a dynamic component")
+    func optionalDynamicComponentIsRejected() {
+        let optionalTenant = FieldSchema(
+            name: "tenantID",
+            fieldNumber: 2,
+            type: .string,
+            isOptional: true
+        )
+        #expect(throws: SchemaEntityError.optionalDirectoryField("tenantID")) {
+            try Self.entity(
+                fields: [optionalTenant],
+                components: [.dynamicField(fieldName: "tenantID")]
+            )
+        }
+    }
+
+    @Test("An array field cannot resolve a dynamic component")
+    func arrayDynamicComponentIsRejected() {
+        let tags = FieldSchema(
+            name: "tags",
+            fieldNumber: 2,
+            type: .string,
+            isArray: true
+        )
+        #expect(
+            throws: SchemaEntityError.nonScalarDirectoryField(
+                fieldName: "tags",
+                type: .string
+            )
+        ) {
+            try Self.entity(
+                fields: [tags],
+                components: [.dynamicField(fieldName: "tags")]
+            )
+        }
+    }
+
+    @Test("A nested field cannot resolve a dynamic component")
+    func nestedDynamicComponentIsRejected() {
+        let profile = FieldSchema(
+            name: "profile",
+            fieldNumber: 2,
+            type: .nested
+        )
+        #expect(
+            throws: SchemaEntityError.nonScalarDirectoryField(
+                fieldName: "profile",
+                type: .nested
+            )
+        ) {
+            try Self.entity(
+                fields: [profile],
+                components: [.dynamicField(fieldName: "profile")]
+            )
+        }
+    }
+
+    @Test("An object field cannot resolve a dynamic component")
+    func objectDynamicComponentIsRejected() {
+        let payload = FieldSchema(
+            name: "payload",
+            fieldNumber: 2,
+            type: .object
+        )
+        #expect(
+            throws: SchemaEntityError.nonScalarDirectoryField(
+                fieldName: "payload",
+                type: .object
+            )
+        ) {
+            try Self.entity(
+                fields: [payload],
+                components: [.dynamicField(fieldName: "payload")]
+            )
+        }
+    }
+
+    @Test("A dynamic component field occurs at most once in a declaration")
+    func repeatedDynamicComponentIsRejected() {
+        #expect(throws: SchemaEntityError.duplicateDirectoryField("tenantID")) {
+            try Self.entity(
+                fields: [Self.tenant],
+                components: [
+                    .dynamicField(fieldName: "tenantID"),
+                    .staticPath("records"),
+                    .dynamicField(fieldName: "tenantID"),
+                ]
+            )
+        }
+    }
+
+    @Test("A polymorphic declaration carries no dynamic component for a partition")
+    func polymorphicPartitionDeclarationIsRejected() {
+        #expect(throws: SchemaEntityError.partitionDirectoryRequiresDynamicField) {
+            try Self.entity(
+                fields: [Self.tenant],
+                components: [],
+                membership: PolymorphicMembership(
+                    identifier: "Shape",
+                    directoryComponents: [.staticPath("shapes")],
+                    directoryLayer: .partition,
+                    indexes: []
+                )
+            )
+        }
+    }
+
+    @Test("A polymorphic declaration resolves a plain directory leaf")
+    func polymorphicDefaultDeclarationIsAccepted() throws {
+        let entity = try Self.entity(
+            fields: [Self.tenant],
+            components: [],
+            membership: PolymorphicMembership(
+                identifier: "Shape",
+                directoryComponents: [.staticPath("shapes")],
+                directoryLayer: .default,
+                indexes: []
+            )
+        )
+        #expect(entity.polymorphicMembership?.directoryLayer == .default)
+    }
+}

@@ -15,6 +15,9 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
     case invalidFieldDefault(fieldName: String)
     case emptyDirectoryPathComponent(position: Int)
     case unknownDirectoryField(String)
+    case duplicateDirectoryField(String)
+    case optionalDirectoryField(String)
+    case nonScalarDirectoryField(fieldName: String, type: FieldSchemaType)
     case partitionDirectoryRequiresDynamicField
     case invalidIndexEntity(
         indexName: String,
@@ -89,6 +92,12 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Directory path component at position \(position) is empty."
         case .unknownDirectoryField(let fieldName):
             return "Directory path references unknown field '\(fieldName)'."
+        case .duplicateDirectoryField(let fieldName):
+            return "Directory path references field '\(fieldName)' more than once."
+        case .optionalDirectoryField(let fieldName):
+            return "Directory path field '\(fieldName)' must be required rather than optional."
+        case .nonScalarDirectoryField(let fieldName, let type):
+            return "Directory path field '\(fieldName)' declares non-scalar type '\(type.rawValue)'."
         case .partitionDirectoryRequiresDynamicField:
             return "A partition directory requires at least one dynamic field."
         case .invalidIndexEntity(let indexName, let expected, let actual):

@@ -335,3 +335,249 @@ struct SchemaEvolutionTests {
         #expect(try !SchemaEvolutionSchemaV2Renamed.canLightweightMigrate(from: SchemaEvolutionSchemaV1.self))
     }
 }
+
+@Suite("Directory Placement Evolution")
+struct DirectoryPlacementEvolutionTests {
+    private static let identifier = FieldSchema(
+        name: "id",
+        fieldNumber: 1,
+        type: .string
+    )
+
+    private static let tenant = FieldSchema(
+        name: "tenantID",
+        fieldNumber: 2,
+        type: .string
+    )
+
+    private static let region = FieldSchema(
+        name: "region",
+        fieldNumber: 3,
+        type: .string
+    )
+
+    private static func entity(
+        fields: [FieldSchema] = [tenant, region],
+        components: [DirectoryPathComponent],
+        layer: DirectoryLayer = .default,
+        membership: PolymorphicMembership? = nil
+    ) throws(SchemaEntityError) -> Schema.Entity {
+        try Schema.Entity(
+            name: "PlacedRecord",
+            identifierType: .string,
+            fields: [identifier] + fields,
+            directoryComponents: components,
+            directoryLayer: layer,
+            polymorphicMembership: membership
+        )
+    }
+
+    @Test("Unchanged placement reports no placement issue")
+    func unchangedPlacementIsCompatible() throws {
+        let components: [DirectoryPathComponent] = [
+            .staticPath("tenants"),
+            .dynamicField(fieldName: "tenantID"),
+        ]
+        let previous = try Self.entity(components: components, layer: .partition)
+        let current = try Self.entity(components: components, layer: .partition)
+        #expect(current.compatibilityReport(from: previous).isCompatible)
+    }
+
+    @Test("A changed static component value requires data movement")
+    func changedStaticComponentValueIsReported() throws {
+        let previous = try Self.entity(components: [.staticPath("tenants")])
+        let current = try Self.entity(components: [.staticPath("accounts")])
+        #expect(
+            current.compatibilityReport(from: previous).issues == [
+                .changedDirectoryComponents(
+                    entityName: "PlacedRecord",
+                    group: nil,
+                    from: [.staticPath("tenants")],
+                    to: [.staticPath("accounts")]
+                )
+            ]
+        )
+    }
+
+    @Test("A reordered static component requires data movement")
+    func reorderedStaticComponentIsReported() throws {
+        let previous = try Self.entity(
+            components: [.staticPath("tenants"), .staticPath("records")]
+        )
+        let current = try Self.entity(
+            components: [.staticPath("records"), .staticPath("tenants")]
+        )
+        #expect(
+            current.compatibilityReport(from: previous).issues == [
+                .changedDirectoryComponents(
+                    entityName: "PlacedRecord",
+                    group: nil,
+                    from: [.staticPath("tenants"), .staticPath("records")],
+                    to: [.staticPath("records"), .staticPath("tenants")]
+                )
+            ]
+        )
+    }
+
+    @Test("A changed dynamic field identity requires data movement")
+    func changedDynamicFieldIdentityIsReported() throws {
+        let previous = try Self.entity(
+            components: [.dynamicField(fieldName: "tenantID")]
+        )
+        let current = try Self.entity(
+            components: [.dynamicField(fieldName: "region")]
+        )
+        #expect(
+            current.compatibilityReport(from: previous).issues == [
+                .changedDirectoryComponents(
+                    entityName: "PlacedRecord",
+                    group: nil,
+                    from: [.dynamicField(fieldName: "tenantID")],
+                    to: [.dynamicField(fieldName: "region")]
+                )
+            ]
+        )
+    }
+
+    @Test("A reordered dynamic component requires data movement")
+    func reorderedDynamicComponentIsReported() throws {
+        let previous = try Self.entity(
+            components: [
+                .dynamicField(fieldName: "tenantID"),
+                .dynamicField(fieldName: "region"),
+            ]
+        )
+        let current = try Self.entity(
+            components: [
+                .dynamicField(fieldName: "region"),
+                .dynamicField(fieldName: "tenantID"),
+            ]
+        )
+        let issues = current.compatibilityReport(from: previous).issues
+        #expect(issues.count == 1)
+        #expect(
+            issues.first == .changedDirectoryComponents(
+                entityName: "PlacedRecord",
+                group: nil,
+                from: [
+                    .dynamicField(fieldName: "tenantID"),
+                    .dynamicField(fieldName: "region"),
+                ],
+                to: [
+                    .dynamicField(fieldName: "region"),
+                    .dynamicField(fieldName: "tenantID"),
+                ]
+            )
+        )
+    }
+
+    @Test("A changed leaf layer tag requires data movement")
+    func changedLeafLayerTagIsReported() throws {
+        let components: [DirectoryPathComponent] = [
+            .staticPath("tenants"),
+            .dynamicField(fieldName: "tenantID"),
+        ]
+        let previous = try Self.entity(components: components, layer: .default)
+        let current = try Self.entity(components: components, layer: .partition)
+        #expect(
+            current.compatibilityReport(from: previous).issues == [
+                .changedDirectoryLayer(
+                    entityName: "PlacedRecord",
+                    group: nil,
+                    from: .default,
+                    to: .partition
+                )
+            ]
+        )
+    }
+
+    @Test("A changed dynamic component field kind is a field encoding change")
+    func changedDynamicComponentFieldKindIsReported() throws {
+        let components: [DirectoryPathComponent] = [
+            .dynamicField(fieldName: "tenantID")
+        ]
+        let previousTenant = FieldSchema(
+            name: "tenantID",
+            fieldNumber: 2,
+            type: .string
+        )
+        let currentTenant = FieldSchema(
+            name: "tenantID",
+            fieldNumber: 2,
+            type: .uuid
+        )
+        let previous = try Self.entity(
+            fields: [previousTenant],
+            components: components
+        )
+        let current = try Self.entity(
+            fields: [currentTenant],
+            components: components
+        )
+        #expect(
+            current.compatibilityReport(from: previous).issues == [
+                .changedFieldEncoding(
+                    entityName: "PlacedRecord",
+                    fieldName: "tenantID",
+                    from: previousTenant,
+                    to: currentTenant
+                )
+            ]
+        )
+    }
+
+    @Test("A changed polymorphic group requires data movement")
+    func changedPolymorphicGroupIsReported() throws {
+        let previous = try Self.entity(
+            components: [],
+            membership: PolymorphicMembership(
+                identifier: "Shape",
+                directoryComponents: [.staticPath("shapes")],
+                directoryLayer: .default,
+                indexes: []
+            )
+        )
+        let current = try Self.entity(components: [])
+        #expect(
+            current.compatibilityReport(from: previous).issues == [
+                .changedPolymorphicGroup(
+                    entityName: "PlacedRecord",
+                    from: "Shape",
+                    to: nil
+                )
+            ]
+        )
+    }
+
+    @Test("A changed shared polymorphic placement requires data movement")
+    func changedPolymorphicPlacementIsReported() throws {
+        let previous = try Self.entity(
+            components: [],
+            membership: PolymorphicMembership(
+                identifier: "Shape",
+                directoryComponents: [.staticPath("shapes")],
+                directoryLayer: .default,
+                indexes: []
+            )
+        )
+        let current = try Self.entity(
+            components: [],
+            membership: PolymorphicMembership(
+                identifier: "Shape",
+                directoryComponents: [.staticPath("figures")],
+                directoryLayer: .default,
+                indexes: []
+            )
+        )
+        #expect(
+            current.compatibilityReport(from: previous).issues == [
+                .changedDirectoryComponents(
+                    entityName: "PlacedRecord",
+                    group: "Shape",
+                    from: [.staticPath("shapes")],
+                    to: [.staticPath("figures")]
+                )
+            ]
+        )
+    }
+}
