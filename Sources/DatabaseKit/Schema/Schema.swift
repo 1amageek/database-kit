@@ -539,11 +539,6 @@ public final class Schema: Sendable {
                         throw .invalidPolymorphicDirectoryComponent(position: position)
                     }
                 }
-                // A polymorphic declaration carries static components only, so
-                // a partition leaf tag can never reach a dynamic component.
-                if polymorphicMembership.directoryLayer == .partition {
-                    throw .partitionDirectoryRequiresDynamicField
-                }
             }
 
             return (fieldsByName, fieldsByNumber)

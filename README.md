@@ -379,10 +379,13 @@ struct Message {
 A dynamic component resolves one path element from one stored value, so every
 key path used in `#Directory` must reference an existing persisted field, be
 required rather than optional, carry a scalar rather than an array or nested
-value, and occur at most once in the declaration. `layer: .partition` requires
-at least one dynamic component; `@PolymorphicDirectory` declares static
-components only and therefore always resolves a plain Directory leaf. Each rule
-is a typed `SchemaEntityError` raised at entity construction.
+value, and occur at most once in the declaration. Each rule is a typed
+`SchemaEntityError` raised at entity construction.
+
+`layer:` names the layer tag of the resolved leaf. On `#Directory`,
+`.partition` requires at least one dynamic component. `@PolymorphicDirectory`
+retains `layer:` for the node its members share, and members disagreeing on
+that tag raise `SchemaError.inconsistentPolymorphicDirectoryLayer`.
 
 ### Placement is schema identity
 

@@ -732,18 +732,30 @@ struct DirectoryDeclarationValidationTests {
     )
 
     private static func entity(
+        name: String = "DirectoryDeclaration",
         fields: [FieldSchema],
         components: [DirectoryPathComponent],
         layer: DirectoryLayer = .default,
         membership: PolymorphicMembership? = nil
     ) throws(SchemaEntityError) -> Schema.Entity {
         try Schema.Entity(
-            name: "DirectoryDeclaration",
+            name: name,
             identifierType: .string,
             fields: [identifier] + fields,
             directoryComponents: components,
             directoryLayer: layer,
             polymorphicMembership: membership
+        )
+    }
+
+    private static func membership(
+        layer: DirectoryLayer
+    ) -> PolymorphicMembership {
+        PolymorphicMembership(
+            identifier: "Shape",
+            directoryComponents: [.staticPath("shapes")],
+            directoryLayer: layer,
+            indexes: []
         )
     }
 
@@ -761,6 +773,17 @@ struct DirectoryDeclarationValidationTests {
             ]
         )
         #expect(entity.directoryLayer == .partition)
+    }
+
+    @Test("A partition leaf requires at least one dynamic component")
+    func staticOnlyPartitionDeclarationIsRejected() {
+        #expect(throws: SchemaEntityError.partitionDirectoryRequiresDynamicField) {
+            try Self.entity(
+                fields: [Self.tenant],
+                components: [.staticPath("tenants")],
+                layer: .partition
+            )
+        }
     }
 
     @Test("An optional field cannot resolve a dynamic component")
@@ -854,20 +877,14 @@ struct DirectoryDeclarationValidationTests {
         }
     }
 
-    @Test("A polymorphic declaration carries no dynamic component for a partition")
-    func polymorphicPartitionDeclarationIsRejected() {
-        #expect(throws: SchemaEntityError.partitionDirectoryRequiresDynamicField) {
-            try Self.entity(
-                fields: [Self.tenant],
-                components: [],
-                membership: PolymorphicMembership(
-                    identifier: "Shape",
-                    directoryComponents: [.staticPath("shapes")],
-                    directoryLayer: .partition,
-                    indexes: []
-                )
-            )
-        }
+    @Test("A polymorphic declaration retains its declared leaf layer tag")
+    func polymorphicPartitionDeclarationRetainsLayerTag() throws {
+        let entity = try Self.entity(
+            fields: [Self.tenant],
+            components: [],
+            membership: Self.membership(layer: .partition)
+        )
+        #expect(entity.polymorphicMembership?.directoryLayer == .partition)
     }
 
     @Test("A polymorphic declaration resolves a plain directory leaf")
@@ -875,13 +892,54 @@ struct DirectoryDeclarationValidationTests {
         let entity = try Self.entity(
             fields: [Self.tenant],
             components: [],
-            membership: PolymorphicMembership(
-                identifier: "Shape",
-                directoryComponents: [.staticPath("shapes")],
-                directoryLayer: .default,
-                indexes: []
-            )
+            membership: Self.membership(layer: .default)
         )
         #expect(entity.polymorphicMembership?.directoryLayer == .default)
+    }
+
+    @Test("Members agreeing on the leaf layer tag share one polymorphic node")
+    func agreeingPolymorphicLayerTagIsAccepted() throws {
+        let schema = try Schema(
+            entities: [
+                Self.entity(
+                    name: "Circle",
+                    fields: [Self.tenant],
+                    components: [],
+                    membership: Self.membership(layer: .partition)
+                ),
+                Self.entity(
+                    name: "Square",
+                    fields: [Self.tenant],
+                    components: [],
+                    membership: Self.membership(layer: .partition)
+                ),
+            ]
+        )
+        let group = try #require(
+            schema.polymorphicGroups.first { $0.identifier == "Shape" }
+        )
+        #expect(group.directoryLayer == .partition)
+        #expect(group.directoryComponents == [.staticPath("shapes")])
+    }
+
+    @Test("Members disagreeing on the leaf layer tag are a typed schema error")
+    func disagreeingPolymorphicLayerTagIsRejected() throws {
+        let circle = try Self.entity(
+            name: "Circle",
+            fields: [Self.tenant],
+            components: [],
+            membership: Self.membership(layer: .default)
+        )
+        let square = try Self.entity(
+            name: "Square",
+            fields: [Self.tenant],
+            components: [],
+            membership: Self.membership(layer: .partition)
+        )
+        #expect(
+            throws: SchemaError.inconsistentPolymorphicDirectoryLayer(group: "Shape")
+        ) {
+            try Schema(entities: [circle, square])
+        }
     }
 }
