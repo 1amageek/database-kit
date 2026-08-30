@@ -1,30 +1,34 @@
-import Foundation
-import SwiftCompilerPlugin
+import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-import SwiftDiagnostics
 
-/// Implementation of its #Directory macro
+/// Implementation of the `#Directory` macro.
 ///
-/// This freestanding declaration macro validates the directory path syntax and layer parameter,
-/// serving as a marker for the @Persistable macro. The @Persistable macro reads its #Directory
-/// call from the AST to generate type-safe store() methods.
+/// This freestanding declaration macro generates nothing. It validates the
+/// Directory declaration where it is written, and the `@Persistable` macro
+/// reads the same call from the AST and compiles it into
+/// `directoryPathComponents` and `directoryLayer`. Both macros parse the
+/// declaration with `parseDirectoryDeclaration(arguments:rootType:node:)`, so a
+/// declaration accepted here is compiled with the meaning validated here.
 ///
-/// **Path Elements**: The path is an array where each element can be:
-/// - String literal: `"app"`, `"tenants"`, `"users"` (static path segments)
-/// - Key path: `\Order.accountID`, `\Order.channelID` (dynamic partition keys)
+/// **Path components**: each unlabeled variadic element is either
+/// - a nonempty string literal without interpolation, contributing a static
+///   component: `"app"`, `"tenants"`; or
+/// - a key path naming one stored property of the generic type, contributing a
+///   dynamic component: `\Order.accountID`.
 ///
-/// **Layer**: The layer parameter specifies the directory type:
-/// - `.default` (default): Default directory
-/// - `.partition`: Multi-tenant partition (requires at least one Field in path)
-/// - Custom: `"my_custom_format_v2"`
+/// **Layer**: `layer:` names the layer tag of the final resolved node and must
+/// be a `DirectoryLayer` case:
+/// - `.default` (the default): the node resolves a plain Directory;
+/// - `.partition`: the node resolves a Partition, and the declaration must
+///   contain at least one dynamic component.
 ///
 /// Usage:
 /// ```swift
 /// @Persistable
 /// struct User {
-///     #Directory<User>(["app", "users"], layer: .default)
+///     #Directory<User>("app", "users")
 ///     #PrimaryKey<User>([\.userID])
 ///
 ///     var userID: Int64
@@ -36,10 +40,7 @@ import SwiftDiagnostics
 /// ```swift
 /// @Persistable
 /// struct Order {
-///     #Directory<Order>(
-///         ["tenants", \Order.accountID, "orders"],
-///         layer: .partition
-///     )
+///     #Directory<Order>("tenants", \Order.accountID, "orders", layer: .partition)
 ///     #PrimaryKey<Order>([\.orderID])
 ///
 ///     var orderID: Int64
@@ -52,37 +53,40 @@ import SwiftDiagnostics
 /// @Persistable
 /// struct Message {
 ///     #Directory<Message>(
-///         ["tenants", \Message.accountID, "channels", \Message.channelID, "messages"],
+///         "tenants",
+///         \Message.accountID,
+///         "channels",
+///         \Message.channelID,
+///         "messages",
 ///         layer: .partition
 ///     )
 ///     #PrimaryKey<Message>([\.messageID])
 ///
 ///     var messageID: Int64
-///     var accountID: String  // First partition key
-///     var channelID: String  // Second partition key
+///     var accountID: String  // First dynamic component
+///     var channelID: String  // Second dynamic component
 /// }
 /// ```
 ///
-/// **Generated code** (by @Persistable macro):
+/// **Generated code** (by the `@Persistable` macro):
 /// ```swift
-/// // Basic directory
-/// extension User {
-///     static func openDirectory(database: any DatabaseProtocol) async throws -> DirectorySubspace
-///     static func store(database: any DatabaseProtocol, schema: Schema) async throws -> PersistableStore<User>
-/// }
-///
-/// // Partition directory
 /// extension Order {
-///     static func openDirectory(accountID: String, database: any DatabaseProtocol) async throws -> DirectorySubspace
-///     static func store(accountID: String, database: any DatabaseProtocol, schema: Schema) async throws -> PersistableStore<Order>
+///     public static var directoryPathComponents: [DirectoryPathComponent] {
+///         [.staticPath("tenants"), .dynamicField(fieldName: "accountID"), .staticPath("orders")]
+///     }
+///     public static var directoryLayer: DatabaseKit.DirectoryLayer { .partition }
 /// }
 /// ```
 ///
 /// **Validation**:
-/// - Generic type parameter `<T>` is required
-/// - Path elements must be string literals or stored-property key paths
-/// - Field properties must exist in the struct and match the generic type parameter
-/// - If `layer: .partition`, at least one Field is required in the path
+/// - the generic type parameter `<T>` is required;
+/// - path components must be unlabeled;
+/// - a static component must be a nonempty string literal without
+///   interpolation;
+/// - a dynamic component must be a key path written with an explicit root
+///   equal to `T` and naming exactly one property;
+/// - `layer:` must be `.default` or `.partition` and may appear once;
+/// - `layer: .partition` requires at least one dynamic component.
 public struct DirectoryMacro: DeclarationMacro {
 
     public static func expansion(
@@ -90,78 +94,26 @@ public struct DirectoryMacro: DeclarationMacro {
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
 
-        // Validate the macro usage
-        // Ensure a generic type parameter is provided
         guard let genericClause = node.genericArgumentClause,
-              let genericArg = genericClause.arguments.first else {
+              let genericArgument = genericClause.arguments.first else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(node),
-                    message: MacroExpansionErrorMessage("#Directory requires a type parameter (e.g., #Directory<User>)")
+                    message: MacroExpansionErrorMessage(
+                        "#Directory requires a type parameter (e.g., #Directory<User>)"
+                    )
                 )
             ])
         }
 
-        // Type name is extracted from generic argument (not currently used but available for future validation)
-        _ = genericArg.argument.description.trimmingCharacters(in: .whitespaces)
+        _ = try parseDirectoryDeclaration(
+            arguments: node.arguments,
+            rootType: genericArgument.argument.trimmedDescription,
+            node: Syntax(node)
+        )
 
-        // Extract Field properties from the path elements (variadic arguments)
-        var fieldProperties: [String] = []
-        var layerExpr: ExprSyntax? = nil
-
-        // Process all arguments (variadic path elements + optional layer)
-        for arg in node.arguments {
-            // Check if this is the "layer:" labeled argument
-            if let label = arg.label, label.text == "layer" {
-                layerExpr = arg.expression
-                continue
-            }
-
-            let expr = arg.expression
-
-            // Check if it's a string literal
-            if expr.is(StringLiteralExprSyntax.self) {
-                // String literal path element - valid
-                continue
-            }
-
-            if let keyPath = expr.as(KeyPathExprSyntax.self),
-               let component = keyPath.components.last,
-               let property = component.component.as(
-                   KeyPathPropertyComponentSyntax.self
-               ) {
-                fieldProperties.append(property.declName.baseName.text)
-                continue
-            }
-
-            // Invalid element type
-            throw DiagnosticsError(diagnostics: [
-                Diagnostic(
-                    node: Syntax(expr),
-                    message: MacroExpansionErrorMessage("Path elements must be string literals or stored-property key paths")
-                )
-            ])
-        }
-
-        // Validate layer: .partition requires at least one Field
-        if let layerExpr = layerExpr {
-            // Check if layer is .partition
-            if let memberAccessExpr = layerExpr.as(MemberAccessExprSyntax.self),
-               memberAccessExpr.declName.baseName.text == "partition" {
-                // Ensure at least one Field exists
-                if fieldProperties.isEmpty {
-                    throw DiagnosticsError(diagnostics: [
-                        Diagnostic(
-                            node: Syntax(layerExpr),
-                            message: MacroExpansionErrorMessage("layer: .partition requires at least one stored-property key path")
-                        )
-                    ])
-                }
-            }
-        }
-
-        // This macro does not generate any declarations.
-        // The @Persistable macro reads its #Directory call directly from the AST.
+        // This macro does not generate any declarations. The @Persistable macro
+        // reads its #Directory call directly from the AST.
         return []
     }
 }

@@ -360,6 +360,119 @@ struct ModelMacroValidationTests {
         #expect(decoded.id == "decoded")
         #expect(decoded.value == 11)
     }
+
+    @Test("@Persistable rejects a #Directory key path rooted at another model")
+    func rejectsForeignDirectoryKeyPathRoot() {
+        assertMacroExpansion(
+            """
+            @Persistable
+            struct DirectoryRootRecord {
+                #Directory<DirectoryRootRecord>("tenants", \\ForeignRecord.tenantID, "records")
+
+                var id: String
+                var tenantID: String
+            }
+            """,
+            expandedSource: """
+            struct DirectoryRootRecord {
+                #Directory<DirectoryRootRecord>("tenants", \\ForeignRecord.tenantID, "records")
+
+                var id: String
+                var tenantID: String
+            }
+
+            extension DirectoryRootRecord: Persistable {
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "#Directory field 'tenantID' must use a key path rooted at 'DirectoryRootRecord'",
+                    line: 3,
+                    column: 48
+                )
+            ],
+            macroSpecs: [
+                "Persistable": MacroSpec(
+                    type: PersistableMacro.self,
+                    conformances: ["Persistable", "PersistableEnum"]
+                )
+            ]
+        )
+    }
+
+    @Test("@Persistable rejects a #Directory layer that is not a DirectoryLayer case")
+    func rejectsUnresolvedDirectoryLayerArgument() {
+        assertMacroExpansion(
+            """
+            @Persistable
+            struct DirectoryLayerRecord {
+                #Directory<DirectoryLayerRecord>("records", layer: resolvedLayer)
+
+                var id: String
+            }
+            """,
+            expandedSource: """
+            struct DirectoryLayerRecord {
+                #Directory<DirectoryLayerRecord>("records", layer: resolvedLayer)
+
+                var id: String
+            }
+
+            extension DirectoryLayerRecord: Persistable {
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "#Directory layer must be a DirectoryLayer case",
+                    line: 3,
+                    column: 56
+                )
+            ],
+            macroSpecs: [
+                "Persistable": MacroSpec(
+                    type: PersistableMacro.self,
+                    conformances: ["Persistable", "PersistableEnum"]
+                )
+            ]
+        )
+    }
+
+    @Test("@Persistable rejects an interpolated #Directory path component")
+    func rejectsInterpolatedDirectoryPathComponent() {
+        assertMacroExpansion(
+            """
+            @Persistable
+            struct DirectoryLiteralRecord {
+                #Directory<DirectoryLiteralRecord>("records\\(suffix)")
+
+                var id: String
+            }
+            """,
+            expandedSource: """
+            struct DirectoryLiteralRecord {
+                #Directory<DirectoryLiteralRecord>("records\\(suffix)")
+
+                var id: String
+            }
+
+            extension DirectoryLiteralRecord: Persistable {
+            }
+            """,
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "#Directory path components must be nonempty string literals without interpolation",
+                    line: 3,
+                    column: 40
+                )
+            ],
+            macroSpecs: [
+                "Persistable": MacroSpec(
+                    type: PersistableMacro.self,
+                    conformances: ["Persistable", "PersistableEnum"]
+                )
+            ]
+        )
+    }
 }
 
 // MARK: - Test Structs

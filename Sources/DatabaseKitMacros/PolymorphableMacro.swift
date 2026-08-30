@@ -206,21 +206,11 @@ private func parseDirectoryArguments(
     for arg in arguments {
         // Check for "layer:" argument
         if let label = arg.label, label.text == "layer" {
-            guard
-                let memberAccess = arg.expression.as(
-                    MemberAccessExprSyntax.self
-                )
-            else {
-                throw DiagnosticsError(diagnostics: [
-                    Diagnostic(
-                        node: Syntax(arg.expression),
-                        message: MacroExpansionErrorMessage(
-                            "@PolymorphicDirectory layer must be a DirectoryLayer case"
-                        )
-                    )
-                ])
-            }
-            directoryLayerValue = ".\(memberAccess.declName.baseName.text)"
+            let layerName = try directoryLayerCaseName(
+                arg.expression,
+                label: "@PolymorphicDirectory"
+            )
+            directoryLayerValue = ".\(layerName)"
             continue
         }
 
@@ -275,15 +265,4 @@ private func parseIndexArguments(
         node: node
     )
     return argument.expression
-}
-
-private func staticStringLiteralValue(_ expression: ExprSyntax) -> String? {
-    guard
-        let literal = expression.as(StringLiteralExprSyntax.self),
-        literal.segments.count == 1,
-        let segment = literal.segments.first?.as(StringSegmentSyntax.self)
-    else {
-        return nil
-    }
-    return segment.content.text
 }

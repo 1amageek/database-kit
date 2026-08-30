@@ -493,49 +493,50 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             }
         }
 
-        // Extract #Directory macro call and parse path components
+        // Compile the #Directory declaration into canonical path components.
+        // The freestanding #Directory macro validates the same call with the
+        // same parser, so a declaration it accepts is compiled here with the
+        // meaning it validated.
         var directoryPathComponents: [String] = []
-        var directoryLayerValue: String = ".default"  // Default layer
+        var directoryLayerValue: String = ".default"
+        var directoryDeclaration: MacroExpansionDeclSyntax?
 
         for member in structDecl.memberBlock.members {
-            if let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
-               macroDecl.macroName.text == "Directory" {
-
-                for arg in macroDecl.arguments {
-                    // Check if this is the "layer:" labeled argument
-                    if let label = arg.label, label.text == "layer" {
-                        // Extract layer value (e.g., .partition, .default)
-                        if let memberAccess = arg.expression.as(MemberAccessExprSyntax.self) {
-                            directoryLayerValue = ".\(memberAccess.declName.baseName.text)"
-                        }
-                        continue
-                    }
-
-                    let expr = arg.expression
-
-                    // Compile a string literal into a canonical static path component.
-                    if let stringLiteral = expr.as(StringLiteralExprSyntax.self),
-                       let segment = stringLiteral.segments.first?.as(StringSegmentSyntax.self) {
-                        let pathValue = segment.content.text
-                        directoryPathComponents.append(".staticPath(\"\(pathValue)\")")
-                        continue
-                    }
-
-                    if let keyPath = expr.as(KeyPathExprSyntax.self),
-                       let component = keyPath.components.last,
-                       let property = component.component.as(
-                           KeyPathPropertyComponentSyntax.self
-                       ) {
-                        directoryPathComponents.append(
-                            ".dynamicField(fieldName: \"\(property.declName.baseName.text)\")"
-                        )
-                        continue
-                    }
-
-                }
-                // Only process the first #Directory declaration
-                break
+            guard let macroDecl = member.decl.as(MacroExpansionDeclSyntax.self),
+                  macroDecl.macroName.text == "Directory" else {
+                continue
             }
+            guard directoryDeclaration == nil else {
+                throw DiagnosticsError(diagnostics: [
+                    Diagnostic(
+                        node: Syntax(macroDecl),
+                        message: MacroExpansionErrorMessage(
+                            "A model can declare only one #Directory"
+                        )
+                    )
+                ])
+            }
+            directoryDeclaration = macroDecl
+            if let genericArgument = macroDecl.genericArgumentClause?.arguments.first {
+                let declaredRoot = genericArgument.argument.trimmedDescription
+                guard declaredRoot == structName else {
+                    throw DiagnosticsError(diagnostics: [
+                        Diagnostic(
+                            node: Syntax(genericArgument),
+                            message: MacroExpansionErrorMessage(
+                                "#Directory type parameter '\(declaredRoot)' must be the declaring type '\(structName)'"
+                            )
+                        )
+                    ])
+                }
+            }
+            let declaration = try parseDirectoryDeclaration(
+                arguments: macroDecl.arguments,
+                rootType: structName,
+                node: Syntax(macroDecl)
+            )
+            directoryPathComponents = declaration.componentExpressions
+            directoryLayerValue = declaration.layerExpression
         }
 
         var decls: [DeclSyntax] = []
