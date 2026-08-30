@@ -342,8 +342,13 @@ public final class Schema: Sendable {
                     guard !field.isOptional else {
                         throw .optionalDirectoryField(fieldName)
                     }
-                    guard !field.isArray, Self.resolvesToDirectoryComponent(field.type) else {
-                        throw .nonScalarDirectoryField(
+                    // One component holds one value, so an array has no
+                    // single element to resolve to.
+                    guard !field.isArray else {
+                        throw .arrayDirectoryField(fieldName: fieldName)
+                    }
+                    guard field.type.hasCanonicalDirectoryComponent else {
+                        throw .unsupportedDirectoryFieldKind(
                             fieldName: fieldName,
                             type: field.type
                         )
@@ -542,29 +547,6 @@ public final class Schema: Sendable {
             }
 
             return (fieldsByName, fieldsByNumber)
-        }
-
-        /// Reports whether one value of this field kind resolves to exactly one
-        /// canonical Directory component.
-        ///
-        /// A component is a single path element, so a kind that carries a
-        /// nested record has no single element to resolve to. The textual form
-        /// itself belongs to the DatabaseFramework bridge.
-        private static func resolvesToDirectoryComponent(
-            _ type: FieldSchemaType
-        ) -> Bool {
-            switch type {
-            case .object, .nested:
-                return false
-            case .bool, .int8, .int16, .int32, .int64,
-                 .uint8, .uint16, .uint32, .uint64,
-                 .float32, .float64, .decimal,
-                 .string, .bytes,
-                 .date, .time, .dateTime, .timestamp, .timeSpan, .calendarPeriod,
-                 .geographicPoint, .geographicPosition,
-                 .vector, .uuid, .rdfTerm, .reference, .enum:
-                return true
-            }
         }
 
         private static func accepts(

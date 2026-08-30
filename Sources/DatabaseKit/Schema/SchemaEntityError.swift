@@ -17,7 +17,8 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
     case unknownDirectoryField(String)
     case duplicateDirectoryField(String)
     case optionalDirectoryField(String)
-    case nonScalarDirectoryField(fieldName: String, type: FieldSchemaType)
+    case arrayDirectoryField(fieldName: String)
+    case unsupportedDirectoryFieldKind(fieldName: String, type: FieldSchemaType)
     case partitionDirectoryRequiresDynamicField
     case invalidIndexEntity(
         indexName: String,
@@ -96,8 +97,10 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Directory path references field '\(fieldName)' more than once."
         case .optionalDirectoryField(let fieldName):
             return "Directory path field '\(fieldName)' must be required rather than optional."
-        case .nonScalarDirectoryField(let fieldName, let type):
-            return "Directory path field '\(fieldName)' declares non-scalar type '\(type.rawValue)'."
+        case .arrayDirectoryField(let fieldName):
+            return "Directory path field '\(fieldName)' must hold a single value rather than an array."
+        case .unsupportedDirectoryFieldKind(let fieldName, let type):
+            return "Directory path field '\(fieldName)' declares kind '\(type.rawValue)', which has no canonical Directory component form."
         case .partitionDirectoryRequiresDynamicField:
             return "A partition directory requires at least one dynamic field."
         case .invalidIndexEntity(let indexName, let expected, let actual):

@@ -93,5 +93,33 @@ public enum FieldSchemaType: String, Sendable, Equatable, Hashable {
     case nested
     /// Enum type (encoded as varint or string depending on raw value)
     case `enum`
+}
 
+extension FieldSchemaType {
+    /// Whether one canonical value of this field kind resolves to exactly one
+    /// Directory path component.
+    ///
+    /// A dynamic Directory component is a single path element, so a kind is
+    /// admitted only where the DatabaseFramework Directory bridge defines a
+    /// total, injective textual form for it. That bridge owns the exact
+    /// strings; this property owns which kinds have one, so a declaration no
+    /// bridge can encode fails where it is written rather than at container
+    /// bootstrap.
+    ///
+    /// `enum` is admitted in both of its raw representations because each one
+    /// carries its own component tag.
+    public var hasCanonicalDirectoryComponent: Bool {
+        switch self {
+        case .bool, .int8, .int16, .int32, .int64,
+             .uint8, .uint16, .uint32, .uint64,
+             .float32, .float64, .decimal,
+             .string, .bytes,
+             .date, .time, .dateTime, .timestamp, .timeSpan, .calendarPeriod,
+             .geographicPoint, .geographicPosition,
+             .uuid, .enum:
+            return true
+        case .vector, .object, .rdfTerm, .reference, .nested:
+            return false
+        }
+    }
 }

@@ -811,10 +811,7 @@ struct DirectoryDeclarationValidationTests {
             isArray: true
         )
         #expect(
-            throws: SchemaEntityError.nonScalarDirectoryField(
-                fieldName: "tags",
-                type: .string
-            )
+            throws: SchemaEntityError.arrayDirectoryField(fieldName: "tags")
         ) {
             try Self.entity(
                 fields: [tags],
@@ -831,7 +828,7 @@ struct DirectoryDeclarationValidationTests {
             type: .nested
         )
         #expect(
-            throws: SchemaEntityError.nonScalarDirectoryField(
+            throws: SchemaEntityError.unsupportedDirectoryFieldKind(
                 fieldName: "profile",
                 type: .nested
             )
@@ -851,7 +848,7 @@ struct DirectoryDeclarationValidationTests {
             type: .object
         )
         #expect(
-            throws: SchemaEntityError.nonScalarDirectoryField(
+            throws: SchemaEntityError.unsupportedDirectoryFieldKind(
                 fieldName: "payload",
                 type: .object
             )
@@ -859,6 +856,67 @@ struct DirectoryDeclarationValidationTests {
             try Self.entity(
                 fields: [payload],
                 components: [.dynamicField(fieldName: "payload")]
+            )
+        }
+    }
+
+    @Test("A vector field cannot resolve a dynamic component")
+    func vectorDynamicComponentIsRejected() {
+        let embedding = FieldSchema(
+            name: "embedding",
+            fieldNumber: 2,
+            type: .vector
+        )
+        #expect(
+            throws: SchemaEntityError.unsupportedDirectoryFieldKind(
+                fieldName: "embedding",
+                type: .vector
+            )
+        ) {
+            try Self.entity(
+                fields: [embedding],
+                components: [.dynamicField(fieldName: "embedding")]
+            )
+        }
+    }
+
+    @Test("An RDF term field cannot resolve a dynamic component")
+    func rdfTermDynamicComponentIsRejected() {
+        let subject = FieldSchema(
+            name: "subject",
+            fieldNumber: 2,
+            type: .rdfTerm
+        )
+        #expect(
+            throws: SchemaEntityError.unsupportedDirectoryFieldKind(
+                fieldName: "subject",
+                type: .rdfTerm
+            )
+        ) {
+            try Self.entity(
+                fields: [subject],
+                components: [.dynamicField(fieldName: "subject")]
+            )
+        }
+    }
+
+    @Test("A reference field cannot resolve a dynamic component")
+    func referenceDynamicComponentIsRejected() {
+        let owner = FieldSchema(
+            name: "owner",
+            fieldNumber: 2,
+            type: .reference,
+            referenceTargetEntity: "Account"
+        )
+        #expect(
+            throws: SchemaEntityError.unsupportedDirectoryFieldKind(
+                fieldName: "owner",
+                type: .reference
+            )
+        ) {
+            try Self.entity(
+                fields: [owner],
+                components: [.dynamicField(fieldName: "owner")]
             )
         }
     }
