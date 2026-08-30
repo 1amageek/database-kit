@@ -921,6 +921,30 @@ struct DirectoryDeclarationValidationTests {
         }
     }
 
+    @Test("A polymorphic membership path admits no dynamic component")
+    func polymorphicMembershipDynamicComponentIsRejected() {
+        let group = PolymorphicMembership(
+            identifier: "Shape",
+            directoryComponents: [
+                .staticPath("shapes"),
+                .dynamicField(fieldName: "tenantID"),
+            ],
+            directoryLayer: .default,
+            indexes: []
+        )
+        #expect(
+            throws: SchemaEntityError.invalidPolymorphicDirectoryComponent(
+                position: 1
+            )
+        ) {
+            try Self.entity(
+                fields: [Self.tenant],
+                components: [.staticPath("records")],
+                membership: group
+            )
+        }
+    }
+
     @Test("A dynamic component field occurs at most once in a declaration")
     func repeatedDynamicComponentIsRejected() {
         #expect(throws: SchemaEntityError.duplicateDirectoryField("tenantID")) {
