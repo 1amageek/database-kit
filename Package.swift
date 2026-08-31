@@ -43,6 +43,7 @@ let package = Package(
                 "DatabaseKitMacros",
                 .product(name: "DatabaseTypes", package: "database-types"),
             ],
+            exclude: ["DESIGN.md"],
             swiftSettings: [
                 .define(
                     "DATABASE_KIT_MULTI_BASE",
@@ -57,7 +58,8 @@ let package = Package(
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
-            ]
+            ],
+            exclude: ["DESIGN.md"]
         ),
         .target(
             name: "DatabaseWire",
@@ -65,6 +67,7 @@ let package = Package(
                 "DatabaseKit",
                 .product(name: "DatabaseTypes", package: "database-types"),
             ],
+            exclude: ["DESIGN.md"],
             swiftSettings: [
                 .define(
                     "DATABASE_KIT_MULTI_BASE",
@@ -84,7 +87,8 @@ let package = Package(
                     name: "DatabaseTypesFoundation",
                     package: "database-types"
                 ),
-            ]
+            ],
+            exclude: ["DESIGN.md"]
         ),
         .target(
             name: "DatabaseSchemaJSON",
@@ -92,7 +96,8 @@ let package = Package(
                 "DatabaseKit",
                 "DatabaseWire",
                 .product(name: "DatabaseTypes", package: "database-types"),
-            ]
+            ],
+            exclude: ["DESIGN.md"]
         ),
         .target(
             name: "DatabaseKitDeclarationContract",
