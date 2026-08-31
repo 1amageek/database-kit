@@ -261,7 +261,7 @@ authorization, transaction binding, and backend access.
 | Native Foundation adaptation | `DatabaseKitFoundationTests` and the [`DatabaseKitFoundation` module design](Sources/DatabaseKitFoundation/DESIGN.md) |
 | Strict schema JSON adaptation | `DatabaseSchemaJSONTests` and the [`DatabaseSchemaJSON` module design](Sources/DatabaseSchemaJSON/DESIGN.md) |
 | Embedded declaration graph | `DatabaseKitDeclarationContract` release compilation with the matching Embedded WASM SDK |
-| Package-level trait matrix | Native standard run (641 tests) and isolated `MultiBase` run (656 tests), plus the standard/Embedded release builds documented in `README.md` |
+| Package-level trait matrix | Native standard run (699 tests) and isolated `MultiBase` run (714 tests), plus the standard/Embedded release builds documented in `README.md` |
 
 The package-level authority changes when package ownership, trait selection,
 wire version, public declarations, ownership, failure behavior, or target

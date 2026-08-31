@@ -131,8 +131,8 @@ host transport contract.
 
 | Lane | Entry point | Acceptance contract |
 |---|---|---|
-| Standard native | `TOOLCHAINS=org.swift.64202608141a scripts/xcode-test-harness` | Exactly 641 tests, all passed, with zero failures, skips, expected failures, runtime warnings, compiler/plugin internal errors, profile errors, or debug-information verification warnings |
-| `MultiBase` native | `TOOLCHAINS=org.swift.64202608141a DATABASE_KIT_TEST_TRAITS=MultiBase scripts/xcode-test-harness` | An isolated source copy with exactly 656 tests and the same strict zero conditions; the source manifest keeps the trait non-default |
+| Standard native | `TOOLCHAINS=org.swift.64202608141a scripts/xcode-test-harness` | Exactly 699 tests, all passed, with zero failures, skips, expected failures, runtime warnings, compiler/plugin internal errors, profile errors, or debug-information verification warnings |
+| `MultiBase` native | `TOOLCHAINS=org.swift.64202608141a DATABASE_KIT_TEST_TRAITS=MultiBase scripts/xcode-test-harness` | An isolated source copy with exactly 714 tests and the same strict zero conditions; the source manifest keeps the trait non-default |
 | WASM release matrix | `TOOLCHAINS=org.swift.64202608141a scripts/wasm-build-harness` | Exactly five locked release builds on the matching standard and Embedded SDKs, with preserved logs and the same compiler-diagnostic rejection |
 | Binary ownership | Native behavior tests | Payload pages borrow ranges from the single final frame allocation |
 | Decoder safety | Native behavior tests | Truncation, limits, malformed values, non-canonical input, and cyclic RDF lists are covered |

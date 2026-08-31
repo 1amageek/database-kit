@@ -154,7 +154,7 @@ outside this module.
 | Operation catalog and v3/v5 envelope mapping | `Tests/DatabaseWireTests` operation and envelope suites |
 | Truncation, bounds, malformed, non-canonical, and trailing-input rejection | `Tests/DatabaseWireTests` decoder suites |
 | Retained owner, lazy page, iterator, and exact-frame behavior | `Tests/DatabaseWireTests` result and byte-ownership suites |
-| Standard and `MultiBase` protocol graphs | Isolated native package harness runs (641 and 656 total package tests) |
+| Standard and `MultiBase` protocol graphs | Isolated native package harness runs (699 and 714 total package tests) |
 | Standard and Embedded compatibility | Package README release builds for `DatabaseWire` |
 
 Any change to a wire byte, operation family, version, target field, limit,
