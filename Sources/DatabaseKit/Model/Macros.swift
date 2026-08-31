@@ -184,7 +184,7 @@ public macro PolymorphicDirectory(
 /// **Usage**:
 /// ```swift
 /// #Directory<User>("app", "users")
-/// #Directory<Order>("tenants", \Order.tenantID, "orders", layer: .partition)
+/// #Directory<Order>("accounts", \Order.accountID, "orders", layer: .partition)
 /// ```
 ///
 /// This macro validates and emits directory metadata. The database runtime
@@ -199,7 +199,7 @@ public enum DirectoryLayer: String, Sendable, Hashable {
     /// Default directory
     case `default` = "default"
 
-    /// Multi-tenant partition (requires at least one Field in path)
+    /// Entity Partition leaf (requires at least one dynamic field in the path)
     case partition = "partition"
 }
 
@@ -207,9 +207,9 @@ public enum DirectoryLayer: String, Sendable, Hashable {
 
 /// @Polymorphable macro declaration
 ///
-/// Generates polymorphic group metadata for a protocol definition. Enables
-/// multiple Persistable types to share a directory and indexes, allowing them to
-/// be queried together.
+/// Generates polymorphic group declaration metadata for a protocol definition.
+/// Enables multiple Persistable types to declare a common directory and index
+/// set, allowing them to be described and queried together by a runtime.
 ///
 /// **Usage**:
 /// ```swift
@@ -261,10 +261,12 @@ public enum DirectoryLayer: String, Sendable, Hashable {
 /// )
 /// ```
 ///
-/// **Dual-Write Behavior**:
-/// When a conforming type has its own `#Directory` (different from the protocol's):
-/// - Save: Data written to both type-specific AND polymorphic directories
-/// - Delete: Data removed from both directories
+/// **Runtime boundary**:
+/// This macro emits only static polymorphic declaration metadata: the group
+/// identifier, directory declaration, and index declarations. `DatabaseKit`
+/// performs no writes or deletes and defines no physical Directory or Entity
+/// Partition layout. `database-framework` owns runtime interpretation and any
+/// persistence to multiple locations.
 ///
 /// **Swift Type System Note**:
 /// Protocol types cannot be passed to generic functions requiring `Polymorphable`:
@@ -272,15 +274,8 @@ public enum DirectoryLayer: String, Sendable, Hashable {
 /// // ❌ Compile error: 'any Document' cannot conform to 'Polymorphable'
 /// try await context.fetchPolymorphic(Document.self)
 ///
-/// // ✅ Use any concrete conforming type (all share the same polymorphic directory)
+/// // ✅ Use any concrete conforming type (all expose the same polymorphic directory declaration)
 /// try await context.fetchPolymorphic(Article.self)
-/// ```
-///
-/// **Storage Layout**:
-/// All conforming types share the same directory with type code prefix:
-/// ```
-/// [polymorphic-directory]/R/[typeCode]/[id] → canonical persisted fields
-/// [type-directory]/R/[PersistableType]/[id] → canonical persisted fields (if dual-write)
 /// ```
 @attached(peer, names: suffixed(PolymorphicGroup))
 public macro Polymorphable(identifier: String? = nil) =

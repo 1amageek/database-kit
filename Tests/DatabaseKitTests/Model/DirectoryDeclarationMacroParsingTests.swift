@@ -49,7 +49,19 @@ struct DirectoryDeclarationMacroParsingTests {
             #"#Directory<User>(\User.tenantID, layer: DirectoryLayer.partition)"#
         )
 
-        #expect(declaration.layerExpression == ".partition")
+        #expect(declaration.layerExpression == "DirectoryLayer.partition")
+    }
+
+    @Test("A module-qualified DirectoryLayer case resolves the same layer")
+    func resolvesModuleQualifiedLayerCase() throws {
+        let declaration = try parseDirectory(
+            #"#Directory<User>(\User.tenantID, layer: DatabaseKit.DirectoryLayer.partition)"#
+        )
+
+        #expect(
+            declaration.layerExpression
+                == "DatabaseKit.DirectoryLayer.partition"
+        )
     }
 
     // MARK: - Rejected layer arguments
@@ -65,6 +77,15 @@ struct DirectoryDeclarationMacroParsingTests {
     func rejectsUnknownLayerCase() {
         #expect(throws: DiagnosticsError.self) {
             _ = try parseDirectory(#"#Directory<User>("users", layer: .archived)"#)
+        }
+    }
+
+    @Test("A layer case reached through a foreign member base is rejected")
+    func rejectsForeignLayerBase() {
+        #expect(throws: DiagnosticsError.self) {
+            _ = try parseDirectory(
+                #"#Directory<User>(\User.tenantID, layer: LayerAlias.partition)"#
+            )
         }
     }
 
@@ -127,6 +148,26 @@ struct DirectoryDeclarationMacroParsingTests {
     func rejectsEscapedStringLiteral() {
         #expect(throws: DiagnosticsError.self) {
             _ = try parseDirectory(##"#Directory<User>("a\nb")"##)
+        }
+    }
+
+    @Test("A raw string literal is rejected")
+    func rejectsRawStringLiteral() {
+        #expect(throws: DiagnosticsError.self) {
+            _ = try parseDirectory(###"#Directory<User>(#"a\nb"#)"###)
+        }
+    }
+
+    @Test("A multiline string literal is rejected")
+    func rejectsMultilineStringLiteral() {
+        #expect(throws: DiagnosticsError.self) {
+            _ = try parseDirectory(
+                ####"""
+                #Directory<User>("""
+                users
+                """)
+                """####
+            )
         }
     }
 

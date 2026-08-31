@@ -56,6 +56,39 @@ struct PolymorphableMacroExpansionTests {
         )
     }
 
+    @Test("@Polymorphable preserves a qualified directory layer expression")
+    func preservesQualifiedDirectoryLayerExpression() {
+        assertMacroExpansion(
+            """
+            @Polymorphable
+            @PolymorphicDirectory(
+                "memory",
+                layer: DatabaseKit.DirectoryLayer.default
+            )
+            protocol QualifiedDirectoryEntity: Polymorphable<QualifiedDirectoryEntityPolymorphicGroup> {
+            }
+            """,
+            expandedSource: """
+            protocol QualifiedDirectoryEntity: Polymorphable<QualifiedDirectoryEntityPolymorphicGroup> {
+            }
+
+            enum QualifiedDirectoryEntityPolymorphicGroup: DatabaseKit.PolymorphicGroupDeclaration {
+                static let identifier = "QualifiedDirectoryEntity"
+
+                static let directoryComponents: [DatabaseKit.DirectoryPathComponent] = [.staticPath("memory")]
+
+                static let directoryLayer: DatabaseKit.DirectoryLayer = DatabaseKit.DirectoryLayer.default
+
+                static let indexes: [DatabaseKit.IndexDeclaration<String>] = []
+            }
+            """,
+            macros: [
+                "Polymorphable": PolymorphableMacro.self,
+                "PolymorphicDirectory": PolymorphicDeclarationMarkerMacro.self,
+            ]
+        )
+    }
+
     @Test("@Polymorphable preserves an explicit stable group identifier")
     func preservesExplicitGroupIdentifier() {
         assertMacroExpansion(
@@ -71,6 +104,36 @@ struct PolymorphableMacroExpansionTests {
             }
 
             enum VersionedDocumentPolymorphicGroup: DatabaseKit.PolymorphicGroupDeclaration {
+                static let identifier = "Document"
+
+                static let directoryComponents: [DatabaseKit.DirectoryPathComponent] = [.staticPath(identifier)]
+
+                static let directoryLayer: DatabaseKit.DirectoryLayer = .default
+
+                static let indexes: [DatabaseKit.IndexDeclaration<String>] = []
+            }
+            """,
+            macros: [
+                "Polymorphable": PolymorphableMacro.self,
+            ]
+        )
+    }
+
+    @Test("@Polymorphable preserves a raw group identifier")
+    func preservesRawGroupIdentifier() {
+        assertMacroExpansion(
+            ##"""
+            @Polymorphable(identifier: #"Document"#)
+            protocol RawIdentifierDocument: Polymorphable<RawIdentifierDocumentPolymorphicGroup> {
+                var id: String { get }
+            }
+            """##,
+            expandedSource: """
+            protocol RawIdentifierDocument: Polymorphable<RawIdentifierDocumentPolymorphicGroup> {
+                var id: String { get }
+            }
+
+            enum RawIdentifierDocumentPolymorphicGroup: DatabaseKit.PolymorphicGroupDeclaration {
                 static let identifier = "Document"
 
                 static let directoryComponents: [DatabaseKit.DirectoryPathComponent] = [.staticPath(identifier)]

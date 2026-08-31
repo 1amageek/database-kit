@@ -206,23 +206,23 @@ private func parseDirectoryArguments(
     for arg in arguments {
         // Check for "layer:" argument
         if let label = arg.label, label.text == "layer" {
-            let layerName = try directoryLayerCaseName(
+            _ = try directoryLayerCaseName(
                 arg.expression,
                 label: "@PolymorphicDirectory"
             )
-            directoryLayerValue = ".\(layerName)"
+            directoryLayerValue = arg.expression.trimmedDescription
             continue
         }
 
         guard
-            let pathValue = staticStringLiteralValue(arg.expression),
+            let pathValue = ordinarySingleLineStringLiteralValue(arg.expression),
             !pathValue.isEmpty
         else {
             throw DiagnosticsError(diagnostics: [
                 Diagnostic(
                     node: Syntax(arg.expression),
                     message: MacroExpansionErrorMessage(
-                        "@PolymorphicDirectory components must be nonempty string literals"
+                        "@PolymorphicDirectory components must be nonempty ordinary single-line string literals without interpolation"
                     )
                 )
             ])

@@ -11,7 +11,7 @@ struct ParsedDirectoryDeclaration {
     /// Dynamic field names in declaration order.
     let dynamicFieldNames: [String]
 
-    /// The `DirectoryLayer` case expression, including its leading dot.
+    /// The validated `DirectoryLayer` case expression as written.
     let layerExpression: String
 }
 
@@ -30,6 +30,7 @@ func parseDirectoryDeclaration(
     var componentExpressions: [String] = []
     var dynamicFieldNames: [String] = []
     var layerName: String?
+    var layerExpression: String?
 
     for argument in arguments {
         if let label = argument.label {
@@ -49,18 +50,22 @@ func parseDirectoryDeclaration(
                 argument.expression,
                 label: "#Directory"
             )
+            layerExpression = argument.expression.trimmedDescription
             continue
         }
 
         let expression = argument.expression
 
         if expression.is(StringLiteralExprSyntax.self) {
-            guard let value = staticStringLiteralValue(expression), !value.isEmpty else {
+            guard
+                let value = ordinarySingleLineStringLiteralValue(expression),
+                !value.isEmpty
+            else {
                 throw directoryDeclarationDiagnostic(
                     node: Syntax(expression),
                     message: """
-                        #Directory path components must be nonempty string \
-                        literals without interpolation
+                        #Directory path components must be nonempty ordinary \
+                        single-line string literals without interpolation
                         """
                 )
             }
@@ -80,8 +85,8 @@ func parseDirectoryDeclaration(
         throw directoryDeclarationDiagnostic(
             node: Syntax(expression),
             message: """
-                #Directory path components must be nonempty string literals or \
-                stored-property key paths
+                #Directory path components must be nonempty ordinary \
+                single-line string literals or stored-property key paths
                 """
         )
     }
@@ -99,7 +104,7 @@ func parseDirectoryDeclaration(
     return ParsedDirectoryDeclaration(
         componentExpressions: componentExpressions,
         dynamicFieldNames: dynamicFieldNames,
-        layerExpression: ".\(layerName ?? "default")"
+        layerExpression: layerExpression ?? ".default"
     )
 }
 
@@ -113,6 +118,21 @@ func staticStringLiteralValue(_ expression: ExprSyntax) -> String? {
         return nil
     }
     return segment.content.text
+}
+
+/// Read an ordinary single-line string literal written without interpolation.
+func ordinarySingleLineStringLiteralValue(_ expression: ExprSyntax) -> String? {
+    guard
+        let literal = expression.as(StringLiteralExprSyntax.self),
+        !literal.hasError,
+        literal.openingPounds == nil,
+        literal.closingPounds == nil,
+        literal.openingQuote.tokenKind == .stringQuote,
+        literal.closingQuote.tokenKind == .stringQuote
+    else {
+        return nil
+    }
+    return staticStringLiteralValue(expression)
 }
 
 /// Read the `DirectoryLayer` case a `layer:` argument names.
@@ -129,7 +149,10 @@ func directoryLayerCaseName(
         )
     }
     let name = memberAccess.declName.baseName.text
-    guard admittedDirectoryLayerCases.contains(name) else {
+    guard
+        admittedDirectoryLayerCases.contains(name),
+        isDirectoryLayerReference(memberAccess.base)
+    else {
         throw directoryDeclarationDiagnostic(
             node: Syntax(expression),
             message: """
@@ -139,6 +162,25 @@ func directoryLayerCaseName(
         )
     }
     return name
+}
+
+/// Accept only the unqualified enum case or the canonical DatabaseKit type.
+private func isDirectoryLayerReference(_ base: ExprSyntax?) -> Bool {
+    guard let base else { return true }
+
+    if let reference = base.as(DeclReferenceExprSyntax.self) {
+        return reference.baseName.text == "DirectoryLayer"
+    }
+
+    guard
+        let qualified = base.as(MemberAccessExprSyntax.self),
+        qualified.declName.baseName.text == "DirectoryLayer",
+        let module = qualified.base?.as(DeclReferenceExprSyntax.self),
+        module.baseName.text == "DatabaseKit"
+    else {
+        return false
+    }
+    return true
 }
 
 /// `DirectoryLayer` is declared in this package with exactly these cases, so a

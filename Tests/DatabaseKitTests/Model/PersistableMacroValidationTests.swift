@@ -460,7 +460,7 @@ struct ModelMacroValidationTests {
             """,
             diagnostics: [
                 DiagnosticSpec(
-                    message: "#Directory path components must be nonempty string literals without interpolation",
+                    message: "#Directory path components must be nonempty ordinary single-line string literals without interpolation",
                     line: 3,
                     column: 40
                 )

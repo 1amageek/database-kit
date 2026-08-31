@@ -13,16 +13,16 @@ import SwiftSyntaxMacros
 /// declaration accepted here is compiled with the meaning validated here.
 ///
 /// **Path components**: each unlabeled variadic element is either
-/// - a nonempty string literal without interpolation, contributing a static
-///   component: `"app"`, `"tenants"`; or
+/// - a nonempty ordinary single-line string literal without interpolation,
+///   contributing a static component: `"app"`, `"accounts"`; or
 /// - a key path naming one stored property of the generic type, contributing a
 ///   dynamic component: `\Order.accountID`.
 ///
 /// **Layer**: `layer:` names the layer tag of the final resolved node and must
 /// be a `DirectoryLayer` case:
 /// - `.default` (the default): the node resolves a plain Directory;
-/// - `.partition`: the node resolves a Partition, and the declaration must
-///   contain at least one dynamic component.
+/// - `.partition`: the node resolves an Entity Partition, and the declaration
+///   must contain at least one dynamic component.
 ///
 /// Usage:
 /// ```swift
@@ -36,11 +36,11 @@ import SwiftSyntaxMacros
 /// }
 /// ```
 ///
-/// **Multi-tenant with Partition**:
+/// **Entity Partition**:
 /// ```swift
 /// @Persistable
 /// struct Order {
-///     #Directory<Order>("tenants", \Order.accountID, "orders", layer: .partition)
+///     #Directory<Order>("accounts", \Order.accountID, "orders", layer: .partition)
 ///     #PrimaryKey<Order>([\.orderID])
 ///
 ///     var orderID: Int64
@@ -53,7 +53,7 @@ import SwiftSyntaxMacros
 /// @Persistable
 /// struct Message {
 ///     #Directory<Message>(
-///         "tenants",
+///         "accounts",
 ///         \Message.accountID,
 ///         "channels",
 ///         \Message.channelID,
@@ -72,7 +72,7 @@ import SwiftSyntaxMacros
 /// ```swift
 /// extension Order {
 ///     public static var directoryPathComponents: [DirectoryPathComponent] {
-///         [.staticPath("tenants"), .dynamicField(fieldName: "accountID"), .staticPath("orders")]
+///         [.staticPath("accounts"), .dynamicField(fieldName: "accountID"), .staticPath("orders")]
 ///     }
 ///     public static var directoryLayer: DatabaseKit.DirectoryLayer { .partition }
 /// }
@@ -81,8 +81,8 @@ import SwiftSyntaxMacros
 /// **Validation**:
 /// - the generic type parameter `<T>` is required;
 /// - path components must be unlabeled;
-/// - a static component must be a nonempty string literal without
-///   interpolation;
+/// - a static component must be a nonempty ordinary single-line string literal
+///   without interpolation;
 /// - a dynamic component must be a key path written with an explicit root
 ///   equal to `T` and naming exactly one property;
 /// - `layer:` must be `.default` or `.partition` and may appear once;
