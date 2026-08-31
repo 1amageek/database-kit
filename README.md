@@ -3,8 +3,9 @@
 Database semantic models, declarations, QueryIR, and the canonical binary
 protocol for the database ecosystem.
 
-The normative ownership and product contract is documented in
-[database-kit Responsibility Specification](Docs/DATABASE_KIT_SPECIFICATION.md).
+The normative package ownership and product contract is documented in
+[the database-kit package design](DESIGN.md), under the workspace authority in
+[`../SPEC.md`](../SPEC.md).
 
 The package implements the target-free DatabaseWire v3 contract by default.
 The non-default `MultiBase` trait adds Base, Composition, persisted Grant,
@@ -119,10 +120,10 @@ with the transactional or federated read points that fixed the result.
 )
 ```
 
-See [Architecture and ownership](Docs/ARCHITECTURE.md) for the package boundary
-and dependency rules.
+See [the package design](DESIGN.md) for the package boundary and dependency
+rules.
 See
-[Zero-Copy and Embedded Architecture](Docs/ZERO_COPY_EMBEDDED_DESIGN.md) for
+[Zero-Copy and Embedded rationale](Docs/ZERO_COPY_EMBEDDED_DESIGN.md) for
 the copy budget, static model-adaptation design, lazy result pages, and WASM
 host transport contract.
 
@@ -332,8 +333,9 @@ models continue to use KeyPath syntax with `#Index`, and runtime index
 maintenance receives only concrete field identities. It performs neither
 KeyPath retention nor string-to-field discovery.
 
-See [Polymorphic Persistence Design](Docs/POLYMORPHIC_DESIGN.md) for the full
-design and migration plan.
+See [Polymorphic Persistence guide](Docs/POLYMORPHIC_DESIGN.md) for
+implementation rationale and migration notes; `DESIGN.md` remains the package
+and module authority.
 
 ## #Directory Macro
 
@@ -343,15 +345,15 @@ design and migration plan.
 #Directory<User>("app", "users")
 ```
 
-### Multi-tenant Partitioning
+### Entity Partition
 
 ```swift
 @Persistable
 struct Order {
-    #Directory<Order>("tenants", \Order.accountID, "orders", layer: .partition)
+    #Directory<Order>("accounts", \Order.accountID, "orders", layer: .partition)
 
     var orderID: Int64
-    var accountID: String  // Partition key
+    var accountID: String  // Entity partition key
 }
 ```
 
@@ -361,7 +363,7 @@ struct Order {
 @Persistable
 struct Message {
     #Directory<Message>(
-        "tenants", \Message.accountID,
+        "accounts", \Message.accountID,
         "channels", \Message.channelID,
         "messages",
         layer: .partition
@@ -399,8 +401,9 @@ evolution: each one relocates existing data and requires an explicit move.
 
 ## Index declarations
 
-See [Index Declaration Design](Docs/INDEX_DECLARATION_DESIGN.md) for the full
-algebra, validation, evolution, and runtime-boundary contract.
+See [Index Declaration rationale](Docs/INDEX_DECLARATION_DESIGN.md) for
+declaration rationale, validation, evolution, and runtime-boundary notes;
+`DESIGN.md` remains the package and module authority.
 
 Built-in indexes have one declaration surface: `IndexDefinition` through
 `#Index`. The macro always accepts one `IndexDeclaration`; changing index

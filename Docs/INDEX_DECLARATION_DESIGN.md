@@ -1,11 +1,16 @@
-# Index Declaration Design
+# Index Declaration Rationale
 
-## Purpose and ownership
+> Supplemental rationale and developer guidance only. The normative authority
+> is [`../Sources/DatabaseKit/DESIGN.md`](../Sources/DatabaseKit/DESIGN.md),
+> composed by [`../DESIGN.md`](../DESIGN.md). If this document conflicts with
+> either authority, the package and module designs take precedence.
 
-`DatabaseKit` owns the complete logical meaning of an index. It does not own
-storage layout, online build state, query planning, runtime algorithm choice,
-or maintainer construction. Those execution concerns belong to
-`database-framework`.
+## Purpose and scope
+
+The `DatabaseKit` module design owns the complete logical meaning of an index.
+This supplemental guide records the declaration rationale. Index storage
+layout, online build state, query planning, runtime algorithm choice, and
+maintainer construction belong to `database-framework`.
 
 The public declaration surface has one stable macro argument:
 

@@ -1,15 +1,19 @@
-# Zero-Copy and Embedded Architecture
+# Zero-Copy and Embedded Rationale
 
 ## Status
 
-This document defines the target architecture for the performance-sensitive
+This document records rationale for the performance-sensitive
 path shared by `database-types`, `database-kit`, `DatabaseWire`, and the
 Embedded core of `database-client`.
 
-It is normative for changes to model adaptation, byte ownership, Wire
-encoding, Wire decoding, result paging, and Embedded transport boundaries.
-The version 1 implementation must be designed from these constraints; existing
-APIs are not compatibility requirements.
+The normative authorities are [`../DESIGN.md`](../DESIGN.md) and
+[`../Sources/DatabaseKit/DESIGN.md`](../Sources/DatabaseKit/DESIGN.md), with
+the corresponding [`DatabaseWire` module design](../Sources/DatabaseWire/DESIGN.md)
+for wire ownership. This document is
+supplemental and non-authoritative; when it conflicts with those authorities,
+the package and module designs take precedence. The current implementation must
+be designed from the fixed contracts; existing APIs are not compatibility
+requirements.
 
 ## Architectural priorities
 
@@ -311,7 +315,7 @@ public enum DatabaseOperationCatalog {
 ```
 
 The descriptor initializer and its encoding witnesses are not public.
-DatabaseWire constructs every descriptor and exposes the fixed version 1
+DatabaseWire constructs every descriptor and exposes the fixed trait-selected
 operation catalog. `DatabaseClient` accepts a descriptor value, encodes its
 statically bound `Request`, and decodes only its bound `Response`.
 

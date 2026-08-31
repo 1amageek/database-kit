@@ -1,8 +1,13 @@
-# Polymorphic Persistence Design
+# Polymorphic Persistence Guide
 
-This document defines the intended design for protocol-oriented polymorphic
-persistence in `database-kit`, `database-framework`, and downstream packages such
-as `swift-memory`.
+> Supplemental rationale and developer guidance only. The normative authority
+> is [`../Sources/DatabaseKit/DESIGN.md`](../Sources/DatabaseKit/DESIGN.md),
+> composed by [`../DESIGN.md`](../DESIGN.md). If this document conflicts with
+> either authority, the package and module designs take precedence.
+
+This document summarizes the intended design for protocol-oriented
+polymorphic persistence in `database-kit`, `database-framework`, and downstream
+packages such as `swift-memory`.
 
 ## Goals
 
@@ -235,7 +240,7 @@ for the actual concrete model being written. Neither level stores a KeyPath.
 
 ## Framework Boundary
 
-`database-kit` owns:
+The `DatabaseKit` module design assigns these declaration responsibilities:
 
 - Public declaration model.
 - Macro expansion and validation.
@@ -278,7 +283,7 @@ manually share one concrete generated field across different member types.
 - Runtime descriptors contain no `KeyPath`, `PartialKeyPath`, `AnyKeyPath`, or
   `Any.Type`.
 
-## Version 1 Contract
+## Current Polymorphic Contract
 
 `database-kit` enforces the following:
 

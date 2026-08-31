@@ -1,10 +1,16 @@
-# Security Declaration Contract
+# Security Declaration Guide
+
+> Supplemental developer guidance only. The normative authority is
+> [`../Sources/DatabaseKit/DESIGN.md`](../Sources/DatabaseKit/DESIGN.md),
+> composed by [`../DESIGN.md`](../DESIGN.md). If this guide conflicts with
+> either authority, the package and module designs take precedence.
 
 ## Scope
 
-`database-kit` defines storage-independent authorization declarations. It does
-not authenticate requests, install task-local state, execute queries, mask
-fields, or coordinate transactions. Those responsibilities belong to the
+The `DatabaseKit` module design assigns storage-independent authorization
+declarations to this package. This guide summarizes that declaration surface;
+it does not define package ownership. Authentication, task-local state, query
+execution, field masking, and transaction coordination belong to the
 application boundary and `database-framework`.
 
 ```text
