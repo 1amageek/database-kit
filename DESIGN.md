@@ -124,6 +124,57 @@ flowchart LR
 
 ## Contracts and Invariants
 
+### Frozen layer contract
+
+These nine statements fix the meaning of this layer. The subsections below
+state the detailed contracts; this list is the authority for what may not be
+reinterpreted. A change that reinterprets any statement here is a new
+architecture version, not an ordinary feature addition.
+
+1. **Declaration only.** The package declares database meaning. It performs no
+   I/O and does not execute what it declares.
+2. **Deterministic semantic output.** The canonical graph is `DatabaseKit` and
+   `DatabaseWire`, with `DatabaseKitDeclarationContract` as its Embedded
+   fixture. The same declaration yields the same static metadata, the same
+   logical identity, and the same canonical wire bytes. `DatabaseKitFoundation`
+   and `DatabaseSchemaJSON` are native adapters outside that canonical graph.
+3. **Directory is placement intent.** `#Directory` declares a logical namespace
+   template: a static component holds the declared literal, a dynamic component
+   names an existing persisted field, and `.partition` requests an isolation
+   boundary. The package fixes no prefix, tuple encoding, table, schema, or
+   subspace. Directory and Partition semantics are owned by StorageKit under
+   root `SPEC.md` F-03, F-04, and F-29. DatabaseKit declarations depend on no
+   FoundationDB type, API, or encoding, and cannot restate, narrow, or weaken
+   that contract.
+4. **A Base is not a Partition.** A Base is a declared logical target of
+   database meaning; a Partition is a StorageKit storage namespace and lifetime
+   unit. They are distinct types with distinct owners. DatabaseFramework
+   performs the single fixed placement that root `SPEC.md` F-32 names, so the
+   one-to-one naming there is a placement decision and not a type identity.
+5. **The standard configuration is target-free.** Without `MultiBase` there is
+   one implicit logical root: no Base identifier in the public API, no target
+   on the wire, DatabaseWire version 3, and no Base, Composition, or Grant on
+   the standard surface.
+6. **MultiBase is optional and additive.** With the trait a Base is an explicit
+   logical target, a target-bound operation names a Base or a Composition, and
+   the wire is version 5. A Composition declares a read over several Bases; it
+   declares no fusion of transactions or Partitions, and DatabaseFramework and
+   StorageKit keep each member separately leased, authorized, and bound.
+   Disabling the trait leaves the package fully functional.
+7. **An address is not an authority.** Holding a Base, Directory, or Partition
+   address grants nothing. Actual access is resolved placement plus the
+   retained Partition generation, the active lease, the transaction scope, and
+   the admitted capability. A `Grant` declaration states policy; issuing,
+   validating, and revoking authority belongs to DatabaseFramework and
+   StorageKit.
+8. **No backend polymorphism.** This layer is a closed semantic model rather
+   than a replaceable capability, so no protocol hierarchy is introduced for
+   backend or implementation substitution. The existing public protocols are
+   conformance and description vocabulary for declarations. Backend
+   polymorphism belongs to StorageKit.
+9. **The wire is the canonical form of this model.** `DatabaseWire` expresses
+   the declared semantic model and owns no separate meaning of its own.
+
 ### Declaration ownership
 
 - `DatabaseKit` is the user-facing declaration interface. It owns the logical
@@ -262,6 +313,7 @@ authorization, transaction binding, and backend access.
 | Strict schema JSON adaptation | `DatabaseSchemaJSONTests` and the [`DatabaseSchemaJSON` module design](Sources/DatabaseSchemaJSON/DESIGN.md) |
 | Embedded declaration graph | `DatabaseKitDeclarationContract` release compilation with the matching Embedded WASM SDK |
 | Package-level trait matrix | Native standard run (699 tests) and isolated `MultiBase` run (714 tests), plus the standard/Embedded release builds documented in `README.md` |
+| Frozen layer contract items 2, 5, and 6 | `DatabaseWireTests/CanonicalDatabaseWireTests` golden envelope byte vectors and canonical-ordering rejection, executed in both the standard version 3 lane and the isolated `MultiBase` version 5 lane |
 
 The package-level authority changes when package ownership, trait selection,
 wire version, public declarations, ownership, failure behavior, or target
@@ -269,3 +321,7 @@ support changes. Such a change must update the affected module authority and
 re-check the direct and transitive designs from the workspace root. A runtime
 execution change belongs to its owning downstream package and does not modify
 this package's declaration contract unless its public assumptions change.
+
+The frozen layer contract is not changed by this procedure. A change that
+reinterprets one of its nine statements is a new architecture version and
+requires the system authority in root `SPEC.md` to change first.
