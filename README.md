@@ -67,7 +67,7 @@ database-client ────────┐
 dependencies: [
     .package(
         url: "https://github.com/1amageek/database-kit.git",
-        from: "26.0818.0"
+        from: "26.0831.0"
     )
 ]
 ```
@@ -115,7 +115,7 @@ with the transactional or federated read points that fixed the result.
 ```swift
 .package(
     url: "https://github.com/1amageek/database-kit.git",
-    from: "26.0818.0",
+    from: "26.0831.0",
     traits: [.trait(name: "MultiBase")]
 )
 ```
@@ -129,42 +129,40 @@ host transport contract.
 
 ## Verification
 
-| Contract | Verification |
+| Lane | Entry point | Acceptance contract |
+|---|---|---|
+| Standard native | `TOOLCHAINS=org.swift.64202608141a scripts/xcode-test-harness` | Exactly 641 tests, all passed, with zero failures, skips, expected failures, runtime warnings, compiler/plugin internal errors, profile errors, or debug-information verification warnings |
+| `MultiBase` native | `TOOLCHAINS=org.swift.64202608141a DATABASE_KIT_TEST_TRAITS=MultiBase scripts/xcode-test-harness` | An isolated source copy with exactly 656 tests and the same strict zero conditions; the source manifest keeps the trait non-default |
+| WASM release matrix | `TOOLCHAINS=org.swift.64202608141a scripts/wasm-build-harness` | Exactly five locked release builds on the matching standard and Embedded SDKs, with preserved logs and the same compiler-diagnostic rejection |
+| Binary ownership | Native behavior tests | Payload pages borrow ranges from the single final frame allocation |
+| Decoder safety | Native behavior tests | Truncation, limits, malformed values, non-canonical input, and cyclic RDF lists are covered |
+
+The WASM harness executes these five lanes with
+`--disable-default-traits --only-use-versions-from-resolved-file` and
+`-debug-info-format none`:
+
+| SDK | Build targets |
 |---|---|
-| Apple platform behavior | `TOOLCHAINS=org.swift.64202607231a scripts/xcode-test-harness`; the package-owned harness enforces the reviewed exact test count with zero skips, expected failures, runtime warnings, or internal tool errors |
-| Standard WASM contract | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 WASM SDK and `-debug-info-format none` |
-| Embedded semantic and Wire graph | Release builds of `DatabaseKit` and `DatabaseWire` with the matching Swift 6.4 Embedded WASM SDK and `-debug-info-format none` |
-| Embedded macro use | Embedded release build of `DatabaseKitDeclarationContract` with `-debug-info-format none`, which expands model, field, directory, index, and relationship declarations |
-| Binary ownership | Tests assert that payload pages borrow ranges from the single final frame allocation |
-| Decoder safety | Tests cover truncation, limits, malformed values, non-canonical input, and cyclic RDF lists |
+| `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm` | `DatabaseKit`, `DatabaseWire` |
+| `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm-embedded` | `DatabaseKit`, `DatabaseWire`, `DatabaseKitDeclarationContract` |
 
 The current baseline is
-`swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a` with the exactly matching
-standard and Embedded WASM SDKs. The macro dependency requires `swift-syntax`
-as a release range (`from: "603.0.2"`) so downstream graphs that also
-constrain swift-syntax (e.g. through JavaScriptKit) stay resolvable;
-reproducibility comes from the committed `Package.resolved`, which CI enforces
-with `-onlyUsePackageVersionsFromResolvedFile`. The full verification matrix
-(host test harness plus the standard and Embedded WASM release builds below)
-passes on this toolchain with swift-syntax `603.0.2`.
+`swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a` with the exactly matching
+standard and Embedded WASM SDKs, and compiler commit `424cae54c1a10da`.
+The macro dependency requires `swift-syntax` as a release range
+(`from: "603.0.2"`) so downstream graphs that also constrain swift-syntax
+(e.g. through JavaScriptKit) stay resolvable. Reproducibility comes from the
+committed `Package.resolved`, which both package-owned harnesses enforce.
 Release/WASM verification disables debug information because it is not shipped
 in the reactor and avoids running host-side `dsymutil` over macro dependency
 objects. Compiler diagnostics remain enabled.
 
 ```bash
-TOOLCHAINS=org.swift.64202607231a scripts/xcode-test-harness
-TOOLCHAINS=org.swift.64202607231a \
+TOOLCHAINS=org.swift.64202608141a scripts/xcode-test-harness
+TOOLCHAINS=org.swift.64202608141a \
   DATABASE_KIT_TEST_TRAITS=MultiBase \
   scripts/xcode-test-harness
-
-swift build --disable-default-traits --product DatabaseWire
-swift build --disable-default-traits --traits MultiBase --product DatabaseWire
-
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseKit -c release -debug-info-format none
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm --product DatabaseWire -c release -debug-info-format none
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --product DatabaseKit -c release -debug-info-format none
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --product DatabaseWire -c release -debug-info-format none
-swift build --swift-sdk swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a_wasm-embedded --target DatabaseKitDeclarationContract -c release -debug-info-format none
+TOOLCHAINS=org.swift.64202608141a scripts/wasm-build-harness
 ```
 
 ## Quick Start

@@ -66,19 +66,34 @@
 
 ## Verification
 
-- Native verification uses `scripts/xcode-test-harness` with the pinned Swift
-  snapshot. The standard graph must execute exactly 635 tests. An isolated
-  `MultiBase` graph uses `DATABASE_KIT_TEST_TRAITS=MultiBase` and must
-  execute exactly 650 tests. The harness selects the trait in an isolated source
-  copy and derives the expected count. Both runs require zero failures,
-  skips, expected failures, runtime warnings, compiler-plugin internal errors,
-  profile errors, or debug-information verification warnings.
-- The harness uses the `database-kit-Package` scheme, separates
+- Native verification uses `scripts/xcode-test-harness` with exactly
+  `TOOLCHAINS=org.swift.64202608141a`, snapshot
+  `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a`, and compiler commit
+  `424cae54c1a10da`. The standard graph must execute exactly 641 tests. An
+  isolated `MultiBase` graph uses
+  `DATABASE_KIT_TEST_TRAITS=MultiBase` and must execute exactly 656 tests. The
+  harness owns these counts; callers cannot override them. The isolated trait
+  copy must not modify the source `Package.swift` or enable a default trait.
+  Both runs require zero failures, skips, expected failures, runtime warnings,
+  compiler/plugin internal errors, profile errors, or debug-information
+  verification warnings.
+- The native harness uses the `database-kit-Package` scheme, separates
   `build-for-testing` from `test-without-building`, injects the pinned
   `libTesting.dylib` path into the generated `.xctestrun`, and applies a timeout
-  to both phases.
-- Standard and Embedded WASM verification uses the exact Swift 6.4 snapshot
-  SDK identifiers and the release commands documented in `README.md`.
+  to both phases. It requires the committed `Package.resolved` and rejects
+  path dependencies.
+- `scripts/wasm-build-harness` uses the same exact toolchain and compiler,
+  validates both SDK identifiers
+  `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm` and
+  `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm-embedded`, and executes
+  exactly five release builds with
+  `--disable-default-traits --only-use-versions-from-resolved-file` and
+  `-debug-info-format none`: standard `DatabaseKit` and `DatabaseWire`, then
+  Embedded `DatabaseKit`, `DatabaseWire`, and
+  `DatabaseKitDeclarationContract`. Standard and Embedded builds share one
+  scratch root each to avoid redundant dependency resolution. Every build has
+  an external timeout, a preserved log, and rejects compiler/plugin internal,
+  profile, or debug-information verification diagnostics.
 - Cross-platform release verification uses `-debug-info-format none`. The
   pinned snapshot emits invalid host-side DWARF name indexes while linking the
   macro dependency graph; release verification must neither emit nor ignore

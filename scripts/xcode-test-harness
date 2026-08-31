@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCHEME="database-kit-Package"
 DESTINATION="platform=macOS,arch=arm64"
+EXPECTED_TOOLCHAINS="org.swift.64202608141a"
+EXPECTED_SWIFT_SNAPSHOT="swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a"
+EXPECTED_SWIFT_COMPILER_COMMIT="424cae54c1a10da"
 TEST_TRAITS="${DATABASE_KIT_TEST_TRAITS:-}"
 BUILD_TIMEOUT_SECONDS="${XCODE_TEST_BUILD_TIMEOUT_SECONDS:-1200}"
 TEST_TIMEOUT_SECONDS="${XCODE_TEST_TIMEOUT_SECONDS:-1200}"
@@ -103,11 +106,37 @@ inject_testing_runtime() {
 reject_internal_tool_errors() {
   local log_path="$1"
   if rg -n \
-      'Internal Error:|LLVM Profile Error:|warning: input verification failed' \
+      -i -- \
+      'internal error:|llvm profile error:|profile.*(error|warning)|warning: input verification failed|warning:.*debug[- ]?information|warning:.*debug info|debug[- ]?information.*(warning|verification|invalid)|debug info.*(warning|verification|invalid)|dwarf.*(warning|verification|invalid)' \
       "$log_path" >&2; then
-    echo "error: internal tool failure detected in $log_path" >&2
+    echo "error: compiler or toolchain diagnostic detected in $log_path" >&2
     return 1
   fi
+}
+
+verify_pinned_toolchain() {
+  local swiftc_path
+  local toolchain_root
+  local toolchain_name
+  local compiler_version
+
+  swiftc_path="$(xcrun --toolchain "$TOOLCHAINS" --find swiftc)"
+  toolchain_root="$(cd "$(dirname "$swiftc_path")/../.." && pwd)"
+  toolchain_name="${toolchain_root##*/}"
+  toolchain_name="${toolchain_name%.xctoolchain}"
+  if [[ "$toolchain_name" != "$EXPECTED_SWIFT_SNAPSHOT" ]]; then
+    echo "error: expected Swift snapshot $EXPECTED_SWIFT_SNAPSHOT, found $toolchain_name" >&2
+    return 1
+  fi
+
+  compiler_version="$(xcrun --toolchain "$TOOLCHAINS" swiftc --version)"
+  if ! printf '%s\n' "$compiler_version" \
+      | rg -F -- "Swift $EXPECTED_SWIFT_COMPILER_COMMIT" >/dev/null; then
+    echo "error: expected Swift compiler commit $EXPECTED_SWIFT_COMPILER_COMMIT" >&2
+    printf '%s\n' "$compiler_version" >&2
+    return 1
+  fi
+  printf '%s\n' "$compiler_version"
 }
 
 summary_number() {
@@ -118,39 +147,53 @@ summary_number() {
 
 case "$TEST_TRAITS" in
   "")
-    default_expected_test_count=635
+    default_expected_test_count=641
     ;;
   "MultiBase")
-    default_expected_test_count=650
+    default_expected_test_count=656
     ;;
   *)
     echo "error: DATABASE_KIT_TEST_TRAITS must be empty or MultiBase" >&2
     exit 2
     ;;
 esac
-EXPECTED_TEST_COUNT="${DATABASE_KIT_EXPECTED_TEST_COUNT:-$default_expected_test_count}"
+EXPECTED_TEST_COUNT="$default_expected_test_count"
 
-for command in jq xcodebuild xcrun plutil perl rg rsync tee; do
+for command in jq xcodebuild xcrun plutil perl rg rsync shasum tee; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "error: required command not found: $command" >&2
     exit 1
   fi
 done
 
-if ! [[ "$EXPECTED_TEST_COUNT" =~ ^[0-9]+$ ]]; then
-  echo "error: DATABASE_KIT_EXPECTED_TEST_COUNT must be a non-negative integer" >&2
+for timeout_value in "$BUILD_TIMEOUT_SECONDS" "$TEST_TIMEOUT_SECONDS"; do
+  if ! [[ "$timeout_value" =~ ^[1-9][0-9]*$ ]]; then
+    echo "error: XCODE_TEST_BUILD_TIMEOUT_SECONDS and XCODE_TEST_TIMEOUT_SECONDS must be positive integers" >&2
+    exit 2
+  fi
+done
+
+if [[ "${TOOLCHAINS:-}" != "$EXPECTED_TOOLCHAINS" ]]; then
+  echo "error: TOOLCHAINS must equal the pinned Swift toolchain $EXPECTED_TOOLCHAINS" >&2
   exit 2
 fi
 
-if [[ -z "${TOOLCHAINS:-}" ]]; then
-  echo "error: TOOLCHAINS must identify the pinned Swift snapshot" >&2
-  exit 2
-fi
+verify_pinned_toolchain
 
 if rg -n '\.package\(path:' "$ROOT_DIR/Package.swift" >/dev/null; then
   echo "error: release verification requires URL dependencies" >&2
   exit 2
 fi
+if rg -n 'enabledTraits|\.default\s*\(' "$ROOT_DIR/Package.swift" >/dev/null; then
+  echo "error: source Package.swift must not enable a default trait" >&2
+  exit 2
+fi
+if [[ ! -f "$ROOT_DIR/Package.resolved" ]]; then
+  echo "error: Package.resolved is required for locked verification" >&2
+  exit 2
+fi
+source_package_digest="$(shasum -a 256 "$ROOT_DIR/Package.swift")"
+source_resolved_digest="$(shasum -a 256 "$ROOT_DIR/Package.resolved")"
 
 WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/database-kit-xcode-test.XXXXXX")"
 derived_data="$WORK_ROOT/DerivedData"
@@ -244,6 +287,12 @@ if (( total_count != EXPECTED_TEST_COUNT \
     || runtime_warning_count != 0 )); then
   printf '%s\n' "$summary" >&2
   echo "error: database-kit result did not meet the strict contract" >&2
+  exit 1
+fi
+
+if [[ "$(shasum -a 256 "$ROOT_DIR/Package.swift")" != "$source_package_digest" \
+    || "$(shasum -a 256 "$ROOT_DIR/Package.resolved")" != "$source_resolved_digest" ]]; then
+  echo "error: source Package.swift or Package.resolved changed during verification" >&2
   exit 1
 fi
 

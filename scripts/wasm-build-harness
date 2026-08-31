@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+EXPECTED_TOOLCHAINS="org.swift.64202608141a"
+EXPECTED_SWIFT_SNAPSHOT="swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a"
+EXPECTED_SWIFT_COMPILER_COMMIT="424cae54c1a10da"
+STANDARD_SDK="swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm"
+EMBEDDED_SDK="swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm-embedded"
+BUILD_TIMEOUT_SECONDS="${DATABASE_KIT_WASM_BUILD_TIMEOUT_SECONDS:-1200}"
+RESULT_DIRECTORY="${DATABASE_KIT_WASM_RESULT_DIRECTORY:-${TMPDIR:-/tmp}/database-kit-wasm-results}"
+WORK_ROOT=""
+
+timeout_command() {
+  local seconds="$1"
+  shift
+  perl -e 'alarm shift; exec @ARGV' "$seconds" "$@"
+}
+
+file_digest() {
+  shasum -a 256 "$1"
+}
+
+cleanup() {
+  if [[ -z "$WORK_ROOT" || ! -d "$WORK_ROOT" ]]; then
+    return
+  fi
+  local expected_prefix="${TMPDIR:-/tmp}/database-kit-wasm-build."
+  case "$WORK_ROOT" in
+    "$expected_prefix"*)
+      rm -rf -- "$WORK_ROOT"
+      ;;
+    *)
+      echo "error: refusing to remove unexpected harness path: $WORK_ROOT" >&2
+      ;;
+  esac
+}
+
+trap cleanup EXIT
+
+reject_toolchain_diagnostics() {
+  local log_path="$1"
+  if rg -n -i -- \
+      'internal error:|llvm profile error:|profile.*(error|warning)|warning: input verification failed|warning:.*debug[- ]?information|warning:.*debug info|debug[- ]?information.*(warning|verification|invalid)|debug info.*(warning|verification|invalid)|dwarf.*(warning|verification|invalid)' \
+      "$log_path" >&2; then
+    echo "error: compiler or toolchain diagnostic detected in $log_path" >&2
+    return 1
+  fi
+}
+
+verify_pinned_toolchain() {
+  local swiftc_path
+  local toolchain_root
+  local toolchain_name
+  local compiler_version
+
+  swiftc_path="$(xcrun --toolchain "$TOOLCHAINS" --find swiftc)"
+  toolchain_root="$(cd "$(dirname "$swiftc_path")/../.." && pwd)"
+  toolchain_name="${toolchain_root##*/}"
+  toolchain_name="${toolchain_name%.xctoolchain}"
+  if [[ "$toolchain_name" != "$EXPECTED_SWIFT_SNAPSHOT" ]]; then
+    echo "error: expected Swift snapshot $EXPECTED_SWIFT_SNAPSHOT, found $toolchain_name" >&2
+    return 1
+  fi
+
+  compiler_version="$(xcrun --toolchain "$TOOLCHAINS" swiftc --version)"
+  if ! printf '%s\n' "$compiler_version" \
+      | rg -F -- "Swift $EXPECTED_SWIFT_COMPILER_COMMIT" >/dev/null; then
+    echo "error: expected Swift compiler commit $EXPECTED_SWIFT_COMPILER_COMMIT" >&2
+    printf '%s\n' "$compiler_version" >&2
+    return 1
+  fi
+  printf '%s\n' "$compiler_version"
+}
+
+verify_sdk_ids() {
+  local sdk_list
+  sdk_list="$(xcrun --toolchain "$TOOLCHAINS" swift sdk list)"
+  if ! printf '%s\n' "$sdk_list" | rg -F -x -- "$STANDARD_SDK" >/dev/null; then
+    echo "error: required standard WASM SDK is not installed: $STANDARD_SDK" >&2
+    return 1
+  fi
+  if ! printf '%s\n' "$sdk_list" | rg -F -x -- "$EMBEDDED_SDK" >/dev/null; then
+    echo "error: required Embedded WASM SDK is not installed: $EMBEDDED_SDK" >&2
+    return 1
+  fi
+  printf '%s\n' "$sdk_list"
+}
+
+verify_source_contract() {
+  if rg -n '\.package\(path:' "$ROOT_DIR/Package.swift" >/dev/null; then
+    echo "error: release verification requires URL dependencies" >&2
+    return 1
+  fi
+  if rg -n 'enabledTraits|\.default\s*\(' "$ROOT_DIR/Package.swift" >/dev/null; then
+    echo "error: source Package.swift must not enable a default trait" >&2
+    return 1
+  fi
+  if [[ ! -f "$ROOT_DIR/Package.resolved" ]]; then
+    echo "error: Package.resolved is required for locked verification" >&2
+    return 1
+  fi
+}
+
+run_build() {
+  local lane="$1"
+  local sdk="$2"
+  local selection_flag="$3"
+  local selection_name="$4"
+  local scratch_path="$5"
+  local log_path="$RESULT_DIRECTORY/$lane-$run_identifier.log"
+  local pipeline_status=()
+  local build_status
+  local tee_status
+
+  printf 'Running %s with %s\n' "$lane" "$sdk"
+  set +e
+  (
+    cd "$ROOT_DIR"
+    timeout_command "$BUILD_TIMEOUT_SECONDS" \
+      xcrun --toolchain "$TOOLCHAINS" swift build \
+        --disable-default-traits \
+        --only-use-versions-from-resolved-file \
+        --swift-sdk "$sdk" \
+        --scratch-path "$scratch_path" \
+        "$selection_flag" "$selection_name" \
+        -c release \
+        -debug-info-format none
+  ) 2>&1 | tee "$log_path"
+  pipeline_status=("${PIPESTATUS[@]}")
+  set -e
+
+  build_status="${pipeline_status[0]:-1}"
+  tee_status="${pipeline_status[1]:-1}"
+  if ! reject_toolchain_diagnostics "$log_path"; then
+    return 1
+  fi
+  if (( build_status != 0 || tee_status != 0 )); then
+    echo "error: $lane exited with build status $build_status and log status $tee_status" >&2
+    return 1
+  fi
+}
+
+for command in mktemp perl rg shasum tee xcrun; do
+  if ! command -v "$command" >/dev/null 2>&1; then
+    echo "error: required command not found: $command" >&2
+    exit 1
+  fi
+done
+
+if [[ "${TOOLCHAINS:-}" != "$EXPECTED_TOOLCHAINS" ]]; then
+  echo "error: TOOLCHAINS must equal the pinned Swift toolchain $EXPECTED_TOOLCHAINS" >&2
+  exit 2
+fi
+if ! [[ "$BUILD_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: DATABASE_KIT_WASM_BUILD_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 2
+fi
+
+verify_pinned_toolchain
+verify_sdk_ids
+verify_source_contract
+
+source_package_digest="$(file_digest "$ROOT_DIR/Package.swift")"
+source_resolved_digest="$(file_digest "$ROOT_DIR/Package.resolved")"
+WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/database-kit-wasm-build.XXXXXX")"
+standard_scratch="$WORK_ROOT/standard"
+embedded_scratch="$WORK_ROOT/embedded"
+mkdir -p "$standard_scratch" "$embedded_scratch" "$RESULT_DIRECTORY"
+run_identifier="$(date -u +%Y%m%d-%H%M%S)-$$"
+
+run_build "standard-database-kit" "$STANDARD_SDK" --product DatabaseKit "$standard_scratch"
+run_build "standard-database-wire" "$STANDARD_SDK" --product DatabaseWire "$standard_scratch"
+run_build "embedded-database-kit" "$EMBEDDED_SDK" --product DatabaseKit "$embedded_scratch"
+run_build "embedded-database-wire" "$EMBEDDED_SDK" --product DatabaseWire "$embedded_scratch"
+run_build "embedded-declaration-contract" "$EMBEDDED_SDK" --target DatabaseKitDeclarationContract "$embedded_scratch"
+
+if [[ "$(file_digest "$ROOT_DIR/Package.swift")" != "$source_package_digest" \
+    || "$(file_digest "$ROOT_DIR/Package.resolved")" != "$source_resolved_digest" ]]; then
+  echo "error: Package.swift or Package.resolved changed during WASM verification" >&2
+  exit 1
+fi
+
+echo "database-kit WASM release contract: five builds passed"
+echo "Result directory: $RESULT_DIRECTORY"

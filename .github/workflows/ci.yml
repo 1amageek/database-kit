@@ -11,16 +11,30 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  TOOLCHAINS: org.swift.64202607231a
-  SWIFT_SNAPSHOT: swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a
-  SWIFT_SNAPSHOT_URL: https://download.swift.org/swift-6.4.x-branch/xcode/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-07-23-a-osx.pkg
-  XCODE_TEST_RESULT_DIRECTORY: /tmp/database-kit-xcode-results
+  TOOLCHAINS: org.swift.64202608141a
+  SWIFT_SNAPSHOT: swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a
+  SWIFT_COMPILER_COMMIT: 424cae54c1a10da
+  SWIFT_SNAPSHOT_URL: https://download.swift.org/swift-6.4.x-branch/xcode/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a-osx.pkg
+  SWIFT_WASM_SDK_URL: https://download.swift.org/swift-6.4.x-branch/wasm-sdk/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a/swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm.artifactbundle.tar.gz
+  SWIFT_WASM_SDK_SHA256: 11fabfac6804222569d330fbbb5fa34eef736abda46790e723ac73b256fd1c7a
 
 jobs:
   native:
-    name: Native contract (macOS)
+    name: Native contract (${{ matrix.name }})
     runs-on: xcode-27
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: standard
+            traits: ''
+            result_directory: /tmp/database-kit-xcode-results-standard
+            artifact_name: native-standard-xcresults
+          - name: MultiBase
+            traits: MultiBase
+            result_directory: /tmp/database-kit-xcode-results-multibase
+            artifact_name: native-multibase-xcresults
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -45,17 +59,82 @@ jobs:
 
       - name: Report Swift version
         run: |
-          swift --version
-          xcrun --toolchain "$TOOLCHAINS" swiftc --version
+          compiler_version="$(xcrun --toolchain "$TOOLCHAINS" swiftc --version)"
+          printf '%s\n' "$compiler_version"
+          printf '%s\n' "$compiler_version" | rg -F -- "Swift $SWIFT_COMPILER_COMMIT"
 
-      - name: Test native contract
+      - name: Test native contract (${{ matrix.name }})
         timeout-minutes: 30
+        env:
+          DATABASE_KIT_TEST_TRAITS: ${{ matrix.traits }}
+          XCODE_TEST_RESULT_DIRECTORY: ${{ matrix.result_directory }}
         run: scripts/xcode-test-harness
 
-      - name: Upload native results
+      - name: Upload native results (${{ matrix.name }})
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: native-xcresults
-          path: /tmp/database-kit-xcode-results
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.result_directory }}
+          if-no-files-found: error
+
+  wasm:
+    name: WASM release contract
+    runs-on: xcode-27
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install verification tools
+        run: |
+          brew untap aws/tap 2>/dev/null || true
+          brew install ripgrep
+
+      - name: Install pinned Swift toolchain
+        run: |
+          toolchain_package="$RUNNER_TEMP/${SWIFT_SNAPSHOT}-osx.pkg"
+          toolchain_root="$HOME/Library/Developer/Toolchains/${SWIFT_SNAPSHOT}.xctoolchain"
+          curl -fL --retry 3 -o "$toolchain_package" "$SWIFT_SNAPSHOT_URL"
+          installer -pkg "$toolchain_package" -target CurrentUserHomeDirectory
+          test -x "$toolchain_root/usr/bin/swift"
+          # The snapshot supplies clang but delegates Darwin linking to Xcode.
+          platform_linker="$(env -u TOOLCHAINS xcrun --find ld)"
+          ln -sf "$platform_linker" "$toolchain_root/usr/bin/ld"
+          test -x "$toolchain_root/usr/bin/ld"
+          echo "$toolchain_root/usr/bin" >> "$GITHUB_PATH"
+
+      - name: Install matching WASM SDKs
+        run: |
+          standard_sdk="swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm"
+          embedded_sdk="swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm-embedded"
+          sdk_list="$(xcrun --toolchain "$TOOLCHAINS" swift sdk list)"
+          if ! printf '%s\n' "$sdk_list" | rg -F -x -- "$standard_sdk" >/dev/null \
+              || ! printf '%s\n' "$sdk_list" | rg -F -x -- "$embedded_sdk" >/dev/null; then
+            xcrun --toolchain "$TOOLCHAINS" swift sdk install \
+              "$SWIFT_WASM_SDK_URL" --checksum "$SWIFT_WASM_SDK_SHA256"
+          fi
+          sdk_list="$(xcrun --toolchain "$TOOLCHAINS" swift sdk list)"
+          printf '%s\n' "$sdk_list" | rg -F -x -- "$standard_sdk"
+          printf '%s\n' "$sdk_list" | rg -F -x -- "$embedded_sdk"
+
+      - name: Report Swift and SDK versions
+        run: |
+          compiler_version="$(xcrun --toolchain "$TOOLCHAINS" swiftc --version)"
+          printf '%s\n' "$compiler_version"
+          printf '%s\n' "$compiler_version" | rg -F -- "Swift $SWIFT_COMPILER_COMMIT"
+          xcrun --toolchain "$TOOLCHAINS" swift sdk list
+
+      - name: Build WASM release contract
+        timeout-minutes: 110
+        env:
+          DATABASE_KIT_WASM_RESULT_DIRECTORY: /tmp/database-kit-wasm-results
+        run: scripts/wasm-build-harness
+
+      - name: Upload WASM results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wasm-release-logs
+          path: /tmp/database-kit-wasm-results
           if-no-files-found: error
