@@ -214,8 +214,16 @@ meaning of the default graph.
   indexes, planners, maintainers, query execution, and graph algorithms are
   Framework responsibilities.
 - Query structure, parameters, pagination, and execution budgets are
-  Foundation-independent values. `LIMIT` and `OFFSET` use bounded unsigned
-  representations, and invalid structure is a typed failure.
+  Foundation-independent values. Current resolved `LIMIT` and `OFFSET` use
+  bounded unsigned representations; SQL expression/inference rules and
+  query-specific type metadata are owned through the
+  [DatabaseKit module's Query child](Sources/DatabaseKit/DESIGN.md).
+  Invalid structure is a typed failure.
+- The accepted SQL expansion changes declaration and bounded wire contracts,
+  not the frozen declaration-only layer, primitive ownership, default
+  target-free graph, or MultiBase version/target boundary. SQL functionality is
+  complete only with downstream behavioral evidence; a new declaration is not
+  a runtime capability.
 - Directory static components use the macro's ordinary-literal contract;
   dynamic components identify existing persisted fields. Validation must not
   rewrite a source expression into a different name-resolution or byte

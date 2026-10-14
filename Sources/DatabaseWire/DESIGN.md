@@ -40,6 +40,7 @@ planning/execution, storage, transaction lifetime, or application commands.
 |---|---|---|---|---|
 | [`../../DESIGN.md`](../../DESIGN.md) | package parent | v3/v5 trait matrix and wire ownership | Fixes the standard and optional protocol graphs. | No runtime version negotiation or target fabrication. |
 | [`../DatabaseKit/DESIGN.md`](../DatabaseKit/DESIGN.md) | semantic dependency | validated models, schema, query, graph, and MultiBase values | Supplies meanings encoded by this module. | Wire codecs must not add semantic execution policy. |
+| [Query](../DatabaseKit/Query/DESIGN.md) | semantic dependency | ordered typed columns, positional query values and language distinction | Supplies query/result meaning and the authoritative SQL profile child. | Encoding must retain duplicate names, empty-result metadata and value-specific metadata; it does not execute SQL. |
 | [`../../../database-client`](https://github.com/1amageek/database-client) | downstream consumer | typed encoding/decoding and request correlation | Adapts operations to transports. | Transport and cancellation ownership remain in the client. |
 | [`../../../database-server/DESIGN.md`](../../../database-server/DESIGN.md) | downstream consumer | envelope and operation catalog | Dispatches decoded operations and publishes results. | Server does not move dispatch or durable jobs into this module. |
 
@@ -100,6 +101,29 @@ The two protocol graphs are explicit:
 - `DatabaseWire` serializes semantic contracts; it does not decide query plans,
   storage keys, transactions, leases, or publication ownership.
 
+### Planned SQL codec and operation extensions
+
+S01+ extends QueryColumn/QueryRow/QueryRowPage and parameter/QueryIR codecs to
+encode the Query-owned typed column and query value contracts. Semantic type,
+typmod, nullability and column order remain available with zero rows; duplicate
+names are preserved. Value tags retain required SQL metadata and the existing
+ByteString owner. Columns are not serialized as a name-keyed map. Decoding
+validates row arity, intrinsic type/metadata invariants and checked dimensions
+before admitting a value, while rows remain lazily materialized.
+
+Later SQL statement/block descriptors are closed DatabaseWire operations, with
+results distinguishing rows, command count and schema change in statement
+order. This module encodes diagnostics and outcomes but does not turn schema
+job acceptance or precommit rows into completion. Publication belongs to the
+server/host after authoritative execution close.
+
+These are planned interfaces, not implemented capabilities. Their byte changes
+require golden-vector and downstream mapping updates in the same completed
+change. They do not select a new protocol version, negotiate compatibility,
+fabricate a standard target, or import runtime SQL semantics into Wire. SPARQL
+boolean/RDF result contracts and MultiBase provenance/consistency fields retain
+their distinct meanings.
+
 ## Runtime Flows
 
 ```mermaid
@@ -154,6 +178,7 @@ outside this module.
 | Operation catalog and v3/v5 envelope mapping | `Tests/DatabaseWireTests` operation and envelope suites |
 | Truncation, bounds, malformed, non-canonical, and trailing-input rejection | `Tests/DatabaseWireTests` decoder suites |
 | Retained owner, lazy page, iterator, and exact-frame behavior | `Tests/DatabaseWireTests` result and byte-ownership suites |
+| Planned typed SQL results and statement/block payloads | QueryResultPage/QueryIR codec suites expanded for duplicate names, zero-row metadata, SQL-specific values, full malformed-input boundaries and standard/MultiBase golden vectors; SQL semantics use the [Query evidence contract](../DatabaseKit/Query/DESIGN.md#verification-and-change-impact) |
 | Standard and `MultiBase` protocol graphs | Isolated native package harness runs (699 and 714 total package tests) |
 | Standard and Embedded compatibility | Package README release builds for `DatabaseWire` |
 

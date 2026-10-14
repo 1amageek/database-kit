@@ -8,9 +8,10 @@ schema, query, mutation, relationship, index, graph, ontology, SHACL,
 Directory, and optional MultiBase declaration contracts.
 
 - Parent: [`database-kit` package design](../../DESIGN.md).
-- Children: none; `Base`, `Query`, `Graph`, `Identity`, `Index`, `Model`,
-  `Mutation`, `Relationship`, `Schema`, and `Security` are source
-  classifications inside this module, not separate design authorities.
+- Children: [Query](Query/DESIGN.md), which owns shared query declarations and
+  indexes its SQL semantic profile. `Base`, `Graph`, `Identity`, `Index`,
+  `Model`, `Mutation`, `Relationship`, `Schema`, and `Security` remain source
+  classifications inside this module in the current design scope.
 - Dependencies: `DatabaseTypes` and the `DatabaseKitMacros` compiler plugin.
 - Dependents: `DatabaseWire`, `DatabaseKitFoundation`,
   `DatabaseSchemaJSON`, `database-framework`, `database-client`, and native
@@ -50,6 +51,7 @@ graph execution, transport, or application schemas.
 | [`../../../SPEC.md`](../../../SPEC.md) | system authority | DatabaseKit declaration ownership and Directory layer tag | Fixes the separation between declaration and StorageKit execution. | A `DirectoryLayer` declaration is not the FoundationDB bindings type. |
 | [`../DatabaseKitMacros/DESIGN.md`](../DatabaseKitMacros/DESIGN.md) | implementation dependency | static expansion and diagnostics | Implements the macros declared by this module. | Macro code must not add runtime semantics. |
 | [`../DatabaseWire/DESIGN.md`](../DatabaseWire/DESIGN.md) | downstream module | semantic values consumed by codecs | Encodes selected declarations as canonical v3 or v5 wire values. | Wire framing and protocol errors remain in `DatabaseWire`. |
+| [Query](Query/DESIGN.md) | child | QueryIR, query values and language separation | Owns query declarations and the SQL profile child index. | SQL-specific semantics must not reinterpret shared SPARQL meaning. |
 | [`../../../database-framework/DESIGN.md`](../../../database-framework/DESIGN.md) | downstream interpreter | validated declarations and execution budgets | Interprets schemas, queries, and optional MultiBase values. | It owns execution, not this module. |
 
 ## Architecture
@@ -87,8 +89,10 @@ flowchart TB
 ## Contracts and Invariants
 
 - `DatabaseTypes` is the only owner of `FieldValue`, `ByteString`, and
-  primitive alternatives. This module consumes those values without aliases,
-  wrappers, or a second algebra.
+  primitive alternatives. This module does not alias or duplicate that
+  primitive algebra. Query-domain values may retain primitive storage while
+  adding type and metadata required by query meaning; their contracts belong
+  to [Query](Query/DESIGN.md).
 - Macro-generated metadata stores typed field identity and validated catalog
   values. Runtime declarations never retain key paths, `AnyKeyPath`, or
   `Any.Type` as semantic identity.
@@ -160,6 +164,7 @@ only produces the validated values consumed at that boundary.
 | Contract | Evidence owner |
 |---|---|
 | Model, identity, schema, query, graph, and declaration behavior | `Tests/DatabaseKitTests` |
+| Shared query semantics and SQL profile changes | [Query verification and change-impact contract](Query/DESIGN.md#verification-and-change-impact) |
 | Macro expansion and Directory declaration validation | `Tests/DatabaseKitTests/Model` and `DatabaseKitDeclarationContract` |
 | Standard semantic graph | Standard `DatabaseKitTests` execution in the package harness |
 | Optional MultiBase declarations | Isolated `MultiBase` `DatabaseKitTests` execution |
