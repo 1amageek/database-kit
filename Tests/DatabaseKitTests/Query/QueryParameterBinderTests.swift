@@ -31,8 +31,8 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            QueryParameter(position: 1, name: "status", value: .string("active")),
-            QueryParameter(position: 2, value: .int64(42)),
+            QueryParameter(position: 1, name: "status", value: .primitive(.string("active"))),
+            QueryParameter(position: 2, value: .primitive(.int64(42))),
         ])
 
         let bound = try binder.bind(statement)
@@ -65,9 +65,9 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            QueryParameter(position: 1, name: "id", value: .string("event-1")),
-            QueryParameter(position: 2, name: "title", value: .string("Festival")),
-            QueryParameter(position: 3, name: "projection", value: .int64(42)),
+            QueryParameter(position: 1, name: "id", value: .primitive(.string("event-1"))),
+            QueryParameter(position: 2, name: "title", value: .primitive(.string("Festival"))),
+            QueryParameter(position: 3, name: "projection", value: .primitive(.int64(42))),
         ])
 
         let bound = try binder.bind(statement)
@@ -95,7 +95,7 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            QueryParameter(position: 1, name: "id", value: .string("event-1")),
+            QueryParameter(position: 1, name: "id", value: .primitive(.string("event-1"))),
         ])
 
         #expect(throws: QueryParameterBindingError.missingPosition(2)) {
@@ -103,14 +103,14 @@ struct QueryParameterBinderTests {
         }
         #expect(throws: QueryParameterBindingError.duplicatePosition(1)) {
             _ = try QueryParameterBinder(parameters: [
-                QueryParameter(position: 1, name: "first", value: .null),
-                QueryParameter(position: 1, name: "second", value: .null),
+                QueryParameter(position: 1, name: "first", value: .primitive(.null)),
+                QueryParameter(position: 1, name: "second", value: .primitive(.null)),
             ])
         }
         #expect(throws: QueryParameterBindingError.duplicateName("same")) {
             _ = try QueryParameterBinder(parameters: [
-                QueryParameter(position: 1, name: "same", value: .null),
-                QueryParameter(position: 2, name: "same", value: .null),
+                QueryParameter(position: 1, name: "same", value: .primitive(.null)),
+                QueryParameter(position: 2, name: "same", value: .primitive(.null)),
             ])
         }
     }
@@ -130,14 +130,14 @@ struct QueryParameterBinderTests {
             QueryParameter(
                 position: 1,
                 name: "count",
-                value: .uint64(UInt64.max)
+                value: .primitive(.uint64(UInt64.max))
             ),
             QueryParameter(
                 position: 2,
                 name: "amount",
-                value: .decimal(
+                value: .primitive(.decimal(
                     ExactDecimal(coefficient: 1234, scale: 2)
-                )
+                ))
             ),
         ])
 
@@ -163,12 +163,12 @@ struct QueryParameterBinderTests {
             QueryParameter(
                 position: 1,
                 name: "reference",
-                value: .reference(
+                value: .primitive(.reference(
                     try EntityReference(
                         entity: "Event",
                         id: .string("event-1")
                     )
-                )
+                ))
             ),
         ])
 
@@ -193,7 +193,7 @@ struct QueryParameterBinderTests {
                 QueryParameter(
                     position: 1,
                     name: "values",
-                    value: .array([.int64(1), .int64(2), .int64(3)])
+                    value: .primitive(.array([.int64(1), .int64(2), .int64(3)]))
                 ),
             ],
             structuralLimits: QueryStructuralLimits(
@@ -234,7 +234,7 @@ struct QueryParameterBinderTests {
             parameters: [
                 QueryParameter(
                     position: 1,
-                    value: parameterValue
+                    value: .primitive(parameterValue)
                 ),
             ],
             structuralLimits: QueryStructuralLimits(
@@ -289,7 +289,7 @@ struct QueryParameterBinderTests {
                 QueryParameter(
                     position: 1,
                     name: "enabled",
-                    value: .bool(true)
+                    value: .primitive(.bool(true))
                 ),
             ],
             structuralLimits: QueryStructuralLimits(
@@ -332,7 +332,7 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            QueryParameter(position: 1, name: "id", value: .uuid(uuid)),
+            QueryParameter(position: 1, name: "id", value: .primitive(.uuid(uuid))),
         ])
 
         guard case .select(let query) = try binder.bind(statement) else {
@@ -361,8 +361,8 @@ struct QueryParameterBinderTests {
             )
         )
         let binder = try QueryParameterBinder(parameters: [
-            QueryParameter(position: 1, name: "group", value: .string("g")),
-            QueryParameter(position: 2, name: "having", value: .bool(true)),
+            QueryParameter(position: 1, name: "group", value: .primitive(.string("g"))),
+            QueryParameter(position: 2, name: "having", value: .primitive(.bool(true))),
         ])
 
         guard case .ask(let query) = try binder.bind(statement) else {
@@ -417,7 +417,7 @@ struct QueryParameterBinderTests {
             QueryParameter(
                 position: 1,
                 name: "enabled",
-                value: .bool(true)
+                value: .primitive(.bool(true))
             ),
         ])
 

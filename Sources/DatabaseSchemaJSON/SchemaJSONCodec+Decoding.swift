@@ -123,6 +123,13 @@ private extension SchemaJSONCodec {
             )
         } catch let error as SchemaJSONError {
             throw error
+        } catch SchemaEntityError.invalidQueryField(let name, let cause) {
+            let fieldPath = fields.firstIndex { $0.name == name }.map {
+                "\(object.child("fields"))[\($0)]"
+            } ?? object.child("fields")
+            throw SchemaJSONError.invalidQueryValue(
+                path: "\(fieldPath).queryType", cause: cause
+            )
         } catch {
             throw SchemaJSONError.invalidValue(path: path, reason: String(describing: error))
         }
@@ -174,13 +181,20 @@ private extension SchemaJSONCodec {
         let object = try JSONObject(node, path: path)
         try object.validateKeys([
             "name", "number", "type", "optional", "array", "referenceTargetEntity",
-            "defaultValue",
+            "queryType", "defaultValue",
         ])
         let rawType = try object.required("type").string(path: object.child("type"))
         guard let type = FieldSchemaType(rawValue: rawType) else {
             throw invalidEnum(object.child("type"), rawType)
         }
         let defaultNode = try object.required("defaultValue")
+        let queryNode = try object.required("queryType")
+        let queryType: QueryColumnType?
+        if case .null = queryNode {
+            queryType = nil
+        } else {
+            queryType = try queryTypeCodec.decode(queryNode, path: object.child("queryType"))
+        }
         let defaultValue: FieldValue?
         if case .null = defaultNode {
             defaultValue = nil
@@ -200,7 +214,8 @@ private extension SchemaJSONCodec {
                 object.required("referenceTargetEntity"),
                 path: object.child("referenceTargetEntity")
             ),
-            defaultValue: defaultValue
+            defaultValue: defaultValue,
+            queryType: queryType
         )
     }
 

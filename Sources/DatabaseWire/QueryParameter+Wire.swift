@@ -13,7 +13,12 @@ extension QueryParameter {
         }
         writer.writeUInt32(position)
         try writer.writeOptionalString(name)
-        try value.encode(into: &writer)
+        writer.writeBool(type != nil)
+        if let type { try QueryColumnTypeWireCodec.encode(type, into: &writer) }
+        if let type, !QueryValueValidator.accepts(value, type: type) {
+            throw .invalidQueryValue(.incompatibleType)
+        }
+        try QueryValueWireCodec.encode(value, into: &writer)
     }
 
     init(
@@ -27,10 +32,17 @@ extension QueryParameter {
         if let name, name.isEmpty {
             throw .emptyParameterName
         }
+        let type = try reader.readBool()
+            ? try QueryColumnTypeWireCodec.decode(from: &reader) : nil
+        let value = try QueryValueWireCodec.decode(from: &reader)
+        if let type, !QueryValueValidator.accepts(value, type: type) {
+            throw .invalidQueryValue(.incompatibleType)
+        }
         self.init(
             position: position,
             name: name,
-            value: try FieldValue(from: &reader)
+            value: value,
+            type: type
         )
     }
 }

@@ -32,6 +32,9 @@ public struct FieldSchema: Sendable, Equatable, Hashable {
     /// `.some(.null)` is the distinct default for an optional field.
     public let defaultValue: FieldValue?
 
+    /// Explicit query semantics; nil preserves the primitive interpretation.
+    public let queryType: QueryColumnType?
+
     public init(
         name: String,
         fieldNumber: Int,
@@ -39,7 +42,8 @@ public struct FieldSchema: Sendable, Equatable, Hashable {
         isOptional: Bool = false,
         isArray: Bool = false,
         referenceTargetEntity: String? = nil,
-        defaultValue: FieldValue? = nil
+        defaultValue: FieldValue? = nil,
+        queryType: QueryColumnType? = nil
     ) {
         self.name = name
         self.fieldNumber = fieldNumber
@@ -47,6 +51,7 @@ public struct FieldSchema: Sendable, Equatable, Hashable {
         self.isOptional = isOptional
         self.isArray = isArray
         self.referenceTargetEntity = referenceTargetEntity
+        self.queryType = queryType
         if let defaultValue {
             self.defaultValue = defaultValue
         } else if isOptional {

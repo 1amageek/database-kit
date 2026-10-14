@@ -56,4 +56,8 @@ public struct SchemaJSONCodec: Sendable {
             maximumCollectionCount: limits.maximumCollectionCount
         )
     }
+
+    var queryTypeCodec: QueryColumnTypeJSONCodec {
+        QueryColumnTypeJSONCodec(limits: limits)
+    }
 }

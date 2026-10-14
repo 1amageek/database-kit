@@ -8,15 +8,19 @@ public struct QueryParameter: Sendable, Hashable {
     /// An optional named address without a query-language prefix.
     public let name: String?
 
-    public let value: FieldValue
+    public let value: QueryValue
+
+    public let type: QueryColumnType?
 
     public init(
         position: UInt32,
         name: String? = nil,
-        value: FieldValue
+        value: QueryValue,
+        type: QueryColumnType? = nil
     ) {
         self.position = position
         self.name = name
         self.value = value
+        self.type = type
     }
 }

@@ -22,6 +22,7 @@ public struct Field<Root, Value>: Sendable, Hashable {
     public let isOptional: Bool
     public let isArray: Bool
     public let referenceTargetEntity: String?
+    public let queryType: QueryColumnType?
 
     public var name: String {
         identity.name
@@ -38,7 +39,8 @@ public struct Field<Root, Value>: Sendable, Hashable {
             type: type,
             isOptional: isOptional,
             isArray: isArray,
-            referenceTargetEntity: referenceTargetEntity
+            referenceTargetEntity: referenceTargetEntity,
+            queryType: queryType
         )
     }
 
@@ -47,12 +49,14 @@ public struct Field<Root, Value>: Sendable, Hashable {
         type: FieldSchemaType,
         isOptional: Bool = false,
         isArray: Bool = false,
-        referenceTargetEntity: String? = nil
+        referenceTargetEntity: String? = nil,
+        queryType: QueryColumnType? = nil
     ) {
         self.identity = identity
         self.type = type
         self.isOptional = isOptional
         self.isArray = isArray
         self.referenceTargetEntity = referenceTargetEntity
+        self.queryType = queryType
     }
 }

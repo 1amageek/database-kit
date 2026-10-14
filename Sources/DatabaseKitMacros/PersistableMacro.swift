@@ -763,6 +763,15 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
             """
         decls.append(fieldNumberDecl)
 
+        // Share the full declared type's static metadata across both field paths.
+        for fieldInfo in fieldInfos where !fieldInfo.isTransient {
+            let fieldType = normalizedTypeName(fieldInfo.type)
+            let queryTypeDecl: DeclSyntax = """
+                private static let _databaseKitQueryType_\(raw: fieldInfo.name): DatabaseKit.QueryColumnType? = (\(raw: fieldType)).queryType
+                """
+            decls.append(queryTypeDecl)
+        }
+
         // Generate fieldSchemas property
         var fieldSchemaEntries: [String] = []
         var schemaFieldIndex = 0
@@ -796,7 +805,7 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     ", defaultValue: \($0)"
                 } ?? ""
                 fieldSchemaEntries.append(
-                    "FieldSchema(name: \"\(fieldInfo.name)\", fieldNumber: \(schemaFieldIndex), type: \(schemaType), isOptional: \(isOptional), isArray: \(isArray)\(referenceTarget)\(defaultValue))"
+                    "FieldSchema(name: \"\(fieldInfo.name)\", fieldNumber: \(schemaFieldIndex), type: \(schemaType), isOptional: \(isOptional), isArray: \(isArray)\(referenceTarget)\(defaultValue), queryType: \(structName)._databaseKitQueryType_\(fieldInfo.name))"
                 )
             }
         }
@@ -864,7 +873,8 @@ public struct PersistableMacro: MemberMacro, ExtensionMacro {
                     identity: FieldIdentity(name: "\(fieldInfo.name)", number: \(typedFieldIndex)),
                     type: \(schemaType),
                     isOptional: \(isOptional),
-                    isArray: \(isArray)\(referenceTarget)
+                    isArray: \(isArray)\(referenceTarget),
+                    queryType: \(structName)._databaseKitQueryType_\(fieldInfo.name)
                 )
                 """
             )
@@ -1270,6 +1280,14 @@ private func canonicalPersistedDefaultExpression(
     if initializer.is(NilLiteralExprSyntax.self) {
         return isOptional ? "DatabaseTypes.FieldValue.null" : nil
     }
+    if isRichQueryPersistedType(rawType) {
+        guard isStableQueryDefaultExpression(initializer) else { return nil }
+        let builder = QueryDefaultConstructorBuilder()
+        let expression = builder.visit(initializer).trimmedDescription
+        let statements = builder.statements.joined(separator: "\n")
+        return "try DatabaseKit.PersistableFieldEncoder.querySchemaDefault(constructing: { () throws(DatabaseKit.PersistableDefaultConstructionError) -> \(rawType) in \(statements)\nreturn \(expression) }, fieldName: \"\(fieldName)\")"
+    }
+
     guard isCanonicalSchemaDefaultExpression(
         initializer,
         fieldType: rawType
@@ -1416,6 +1434,145 @@ private func isStableValueConstructor(
         return labels == [nil]
     }
     return true
+}
+
+private func queryDefaultConstructorName(_ expression: ExprSyntax) -> String? {
+    if let specialized = expression.as(GenericSpecializationExprSyntax.self) {
+        return queryDefaultConstructorName(specialized.expression)
+    }
+    if let reference = expression.as(DeclReferenceExprSyntax.self) {
+        return reference.baseName.text
+    }
+    if let member = expression.as(MemberAccessExprSyntax.self) {
+        return member.declName.baseName.text
+    }
+    return nil
+}
+
+private func isStableQueryDefaultExpression(_ expression: ExprSyntax) -> Bool {
+    if let attempt = expression.as(TryExprSyntax.self) {
+        return isStableQueryDefaultExpression(attempt.expression)
+    }
+    if expression.is(BooleanLiteralExprSyntax.self)
+        || expression.is(IntegerLiteralExprSyntax.self)
+        || expression.is(FloatLiteralExprSyntax.self)
+        || expression.is(NilLiteralExprSyntax.self) {
+        return true
+    }
+    if let string = expression.as(StringLiteralExprSyntax.self) {
+        return string.segments.allSatisfy { $0.is(StringSegmentSyntax.self) }
+    }
+    if let array = expression.as(ArrayExprSyntax.self) {
+        return array.elements.allSatisfy { isStableQueryDefaultExpression($0.expression) }
+    }
+    if let prefix = expression.as(PrefixOperatorExprSyntax.self) {
+        return ["-", "+"].contains(prefix.operator.text)
+            && isStableQueryDefaultExpression(prefix.expression)
+    }
+    if let member = expression.as(MemberAccessExprSyntax.self) {
+        return ["null", "none"].contains(member.declName.baseName.text)
+            && (member.base == nil || member.base?.trimmedDescription == "QueryJSONBNode")
+    }
+    guard let call = expression.as(FunctionCallExprSyntax.self),
+          call.trailingClosure == nil,
+          call.additionalTrailingClosures.isEmpty,
+          let name = queryDefaultConstructorName(call.calledExpression) else {
+        return false
+    }
+    let labels = call.arguments.map { $0.label?.text }
+    let admitted: Bool
+    switch name {
+    case "QueryNumericValue":
+        admitted = labels == ["value", "displayScale"]
+    case "QueryJSONValue":
+        admitted = labels == ["bytes", "limits"]
+    case "QueryJSONBValue":
+        admitted = labels == ["json", "limits"] || labels == ["root", "limits"]
+    case "QueryIntervalValue":
+        admitted = labels == ["period", "time"]
+    case "QueryArray":
+        admitted = call.calledExpression.is(GenericSpecializationExprSyntax.self)
+            && labels == ["dimensions", "elements", "limits"]
+    case "QueryArrayDimension":
+        admitted = labels == ["lowerBound", "length"]
+    case "QueryValueLimits":
+        admitted = labels == ["maximumRetainedBytes", "maximumTotalNodes",
+                              "maximumNestingDepth", "maximumCollectionElements"]
+    case "ExactDecimal":
+        admitted = labels == ["coefficient", "scale"]
+    case "ByteString":
+        admitted = labels.isEmpty || labels == [nil] || labels == ["utf8"]
+    case "CalendarPeriod":
+        admitted = labels.isEmpty || labels == ["months"] || labels == ["days"]
+            || labels == ["months", "days"]
+    case "TimeSpan":
+        admitted = labels == ["seconds"] || labels == ["seconds", "nanoseconds"]
+    case "String", "Bool", "Int8", "Int16", "Int32", "Int64",
+         "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double":
+        admitted = labels.isEmpty || labels == [nil]
+    case "QueryJSONBMember":
+        admitted = labels == ["key", "value"]
+    case "bool", "string", "number", "array", "object":
+        admitted = labels == [nil]
+            && call.calledExpression.as(MemberAccessExprSyntax.self).map {
+                $0.base == nil || $0.base?.trimmedDescription == "QueryJSONBNode"
+            } == true
+    default:
+        admitted = false
+    }
+    return admitted && call.arguments.allSatisfy {
+        isStableQueryDefaultExpression($0.expression)
+    }
+}
+
+private final class QueryDefaultConstructorBuilder: SyntaxRewriter {
+    private(set) var statements: [String] = []
+
+    init() {
+        super.init(viewMode: .sourceAccurate)
+    }
+
+    override func visit(_ node: TryExprSyntax) -> ExprSyntax {
+        visit(node.expression)
+    }
+
+    override func visit(_ node: FunctionCallExprSyntax) -> ExprSyntax {
+        let rewritten = super.visit(node)
+        guard let name = queryDefaultConstructorName(node.calledExpression) else {
+            return rewritten
+        }
+        let local = "_databaseKitDefaultComponent\(statements.count)"
+        let errorType: String
+        let errorCase: String
+        switch name {
+        case "QueryNumericValue", "QueryJSONValue", "QueryJSONBValue",
+             "QueryIntervalValue", "QueryArray", "QueryArrayDimension":
+            errorType = "DatabaseKit.QueryValueError"
+            errorCase = "queryValue"
+        case "TimeSpan":
+            errorType = "DatabaseTypes.TimeSpanError"
+            errorCase = "timeSpan"
+        case "bool", "string", "number", "array", "object":
+            statements.append("let \(local): DatabaseKit.QueryJSONBNode = \(rewritten.trimmedDescription)")
+            return ExprSyntax(stringLiteral: local)
+        default:
+            statements.append("let \(local) = \(rewritten.trimmedDescription)")
+            return ExprSyntax(stringLiteral: local)
+        }
+        let type = node.calledExpression.trimmedDescription
+        statements.append(
+            "let \(local) = try DatabaseKit.PersistableFieldEncoder.queryDefaultComponent(constructing: { () throws(\(errorType)) -> \(type) in try \(rewritten.trimmedDescription) }, mapError: { .\(errorCase)($0) })"
+        )
+        return ExprSyntax(stringLiteral: local)
+    }
+}
+
+private func isRichQueryPersistedType(_ rawType: String) -> Bool {
+    let type = persistedElementType(rawType)
+        .split(separator: "<", maxSplits: 1).first.map(String.init)?
+        .split(separator: ".").last.map(String.init) ?? ""
+    return ["QueryNumericValue", "QueryJSONValue", "QueryJSONBValue",
+            "QueryIntervalValue", "QueryArray"].contains(type)
 }
 
 private func isEnumLikePersistedType(_ rawType: String) -> Bool {

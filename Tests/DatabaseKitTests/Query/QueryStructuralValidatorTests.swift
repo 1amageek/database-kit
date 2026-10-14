@@ -292,7 +292,7 @@ struct QueryStructuralValidatorTests {
             value = .array([value])
         }
         let parameters = [
-            QueryParameter(position: 1, name: "value", value: value),
+            QueryParameter(position: 1, name: "value", value: .primitive(value)),
         ]
 
         #expect(

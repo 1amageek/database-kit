@@ -6,14 +6,14 @@ import DatabaseTypes
 /// process-stack recursion so an admitted query cannot exhaust the stack.
 /// Unchanged subtrees retain their original copy-on-write storage.
 struct QueryParameterBindingTraversal {
-    private let positions: [UInt32: FieldValue]
-    private let names: [String: FieldValue]
+    private let positions: [UInt32: QueryParameter]
+    private let names: [String: QueryParameter]
     private var bindingSteps: [BindingStep] = []
     private var results: [BindingResult] = []
 
     init(
-        positions: [UInt32: FieldValue],
-        names: [String: FieldValue]
+        positions: [UInt32: QueryParameter],
+        names: [String: QueryParameter]
     ) {
         self.positions = positions
         self.names = names
@@ -1980,7 +1980,7 @@ private extension QueryParameterBindingTraversal {
     func literal(
         for reference: QueryParameterReference
     ) throws(QueryParameterBindingError) -> Literal {
-        let value: FieldValue
+        let parameter: QueryParameter
         switch reference {
         case .position(let position):
             guard position > 0 else {
@@ -1989,14 +1989,18 @@ private extension QueryParameterBindingTraversal {
             guard let resolved = positions[position] else {
                 throw .missingPosition(position)
             }
-            value = resolved
+            parameter = resolved
         case .name(let name):
             guard let resolved = names[name] else {
                 throw .missingName(name)
             }
-            value = resolved
+            parameter = resolved
         }
 
+        guard parameter.type == nil,
+              case .primitive(let value) = parameter.value else {
+            return .queryValue(parameter.value, type: parameter.type)
+        }
         do {
             return try value.queryLiteral
         } catch {

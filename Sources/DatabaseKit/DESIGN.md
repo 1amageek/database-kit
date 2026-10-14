@@ -8,9 +8,9 @@ schema, query, mutation, relationship, index, graph, ontology, SHACL,
 Directory, and optional MultiBase declaration contracts.
 
 - Parent: [`database-kit` package design](../../DESIGN.md).
-- Children: [Query](Query/DESIGN.md), which owns shared query declarations and
-  indexes its SQL semantic profile. `Base`, `Graph`, `Identity`, `Index`,
-  `Model`, `Mutation`, `Relationship`, `Schema`, and `Security` remain source
+- Children: [Query](Query/DESIGN.md), [Model](Model/DESIGN.md) and
+  [Schema](Schema/DESIGN.md). Query indexes its SQL semantic profile.
+  `Base`, `Graph`, `Identity`, `Index`, `Mutation`, `Relationship`, and `Security` remain source
   classifications inside this module in the current design scope.
 - Dependencies: `DatabaseTypes` and the `DatabaseKitMacros` compiler plugin.
 - Dependents: `DatabaseWire`, `DatabaseKitFoundation`,
@@ -52,6 +52,8 @@ graph execution, transport, or application schemas.
 | [`../DatabaseKitMacros/DESIGN.md`](../DatabaseKitMacros/DESIGN.md) | implementation dependency | static expansion and diagnostics | Implements the macros declared by this module. | Macro code must not add runtime semantics. |
 | [`../DatabaseWire/DESIGN.md`](../DatabaseWire/DESIGN.md) | downstream module | semantic values consumed by codecs | Encodes selected declarations as canonical v3 or v5 wire values. | Wire framing and protocol errors remain in `DatabaseWire`. |
 | [Query](Query/DESIGN.md) | child | QueryIR, query values and language separation | Owns query declarations and the SQL profile child index. | SQL-specific semantics must not reinterpret shared SPARQL meaning. |
+| [Model](Model/DESIGN.md) | child | static field identity and concrete model adaptation | Owns generated-traversal requirements and declared query metadata propagation. | No runtime metatype or model registry. |
+| [Schema](Schema/DESIGN.md) | child | field declaration admission, fingerprints and evolution | Owns query descriptor/default/storage agreement. | Primitive storage kind alone does not identify a rich query field. |
 | [`../../../database-framework/DESIGN.md`](../../../database-framework/DESIGN.md) | downstream interpreter | validated declarations and execution budgets | Interprets schemas, queries, and optional MultiBase values. | It owns execution, not this module. |
 
 ## Architecture

@@ -85,6 +85,15 @@ private struct ExactNumericMagnitude {
     private let leadingPower: Int64
 
     init?(_ literal: Literal) {
+        if case .queryValue(.primitive(let value), _) = literal {
+            do {
+                guard let magnitude = ExactNumericMagnitude(try value.queryLiteral) else { return nil }
+                self = magnitude
+                return
+            } catch {
+                return nil
+            }
+        }
         let lexicalDigits: String
         let scale: Int64
         switch literal {

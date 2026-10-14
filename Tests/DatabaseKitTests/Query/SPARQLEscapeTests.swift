@@ -33,7 +33,7 @@ struct SPARQLEscapeTests {
     }
 
     @Test("Blank-node fallback is deterministic and injective")
-    func blankNodeFallback() {
+    func blankNodeFallback() throws {
         #expect(SPARQLEscape.blankNodeLabel("1node") == "1node")
         #expect(SPARQLEscape.blankNodeLabel("node.") == "z6e6f64652e")
         #expect(SPARQLEscape.blankNodeLabel("") == "z")
@@ -43,7 +43,7 @@ struct SPARQLEscapeTests {
                 != SPARQLEscape.blankNodeLabel("node.")
         )
         #expect(
-            SPARQLTerm.blankNode("node.").toSPARQL()
+            try SPARQLTerm.blankNode("node.").toSPARQL()
                 == "_:z6e6f64652e"
         )
     }
@@ -69,7 +69,7 @@ struct SPARQLEscapeTests {
     }
 
     @Test("IRI abbreviation selects the longest base deterministically")
-    func deterministicPrefixSelection() {
+    func deterministicPrefixSelection() throws {
         let term = SPARQLTerm.iri("https://example.invalid/ns/item")
         let prefixes = [
             "root": "https://example.invalid/",
@@ -77,6 +77,6 @@ struct SPARQLEscapeTests {
             "a": "https://example.invalid/ns/",
         ]
 
-        #expect(term.toSPARQL(prefixes: prefixes) == "a:item")
+        #expect(try term.toSPARQL(prefixes: prefixes) == "a:item")
     }
 }

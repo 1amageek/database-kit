@@ -69,10 +69,10 @@
 - Native verification uses `scripts/xcode-test-harness` with exactly
   `TOOLCHAINS=org.swift.64202608141a`, snapshot
   `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a`, and compiler commit
-  `424cae54c1a10da`. The standard graph must execute exactly 699 tests. An
-  isolated `MultiBase` graph uses
-  `DATABASE_KIT_TEST_TRAITS=MultiBase` and must execute exactly 714 tests. The
-  harness owns these counts; callers cannot override them. The isolated trait
+  `424cae54c1a10da`. Standard and isolated `MultiBase` exact counts are owned
+  by `scripts/xcode-test-harness`; callers cannot override full-graph counts.
+  The isolated `MultiBase` graph uses `DATABASE_KIT_TEST_TRAITS=MultiBase`.
+  The isolated trait
   copy must not modify the source `Package.swift` or enable a default trait.
   Both runs require zero failures, skips, expected failures, runtime warnings,
   compiler/plugin internal errors, profile errors, or debug-information
@@ -86,14 +86,24 @@
   validates both SDK identifiers
   `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm` and
   `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm-embedded`, and executes
-  exactly five release builds with
+  seven release builds and two runtime executions with
   `--disable-default-traits --only-use-versions-from-resolved-file` and
   `-debug-info-format none`: standard `DatabaseKit` and `DatabaseWire`, then
   Embedded `DatabaseKit`, `DatabaseWire`, and
-  `DatabaseKitDeclarationContract`. Standard and Embedded builds share one
+  `DatabaseKitDeclarationContract`, plus the test-only
+  `QueryValueRuntimeContract` executable for each SDK. Both executables run
+  under Node WASI Preview 1 with strict case/completion markers and an external
+  timeout. Their target-specific runtime evidence covers rich query values,
+  typed Wire pages, declared persistence and bounded failures; compilation
+  alone does not satisfy that contract. Standard and Embedded builds share one
   scratch root each to avoid redundant dependency resolution. Every build has
   an external timeout, a preserved log, and rejects compiler/plugin internal,
   profile, or debug-information verification diagnostics.
+- An explicit `DATABASE_KIT_WASM_WORK_ROOT` may reuse one caller-owned absolute
+  build cache with the harness ownership marker, exclusive lock and unchanged
+  toolchain/SDK/URL pins. Every lane still builds; the harness retains that root
+  and removes only its own lock. Without the option it uses an isolated temporary
+  work root and validates its generated path before cleanup.
 - Cross-platform release verification uses `-debug-info-format none`. The
   pinned snapshot emits invalid host-side DWARF name indexes while linking the
   macro dependency graph; release verification must neither emit nor ignore

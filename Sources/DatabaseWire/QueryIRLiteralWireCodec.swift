@@ -180,6 +180,16 @@ private extension QueryIRLiteralWireCodec {
         case .rdfTerm(let term):
             writer.writeUInt8(17)
             try term.encode(into: &writer)
+        case .queryValue(let value, let type):
+            writer.writeUInt8(18)
+            writer.writeBool(type != nil)
+            if let type {
+                try QueryColumnTypeWireCodec.encode(type, into: &writer)
+                guard QueryValueValidator.accepts(value, type: type) else {
+                    throw .invalidQueryValue(.incompatibleType)
+                }
+            }
+            try QueryValueWireCodec.encode(value, into: &writer)
         }
     }
 
@@ -264,6 +274,14 @@ private extension QueryIRLiteralWireCodec {
             )
         case 17:
             return .rdfTerm(try RDFTerm(from: &reader))
+        case 18:
+            let type = try reader.readBool()
+                ? try QueryColumnTypeWireCodec.decode(from: &reader) : nil
+            let value = try QueryValueWireCodec.decode(from: &reader)
+            if let type, !QueryValueValidator.accepts(value, type: type) {
+                throw .invalidQueryValue(.incompatibleType)
+            }
+            return .queryValue(value, type: type)
         default:
             throw .invalidValueTag(tag)
         }

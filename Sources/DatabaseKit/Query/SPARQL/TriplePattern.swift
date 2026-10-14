@@ -157,8 +157,8 @@ public enum TripleIndex: String, Sendable {
 
 extension TriplePattern {
     /// Generate SPARQL syntax
-    public func toSPARQL(prefixes: [String: String] = [:]) -> String {
-        "\(subject.toSPARQL(prefixes: prefixes)) \(predicate.toSPARQL(prefixes: prefixes)) \(object.toSPARQL(prefixes: prefixes)) ."
+    public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
+        "\(try subject.toSPARQL(prefixes: prefixes)) \(try predicate.toSPARQL(prefixes: prefixes)) \(try object.toSPARQL(prefixes: prefixes)) ."
     }
 }
 
@@ -287,8 +287,8 @@ extension Array where Element == TriplePattern {
     }
 
     /// Generate SPARQL syntax for all patterns
-    public func toSPARQL(prefixes: [String: String] = [:]) -> String {
-        map { $0.toSPARQL(prefixes: prefixes) }.joined(separator: "\n")
+    public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
+        try map { (value) throws(QueryLiteralConversionError) -> String in try value.toSPARQL(prefixes: prefixes) }.joined(separator: "\n")
     }
 }
 

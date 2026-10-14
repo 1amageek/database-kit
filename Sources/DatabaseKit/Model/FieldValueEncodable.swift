@@ -5,6 +5,9 @@ public protocol FieldValueEncodable: Sendable {
     /// The scalar schema category after Optional and Array containers are removed.
     static var fieldSchemaType: FieldSchemaType { get }
 
+    /// Explicit query semantics for the complete declared field type.
+    static var queryType: QueryColumnType? { get }
+
     /// Static enum catalog metadata. Non-enum values return `nil`.
     static func fieldEnumMetadata(named typeName: String) -> EnumMetadata?
 
@@ -13,6 +16,8 @@ public protocol FieldValueEncodable: Sendable {
 }
 
 public extension FieldValueEncodable {
+    static var queryType: QueryColumnType? { nil }
+
     static func fieldEnumMetadata(named typeName: String) -> EnumMetadata? {
         nil
     }
@@ -164,6 +169,8 @@ extension RDFTerm: FieldValueEncodable, FieldValueRepresentable {
 }
 
 extension Array: FieldValueEncodable where Element: FieldValueEncodable {
+    public static var queryType: QueryColumnType? { Element.queryType }
+
     public static var fieldSchemaType: FieldSchemaType {
         Element.fieldSchemaType
     }
@@ -190,6 +197,8 @@ extension Array: FieldValueRepresentable where Element: FieldValueRepresentable 
 }
 
 extension Optional: FieldValueEncodable where Wrapped: FieldValueEncodable {
+    public static var queryType: QueryColumnType? { Wrapped.queryType }
+
     public static var fieldSchemaType: FieldSchemaType {
         Wrapped.fieldSchemaType
     }

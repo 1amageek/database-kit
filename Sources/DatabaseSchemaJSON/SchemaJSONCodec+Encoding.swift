@@ -111,6 +111,7 @@ extension SchemaJSONCodec {
             ("optional", .bool(field.isOptional)),
             ("array", .bool(field.isArray)),
             ("referenceTargetEntity", optionalString(field.referenceTargetEntity)),
+            ("queryType", try field.queryType.map { try queryTypeCodec.encode($0, path: "queryType") } ?? .null),
             (
                 "defaultValue",
                 try field.defaultValue.map(fieldValueCodec.encode) ?? .null

@@ -10,11 +10,16 @@ struct QueryResultPageTests {
         let response = QueryExecuteOperation.Response.rows(
             try makeTestQueryRowPage(
                 columns: [
-                    QueryColumn(number: 1, name: "payload"),
+                    QueryColumn(
+                        number: 1,
+                        name: "payload",
+                        type: .primitive(.bytes),
+                        isNullable: false
+                    ),
                 ],
                 rows: [
-                    QueryRow(values: [.bytes([1, 2, 3, 4])]),
-                    QueryRow(values: [.bytes([5, 6, 7, 8])]),
+                    QueryRow(values: [.primitive(.bytes([1, 2, 3, 4]))]),
+                    QueryRow(values: [.primitive(.bytes([5, 6, 7, 8]))]),
                 ],
                 continuation: [9, 10],
                 snapshotVersion: 21
@@ -38,17 +43,22 @@ struct QueryResultPageTests {
         try expectSharedBacking(child: encodedRows, owner: frame)
 
         #expect(page.rowCount == 2)
-        #expect(page.columns == [QueryColumn(number: 1, name: "payload")])
+        #expect(page.columns == [try QueryColumn(
+            number: 1,
+            name: "payload",
+            type: .primitive(.bytes),
+            isNullable: false
+        )])
         var iterator = page.makeRowIterator()
         let firstRow = try iterator.next()
         let first = try #require(firstRow)
         guard let firstValue = first.values.first,
-              case .bytes(let firstPayload) = firstValue else {
+              case .primitive(.bytes(let firstPayload)) = firstValue else {
             Issue.record("Expected a borrowed byte field")
             return
         }
         try expectSharedBacking(child: firstPayload, owner: frame)
-        #expect(try iterator.next()?.values == [.bytes([5, 6, 7, 8])])
+        #expect(try iterator.next()?.values == [.primitive(.bytes([5, 6, 7, 8]))])
         #expect(try iterator.next() == nil)
     }
 
@@ -101,9 +111,14 @@ struct QueryResultPageTests {
     func rowPageRejectsInvalidValueTagDuringAcceptance() throws {
         let response = QueryExecuteOperation.Response.rows(
             try makeTestQueryRowPage(
-                columns: [QueryColumn(number: 1, name: "marker")],
+                columns: [QueryColumn(
+                    number: 1,
+                    name: "marker",
+                    type: .primitive(.uint64),
+                    isNullable: false
+                )],
                 rows: [
-                    QueryRow(values: [.uint64(0x8877_6655_4433_2211)]),
+                    QueryRow(values: [.primitive(.uint64(0x8877_6655_4433_2211))]),
                 ],
                 continuation: nil,
                 snapshotVersion: 1
@@ -128,6 +143,13 @@ struct QueryResultPageTests {
                 from: ByteString(corrupted),
                 matching: 93
             )
+        }
+        for primitivePayload in [[UInt8(255)], [25, 1, 0, 0, 0, 255]] {
+            var reader = DatabaseWireReader([0] + primitivePayload)
+            #expect(throws: DatabaseWireError.invalidValueTag(255)) {
+                try QueryValueWireCodec.validate(from: &reader, type: .primitive(.uint64, isArray: true),
+                                                 isNullable: false)
+            }
         }
     }
 
@@ -154,8 +176,13 @@ struct QueryResultPageTests {
     func retainedRowsRespectSelectedEncodingLimits() throws {
         let response = QueryExecuteOperation.Response.rows(
             try makeTestQueryRowPage(
-                columns: [QueryColumn(number: 1, name: "v")],
-                rows: [QueryRow(values: [.string("long value")])],
+                columns: [QueryColumn(
+                    number: 1,
+                    name: "v",
+                    type: .primitive(.string),
+                    isNullable: false
+                )],
+                rows: [QueryRow(values: [.primitive(.string("long value"))])],
                 continuation: nil,
                 snapshotVersion: 1
             )
@@ -176,7 +203,7 @@ struct QueryResultPageTests {
         }
         let strictLimits = try DatabaseWireLimits(
             maximumFrameBytes: 1_024,
-            maximumStringBytes: 1,
+            maximumStringBytes: 6,
             maximumByteStringBytes: 1_024,
             maximumCollectionCount: 10,
             maximumNestingDepth: 10,
@@ -186,7 +213,7 @@ struct QueryResultPageTests {
         #expect(
             throws: DatabaseWireError.stringTooLarge(
                 actual: 10,
-                maximum: 1
+                maximum: 6
             )
         ) {
             _ = try DatabaseWireEncoder(limits: strictLimits).encodeResponse(

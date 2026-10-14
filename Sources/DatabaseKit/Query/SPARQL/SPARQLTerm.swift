@@ -131,7 +131,7 @@ extension SPARQLTerm {
 
 extension SPARQLTerm {
     /// Generate SPARQL syntax with proper escaping
-    public func toSPARQL(prefixes: [String: String] = [:]) -> String {
+    public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
         switch self {
         case .variable(let name):
             return "?\(name)"
@@ -146,24 +146,29 @@ extension SPARQLTerm {
             return SPARQLEscape.iri(iri)
 
         case .literal(let lit):
-            return lit.toSPARQL()
+            return try lit.toSPARQL()
 
         case .blankNode(let id):
             return "_:\(SPARQLEscape.blankNodeLabel(id))"
 
         case .tripleTerm(let s, let p, let o):
-            return "<< \(s.toSPARQL(prefixes: prefixes)) \(p.toSPARQL(prefixes: prefixes)) \(o.toSPARQL(prefixes: prefixes)) >>"
+            return "<< \(try s.toSPARQL(prefixes: prefixes)) \(try p.toSPARQL(prefixes: prefixes)) \(try o.toSPARQL(prefixes: prefixes)) >>"
 
         case .reifiedTriple(let s, let p, let o, let r):
-            return "<< \(s.toSPARQL(prefixes: prefixes)) \(p.toSPARQL(prefixes: prefixes)) \(o.toSPARQL(prefixes: prefixes)) ~\(r.toSPARQL(prefixes: prefixes)) >>"
+            return "<< \(try s.toSPARQL(prefixes: prefixes)) \(try p.toSPARQL(prefixes: prefixes)) \(try o.toSPARQL(prefixes: prefixes)) ~\(try r.toSPARQL(prefixes: prefixes)) >>"
         }
     }
 }
 
 extension Literal {
     /// Generate SPARQL literal syntax
-    public func toSPARQL() -> String {
+    public func toSPARQL() throws(QueryLiteralConversionError) -> String {
         switch self {
+        case .queryValue(let value, _):
+            guard case .primitive(let primitive) = value else {
+                throw .unsupportedSPARQLLiteral
+            }
+            return try primitive.queryLiteral.toSPARQL()
         case .null:
             return "UNDEF"
         case .bool(let v):
@@ -187,7 +192,7 @@ extension Literal {
         case .uuid(let v):
             return "\"\(v.description)\"^^<urn:uuid>"
         case .array(let v):
-            return "(" + v.map { $0.toSPARQL() }.joined(separator: " ") + ")"
+            return try "(" + v.map { (value) throws(QueryLiteralConversionError) -> String in try value.toSPARQL() }.joined(separator: " ") + ")"
         case .iri(let v):
             return SPARQLEscape.iri(v)
         case .blankNode(let v):

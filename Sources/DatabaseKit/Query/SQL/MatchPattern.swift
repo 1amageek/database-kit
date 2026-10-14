@@ -295,11 +295,16 @@ extension MatchPattern {
 
 extension MatchPattern {
     /// Generate SQL/PGQ MATCH clause syntax
-    public func toSQL() -> String {
+    public func toSQL() throws(QueryLiteralConversionError) -> String {
+        try QueryStructuralValidator.validateSQLLiteralSupport(self)
+        return try sqlText()
+    }
+
+    func sqlText() throws(QueryLiteralConversionError) -> String {
         var result = "MATCH "
-        result += paths.map { $0.toSQL() }.joined(separator: ", ")
+        result += try paths.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: ", ")
         if let whereClause = `where` {
-            result += " WHERE \(whereClause.toSQL())"
+            result += " WHERE \(try whereClause.sqlText())"
         }
         return result
     }
@@ -307,7 +312,12 @@ extension MatchPattern {
 
 extension PathPattern {
     /// Generate SQL/PGQ path pattern syntax
-    public func toSQL() -> String {
+    public func toSQL() throws(QueryLiteralConversionError) -> String {
+        try QueryStructuralValidator.validateSQLLiteralSupport(self)
+        return try sqlText()
+    }
+
+    func sqlText() throws(QueryLiteralConversionError) -> String {
         var result = ""
         if let pathVar = pathVariable {
             result += "\(pathVar) = "
@@ -315,37 +325,47 @@ extension PathPattern {
         if let mode = mode {
             result += "\(mode.toSQL()) "
         }
-        result += elements.map { $0.toSQL() }.joined()
+        result += try elements.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined()
         return result
     }
 }
 
 extension PathElement {
     /// Generate SQL/PGQ path element syntax
-    public func toSQL() -> String {
+    public func toSQL() throws(QueryLiteralConversionError) -> String {
+        try QueryStructuralValidator.validateSQLLiteralSupport(self)
+        return try sqlText()
+    }
+
+    func sqlText() throws(QueryLiteralConversionError) -> String {
         switch self {
         case .node(let node):
-            return node.toSQL()
+            return try node.sqlText()
         case .edge(let edge):
-            return edge.toSQL()
+            return try edge.sqlText()
         case .quantified(let path, let quant):
-            return "(\(path.toSQL()))\(quant.toSQL())"
+            return "(\(try path.sqlText()))\(quant.toSQL())"
         case .alternation(let alts):
-            return "(" + alts.map { $0.toSQL() }.joined(separator: "|") + ")"
+            return try "(" + alts.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: "|") + ")"
         }
     }
 }
 
 extension NodePattern {
     /// Generate SQL/PGQ node pattern syntax
-    public func toSQL() -> String {
+    public func toSQL() throws(QueryLiteralConversionError) -> String {
+        try QueryStructuralValidator.validateSQLLiteralSupport(self)
+        return try sqlText()
+    }
+
+    func sqlText() throws(QueryLiteralConversionError) -> String {
         var result = "("
         if let v = variable { result += v }
         if let labels = labels, !labels.isEmpty {
             result += ":" + labels.joined(separator: ":")
         }
         if let props = properties, !props.isEmpty {
-            result += " {" + props.map { "\($0.key): \($0.value.toSQL())" }.joined(separator: ", ") + "}"
+            result += try " {" + props.map { (value) throws(QueryLiteralConversionError) -> String in "\(value.key): \(try value.value.sqlText())" }.joined(separator: ", ") + "}"
         }
         result += ")"
         return result
@@ -354,14 +374,19 @@ extension NodePattern {
 
 extension EdgePattern {
     /// Generate SQL/PGQ edge pattern syntax
-    public func toSQL() -> String {
+    public func toSQL() throws(QueryLiteralConversionError) -> String {
+        try QueryStructuralValidator.validateSQLLiteralSupport(self)
+        return try sqlText()
+    }
+
+    func sqlText() throws(QueryLiteralConversionError) -> String {
         var inner = ""
         if let v = variable { inner += v }
         if let labels = labels, !labels.isEmpty {
             inner += ":" + labels.joined(separator: ":")
         }
         if let props = properties, !props.isEmpty {
-            inner += " {" + props.map { "\($0.key): \($0.value.toSQL())" }.joined(separator: ", ") + "}"
+            inner += try " {" + props.map { (value) throws(QueryLiteralConversionError) -> String in "\(value.key): \(try value.value.sqlText())" }.joined(separator: ", ") + "}"
         }
 
         switch direction {
@@ -424,11 +449,16 @@ extension PathMode {
 extension Expression {
     /// Generate SQL expression syntax
     /// Complete implementation covering all expression cases
-    public func toSQL() -> String {
+    public func toSQL() throws(QueryLiteralConversionError) -> String {
+        try QueryStructuralValidator.validateSQLLiteralSupport(self)
+        return try sqlText()
+    }
+
+    func sqlText() throws(QueryLiteralConversionError) -> String {
         switch self {
         // Literals and references
         case .literal(let lit):
-            return lit.toSQL()
+            return try lit.sqlText()
 
         case .column(let col):
             return col.description
@@ -447,58 +477,58 @@ extension Expression {
 
         // Comparison operations
         case .equal(let l, let r):
-            return "(\(l.toSQL()) = \(r.toSQL()))"
+            return "(\(try l.sqlText()) = \(try r.sqlText()))"
 
         case .notEqual(let l, let r):
-            return "(\(l.toSQL()) <> \(r.toSQL()))"
+            return "(\(try l.sqlText()) <> \(try r.sqlText()))"
 
         case .lessThan(let l, let r):
-            return "(\(l.toSQL()) < \(r.toSQL()))"
+            return "(\(try l.sqlText()) < \(try r.sqlText()))"
 
         case .lessThanOrEqual(let l, let r):
-            return "(\(l.toSQL()) <= \(r.toSQL()))"
+            return "(\(try l.sqlText()) <= \(try r.sqlText()))"
 
         case .greaterThan(let l, let r):
-            return "(\(l.toSQL()) > \(r.toSQL()))"
+            return "(\(try l.sqlText()) > \(try r.sqlText()))"
 
         case .greaterThanOrEqual(let l, let r):
-            return "(\(l.toSQL()) >= \(r.toSQL()))"
+            return "(\(try l.sqlText()) >= \(try r.sqlText()))"
 
         // Logical operations
         case .and(let l, let r):
-            return "(\(l.toSQL()) AND \(r.toSQL()))"
+            return "(\(try l.sqlText()) AND \(try r.sqlText()))"
 
         case .or(let l, let r):
-            return "(\(l.toSQL()) OR \(r.toSQL()))"
+            return "(\(try l.sqlText()) OR \(try r.sqlText()))"
 
         case .not(let e):
-            return "NOT (\(e.toSQL()))"
+            return "NOT (\(try e.sqlText()))"
 
         // Arithmetic operations
         case .add(let l, let r):
-            return "(\(l.toSQL()) + \(r.toSQL()))"
+            return "(\(try l.sqlText()) + \(try r.sqlText()))"
 
         case .subtract(let l, let r):
-            return "(\(l.toSQL()) - \(r.toSQL()))"
+            return "(\(try l.sqlText()) - \(try r.sqlText()))"
 
         case .multiply(let l, let r):
-            return "(\(l.toSQL()) * \(r.toSQL()))"
+            return "(\(try l.sqlText()) * \(try r.sqlText()))"
 
         case .divide(let l, let r):
-            return "(\(l.toSQL()) / \(r.toSQL()))"
+            return "(\(try l.sqlText()) / \(try r.sqlText()))"
 
         case .modulo(let l, let r):
-            return "(\(l.toSQL()) % \(r.toSQL()))"
+            return "(\(try l.sqlText()) % \(try r.sqlText()))"
 
         case .negate(let e):
-            return "-(\(e.toSQL()))"
+            return "-(\(try e.sqlText()))"
 
         // NULL checks
         case .isNull(let e):
-            return "(\(e.toSQL()) IS NULL)"
+            return "(\(try e.sqlText()) IS NULL)"
 
         case .isNotNull(let e):
-            return "(\(e.toSQL()) IS NOT NULL)"
+            return "(\(try e.sqlText()) IS NOT NULL)"
 
         // BOUND (SPARQL-specific, map to IS NOT NULL)
         case .bound(let v):
@@ -506,130 +536,135 @@ extension Expression {
 
         // Pattern matching
         case .like(let e, let pattern):
-            return "(\(e.toSQL()) LIKE \(SQLEscape.string(pattern)))"
+            return "(\(try e.sqlText()) LIKE \(SQLEscape.string(pattern)))"
 
         case .regex(let text, let pattern, let flags):
             // SQL doesn't have native REGEX, use LIKE approximation or REGEXP
             if let f = flags, f.contains("i") {
-                return "(UPPER(\(text.toSQL())) LIKE UPPER(\(SQLEscape.string(pattern))))"
+                return "(UPPER(\(try text.sqlText())) LIKE UPPER(\(SQLEscape.string(pattern))))"
             }
-            return "(REGEXP_LIKE(\(text.toSQL()), \(SQLEscape.string(pattern))))"
+            return "(REGEXP_LIKE(\(try text.sqlText()), \(SQLEscape.string(pattern))))"
 
         // Range operations
         case .between(let e, let low, let high):
-            return "(\(e.toSQL()) BETWEEN \(low.toSQL()) AND \(high.toSQL()))"
+            return "(\(try e.sqlText()) BETWEEN \(try low.sqlText()) AND \(try high.sqlText()))"
 
         case .inList(let e, let values):
-            let vals = values.map { $0.toSQL() }.joined(separator: ", ")
-            return "(\(e.toSQL()) IN (\(vals)))"
+            let vals = try values.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: ", ")
+            return "(\(try e.sqlText()) IN (\(vals)))"
 
         case .notInList(let e, let values):
-            let vals = values.map { $0.toSQL() }.joined(separator: ", ")
-            return "(\(e.toSQL()) NOT IN (\(vals)))"
+            let vals = try values.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: ", ")
+            return "(\(try e.sqlText()) NOT IN (\(vals)))"
 
         case .inSubquery(let e, let subquery):
-            return "(\(e.toSQL()) IN (\(subquery.toSQL())))"
+            return "(\(try e.sqlText()) IN (\(try subquery.sqlText())))"
 
         // Aggregates
         case .aggregate(let agg):
-            return agg.toSQL()
+            return try agg.sqlText()
 
         // Functions
         case .function(let call):
-            let args = call.arguments.map { $0.toSQL() }.joined(separator: ", ")
+            let args = try call.arguments.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: ", ")
             return "\(call.name)(\(args))"
 
         // Conditional
         case .caseWhen(let cases, let elseResult):
             var result = "CASE"
             for pair in cases {
-                result += " WHEN \(pair.condition.toSQL()) THEN \(pair.result.toSQL())"
+                result += " WHEN \(try pair.condition.sqlText()) THEN \(try pair.result.sqlText())"
             }
             if let elseExpr = elseResult {
-                result += " ELSE \(elseExpr.toSQL())"
+                result += " ELSE \(try elseExpr.sqlText())"
             }
             result += " END"
             return result
 
         case .coalesce(let exprs):
-            let args = exprs.map { $0.toSQL() }.joined(separator: ", ")
+            let args = try exprs.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: ", ")
             return "COALESCE(\(args))"
 
         case .nullIf(let e1, let e2):
-            return "NULLIF(\(e1.toSQL()), \(e2.toSQL()))"
+            return "NULLIF(\(try e1.sqlText()), \(try e2.sqlText()))"
 
         // Type conversion
         case .cast(let e, let targetType):
-            return "CAST(\(e.toSQL()) AS \(targetType.sqlName))"
+            return "CAST(\(try e.sqlText()) AS \(targetType.sqlName))"
 
         // RDF-star operations (not standard SQL, but included for completeness)
         case .triple(let subject, let predicate, let object):
             // Represent as JSON-like structure in SQL
-            return "JSON_OBJECT('s', \(subject.toSQL()), 'p', \(predicate.toSQL()), 'o', \(object.toSQL()))"
+            return "JSON_OBJECT('s', \(try subject.sqlText()), 'p', \(try predicate.sqlText()), 'o', \(try object.sqlText()))"
 
         case .isTriple(let e):
-            return "(JSON_TYPE(\(e.toSQL())) = 'OBJECT')"
+            return "(JSON_TYPE(\(try e.sqlText())) = 'OBJECT')"
 
         case .subject(let e):
-            return "JSON_VALUE(\(e.toSQL()), '$.s')"
+            return "JSON_VALUE(\(try e.sqlText()), '$.s')"
 
         case .predicate(let e):
-            return "JSON_VALUE(\(e.toSQL()), '$.p')"
+            return "JSON_VALUE(\(try e.sqlText()), '$.p')"
 
         case .object(let e):
-            return "JSON_VALUE(\(e.toSQL()), '$.o')"
+            return "JSON_VALUE(\(try e.sqlText()), '$.o')"
 
         // Subqueries
         case .subquery(let query):
-            return "(\(query.toSQL()))"
+            return "(\(try query.sqlText()))"
 
         case .exists(let query):
-            return "EXISTS (\(query.toSQL()))"
+            return "EXISTS (\(try query.sqlText()))"
         }
     }
 }
 
 extension AggregateFunction {
     /// Generate SQL aggregate syntax
-    public func toSQL() -> String {
+    public func toSQL() throws(QueryLiteralConversionError) -> String {
+        try QueryStructuralValidator.validateSQLLiteralSupport(self)
+        return try sqlText()
+    }
+
+    func sqlText() throws(QueryLiteralConversionError) -> String {
         switch self {
         case .count(let expr, let distinct):
             let distinctStr = distinct ? "DISTINCT " : ""
             if let e = expr {
-                return "COUNT(\(distinctStr)\(e.toSQL()))"
+                return "COUNT(\(distinctStr)\(try e.sqlText()))"
             }
             return "COUNT(\(distinctStr)*)"
 
         case .sum(let expr, let distinct):
             let distinctStr = distinct ? "DISTINCT " : ""
-            return "SUM(\(distinctStr)\(expr.toSQL()))"
+            return "SUM(\(distinctStr)\(try expr.sqlText()))"
 
         case .avg(let expr, let distinct):
             let distinctStr = distinct ? "DISTINCT " : ""
-            return "AVG(\(distinctStr)\(expr.toSQL()))"
+            return "AVG(\(distinctStr)\(try expr.sqlText()))"
 
         case .min(let expr):
-            return "MIN(\(expr.toSQL()))"
+            return "MIN(\(try expr.sqlText()))"
 
         case .max(let expr):
-            return "MAX(\(expr.toSQL()))"
+            return "MAX(\(try expr.sqlText()))"
 
         case .groupConcat(let expr, let separator, let distinct):
             let distinctStr = distinct ? "DISTINCT " : ""
             if let sep = separator {
-                return "GROUP_CONCAT(\(distinctStr)\(expr.toSQL()) SEPARATOR \(SQLEscape.string(sep)))"
+                return "GROUP_CONCAT(\(distinctStr)\(try expr.sqlText()) SEPARATOR \(SQLEscape.string(sep)))"
             }
-            return "GROUP_CONCAT(\(distinctStr)\(expr.toSQL()))"
+            return "GROUP_CONCAT(\(distinctStr)\(try expr.sqlText()))"
 
         case .sample(let expr):
             // SQL doesn't have SAMPLE, use subquery with LIMIT 1
-            return "(SELECT \(expr.toSQL()) LIMIT 1)"
+            return "(SELECT \(try expr.sqlText()) LIMIT 1)"
 
         case .arrayAgg(let expr, let orderBy, let distinct):
             let distinctStr = distinct ? "DISTINCT " : ""
-            var sql = "ARRAY_AGG(\(distinctStr)\(expr.toSQL())"
+            var sql = "ARRAY_AGG(\(distinctStr)\(try expr.sqlText())"
             if let order = orderBy {
-                sql += " ORDER BY \(order.map { "\($0.expression.toSQL()) \($0.direction == .descending ? "DESC" : "ASC")" }.joined(separator: ", "))"
+                sql += " ORDER BY \(try order.map { (value) throws(QueryLiteralConversionError) -> String in "\(try value.expression.sqlText()) \(value.direction == .descending ? "DESC" : "ASC")" }.joined(separator: ", "))"
             }
             sql += ")"
             return sql
@@ -708,18 +743,23 @@ extension DataType {
 
 extension SelectQuery {
     /// Generate SQL SELECT query syntax
-    public func toSQL() -> String {
+    public func toSQL() throws(QueryLiteralConversionError) -> String {
+        try QueryStructuralValidator.validateSQLLiteralSupport(self)
+        return try sqlText()
+    }
+
+    func sqlText() throws(QueryLiteralConversionError) -> String {
         var sql = ""
 
         // WITH clause (CTEs)
         if let ctes = subqueries, !ctes.isEmpty {
             sql += "WITH "
-            sql += ctes.map { cte in
+            sql += try ctes.map { (cte) throws(QueryLiteralConversionError) -> String in
                 var cteSQL = SQLEscape.identifier(cte.name)
                 if let cols = cte.columns {
                     cteSQL += " (\(cols.map { SQLEscape.identifier($0) }.joined(separator: ", ")))"
                 }
-                cteSQL += " AS (\(cte.query.toSQL()))"
+                cteSQL += " AS (\(try cte.query.sqlText()))"
                 return cteSQL
             }.joined(separator: ", ")
             sql += " "
@@ -736,8 +776,8 @@ extension SelectQuery {
         case .allFrom(let table):
             sql += "\(SQLEscape.identifier(table)).*"
         case .items(let items), .distinctItems(let items):
-            sql += items.map { item in
-                var s = item.expression.toSQL()
+            sql += try items.map { (item) throws(QueryLiteralConversionError) -> String in
+                var s = try item.expression.sqlText()
                 if let alias = item.alias {
                     s += " AS \(SQLEscape.identifier(alias))"
                 }
@@ -746,28 +786,28 @@ extension SelectQuery {
         }
 
         // FROM clause
-        sql += " FROM \(source.toSQL())"
+        sql += " FROM \(try source.sqlText())"
 
         // WHERE clause
         if let filter = filter {
-            sql += " WHERE \(filter.toSQL())"
+            sql += " WHERE \(try filter.sqlText())"
         }
 
         // GROUP BY clause
         if let groupBy = groupBy, !groupBy.isEmpty {
-            sql += " GROUP BY \(groupBy.map { $0.toSQL() }.joined(separator: ", "))"
+            sql += " GROUP BY \(try groupBy.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: ", "))"
         }
 
         // HAVING clause
         if let having = having {
-            sql += " HAVING \(having.toSQL())"
+            sql += " HAVING \(try having.sqlText())"
         }
 
         // ORDER BY clause
         if let orderBy = orderBy, !orderBy.isEmpty {
             sql += " ORDER BY "
-            sql += orderBy.map { key in
-                var s = key.expression.toSQL()
+            sql += try orderBy.map { (key) throws(QueryLiteralConversionError) -> String in
+                var s = try key.expression.sqlText()
                 s += key.direction == .descending ? " DESC" : " ASC"
                 if let nulls = key.nulls {
                     s += nulls == .first ? " NULLS FIRST" : " NULLS LAST"
@@ -792,22 +832,27 @@ extension SelectQuery {
 
 extension DataSource {
     /// Generate SQL data source syntax
-    public func toSQL() -> String {
+    public func toSQL() throws(QueryLiteralConversionError) -> String {
+        try QueryStructuralValidator.validateSQLLiteralSupport(self)
+        return try sqlText()
+    }
+
+    func sqlText() throws(QueryLiteralConversionError) -> String {
         switch self {
         case .table(let ref):
             return ref.description
 
         case .subquery(let query, let alias):
-            return "(\(query.toSQL())) AS \(SQLEscape.identifier(alias))"
+            return "(\(try query.sqlText())) AS \(SQLEscape.identifier(alias))"
 
         case .join(let clause):
-            let left = clause.left.toSQL()
-            let right = clause.right.toSQL()
+            let left = try clause.left.sqlText()
+            let right = try clause.right.sqlText()
             var sql = "\(left) \(clause.type.toSQL()) \(right)"
             if let cond = clause.condition {
                 switch cond {
                 case .on(let expr):
-                    sql += " ON \(expr.toSQL())"
+                    sql += " ON \(try expr.sqlText())"
                 case .using(let cols):
                     sql += " USING (\(cols.map { SQLEscape.identifier($0) }.joined(separator: ", ")))"
                 }
@@ -815,23 +860,23 @@ extension DataSource {
             return sql
 
         case .graphTable(let gtSource):
-            return gtSource.toSQL()
+            return try gtSource.sqlText()
 
         case .graphPattern(let pattern):
             // SPARQL-specific, not standard SQL
-            return "/* GRAPH PATTERN */ \(pattern.toSPARQL())"
+            return "/* GRAPH PATTERN */ \(try pattern.toSPARQL())"
 
         case .namedGraph(let name, let pattern):
-            return "/* NAMED GRAPH \(name) */ \(pattern.toSPARQL())"
+            return "/* NAMED GRAPH \(name) */ \(try pattern.toSPARQL())"
 
         case .service(let endpoint, let pattern, let silent):
             let silentStr = silent ? "SILENT " : ""
-            return "/* SERVICE \(silentStr)\(SPARQLEscape.iri(endpoint)) */ \(pattern.toSPARQL())"
+            return "/* SERVICE \(silentStr)\(SPARQLEscape.iri(endpoint)) */ \(try pattern.toSPARQL())"
 
         case .values(let rows, let columnNames):
             var sql = "(VALUES "
-            sql += rows.map { row in
-                "(" + row.map { $0.toSQL() }.joined(separator: ", ") + ")"
+            sql += try rows.map { (row) throws(QueryLiteralConversionError) -> String in
+                try "(" + row.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: ", ") + ")"
             }.joined(separator: ", ")
             sql += ")"
             if let names = columnNames {
@@ -840,22 +885,22 @@ extension DataSource {
             return sql
 
         case .union(let sources):
-            return "(" + sources.map { $0.toSQL() }.joined(separator: " UNION ") + ")"
+            return try "(" + sources.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: " UNION ") + ")"
 
         case .unionAll(let sources):
-            return "(" + sources.map { $0.toSQL() }.joined(separator: " UNION ALL ") + ")"
+            return try "(" + sources.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: " UNION ALL ") + ")"
 
         case .intersect(let sources):
-            return "(" + sources.map { $0.toSQL() }.joined(separator: " INTERSECT ") + ")"
+            return try "(" + sources.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: " INTERSECT ") + ")"
 
         case .except(let left, let right):
-            return "(\(left.toSQL()) EXCEPT \(right.toSQL()))"
+            return "(\(try left.sqlText()) EXCEPT \(try right.sqlText()))"
 
         case .logical(let logicalSource):
             return SQLEscape.identifier(logicalSource.effectiveName)
         #if DATABASE_KIT_MULTI_BASE
         case .base(let baseID, let source):
-            return "/* BASE \(baseID.value) */ \(source.toSQL())"
+            return "/* BASE \(baseID.value) */ \(try source.sqlText())"
         #endif
         }
     }
@@ -882,8 +927,21 @@ extension JoinType {
 
 extension Literal {
     /// Generate SQL literal syntax
-    public func toSQL() -> String {
+    public func toSQL() throws(QueryLiteralConversionError) -> String {
+        try QueryStructuralValidator.validateSQLLiteralSupport(self)
+        return try sqlText()
+    }
+
+    func sqlText() throws(QueryLiteralConversionError) -> String {
         switch self {
+        // FIXME(INCOMPLETE_IMPLEMENTATION): Rich SQL literal syntax is pending S02.
+        // Public toSQL generators reach this guard; they must fail until the
+        // canonical QueryAST serializer proves lossless rich literal round trips.
+        case .queryValue(let value, _):
+            guard case .primitive(let primitive) = value else {
+                throw .unsupportedSQLLiteral
+            }
+            return try primitive.queryLiteral.sqlText()
         case .null:
             return "NULL"
         case .bool(let v):
@@ -919,7 +977,7 @@ extension Literal {
         case .rdfTerm(let term):
             return SQLEscape.string(term.description)
         case .array(let values):
-            return "ARRAY[\(values.map { $0.toSQL() }.joined(separator: ", "))]"
+            return "ARRAY[\(try values.map { (value) throws(QueryLiteralConversionError) -> String in try value.sqlText() }.joined(separator: ", "))]"
         }
     }
 }

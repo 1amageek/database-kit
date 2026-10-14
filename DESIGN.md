@@ -320,8 +320,60 @@ authorization, transaction binding, and backend access.
 | Native Foundation adaptation | `DatabaseKitFoundationTests` and the [`DatabaseKitFoundation` module design](Sources/DatabaseKitFoundation/DESIGN.md) |
 | Strict schema JSON adaptation | `DatabaseSchemaJSONTests` and the [`DatabaseSchemaJSON` module design](Sources/DatabaseSchemaJSON/DESIGN.md) |
 | Embedded declaration graph | `DatabaseKitDeclarationContract` release compilation with the matching Embedded WASM SDK |
-| Package-level trait matrix | Native standard run (699 tests) and isolated `MultiBase` run (714 tests), plus the standard/Embedded release builds documented in `README.md` |
+| S01 standard/Embedded query-value runtime | Test-only executable target [`QueryValueRuntimeContract`](Tests/QueryValueRuntimeContract/QueryValueRuntimeContract.swift), built and executed by [`scripts/wasm-build-harness`](scripts/wasm-build-harness) on each matching August 14 SDK. Exercises all five rich values, declared persistence, depth-4096 JSONB destruction, duplicate and zero-row typed pages, typed parameters, malformed input and resource failures. It adds no supported package product or native test cases. |
+| Package-level trait matrix | Native standard and isolated `MultiBase` runs with reviewed exact counts owned by `scripts/xcode-test-harness`, plus the standard/Embedded release builds documented in `README.md` |
 | Frozen layer contract items 2, 5, and 6 | `DatabaseWireTests/CanonicalDatabaseWireTests` golden envelope byte vectors and canonical-ordering rejection, executed in both the standard version 3 lane and the isolated `MultiBase` version 5 lane |
+
+S01's native harness accepts repeatable focused test selectors only with an
+explicit exact expected count. An optional preserved work root can be reused
+only after its harness marker and exclusive ownership are checked; source is
+resynchronized and build-for-testing always runs. A changed trait graph clears
+incompatible build products. WASM verification accepts an explicit absolute
+SDK directory and checks the same pinned SDK identifiers there, with no
+fallback to another SDK directory or global installation changes.
+
+The WASM harness retains its five release compile lanes and adds one release
+build and one Node WASI Preview 1 execution of QueryValueRuntimeContract for
+each SDK. Default build parallelism is six jobs, configurable only as a positive
+integer through DATABASE_KIT_WASM_BUILD_JOBS. Each build and runtime has an
+external timeout and a unique preserved log; runtime completion requires exactly
+one begin marker, every declared case marker, and one final pass marker with
+zero exit status. The runner imports only Node standard-library WASI/filesystem
+support, grants no filesystem preopens, and rejects unexpected host imports.
+Compiler identity, matching SDK identifier, wasm32-unknown-wasip1 triple, Node
+version, mode and job count are recorded. Snapshot runtime evidence is local to
+these exact targets and does not prove a different release toolchain or SDK.
+The Embedded executable explicitly links libswiftUnicodeDataTables.a from the
+selected SDK's swiftResourcesPath/embedded/wasm32-unknown-wasip1 directory.
+SDK configuration supplies that path; the harness records its digest and rejects
+a missing archive. This supplies the actual Unicode operations reachable through
+value equality and string handling instead of changing their semantics to avoid
+the library. The private harness input
+DATABASE_KIT_QUERY_VALUE_UNICODE_ARCHIVE selects a WASI-only linker setting on
+QueryValueRuntimeContract through PackageDescription.Context.environment. It is
+set only for the Embedded executable lane and cleared for every other lane.
+The flag is target-scoped: host macro executables and public library targets do
+not receive a WASM archive. Library-only compile lanes do not prove that final
+linkage.
+Runtime evidence remains pending until both executions succeed; compilation
+alone does not satisfy this gate.
+The verification executable follows the non-default MultiBase trait when a
+native package scheme compiles it: only the explicit target/read-consistency
+API calls are trait-conditional. WASM lanes disable default traits and retain
+their verified standard branches; this native compile adaptation changes
+neither the fourteen WASI case executions nor native test counts.
+
+DATABASE_KIT_WASM_WORK_ROOT optionally selects an absolute caller-owned build
+cache directory. A new cache must be empty; subsequent use requires this
+package's ownership marker and identical repository, pinned toolchain/compiler,
+SDK identifiers/location, target triple and URL-resolution pins. One invocation
+owns an exclusive directory lock. Source edits still flow through SwiftPM's
+incremental dependency checks, and every lane always runs its build command;
+cached objects are never accepted as skipped verification. The harness removes
+only its own lock and retains caller-owned state in success and failure paths.
+Without this option it creates and removes one isolated temporary work root as
+before. Each invocation records its source manifest/pin fingerprints and checks
+they remain unchanged.
 
 The package-level authority changes when package ownership, trait selection,
 wire version, public declarations, ownership, failure behavior, or target
@@ -329,6 +381,18 @@ support changes. Such a change must update the affected module authority and
 re-check the direct and transitive designs from the workspace root. A runtime
 execution change belongs to its owning downstream package and does not modify
 this package's declaration contract unless its public assumptions change.
+
+S01 follows the [Query semantic contract](Sources/DatabaseKit/Query/DESIGN.md),
+[Model adaptation](Sources/DatabaseKit/Model/DESIGN.md),
+[Schema admission](Sources/DatabaseKit/Schema/DESIGN.md) and
+[Wire grammar](Sources/DatabaseWire/DESIGN.md#s01-frozen-query-codec-contract).
+Typed query metadata enters neither DatabaseTypes nor the optional Foundation
+adapter. SchemaManifest and strict schema JSON preserve the admitted queryType
+descriptor in the same change. Native focused selectors and scoped matching
+SDK lookup are required package-owned harness support before S01 verification;
+final standard/MultiBase counts remain executable configuration, not values
+copied into this design. Current S00 pilot evidence does not prove S01 codecs,
+model reconstruction or Embedded query-value behavior.
 
 The frozen layer contract is not changed by this procedure. A change that
 reinterprets one of its nine statements is a new architecture version and

@@ -4,6 +4,8 @@
 /// Syntax-specific counters supplement the global node and collection budgets.
 public struct QueryStructuralLimits: Sendable, Equatable, Hashable {
     public let maximumNestingDepth: UInt64
+    /// Default follows the canonical Wire frame byte policy; callers may tighten it.
+    public let maximumRetainedBytes: UInt64
     public let maximumInputTokens: UInt64
     public let maximumTotalNodes: UInt64
     public let maximumCollectionElements: UInt64
@@ -16,6 +18,7 @@ public struct QueryStructuralLimits: Sendable, Equatable, Hashable {
 
     public init(
         maximumNestingDepth: UInt64 = 64,
+        maximumRetainedBytes: UInt64 = 4 * 1024 * 1024,
         maximumInputTokens: UInt64 = 1_000_000,
         maximumTotalNodes: UInt64 = 1_000_000,
         maximumCollectionElements: UInt64 = 1_000_000,
@@ -27,6 +30,7 @@ public struct QueryStructuralLimits: Sendable, Equatable, Hashable {
         maximumReifiedTripleExpansions: UInt64 = 100_000
     ) {
         self.maximumNestingDepth = maximumNestingDepth
+        self.maximumRetainedBytes = maximumRetainedBytes
         self.maximumInputTokens = maximumInputTokens
         self.maximumTotalNodes = maximumTotalNodes
         self.maximumCollectionElements = maximumCollectionElements

@@ -272,6 +272,25 @@ public indirect enum DataSource: Sendable, Equatable, Hashable {
 
     /// EXCEPT / MINUS
     case except(DataSource, DataSource)
+
+    /// Whether a SELECT rooted at this source uses SPARQL semantic validation.
+    ///
+    /// This classifies the top-level source, not SPARQL descendants inside a
+    /// relational join, subquery or set operation. SQL/PGQ graph tables remain
+    /// relational sources. Explicit SPARQL validator calls retain their rules.
+    public var usesSPARQLSemantics: Bool {
+        switch self {
+        case .graphPattern, .namedGraph, .service:
+            return true
+        case .table, .logical, .subquery, .join, .values, .graphTable,
+             .union, .unionAll, .intersect, .except:
+            return false
+        #if DATABASE_KIT_MULTI_BASE
+        case .base:
+            return false
+        #endif
+        }
+    }
 }
 
 // MARK: - Graph Table

@@ -8,8 +8,10 @@ The feature inventory below is the complete implementation target, including
 analysis queries, mutations, basic DDL, and one-request SQL blocks. A limited
 SELECT implementation does not satisfy this profile.
 
-Status: **S00 accepted design; S01–S18 implementation and behavioral evidence
-pending.** Names and interfaces labeled planned are not existing capabilities.
+Status: **S00 accepted design; S01 implemented and verified on the frozen local
+graph, with full FoundationDB regression deferred by the user to S18;
+S02–S18 pending.** This does not claim full FoundationDB or final URL-graph
+acceptance. Interfaces explicitly labeled planned are not existing capabilities.
 Inventory rows state required behavior, not current implementation completion.
 The reference dialect is PostgreSQL 18; the accepted differential-server pin
 is 18.6, verified by the harness before its evidence is accepted.
@@ -39,6 +41,8 @@ the SQL dialect or bypass Framework SQL execution.
 | Design | Relationship | Contract Used | Summary | Cautions |
 |---|---|---|---|---|
 | [Query](../DESIGN.md) | parent | QueryIR, language separation, retained query values | Composes SQL with shared query contracts. | SQL changes do not redefine SPARQL. |
+| [Model](../../Model/DESIGN.md) | coordinates with | declared field metadata and static wrapper conversion | Propagates rich SQL values through existing generic model adaptation. | Model owns public traversal/conformance changes. |
+| [Schema](../../Schema/DESIGN.md) | coordinates with | descriptor admission, defaults, fingerprint and evolution | Keeps explicit SQL meaning attached to admitted fields. | Schema owns FieldSchema changes; matching object storage is insufficient. |
 | [DatabaseWire](../../../DatabaseWire/DESIGN.md) | used by | deterministic bounded semantic encoding | Carries the profile's types, statements, diagnostics and results. | No generic DTO collection, eager page decode, or runtime version negotiation. |
 | [QueryAST](../../../../../database-framework/Sources/QueryAST/DESIGN.md) | used by | parser and serializer language contract | Owns accepted text forms, positions and rejected syntax. | Parsing a built-in form does not imply an available execution capability. |
 | [DatabaseEngine](../../../../../database-framework/Sources/DatabaseEngine/DESIGN.md) | used by | SQL binding and execution contracts | Executes this profile on the injected storage engine. | Authorization, work meters, clocks and lifecycle remain runtime-owned. |
@@ -76,24 +80,25 @@ flowchart TB
 
 ### Current implementation facts
 
-These are source observations, not newly executed verification. Existing tests
-are linked as behavioral specifications; their existence is not a passing run.
+These observations track the S01 implementation. Behavioral specifications
+identify their owners; completed execution evidence is recorded in the task's
+progress record rather than inferred from test declarations.
 
 | Observed current fact | Source or behavioral specification |
 |---|---|
 | DataType lists integer/numeric/string/time/JSON/array forms, but declarations alone do not establish runtime support. | [Expression](../Expression.swift) |
 | SelectQuery has UInt64 limit/offset and shared SPARQL fields; QueryStatement has SELECT/INSERT/UPDATE/DELETE but no general SQL block or ordinary DDL cases. | [SelectQuery](../SelectQuery.swift), [QueryStatement](../QueryStatement.swift) |
-| QueryParameter and Wire QueryRow currently carry primitive FieldValue; Literal.decimal canonicalizes ExactDecimal rather than preserving SQL display scale. | [QueryParameter](../QueryParameter.swift), [Literal](../Literal.swift), [QueryRow](../../../DatabaseWire/QueryRow.swift), [exact numeric tests](../../../../Tests/DatabaseKitTests/Query/ExactNumericLiteralTests.swift) |
-| Wire rows are already positional and lazy; QueryColumn contains number/name without SQL type metadata. | [QueryColumn](../../../DatabaseWire/QueryColumn.swift), [QueryRowPage](../../../DatabaseWire/QueryRowPage.swift), [ownership tests](../../../../Tests/DatabaseWireTests/QueryResultPageTests.swift) |
-| Public executeSQL parses and binds but explicitly rejects non-SELECT statements; SQL row tests currently inspect fields by name. | [DatabaseContext SQL entry](../../../../../database-framework/Sources/Database/DatabaseContext+SQL.swift), [SQL row tests](../../../../../database-framework/Tests/DatabaseTests/SQLRowExecutionTests.swift) |
+| QueryParameter, Literal.queryValue and Wire QueryRow carry QueryValue; numeric display scale and explicit parameter declarations survive carriage. Literal.decimal remains the primitive exact-value form. | [QueryParameter](../QueryParameter.swift), [Literal](../Literal.swift), [QueryRow](../../../DatabaseWire/QueryRow.swift), [typed page tests](../../../../Tests/DatabaseWireTests/QueryTypedPageTests.swift) |
+| Wire rows are positional and lazy; Kit-owned QueryColumn declares number/name/type/nullability independently of row count. | [QueryColumn](../QueryColumn.swift), [QueryRowPage](../../../DatabaseWire/QueryRowPage.swift), [ownership tests](../../../../Tests/DatabaseWireTests/QueryResultPageTests.swift) |
+| Public executeSQL parses and binds but explicitly rejects non-SELECT statements; canonical responses preserve declared columns and positional cells. Name-based projection throws for ambiguous labels. | [DatabaseContext SQL entry](../../../../../database-framework/Sources/Database/DatabaseContext+SQL.swift), [SQL row tests](../../../../../database-framework/Tests/DatabaseTests/SQLRowExecutionTests.swift) |
 | Existing expression SQL serialization maps case-insensitive regex to UPPER/LIKE; source serialization has non-SQL cases. | [SQL-generation implementation](MatchPattern.swift) |
 
-### Planned public semantic contracts
+### Accepted public semantic contracts
 
 - Extend the existing DataType/QueryStatement/QueryIR owners rather than create
   a parallel SQL statement algebra. Represent SELECT/VALUES/set-operation
   bodies with CTEs and outer ordering/pagination, then add DML/DDL/block forms.
-- Introduce a query-domain value contract in DatabaseKit for type and metadata
+- The S01 query-domain value contract in DatabaseKit retains type and metadata
   that primitive FieldValue cannot express: numeric display scale, retained
   JSON lexical bytes, normalized JSONB, array dimensions/lower bounds, and a
   mixed month/day/time interval. Retain existing primitive representations;
@@ -135,6 +140,330 @@ feature ledger. No placeholder, empty rows or synthetic success is permitted.
 | Float | Preserve real versus double precision, finite values and their overload behavior. SQL nonfinite values are explicit unsupported input in this profile. |
 | Equality | SQL joins, grouping, DISTINCT, set operations and SQL indexes use one bound SQL equality/collation contract. Display scale does not create numeric inequality. |
 | Language boundary | SQL NULL/coercion/numeric/order rules do not replace RDF term identity, SPARQL unbound/error semantics, datasets, aggregate or ordering contracts. |
+
+### S01 frozen value and persistence interfaces
+
+S01 implements lossless carriage, declared persistence adaptation and output
+typing for already-admitted expressions. It does not implement later JSON,
+array, interval, numeric arithmetic functions or SQL DDL. Constructors and
+codecs must validate the complete values before publishing them; later
+expression support cannot be used to excuse a lossy S01 round trip.
+
+| Implemented type/case | Stored properties and validation |
+|---|---|
+| `QueryValue` | `.primitive(FieldValue)`, `.numeric(QueryNumericValue)`, `.json(QueryJSONValue)`, `.jsonb(QueryJSONBValue)`, `.array(QueryArrayValue)`, `.interval(QueryIntervalValue)`. Only `.primitive(.null)` means SQL NULL. |
+| `QueryNumericValue` | `value: ExactDecimal`, `displayScale: Int32`; throwing initializer enforces at most 38 coefficient digits, `0...16383` display scale and no hidden significant fractional digits (`displayScale >= max(0, value.scale)` for a nonzero value). Zero retains its requested displayScale. Typmod is not stored in this value. |
+| `QueryJSONValue` | `bytes: ByteString`; throwing initializer validates one complete UTF-8 JSON value and retains the original owner, whitespace, key order and duplicate members. No numeric conversion is required for lexical JSON. JSON `null` remains a JSON value, distinct from SQL NULL. |
+| `QueryJSONBValue` | `root: QueryJSONBNode`; input parsing normalizes object keys/duplicates and validates JSONB semantics. It retains numeric display scale. A constructor from a normalized node validates canonical order instead of silently repairing malformed persisted/Wire data. |
+| `QueryJSONBNode` | Non-indirect closed `.null`, `.bool(Bool)`, `.string(String)`, `.number(QueryNumericValue)`, `.array(QueryJSONBElements)`, `.object(QueryJSONBMembers)`. Collection payloads are immutable views into one flat owner, never arrays of recursively owned nodes. QueryJSONBMember contains `key: String`, `value: QueryJSONBNode`. Members are unique and ordered by UTF-8 byte length, then unsigned byte order; textual duplicate keys keep the last input value. |
+| `QueryArrayDimension` | `lowerBound: Int32`, `length: Int32`; nonempty dimensions have positive length and a checked Int32 upper bound. |
+| `QueryArrayValue` | `elementType: DataType`, `dimensions: [QueryArrayDimension]`, flat row-major `elements: [QueryValue]`; zero dimensions and zero elements are the one empty form. Nonempty arrays have at most six dimensions. Checked product equals element count. Element type is a resolved non-array SQL type; cells are NULL or exactly compatible with it. Nested array cells are not a substitute for dimensions. |
+| `QueryIntervalValue` | `period: CalendarPeriod`, `time: TimeSpan`; preserves months, days and elapsed time without converting between components. Throwing initializer requires Int32 months/days and elapsed time exactly representable as Int64 microseconds. Existing primitive nanosecond/Int64 calendar representations are not changed. |
+
+Numeric displayScale is separate from the precision/scale bounds on declared
+typmods: PostgreSQL's stored dscale supports 14 bits, whereas the public typmod
+scale is limited to −1000…1000. Formatting uses checked output-byte admission
+before expanding an exponent or display scale. This is value metadata
+validation, not an instruction to allocate a padded decimal string. See the
+[PostgreSQL numeric implementation](https://raw.githubusercontent.com/postgres/postgres/REL_18_STABLE/src/backend/utils/adt/numeric.c).
+
+JSON lexical validation accepts syntactically valid Unicode escape sequences
+without decoding every escape; JSONB rejects escaped U+0000, unpaired surrogate
+escapes and numeric values outside this profile. Invalid raw UTF-8 and trailing
+input fail for both. JSONB numbers retain trailing fractional zeros while SQL
+numeric equality ignores them, as required by the
+[PostgreSQL JSON specification](https://www.postgresql.org/docs/18/datatype-json.html).
+Canonical member order follows
+[lengthCompareJsonbString/uniqueifyJsonbObject](https://raw.githubusercontent.com/postgres/postgres/REL_18_STABLE/src/backend/utils/adt/jsonb_util.c).
+Primitive FieldObject ordering is not the JSONB member ordering contract.
+
+#### Flat JSONB ownership and construction
+
+The deep-value lifecycle contract includes destruction as well as parsing,
+comparison and persistence. The previous indirect enum recursively destroyed
+admitted depth-4096 values; a larger process stack or an arbitrary depth ceiling
+does not discharge this contract. The replacement has these exact interfaces:
+
+| Interface | Contract |
+|---|---|
+| `QueryJSONBElements` | Public immutable Sendable RandomAccessCollection, Index Int and Element QueryJSONBNode, zero-based indices. Stores one immutable owner and an element-index range. Its subscript creates a scalar value or another bounded view without copying a subtree. No public array-literal conformance or mutable storage access. |
+| `QueryJSONBMembers` | The corresponding public immutable collection with Element QueryJSONBMember. A member's node view retains the owner as required. |
+| `QueryJSONBNode.array(_:limits:)` | Public throwing overload accepting `[QueryJSONBNode]` and explicit QueryValueLimits. Iteratively copies caller-owned logical subtrees into one new owner, admitting counts and preserving order. Before reading a child or pushing a copy-parent frame, checks the prospective output node count and depth, including the enclosing factory root and all visited but not yet appended ancestors. A deep existing input cannot allocate an unadmitted temporary descent stack. Throws QueryValueError; it grants no runtime reservation. |
+| `QueryJSONBNode.object(_:limits:)` | Corresponding overload accepting `[QueryJSONBMember]`; validates unique canonical key order rather than silently normalizing arbitrary callers. |
+| `QueryJSONBNode.storageFootprint` | Public QueryJSONBStorageFootprint with UInt64 nodeCapacity, elementIndexCapacity, memberCapacity, retainedStorageByteCount and utf8ByteCount. It separates actual backing-array capacities and their checked retainedStorageByteCount from retained string content. It measures the whole retained owner, including unreachable records left by duplicate-key normalization, not merely the visible subtree. Scalars have no flat owner. String content size is not a claim about physical String capacity. |
+| `QueryJSONBStorageFootprint.storageByteCount(nodeCapacity:elementIndexCapacity:memberCapacity:)` | Public checked, allocation-free byte calculation for explicitly chosen capacities using Kit-owned record layouts. Logical counts do not predict capacities selected by Swift Array growth. |
+| `QueryJSONBBuilder.init(limits:)` | Package-only task-local mutable builder. Resource limits are explicit; no public bypass or ambient runtime authority. |
+| `QueryJSONBBuilder.append(_:)` | Package-only throwing scalar append returning Int node ID; composite inputs are rejected. |
+| `QueryJSONBBuilder.appendArray(_:)` | Package-only throwing `[Int]` child-ID append returning the new node ID. |
+| `QueryJSONBBuilder.appendObject(_:)` | Package-only throwing `[QueryJSONBIndexedMember]` append, where each indexed member has immutable key String and value Int. Canonical keys and child ownership are checked. |
+| `QueryJSONBBuilder.finish(root:)` | Package-only consuming throwing operation returning QueryJSONBNode. A root ID must identify the last completed record. Invalid IDs, repeated parent ownership, noncanonical members or incomplete construction are typed QueryValueError.nonCanonicalJSONB failures. |
+
+The immutable storage owns only raw scalar/container records, integer child
+indices and key/index member records. It stores neither QueryJSONBNode nor
+another storage owner. Container records reference earlier completed records;
+child IDs acquire at most one parent. Consequently ownership has no recursive
+RC chain or arena cycle. Destruction releases a fixed number of flat arrays.
+Parser, Wire and declared field decoding append IDs into this builder instead
+of repeatedly invoking public composite factories. Each production node/edge
+is appended once; textual object sorting retains its existing key-order cost.
+Parser duplicate handling may leave admitted unused records; full-owner
+retention measurement includes them, while equality, hashing and logical
+node/depth measurement visit only the canonical root. All traversals use
+iterative cursor continuations bounded by nesting rather than width.
+
+Builder checks prospective node, collection, depth and UTF-8 content counts
+before appending. Backing-array capacity is observed from actual Swift arrays;
+requested count is never reported as physical capacity. These representation
+counts and actual retained capacities remain separate from Framework's platform
+allocation policy and reservations. Builder finish checks actual retained buffer
+bytes plus string content against its admitted retained-byte limit before
+exposing a root. Public measurement uses that same combined amount. Framework
+reserves conservatively from prospective logical requirements and its owned
+capacity policy, then reconciles actual footprint before publication; unknown
+physical String capacity is never replaced by an equality claim about content.
+A child collection view retains the entire
+owner; independent public values conservatively charge each retained reference.
+Known-source runtime leases may share that origin without claiming universal
+physical deduplication. No DatabaseTypes representation is changed.
+
+All public value properties are immutable. Typed initializers, Wire decoding,
+field decoding and expression binding use the same intrinsic validator, with
+`QueryValueLimits` explicitly bounding retained bytes, total nodes, nesting
+depth and collection elements. Limits are supplied by the admitting boundary;
+runtime work-meter reservations remain Framework-owned. Checked counts and
+dimensions are verified before allocation; formatting/parsing cannot evade
+limits through exponent expansion or escaped characters.
+
+Public QueryValue validation and measurement conservatively count known retained
+capacity for every byte reference. They do not claim unique physical allocation
+or deduplicate aliased backing owners. A bounded slice retains its complete
+known owner capacity; unknown retained capacity is a typed
+unknownRetainedByteCount failure wherever a retained-byte bound is being proven.
+Visible slice length is never substituted for unknown physical retention.
+Callers may explicitly detach/copy into a self-contained ByteString instead.
+
+DatabaseWire may use a package-limited assembly path for values decoded from
+one admitted root frame. The codec first admits that root's known retention
+once, then separately admits views, new UTF-8 allocations, nodes, depth and
+collection elements. Array assembly uses the same intrinsic shape/type checks
+as public construction but does not repeat the conservative per-reference
+capacity sum after those codec ledgers have admitted the input. This path is
+only for codec-created children of that root, has no public bypass, and does
+not change subsequent public measurement into a physical deduplication claim.
+Framework similarly shares an admitted source-payload lease for known origins;
+independent caller roots retain the conservative public contract.
+The package-only entry is
+`QueryArrayValue.init(admittedElementType:dimensions:elements:) throws(QueryValueError)`.
+It shares validateShapeAndTypes with public construction. Individual lexical
+JSON values retain their public constructor and known-root capacity check;
+there is no JSON-validation bypass. Wire's root gate rejects unknown or
+oversized physical retention before children reach this entry.
+
+#### Exact declared persistence adaptation
+
+The chosen adaptation preserves the existing primitive persistence traversal.
+It does not require Kit to call a Framework codec or let a primitive object
+silently acquire SQL meaning.
+
+| Planned interface/change | Contract |
+|---|---|
+| Schema query descriptor | Consume the [Schema-owned optional descriptor and identity contract](../../Schema/DESIGN.md#contracts-and-invariants) to select rich field interpretation. |
+| Static model adaptation | Consume [Model-owned Field metadata and conformance propagation](../../Model/DESIGN.md#contracts-and-invariants) through existing generic field traversal. |
+| Rich scalar wrappers | QueryNumericValue, QueryJSONValue, QueryJSONBValue and QueryIntervalValue provide the corresponding unconstrained SQL DataType and the declared storage-adapter conversions consumed by Model. QueryLiteralConvertible produces Literal.queryValue. |
+| `QueryArrayElement` | Static `queryDataType: DataType`, throwing `queryValue` getter and `static decodeQueryValue(_:) throws(QueryValueError) -> Self`. Primitive scalar and rich scalar conformances supply a resolved, non-array type; it is a statically specialized model-adaptation protocol, not a runtime registry. |
+| `QueryArray<Element: QueryArrayElement>` | Typed array wrapper holding dimensions and flat optional elements, declaring `.sql(.array(Element.queryDataType))`. Converts to/from QueryArrayValue with identical shape/type checks. Model and Schema own its persisted-field admission; runtime-erased QueryArrayValue is not a model field. |
+| `QueryFieldStorageAdapter` | Pure Kit static operations `encode(_:type:limits:) -> FieldValue` and `decode(_:type:limits:) -> QueryValue`, throwing QueryValueError. Type is the declared QueryColumnType; plain object/bytes content is never inspected to guess a wrapper. |
+| `QueryFieldStorageAdapter.measure(_:type:)` | Checked iterative traversal returning QueryFieldStorageFootprint for the exact envelope that encode will construct. Measurement owns a bounded temporary worklist; it does not materialize the destination envelope, format numeric text, decode lexical JSON into a tree or obtain runtime authority. |
+| `QueryFieldStorageAdapter.measureDecoded(_:type:)` | Returns QueryFieldDecodedFootprint without materializing the destination: logical value nodes, collection elements, depth, UTF-8 content, and aggregate JSONB node/element-index/member requirements. Its minimumJSONBStorageByteCount uses logical counts as capacities only to compute a layout minimum, not an actual capacity forecast. |
+
+The adapter preserves primitive values unchanged for `.primitive` descriptors.
+For rich SQL descriptors it produces a declared FieldObject envelope with a
+closed `kind` tag and exact payload; decode requires the matching declaration,
+tag, exact fields and intrinsic value validity. There is no permissive unknown
+tag, extra-key, old-layout or missing-metadata fallback. The pure conversion is
+Kit model adaptation; actual persistence bytes remain the Framework primitive
+storage codec's responsibility.
+
+| Envelope kind | Exact payload meaning |
+|---|---|
+| `numeric` | `value` is primitive ExactDecimal and `displayScale` is Int32. |
+| `json` | `bytes` retains the validated original ByteString. |
+| `jsonb` | `nodes` is a flat array of prefix node records; the first record is the implicit root. Scalar records retain existing kind/value/displayScale meanings. Array records carry exact child count; object records carry canonical ordered keys, one for each following child subtree. Decoding consumes exactly all records and declared child counts, rejecting extras or truncation. Physical FieldValue nesting is constant regardless of logical JSON depth. |
+| `array` | `dimensions` is ordered `{lowerBound, length}` entries and `elements` is a flat array of declared element adaptations, with SQL NULL represented by primitive null. The array element type comes from the field declaration, not row contents. |
+| `interval` | `months`/`days` are Int32, `microseconds` is Int64; conversion back to existing calendar/time primitives is checked and exact. |
+
+Each envelope has exactly `kind` plus the named payload fields. The JSONB
+`nodes` array is nonempty and stores exactly one depth-first prefix tree:
+
+| Record kind | Exact fields and meaning |
+|---|---|
+| `null` | `kind` only; JSON null remains distinct from SQL NULL. |
+| `bool` | `kind`, `value: FieldValue.bool`. |
+| `string` | `kind`, `value: FieldValue.string`. |
+| `number` | `kind`, `value: FieldValue.decimal`, `displayScale: FieldValue.int32`. |
+| `array` | `kind`, `childCount: FieldValue.uint64`; exactly that many following child subtrees. |
+| `object` | `kind`, `keys: FieldValue.array` of primitive strings in canonical unique JSONB key order; one following child subtree per key, in the same order. |
+
+Reference indices and old recursive layouts are not admitted. Unknown, missing,
+extra or mismatched fields, invalid key order, impossible child counts,
+truncated subtrees and trailing records fail explicitly. Array element
+adaptation uses the declared DataType. Schema consumes these same envelopes
+for its default-validation contract; optional outer NULL remains primitive
+null. Schema's evolution contract governs descriptor changes.
+
+The [Model-owned static conversion flow](../../Model/DESIGN.md#runtime-flows)
+calls this adapter for wrapper values, selected fields and defaults. Framework
+SQL projection/read/update consumes the
+[Schema-owned admitted descriptor](../../Schema/DESIGN.md#contracts-and-invariants),
+and never treats the declared envelope as a user JSON/object. Schema owns
+Directory/index admission and descriptor changes; this component supplies the
+rich type/value validation consumed there.
+
+#### Failure model and type boundaries
+
+QueryValueError is the one intrinsic failure enum for these operations, with
+distinct cases for invalid display scale, coefficient range, malformed JSON
+(byte offset/reason), invalid UTF-8, noncanonical JSONB, invalid dimension count,
+invalid dimension/upper bound, dimension product overflow, element count,
+element type, incompatible declared type, invalid column numbering,
+missing/invalid persistence descriptor or envelope, and value-resource limit.
+Model's error contract preserves the typed query adaptation cause through
+persisted-field conversion; it cannot silently remove metadata.
+Wire maps these to its typed malformed-value errors while retaining the cause;
+Framework maps to its semantic diagnostics. Array and JSONB validation reports
+the failing element/member path within the bounded input.
+
+The frozen constructor and adapter spellings are:
+
+```swift
+QueryNumericValue.init(value: ExactDecimal, displayScale: Int32)
+QueryJSONValue.init(bytes: ByteString, limits: QueryValueLimits)
+QueryJSONBValue.init(json: QueryJSONValue, limits: QueryValueLimits)
+QueryJSONBValue.init(root: QueryJSONBNode, limits: QueryValueLimits)
+QueryArrayDimension.init(lowerBound: Int32, length: Int32)
+QueryArrayValue.init(elementType: DataType, dimensions: [QueryArrayDimension],
+                    elements: [QueryValue], limits: QueryValueLimits)
+QueryIntervalValue.init(period: CalendarPeriod, time: TimeSpan)
+QueryArray<Element>.init(dimensions: [QueryArrayDimension], elements: [Element?],
+                         limits: QueryValueLimits)
+QueryFieldStorageAdapter.encode(_ value: QueryValue, type: QueryColumnType,
+                                limits: QueryValueLimits) -> FieldValue
+QueryFieldStorageAdapter.decode(_ value: FieldValue, type: QueryColumnType,
+                                limits: QueryValueLimits) -> QueryValue
+```
+
+The throwing operations above use QueryValueError. These are the implemented
+S01 interfaces. QueryValueLimits
+has immutable UInt64 maximumRetainedBytes, maximumTotalNodes,
+maximumNestingDepth and maximumCollectionElements, with an initializer requiring
+all four. The admitting runtime or codec derives limits from its existing budget
+and limits; value construction does not silently choose a larger budget.
+QueryArrayElement requirements include Sendable, retain no metatype in values,
+and return primitive/rich representations without inferred element schemas.
+
+Existing FieldValueEncodable/FieldValueDecodable methods have no execution
+budget argument. Their wrapper conformances perform intrinsic conversion under
+checked structural bounds derived from the already-owned input/value footprint,
+without a global/unlimited fallback or stored runtime reservation. Runtime
+catalog conversion calls the explicit limits-taking adapter before admitting
+the value; typed model destinations independently pre-admit the resulting
+footprint. Thus the model conformance cannot authorize a larger runtime budget,
+and the no-budget protocol does not force a Kit dependency on Framework state.
+
+QueryFieldStorageFootprint records checked UInt64 scalar/value node count,
+object-entry count, array-element count, newly materialized UTF-8 byte count,
+retained byte-view count/length and maximum depth. It describes the adapter's
+representation, not platform allocator size or a reservation. Measurement owns
+an explicit temporary worklist with at most one continuation per active input
+container and one current child. Children are scheduled individually after node,
+depth and collection checks; workspace growth is bounded by the admitted input
+nodes and depth rather than collection width. This temporary traversal allocation
+is not a destination envelope allocation and is released when measurement returns
+or throws. JSONB field encoding writes shallow prefix records and decoding uses
+the package flat builder. The complete destination footprint is admitted before
+assembly; traversal descends one child at a time and preserves declared member
+order and exact closed node layouts. The encoded FieldValue and decoded JSONB
+owners both have nonrecursive destruction. Adapter inferred limits include the
+prospective decoded arena records, edges, members and UTF-8 content in addition
+to the encoded envelope shape. Its decode-footprint measurement reports those
+destination counts without materializing that arena; Framework pre-admits them
+using its existing platform allocation policy before conversion. Workspace is
+bounded by admitted input nodes and depth, with no guessed platform-safe
+recursion limit. Framework selects a logical layout allowance before construction
+and reconciles the resulting actual storageFootprint before publication; allocator
+internal overhead and exact physical peak are not claimed by these counts. Pure
+payload-derived limits provide a checked allowance of twice the logical JSONB
+storage layout plus the retained envelope and UTF-8 content. This is a finite
+policy allowance, not a prediction of Swift Array capacity; builder finish rejects
+an actual retained owner exceeding that allowance before returning it. Pure no-budget model measurement derives its finite
+workspace from the already-owned structure; runtime admission remains the caller's
+responsibility. Primitive byte payloads and lexical JSON retain the same ByteString
+owner; measure records that retention separately from new destination allocations. Framework combines
+these counts with its existing platform/layout/capacity footprint calculation,
+pre-admits the destination, then calls encode. Encoding uses that same traversal
+and capacity policy, so measurement cannot omit recursively tagged JSONB nodes,
+dimension arrays, element envelopes or metadata strings. Exact/one-past logical
+node, collection and depth budgets reject growth before its allocation. Actual
+Swift Array capacities are reconciled against admitted retained-storage budgets
+before publication; allocator-internal bytes are outside these representation
+counts. Known byte-owner source retention is admitted before conversion. Failure
+after actual-capacity reconciliation releases the unpublished destination and its
+claims. User-owned pure
+model encoding has no Framework meter; invoking it inside a runtime path is
+permitted only after the runtime's admission. No constructor limit, footprint
+value or static conformance itself grants work-meter admission.
+
+An explicit cast/adaptation is required to drop rich metadata. The explicit
+name-keyed result/model projection rejects duplicate names, unrepresentable
+rich values and incompatible types. No first/last-wins dictionary projection,
+missing-cell-to-NULL rule, first-row type inference or `.unknown` output type
+is part of S01. The existing SQL syntax needs a type binder for its admitted
+columns/literals/casts/operators/functions/aggregate/CASE/subquery forms even
+when zero rows are produced; S03 extends that same binder later.
+
+S01 also closes the actual existing SQL-generation boundary in
+[MatchPattern.swift](MatchPattern.swift): Literal.toSQL and its reachable
+expression/source/query/graph generators become throwing. Add
+`QueryLiteralConversionError.unsupportedSQLLiteral` to the existing Kit-owned
+conversion error; preflight rejects numeric/json/jsonb/array/interval rich
+QueryValue alternatives anywhere in a generation request before producing SQL
+text, and propagates the typed failure to current Framework builder callers.
+Literal.queryValue(.primitive(value)) explicitly delegates through the existing
+lossless FieldValue-to-Literal conversion and its existing SQL literal path;
+unsupported primitive conversion remains a typed error. It cannot strip
+metadata from a rich alternative to obtain that primitive path.
+Literal.description remains diagnostic and is not a SQL
+serialization fallback. This is narrow safety for S01's new value case, not
+implementation of its later SQL literal syntax or S02 serializer consolidation.
+
+#### S01 falsifiable case IDs
+
+| Case ID | Required behavior and counterexample rejected |
+|---|---|
+| S01-C01 | Public SQL `SELECT 1 AS x, 2 AS x` returns ordered columns 1/2 and cells 1/2. Name projection fails as ambiguous; duplicate names themselves succeed. |
+| S01-C02 | Zero-row projection of typed NULL and BIGINT retains both ordered types/nullability. An explicitly BIGINT parameter containing NULL, and an explicitly typed empty-array parameter, retain their declarations after parameter replacement and Wire IR round trip. Nonempty NULL result carries the same declarations; no first-row inference is possible. |
+| S01-C03 | Join/derived relation duplicates preserve all slots and qualified lookup; unqualified ambiguous lookup fails before execution. |
+| S01-C04 | QueryNumericValue canonical `1` with displayScale 2 and zero with nonzero scale survive literal/parameter, model insert/reload/update, SQL projection and Wire round trip. Negative/16384 dscale, hidden fractional digits and 39-digit coefficient fail. |
+| S01-C05 | JSON whitespace/key order/duplicates remain byte-identical through all boundaries; JSON null differs from SQL NULL. Invalid UTF-8, trailing tokens, incomplete escapes and depth/byte limits fail. |
+| S01-C06 | JSONB duplicate keys last-win, length-first/bytewise key order, numeric trailing zeros, nested JSON null and normalized tree survive all boundaries. Invalid surrogate/U+0000, noncanonical persisted members, nonfinite/out-of-range numbers fail. |
+| S01-C07 | Typed multidimensional array with negative/non-1 lower bounds and NULL elements survives literal/parameter, model persistence, projection and Wire. Empty array type survives zero cells. Wrong element type, count/product/upper-bound overflow and seventh dimension fail. |
+| S01-C08 | Mixed-sign month/day/time interval survives all boundaries without component normalization. Month/day overflow, nonmicrosecond time or elapsed-microsecond overflow fail. |
+| S01-C09 | Declared wrapper schema, generated Field metadata, default, selected-field encode, persisted model decode and SchemaManifest retain queryType. Plain object/bytes resembling envelopes remain primitive; mismatched/extra/missing/unknown envelope fields fail. |
+| S01-C10 | First, continuation and zero-row pages preserve identical columns/values across actual server/client/CLI mapping; no row-derived schema reconstruction. |
+| S01-C11 | Lazy Wire query values/columns survive source-frame scope, preserve one retained byte owner and reject unknown tags, arity/type mismatch, truncation, trailing input and exact/one-past budgets. Encoded-page validation checks grammar, intrinsic values, logical/UTF-8 limits and known frame retention in place. Fallible iterator row materialization reconciles actual flat-owner capacity before returning a row; a resource failure returns no partial row. It does not eagerly build/discard future arenas or expand quota. See [Wire ownership phases](../../../DatabaseWire/DESIGN.md). Two known slices of one root demonstrate conservative public per-reference capacity versus codec root-once admission. Unknown capacity is explicitly rejected, never replaced by visible length. |
+| S01-C12 | Framework lexical/array/JSONB values and columns retain reservations through admitted construction and required resource close. Retained Ready/Server paths keep claims until last-owner release or explicit consuming final transfer. Complete public materialization becomes caller-owned after that transfer and ends runtime claims. Failure/cancel release all claims. Exact/one-past logical node, collection and depth growth rejects before allocation; known byte-owned source retention is pre-admitted. Actual full-owner Swift Array capacity is reconciled before publication, with allocator internals excluded rather than guessed. Reconciliation failure releases the unpublished value and all claims. |
+| S01-C13 | Existing primitive persistence identity/bytes, RDF terms/SPARQL NULL-unbound semantics, and standard v3 versus MultiBase v5 target/provenance contracts regress without adopting SQL equality. |
+
+S01-C04–C08 each exercise both a rich literal and a rich parameter and at least
+one generated @Persistable model, not manually fabricated storage envelopes
+alone. S01-C09 additionally checks schema evolution/fingerprint distinguishes
+the same primitive storage kind with different query descriptors. S01-C11 uses
+codec golden/malformed inputs; S01-C10 uses actual public invocation. Every case
+is pending until its owning runtime test executes successfully.
+S01-C09 additionally rejects ordinary `[RichWrapper]` and optional variants via
+the single static metadata-forwarding path. S01-C04–C08 include direct and
+nested toSQL attempts, each failing with unsupportedSQLLiteral instead of
+emitting diagnostic descriptions, partial SQL or placeholders.
 
 ### Complete feature inventory and acceptance obligations
 
@@ -327,7 +656,7 @@ catalog and publication contracts rather than blindly replay visible effects.
 | Block settings/prepared statements/temporary tables | Framework SQL block, destroyed after authoritative close |
 | Checkpoint journal/read overlay | StorageKit transaction; includes data, indexes, Directory metadata and schema staging |
 | Sequence state | Framework persisted nonrollback allocation owner, with explicit retry/crash recovery |
-| Result page/frame | Runtime owner until publication; Wire lazy page retains its immutable encoded owner afterward |
+| Result page/frame | Runtime retained owner until last release or explicit consuming final-output transfer; complete public materialization is caller-owned afterward, while Wire lazy pages retain their encoded byte owner |
 
 The SQL catalog separates SQL keys from internal row identity, including
 no-primary-key and composite-key tables. DDL validates a candidate schema/runtime
@@ -419,6 +748,12 @@ SQL semantic changes propagate to Query, DatabaseKit, DatabaseWire, Framework
 binding/evaluation/mutation/catalog and direct client/server mappings as
 applicable. Shared QueryIR changes additionally require SPARQL/graph regression.
 Primitive representation changes require a separate intrinsic-meaning analysis;
-SQL metadata alone does not authorize them. Each sprint owns focused evidence;
-the complete accepted profile and cumulative backend/target matrix is S18's
-integration obligation, not evidence already supplied by S00.
+SQL metadata alone does not authorize them. Each sprint verifies its changed
+contracts against a frozen task-source dependency graph, records the exact
+source and dependency inputs, completes its affected feature/backend and package
+lanes, and then commits. Local dependency copies provide sprint evidence, not
+final URL-graph acceptance. S18 owns the complete accepted profile and cumulative
+backend/target matrix, normal task-only upstream publication and URL-pin
+reconciliation, followed by final verification against that published URL graph.
+S00 does not supply this later integration evidence. Tags, releases and deployment
+remain outside this implementation task.

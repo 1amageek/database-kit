@@ -98,19 +98,22 @@ public enum SchemaDescribeOperation: DatabaseOperationDeclaration {
         public let type: ValueType
         public let nullable: Bool
         public let reference: Reference?
+        public let queryType: QueryColumnType?
 
         public init(
             number: UInt32,
             name: String,
             type: ValueType,
             nullable: Bool,
-            reference: Reference? = nil
+            reference: Reference? = nil,
+            queryType: QueryColumnType? = nil
         ) {
             self.number = number
             self.name = name
             self.type = type
             self.nullable = nullable
             self.reference = reference
+            self.queryType = queryType
         }
 
         fileprivate func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
@@ -121,6 +124,10 @@ public enum SchemaDescribeOperation: DatabaseOperationDeclaration {
             writer.writeBool(reference != nil)
             if let reference {
                 try reference.encode(into: &writer)
+            }
+            writer.writeBool(queryType != nil)
+            if let queryType {
+                try QueryColumnTypeWireCodec.encode(queryType, into: &writer)
             }
         }
 
@@ -135,12 +142,16 @@ public enum SchemaDescribeOperation: DatabaseOperationDeclaration {
             let reference = try reader.readBool()
                 ? Reference(from: &reader)
                 : nil
+            let queryType = try reader.readBool()
+                ? QueryColumnTypeWireCodec.decode(from: &reader)
+                : nil
             self.init(
                 number: number,
                 name: name,
                 type: type,
                 nullable: nullable,
-                reference: reference
+                reference: reference,
+                queryType: queryType
             )
         }
     }

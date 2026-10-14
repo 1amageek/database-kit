@@ -209,6 +209,8 @@ struct SchemaExecuteWireTests {
                 writer.writeBool(false)
                 writer.writeBool(false)
                 writer.writeBool(false)
+                writer.writeBool(false)
+                writer.writeBool(false)
             }
             try writer.writeCount(0)
             try writer.writeString(DirectoryLayer.default.rawValue)
@@ -264,6 +266,97 @@ struct SchemaExecuteWireTests {
                 request: request
             )
             #endif
+        }
+    }
+
+    @Test("Query descriptors and rich defaults survive canonical manifests and affect identity")
+    func queryDescriptorsRoundTrip() throws {
+        let type: QueryColumnType = .sql(.decimal(precision: 18, scale: 2))
+        let value = QueryValue.numeric(try QueryNumericValue(
+            value: ExactDecimal(coefficient: 12345, scale: 2), displayScale: 2
+        ))
+        let payload = try QueryFieldStorageAdapter.encode(
+            value, type: type, limits: QueryFieldStorageAdapter.inferredLimits(for: value, type: type)
+        )
+        let fields = [
+            FieldSchema(name: "amount", fieldNumber: 1, type: .object, defaultValue: payload, queryType: type),
+            FieldSchema(name: "tags", fieldNumber: 2, type: .string, isArray: true,
+                        queryType: .primitive(.string, isArray: true)),
+        ]
+        let entity = try Schema.Entity(name: "Entry", identifierType: .string, fields: fields)
+        let manifest = SchemaManifest(schema: try Schema(entities: [entity]))
+        let bytes = try manifest.canonicalBytes()
+        let decoded = try SchemaManifest(canonicalBytes: bytes)
+        #expect(decoded.schema == manifest.schema)
+        #expect(try decoded.fingerprint() == manifest.fingerprint())
+        let decodedField = try #require(decoded.schema.entity(named: "Entry")?.fields.first)
+        #expect(try QueryFieldStorageAdapter.decode(
+            #require(decodedField.defaultValue), type: #require(decodedField.queryType),
+            limits: QueryFieldStorageAdapter.inferredLimits(for: payload, type: type)
+        ) == value)
+
+        let primitive = SchemaManifest(schema: try Schema(entities: [
+            Schema.Entity(name: "Entry", identifierType: .string, fields: [
+                FieldSchema(name: "tags", fieldNumber: 1, type: .string),
+            ]),
+        ]))
+        let declared = SchemaManifest(schema: try Schema(entities: [
+            Schema.Entity(name: "Entry", identifierType: .string, fields: [
+                FieldSchema(name: "tags", fieldNumber: 1, type: .string, queryType: .primitive(.string)),
+            ]),
+        ]))
+        let sql = SchemaManifest(schema: try Schema(entities: [
+            Schema.Entity(name: "Entry", identifierType: .string, fields: [
+                FieldSchema(name: "tags", fieldNumber: 1, type: .string, queryType: .sql(.text)),
+            ]),
+        ]))
+        #expect(try primitive.fingerprint() != declared.fingerprint())
+        #expect(try declared.fingerprint() != sql.fingerprint())
+    }
+
+    @Test("Query column metadata round trips and rejects invalid constructors")
+    func queryColumnsValidate() throws {
+        let column = try QueryColumn(number: 1, name: "value", type: .sql(.jsonb), isNullable: true)
+        let bytes = try DatabaseWireWriter.encode { writer throws(DatabaseWireError) in
+            try column.encode(into: &writer)
+        }
+        var reader = DatabaseWireReader(bytes)
+        #expect(try QueryColumn(from: &reader) == column)
+        try reader.ensureFullyRead()
+        let invalid = try DatabaseWireWriter.encode { writer throws(DatabaseWireError) in
+            writer.writeUInt32(0)
+            try writer.writeString("value")
+            try QueryColumnTypeWireCodec.encode(.sql(.integer), into: &writer)
+            writer.writeBool(false)
+        }
+        #expect(throws: DatabaseWireError.invalidQueryValue(.invalidColumnNumber(0))) {
+            var reader = DatabaseWireReader(invalid)
+            _ = try QueryColumn(from: &reader)
+        }
+    }
+
+    @Test("Query descriptor wire decoder rejects unknown tags and invalid SQL parameters")
+    func queryTypeRejectsMalformedBytes() throws {
+        #expect(throws: DatabaseWireError.invalidValueTag(255)) {
+            var reader = DatabaseWireReader(ByteString([255]))
+            _ = try QueryColumnTypeWireCodec.decode(from: &reader)
+        }
+        let invalid = try DatabaseWireWriter.encode { writer throws(DatabaseWireError) in
+            writer.writeUInt8(1)
+            try QueryIRDataTypeWireCodec.encode(.varchar(length: 0), into: &writer)
+        }
+        #expect(throws: DatabaseWireError.invalidQueryValue(.incompatibleType)) {
+            var reader = DatabaseWireReader(invalid)
+            _ = try QueryColumnTypeWireCodec.decode(from: &reader)
+        }
+        let valid = try DatabaseWireWriter.encode { writer throws(DatabaseWireError) in
+            try QueryColumnTypeWireCodec.encode(.primitive(.vector, isArray: true), into: &writer)
+        }
+        for length in 0..<valid.count {
+            #expect(throws: DatabaseWireError.self) {
+                var reader = DatabaseWireReader(ByteString(valid.copyBytes().prefix(length)))
+                _ = try QueryColumnTypeWireCodec.decode(from: &reader)
+            }
         }
     }
 

@@ -54,12 +54,17 @@ extension GraphTableSource {
 
 extension GraphTableSource {
     /// Generate SQL/PGQ GRAPH_TABLE syntax
-    public func toSQL() -> String {
+    public func toSQL() throws(QueryLiteralConversionError) -> String {
+        try QueryStructuralValidator.validateSQLLiteralSupport(self)
+        return try sqlText()
+    }
+
+    func sqlText() throws(QueryLiteralConversionError) -> String {
         var result = "GRAPH_TABLE(\(graphName),\n"
-        result += "  \(matchPattern.toSQL())"
+        result += "  \(try matchPattern.sqlText())"
         if let cols = columns, !cols.isEmpty {
             result += "\n  COLUMNS ("
-            result += cols.map { "\($0.expression.toSQL()) AS \($0.alias)" }.joined(separator: ", ")
+            result += try cols.map { (value) throws(QueryLiteralConversionError) -> String in "\(try value.expression.sqlText()) AS \(value.alias)" }.joined(separator: ", ")
             result += ")"
         }
         result += "\n)"

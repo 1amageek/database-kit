@@ -40,6 +40,8 @@ application schemas, or a global macro/runtime registry.
 |---|---|---|---|---|
 | [`../../DESIGN.md`](../../DESIGN.md) | package parent | module ownership and static/Embedded boundary | Defines this target as the implementation of the DatabaseKit macro surface. | This plugin is not a package product. |
 | [`../DatabaseKit/DESIGN.md`](../DatabaseKit/DESIGN.md) | public contract owner | generated declaration shapes and semantic validation | Defines what generated code means. | The plugin must not invent a second semantic contract. |
+| [Model](../DatabaseKit/Model/DESIGN.md) | public contract owner | Field metadata and generic model adaptation | Defines optional static query type propagation and typed conversion failures. | The plugin emits static declarations, not runtime type discovery. |
+| [Schema](../DatabaseKit/Schema/DESIGN.md) | public contract owner | field query-descriptor/storage/default validation | Admits generated declarations through the same boundary as manual schemas. | No fingerprint or storage-shape exception for generated fields. |
 | [`../../../SPEC.md`](../../../SPEC.md) | system authority | declaration-versus-execution boundary | Keeps Directory declaration separate from StorageKit mechanics. | Generated path values are data, not storage capabilities. |
 
 ## Architecture
@@ -85,6 +87,37 @@ does not import or execute StorageKit or Framework.
 - The public macro declarations remain in `DatabaseKit`; this target supplies
   only their compiler implementation and is not directly imported by users as
   a semantic runtime module.
+
+### S01 generated field metadata assumptions
+
+The existing [PersistableMacro](PersistableMacro.swift) emits concrete generic
+output.write traversal, selected-field conversion and typed input decoding;
+unknown declared Swift types already delegate their primitive classification
+to Type.fieldSchemaType. S01 extends that static path to emit the
+[Model-owned query metadata](../DatabaseKit/Model/DESIGN.md#contracts-and-invariants)
+into generated Field and FieldSchema values. Optional wrappers retain the
+declared wrapped type, and typed SQL arrays retain their statically selected
+element declaration. Metadata is not inferred from defaults or row contents.
+The generator reads the full declared field type's static queryType once for
+both metadata paths. Model's Optional/Array forwarding resolves wrapped or
+element metadata; the macro does not implement a second rich-array recognition
+rule. Schema then rejects ordinary isArray fields with rich descriptors.
+
+Stable rich default generation follows Model's
+[finite constructor and typed failure contract](../DatabaseKit/Model/DESIGN.md#stable-query-defaults).
+The generator recognizes explicit QueryArray element specialization, evaluates
+nested admitted throwing constructors in source order into concrete locals, and
+normalizes forced tries only inside this captured default expression. Each
+constructor is caught through its known QueryValueError or TimeSpanError type;
+arbitrary factories and unsupported constructor overloads remain uncaptured.
+
+Generated defaults, selected-field access and model reconstruction keep the
+same statically specialized wrapper conversions. Schema validates descriptor
+compatibility and typed failures; expansion may issue a diagnostic when the
+invalid shape is known from source, but must not substitute nil query metadata
+to make invalid declarations compile. Macro expansion tests cover these new
+assumptions alongside the SQL owner's S01-C04–C09/C13 obligations. The workspace
+progress record owns execution evidence for these implemented generated paths.
 
 ## Runtime Flows
 

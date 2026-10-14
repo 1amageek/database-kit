@@ -1,3 +1,5 @@
+import DatabaseKit
+
 public enum SchemaJSONError: Error, Sendable, Equatable {
     case inputTooLarge(actual: Int, maximum: Int)
     case nestingTooDeep(maximum: Int)
@@ -8,6 +10,7 @@ public enum SchemaJSONError: Error, Sendable, Equatable {
     case unknownField(path: String)
     case typeMismatch(path: String, expected: String)
     case invalidValue(path: String, reason: String)
+    case invalidQueryValue(path: String, cause: QueryValueError)
     case invalidSchema(reason: String)
     case outputTooLarge(actual: Int, maximum: Int)
 }
@@ -33,6 +36,8 @@ extension SchemaJSONError: CustomStringConvertible {
             "Schema JSON field '\(path)' must be \(expected)"
         case .invalidValue(let path, let reason):
             "Invalid Schema JSON value at '\(path)': \(reason)"
+        case .invalidQueryValue(let path, let cause):
+            "Invalid query descriptor at '\(path)': \(cause)"
         case .invalidSchema(let reason):
             "Invalid schema: \(reason)"
         case .outputTooLarge(let actual, let maximum):

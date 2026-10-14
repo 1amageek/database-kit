@@ -7,6 +7,7 @@ public struct QueryStructuralResourceLedger: Sendable {
     public let limits: QueryStructuralLimits
 
     private var nestingDepth: UInt64 = 0
+    private var retainedBytes: UInt64 = 0
     private var inputTokens: UInt64 = 0
     private var totalNodes: UInt64 = 0
     private var collectionElements: UInt64 = 0
@@ -59,6 +60,13 @@ public struct QueryStructuralResourceLedger: Sendable {
         switch resource {
         case .nestingDepth:
             throw .invalidResourceClaim(.nestingDepth)
+        case .retainedBytes:
+            retainedBytes = try checkedTotal(
+                current: retainedBytes,
+                amount: amount,
+                resource: resource,
+                maximum: limits.maximumRetainedBytes
+            )
         case .inputTokens:
             inputTokens = try checkedTotal(
                 current: inputTokens,

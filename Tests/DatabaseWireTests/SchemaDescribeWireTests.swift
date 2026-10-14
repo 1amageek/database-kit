@@ -5,6 +5,27 @@ import Testing
 
 @Suite("Schema describe wire")
 struct SchemaDescribeWireTests {
+    @Test("Schema describe preserves declared query semantics beside primitive metadata")
+    func queryDescriptorsRoundTrip() throws {
+        let response = SchemaDescribeOperation.Response(version: .init(1, 0, 0), entities: [
+            .init(name: "Entry", fields: [
+                .init(number: 1, name: "payload", type: .object, nullable: true, queryType: .sql(.jsonb)),
+                .init(number: 2, name: "amount", type: .object, nullable: false,
+                      queryType: .sql(.decimal(precision: 38, scale: 7))),
+                .init(number: 3, name: "names", type: .string, nullable: false,
+                      queryType: .primitive(.string, isArray: true)),
+                .init(number: 4, name: "raw", type: .bytes, nullable: false),
+            ], indexes: []),
+        ])
+        let frame = try DatabaseWireEncoder().encodeResponse(
+            DatabaseOperationCatalog.schemaDescribe, requestID: 19, response: response
+        )
+        let decoded = try DatabaseWireDecoder().decodeResponse(
+            DatabaseOperationCatalog.schemaDescribe, from: frame, matching: 19
+        )
+        #expect(try decoded.get() == response)
+    }
+
     @Test("Index types round-trip without string dispatch")
     func indexTypesRoundTrip() throws {
         let types: [IndexType] = [

@@ -39,14 +39,9 @@ public struct QueryRowPage: Sendable {
         provenance: CompositionPageProvenance?,
         consistency: DatabaseReadConsistency
     ) throws(DatabaseWireError) {
-        for row in rows {
-            guard row.values.count == columns.count else {
-                throw .invalidRowValueCount(
-                    expected: columns.count,
-                    actual: row.values.count
-                )
-            }
-        }
+        do { try QueryColumn.validate(columns) }
+        catch let error { throw .invalidQueryValue(error) }
+        for row in rows { try row.validate(columns: columns) }
         guard provenance == nil || provenance?.originCount == rows.count else {
             throw .invalidCompositionProvenance
         }
@@ -65,14 +60,9 @@ public struct QueryRowPage: Sendable {
         continuation: ByteString? = nil,
         snapshotVersion: UInt64? = nil
     ) throws(DatabaseWireError) {
-        for row in rows {
-            guard row.values.count == columns.count else {
-                throw .invalidRowValueCount(
-                    expected: columns.count,
-                    actual: row.values.count
-                )
-            }
-        }
+        do { try QueryColumn.validate(columns) }
+        catch let error { throw .invalidQueryValue(error) }
+        for row in rows { try row.validate(columns: columns) }
         self.columns = columns
         self.rowCount = rows.count
         self.continuation = continuation
@@ -90,7 +80,7 @@ public struct QueryRowPage: Sendable {
             return QueryRowIterator(
                 encodedRows: bytes,
                 rowCount: rowCount,
-                columnCount: columns.count,
+                columns: columns,
                 limits: limits
             )
         }
@@ -120,6 +110,8 @@ public struct QueryRowPage: Sendable {
     func encode(
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
+        do { try QueryColumn.validate(columns) }
+        catch let error { throw .invalidQueryValue(error) }
         try writer.writeCount(columns.count)
         for column in columns {
             try column.encode(into: &writer)
@@ -128,6 +120,7 @@ public struct QueryRowPage: Sendable {
         switch storage {
         case .materialized(let rows):
             for row in rows {
+                try row.validate(columns: columns)
                 try row.encode(into: &writer)
             }
         case .encoded(let bytes):
@@ -143,7 +136,7 @@ public struct QueryRowPage: Sendable {
             for _ in 0..<rowCount {
                 try QueryRow.validate(
                     from: &validator,
-                    expectedValueCount: columns.count
+                    columns: columns
                 )
             }
             try validator.ensureFullyRead()
@@ -174,6 +167,7 @@ public struct QueryRowPage: Sendable {
     init(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) {
+        try reader.admitQueryRootRetention()
         let columnCount = try reader.readCount()
         var columns: [QueryColumn] = []
         columns.reserveCapacity(columnCount)
@@ -181,12 +175,14 @@ public struct QueryRowPage: Sendable {
             columns.append(try QueryColumn(from: &reader))
         }
 
+        do { try QueryColumn.validate(columns) }
+        catch let error { throw .invalidQueryValue(error) }
         let rowCount = try reader.readCount()
         let rowsStart = reader.consumedByteCount
         for _ in 0..<rowCount {
             try QueryRow.validate(
                 from: &reader,
-                expectedValueCount: columnCount
+                columns: columns
             )
         }
         let rowsEnd = reader.consumedByteCount

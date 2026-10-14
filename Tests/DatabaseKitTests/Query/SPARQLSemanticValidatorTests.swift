@@ -19,7 +19,19 @@ struct SPARQLSemanticValidatorTests {
             )
         )
 
+        #expect(query.source.usesSPARQLSemantics)
         try SPARQLSemanticValidator.validate(query)
+        let pattern = GraphPattern.basic([])
+        for source in [DataSource.namedGraph(name: "urn:graph", pattern: pattern),
+                       .service(endpoint: "urn:endpoint", pattern: pattern, silent: false)] {
+            #expect(source.usesSPARQLSemantics)
+            try SPARQLSemanticValidator.validate(SelectQuery(projection: .all, source: source))
+        }
+        let nested = DataSource.subquery(query, alias: "nested")
+        let joined = DataSource.join(JoinClause(type: .inner, left: query.source, right: nested))
+        #expect(!nested.usesSPARQLSemantics)
+        #expect(!joined.usesSPARQLSemantics)
+        try QueryStructuralValidator.validate(SelectQuery(projection: .all, source: joined))
     }
 
     @Test("One blank node label cannot cross basic graph patterns")
@@ -604,7 +616,7 @@ struct SPARQLSemanticValidatorTests {
     }
 
     @Test("BIND and SELECT AS cannot replace source variables")
-    func assignmentTargetCollisionIsInvalid() {
+    func assignmentTargetCollisionIsInvalid() throws {
         let pattern = GraphPattern.basic([
             triple(subject: .variable("value"))
         ])
@@ -634,6 +646,15 @@ struct SPARQLSemanticValidatorTests {
             ) {
                 try SPARQLSemanticValidator.validate(query)
             }
+        }
+        let relational = SelectQuery(projection: .items([
+            ProjectionItem(.literal(.int(1)), alias: "same"),
+            ProjectionItem(.literal(.int(2)), alias: "same"),
+        ]), source: .values([], columnNames: nil))
+        #expect(!relational.source.usesSPARQLSemantics)
+        try QueryStructuralValidator.validate(relational)
+        #expect(throws: SPARQLSemanticValidationError.duplicateProjectionTarget("same")) {
+            try SPARQLSemanticValidator.validate(relational)
         }
     }
 

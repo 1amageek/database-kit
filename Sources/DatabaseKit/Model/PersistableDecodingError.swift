@@ -25,6 +25,8 @@ public enum PersistableDecodingError: Error, Sendable, CustomStringConvertible {
         name: String
     )
     case missingRequiredField(String)
+    case invalidQueryValue(field: String, cause: QueryValueError)
+    case invalidFieldDefaultConstruction(field: String, cause: PersistableDefaultConstructionError)
     case invalidValue(field: String, expected: String)
     case invalidReference(
         field: String,
@@ -66,6 +68,10 @@ public enum PersistableDecodingError: Error, Sendable, CustomStringConvertible {
             return "Persisted field #\(number) '\(name)' was not consumed while reconstructing '\(entity)'"
         case .missingRequiredField(let field):
             return "Required persisted field '\(field)' is missing"
+        case .invalidFieldDefaultConstruction(let field, _):
+            return "Persisted field '\(field)' has an invalid default constructor"
+        case .invalidQueryValue(let field, _):
+            return "Persisted field '\(field)' contains an invalid query value"
         case .invalidValue(let field, let expected):
             return "Persisted field '\(field)' must be encoded as \(expected)"
         case .invalidReference(let field, let reason):

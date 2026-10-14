@@ -4,6 +4,7 @@ import DatabaseTypes
 public enum QueryStructuralValidationError: Error, Sendable, Equatable {
     public enum Resource: String, Sendable, Equatable {
         case nestingDepth
+        case retainedBytes
         case inputTokens
         case totalNodes
         case collectionElements
@@ -22,6 +23,7 @@ public enum QueryStructuralValidationError: Error, Sendable, Equatable {
     )
     case invalidResourceClaim(Resource)
     case unbalancedNesting
+    case invalidQueryValue(QueryValueError)
     case invalidReferenceIdentifier(ReferenceIdentifierValidationError)
 }
 
@@ -34,6 +36,8 @@ extension QueryStructuralValidationError: CustomStringConvertible {
             return "Query \(resource.rawValue) must use its dedicated admission operation"
         case .unbalancedNesting:
             return "Query nesting admission is unbalanced"
+        case .invalidQueryValue:
+            return "Query contains an invalid query value"
         case .invalidReferenceIdentifier(let error):
             return "Query contains an invalid reference identifier: \(error)"
         }

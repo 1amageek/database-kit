@@ -2,8 +2,8 @@ import DatabaseTypes
 
 /// Resolves canonical wire parameters into an immutable QueryIR statement.
 public struct QueryParameterBinder: Sendable {
-    private let positions: [UInt32: FieldValue]
-    private let names: [String: FieldValue]
+    private let positions: [UInt32: QueryParameter]
+    private let names: [String: QueryParameter]
     private let structuralLimits: QueryStructuralLimits
 
     public init(
@@ -18,8 +18,8 @@ public struct QueryParameterBinder: Sendable {
         } catch {
             throw .invalidStructure(error)
         }
-        var positions: [UInt32: FieldValue] = [:]
-        var names: [String: FieldValue] = [:]
+        var positions: [UInt32: QueryParameter] = [:]
+        var names: [String: QueryParameter] = [:]
 
         for parameter in parameters {
             guard parameter.position > 0 else {
@@ -28,7 +28,7 @@ public struct QueryParameterBinder: Sendable {
                 )
             }
             guard positions.updateValue(
-                parameter.value,
+                parameter,
                 forKey: parameter.position
             ) == nil else {
                 throw QueryParameterBindingError.duplicatePosition(
@@ -39,7 +39,7 @@ public struct QueryParameterBinder: Sendable {
                 guard !name.isEmpty else {
                     throw QueryParameterBindingError.invalidName
                 }
-                guard names.updateValue(parameter.value, forKey: name) == nil else {
+                guard names.updateValue(parameter, forKey: name) == nil else {
                     throw QueryParameterBindingError.duplicateName(
                         name
                     )

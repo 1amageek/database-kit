@@ -7,9 +7,24 @@ EXPECTED_SWIFT_SNAPSHOT="swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a"
 EXPECTED_SWIFT_COMPILER_COMMIT="424cae54c1a10da"
 STANDARD_SDK="swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm"
 EMBEDDED_SDK="swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm-embedded"
+TARGET_TRIPLE="wasm32-unknown-wasip1"
 BUILD_TIMEOUT_SECONDS="${DATABASE_KIT_WASM_BUILD_TIMEOUT_SECONDS:-1200}"
+RUNTIME_TIMEOUT_SECONDS="${DATABASE_KIT_WASM_RUNTIME_TIMEOUT_SECONDS:-120}"
+BUILD_JOBS="${DATABASE_KIT_WASM_BUILD_JOBS:-6}"
 RESULT_DIRECTORY="${DATABASE_KIT_WASM_RESULT_DIRECTORY:-${TMPDIR:-/tmp}/database-kit-wasm-results}"
 WORK_ROOT=""
+PERSISTENT_WORK_ROOT=0
+WORK_LOCK_OWNED=0
+EMBEDDED_UNICODE_ARCHIVE=""
+SDK_ARGUMENTS=()
+if [[ -n "${DATABASE_KIT_SWIFT_SDKS_PATH:-}" ]]; then
+  if [[ "$DATABASE_KIT_SWIFT_SDKS_PATH" != /* \
+      || ! -d "$DATABASE_KIT_SWIFT_SDKS_PATH" ]]; then
+    echo "error: DATABASE_KIT_SWIFT_SDKS_PATH must name an absolute SDK directory" >&2
+    exit 2
+  fi
+  SDK_ARGUMENTS=(--swift-sdks-path "$DATABASE_KIT_SWIFT_SDKS_PATH")
+fi
 
 timeout_command() {
   local seconds="$1"
@@ -23,6 +38,13 @@ file_digest() {
 
 cleanup() {
   if [[ -z "$WORK_ROOT" || ! -d "$WORK_ROOT" ]]; then
+    return
+  fi
+  if (( WORK_LOCK_OWNED == 1 )); then
+    rmdir "$WORK_ROOT/.database-kit-wasm-lock"
+    WORK_LOCK_OWNED=0
+  fi
+  if (( PERSISTENT_WORK_ROOT == 1 )); then
     return
   fi
   local expected_prefix="${TMPDIR:-/tmp}/database-kit-wasm-build."
@@ -75,7 +97,7 @@ verify_pinned_toolchain() {
 
 verify_sdk_ids() {
   local sdk_list
-  sdk_list="$(xcrun --toolchain "$TOOLCHAINS" swift sdk list)"
+  sdk_list="$(xcrun --toolchain "$TOOLCHAINS" swift sdk list ${SDK_ARGUMENTS[@]+"${SDK_ARGUMENTS[@]}"})"
   if ! printf '%s\n' "$sdk_list" | rg -F -x -- "$STANDARD_SDK" >/dev/null; then
     echo "error: required standard WASM SDK is not installed: $STANDARD_SDK" >&2
     return 1
@@ -85,6 +107,25 @@ verify_sdk_ids() {
     return 1
   fi
   printf '%s\n' "$sdk_list"
+}
+
+verify_embedded_unicode_archive() {
+  local configuration
+  local resources
+  configuration="$(timeout_command 30 xcrun --toolchain "$TOOLCHAINS" swift sdk configure \
+    ${SDK_ARGUMENTS[@]+"${SDK_ARGUMENTS[@]}"} "$EMBEDDED_SDK" --show-configuration)"
+  resources="$(printf '%s\n' "$configuration" | sed -n 's/^swiftResourcesPath: //p')"
+  if [[ "$resources" != /* || "$resources" == *$'\n'* ]]; then
+    echo "error: matching Embedded SDK must declare one absolute Swift resources path" >&2
+    return 1
+  fi
+  EMBEDDED_UNICODE_ARCHIVE="$resources/embedded/$TARGET_TRIPLE/libswiftUnicodeDataTables.a"
+  if [[ ! -f "$EMBEDDED_UNICODE_ARCHIVE" ]]; then
+    echo "error: matching Embedded Unicode data archive is missing: $EMBEDDED_UNICODE_ARCHIVE" >&2
+    return 1
+  fi
+  printf 'EmbeddedUnicodeArchive=%s\n' "$EMBEDDED_UNICODE_ARCHIVE" | tee -a "$metadata_path"
+  file_digest "$EMBEDDED_UNICODE_ARCHIVE" | tee -a "$metadata_path"
 }
 
 verify_source_contract() {
@@ -102,6 +143,70 @@ verify_source_contract() {
   fi
 }
 
+prepare_work_root() {
+  if [[ -z "${DATABASE_KIT_WASM_WORK_ROOT:-}" ]]; then
+    WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/database-kit-wasm-build.XXXXXX")"
+    return
+  fi
+  PERSISTENT_WORK_ROOT=1
+  WORK_ROOT="$DATABASE_KIT_WASM_WORK_ROOT"
+  if [[ "$WORK_ROOT" != /* || "$WORK_ROOT" == / || -L "$WORK_ROOT" ]]; then
+    echo "error: DATABASE_KIT_WASM_WORK_ROOT must be an absolute, nonsymlink cache directory" >&2
+    return 2
+  fi
+  mkdir -p "$WORK_ROOT"
+  if [[ ! -O "$WORK_ROOT" ]]; then
+    echo "error: DATABASE_KIT_WASM_WORK_ROOT must be owned by the current user" >&2
+    return 2
+  fi
+  local canonical_root
+  canonical_root="$(cd -P "$WORK_ROOT" && pwd)"
+  if [[ "$WORK_ROOT" != "$canonical_root" ]]; then
+    echo "error: DATABASE_KIT_WASM_WORK_ROOT must use its canonical absolute path" >&2
+    return 2
+  fi
+  local marker="$WORK_ROOT/.database-kit-wasm-owner"
+  if [[ -L "$marker" ]]; then
+    echo "error: WASM cache ownership marker must not be a symlink" >&2
+    return 2
+  fi
+  if [[ ! -f "$marker" ]]; then
+    local entry
+    for entry in "$WORK_ROOT"/* "$WORK_ROOT"/.[!.]* "$WORK_ROOT"/..?*; do
+      if [[ -e "$entry" || -L "$entry" ]]; then
+        echo "error: an unowned WASM cache directory must be empty" >&2
+        return 2
+      fi
+    done
+  fi
+  if ! mkdir "$WORK_ROOT/.database-kit-wasm-lock"; then
+    echo "error: WASM work root is already locked; no cache state was removed" >&2
+    return 2
+  fi
+  WORK_LOCK_OWNED=1
+  local contract
+  contract="$(printf '%s\n' \
+    'database-kit-wasm-work-root-v1' \
+    "Repository=$ROOT_DIR" \
+    "Toolchain=$EXPECTED_TOOLCHAINS" \
+    "Snapshot=$EXPECTED_SWIFT_SNAPSHOT" \
+    "Compiler=$EXPECTED_SWIFT_COMPILER_COMMIT" \
+    "StandardSDK=$STANDARD_SDK" \
+    "EmbeddedSDK=$EMBEDDED_SDK" \
+    "SDKDirectory=${DATABASE_KIT_SWIFT_SDKS_PATH:-default}" \
+    "Triple=$TARGET_TRIPLE" \
+    'Configuration=release;default-traits-disabled' \
+    "ResolvedPins=$source_resolved_digest")"
+  if [[ -f "$marker" ]]; then
+    if [[ "$(cat "$marker")" != "$contract" ]]; then
+      echo "error: WASM cache inputs differ from its ownership contract; choose another work root" >&2
+      return 2
+    fi
+  else
+    printf '%s\n' "$contract" > "$marker"
+  fi
+}
+
 run_build() {
   local lane="$1"
   local sdk="$2"
@@ -112,17 +217,25 @@ run_build() {
   local pipeline_status=()
   local build_status
   local tee_status
+  local unicode_archive=""
+  if [[ "$sdk" == "$EMBEDDED_SDK" && "$selection_name" == QueryValueRuntimeContract ]]; then
+    unicode_archive="$EMBEDDED_UNICODE_ARCHIVE"
+  fi
 
   printf 'Running %s with %s\n' "$lane" "$sdk"
   set +e
   (
     cd "$ROOT_DIR"
+    DATABASE_KIT_QUERY_VALUE_UNICODE_ARCHIVE="$unicode_archive" \
     timeout_command "$BUILD_TIMEOUT_SECONDS" \
       xcrun --toolchain "$TOOLCHAINS" swift build \
+        ${SDK_ARGUMENTS[@]+"${SDK_ARGUMENTS[@]}"} \
         --disable-default-traits \
         --only-use-versions-from-resolved-file \
         --swift-sdk "$sdk" \
+        --triple "$TARGET_TRIPLE" \
         --scratch-path "$scratch_path" \
+        --jobs "$BUILD_JOBS" \
         "$selection_flag" "$selection_name" \
         -c release \
         -debug-info-format none
@@ -141,7 +254,76 @@ run_build() {
   fi
 }
 
-for command in mktemp perl rg shasum tee xcrun; do
+run_runtime() {
+  local lane="$1"
+  local sdk="$2"
+  local scratch_path="$3"
+  local bin_path
+  local artifact
+  local retained_artifact="$RESULT_DIRECTORY/$lane-$run_identifier.wasm"
+  local log_path="$RESULT_DIRECTORY/$lane-$run_identifier.log"
+  local pipeline_status=()
+
+  local unicode_archive=""
+  if [[ "$sdk" == "$EMBEDDED_SDK" ]]; then
+    unicode_archive="$EMBEDDED_UNICODE_ARCHIVE"
+  fi
+  bin_path="$(cd "$ROOT_DIR" && DATABASE_KIT_QUERY_VALUE_UNICODE_ARCHIVE="$unicode_archive" \
+    timeout_command "$BUILD_TIMEOUT_SECONDS" \
+    xcrun --toolchain "$TOOLCHAINS" swift build \
+      ${SDK_ARGUMENTS[@]+"${SDK_ARGUMENTS[@]}"} \
+      --disable-default-traits --only-use-versions-from-resolved-file \
+      --swift-sdk "$sdk" --triple "$TARGET_TRIPLE" --scratch-path "$scratch_path" \
+      --jobs "$BUILD_JOBS" -c release --show-bin-path)"
+  artifact="$bin_path/QueryValueRuntimeContract.wasm"
+  if [[ ! -f "$artifact" ]]; then
+    echo "error: expected runtime executable is missing: $artifact" >&2
+    return 1
+  fi
+  # Preserve the raw executable for target-specific trap and lifetime diagnosis.
+  cp "$artifact" "$retained_artifact"
+  printf 'Runtime %s SDK=%s triple=%s artifact=%s\n' \
+    "$lane" "$sdk" "$TARGET_TRIPLE" "$retained_artifact" | tee -a "$metadata_path"
+  file_digest "$retained_artifact" | tee -a "$metadata_path"
+  set +e
+  timeout_command "$RUNTIME_TIMEOUT_SECONDS" \
+    node "$ROOT_DIR/Tests/QueryValueRuntimeContract/run.mjs" "$retained_artifact" \
+    2>&1 | tee "$log_path"
+  pipeline_status=("${PIPESTATUS[@]}")
+  set -e
+  if (( ${pipeline_status[0]:-1} != 0 || ${pipeline_status[1]:-1} != 0 )); then
+    echo "error: $lane failed or timed out" >&2
+    return 1
+  fi
+  local marker
+  for marker in \
+    'QUERY_VALUE_RUNTIME_BEGIN' \
+    'QUERY_VALUE_RUNTIME_CASE rich-values PASS' \
+    'QUERY_VALUE_RUNTIME_CASE persistence PASS' \
+    'QUERY_VALUE_RUNTIME_CASE deep-jsonb PASS' \
+    'QUERY_VALUE_RUNTIME_CASE typed-pages PASS' \
+    'QUERY_VALUE_RUNTIME_CASE typed-parameters PASS' \
+    'QUERY_VALUE_RUNTIME_CASE invalid-values PASS' \
+    'QUERY_VALUE_RUNTIME_CASE wire-errors PASS' \
+    'QUERY_VALUE_RUNTIME_PASS cases=7' \
+    'QUERY_VALUE_WASI_EXIT code=0'; do
+    if [[ "$(rg -F -x -c -- "$marker" "$log_path" || true)" != 1 ]]; then
+      echo "error: expected exactly one runtime marker: $marker" >&2
+      return 1
+    fi
+  done
+  if [[ "$(rg -c '^QUERY_VALUE_RUNTIME_CASE ' "$log_path" || true)" != 7 \
+      || "$(rg -c '^QUERY_VALUE_RUNTIME_' "$log_path" || true)" != 9 ]]; then
+    echo "error: unexpected runtime case or completion marker count" >&2
+    return 1
+  fi
+  if rg -n 'QUERY_VALUE_RUNTIME_FAIL|RuntimeError:|fatal error:|Error:|error:' "$log_path" >&2; then
+    echo "error: runtime diagnostic detected in $log_path" >&2
+    return 1
+  fi
+}
+
+for command in cat cp mkdir mktemp node perl rg rmdir sed shasum tee xcrun; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "error: required command not found: $command" >&2
     exit 1
@@ -156,24 +338,49 @@ if ! [[ "$BUILD_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   echo "error: DATABASE_KIT_WASM_BUILD_TIMEOUT_SECONDS must be a positive integer" >&2
   exit 2
 fi
+if ! [[ "$RUNTIME_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: DATABASE_KIT_WASM_RUNTIME_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 2
+fi
+if ! [[ "$BUILD_JOBS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: DATABASE_KIT_WASM_BUILD_JOBS must be a positive integer" >&2
+  exit 2
+fi
 
-verify_pinned_toolchain
-verify_sdk_ids
+mkdir -p "$RESULT_DIRECTORY"
+run_identifier="$(date -u +%Y%m%d-%H%M%S)-$$"
+metadata_path="$RESULT_DIRECTORY/metadata-$run_identifier.log"
+printf 'Snapshot=%s\nToolchain=%s\nTriple=%s\nBuildJobs=%s\nNode=%s\n' \
+  "$EXPECTED_SWIFT_SNAPSHOT" "$TOOLCHAINS" "$TARGET_TRIPLE" "$BUILD_JOBS" "$(node --version)" \
+  | tee "$metadata_path"
+verify_pinned_toolchain | tee -a "$metadata_path"
+verify_sdk_ids | tee -a "$metadata_path"
+verify_embedded_unicode_archive
 verify_source_contract
 
 source_package_digest="$(file_digest "$ROOT_DIR/Package.swift")"
 source_resolved_digest="$(file_digest "$ROOT_DIR/Package.resolved")"
-WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/database-kit-wasm-build.XXXXXX")"
+prepare_work_root
+printf 'WorkRoot=%s\nPersistentWorkRoot=%s\nSourceManifest=%s\nSourcePins=%s\n' \
+  "$WORK_ROOT" "$PERSISTENT_WORK_ROOT" "$source_package_digest" "$source_resolved_digest" \
+  | tee -a "$metadata_path"
 standard_scratch="$WORK_ROOT/standard"
 embedded_scratch="$WORK_ROOT/embedded"
-mkdir -p "$standard_scratch" "$embedded_scratch" "$RESULT_DIRECTORY"
-run_identifier="$(date -u +%Y%m%d-%H%M%S)-$$"
+if [[ -L "$standard_scratch" || -L "$embedded_scratch" ]]; then
+  echo "error: WASM scratch directories must not be symlinks" >&2
+  exit 2
+fi
+mkdir -p "$standard_scratch" "$embedded_scratch"
 
 run_build "standard-database-kit" "$STANDARD_SDK" --product DatabaseKit "$standard_scratch"
 run_build "standard-database-wire" "$STANDARD_SDK" --product DatabaseWire "$standard_scratch"
 run_build "embedded-database-kit" "$EMBEDDED_SDK" --product DatabaseKit "$embedded_scratch"
 run_build "embedded-database-wire" "$EMBEDDED_SDK" --product DatabaseWire "$embedded_scratch"
 run_build "embedded-declaration-contract" "$EMBEDDED_SDK" --target DatabaseKitDeclarationContract "$embedded_scratch"
+run_build "standard-query-value-contract" "$STANDARD_SDK" --product QueryValueRuntimeContract "$standard_scratch"
+run_build "embedded-query-value-contract" "$EMBEDDED_SDK" --product QueryValueRuntimeContract "$embedded_scratch"
+run_runtime "standard-query-value-runtime" "$STANDARD_SDK" "$standard_scratch"
+run_runtime "embedded-query-value-runtime" "$EMBEDDED_SDK" "$embedded_scratch"
 
 if [[ "$(file_digest "$ROOT_DIR/Package.swift")" != "$source_package_digest" \
     || "$(file_digest "$ROOT_DIR/Package.resolved")" != "$source_resolved_digest" ]]; then
@@ -181,5 +388,5 @@ if [[ "$(file_digest "$ROOT_DIR/Package.swift")" != "$source_package_digest" \
   exit 1
 fi
 
-echo "database-kit WASM release contract: five builds passed"
+echo "database-kit WASM release contract: seven builds and two runtime contracts passed"
 echo "Result directory: $RESULT_DIRECTORY"

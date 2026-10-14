@@ -234,6 +234,10 @@ private extension SchemaManifest {
         writer.writeBool(field.isOptional)
         writer.writeBool(field.isArray)
         try writeOptionalString(field.referenceTargetEntity, into: &writer)
+        writer.writeBool(field.queryType != nil)
+        if let queryType = field.queryType {
+            try QueryColumnTypeWireCodec.encode(queryType, into: &writer)
+        }
         writer.writeBool(field.defaultValue != nil)
         if let defaultValue = field.defaultValue {
             try defaultValue.encode(into: &writer)
@@ -756,6 +760,8 @@ private extension SchemaManifest {
                 ontology: ontology,
                 polymorphicMembership: membership
             )
+        } catch SchemaEntityError.invalidQueryField(_, let cause) {
+            throw .invalidQueryValue(cause)
         } catch {
             throw .invalidSchemaManifest(String(describing: error))
         }
@@ -804,6 +810,8 @@ private extension SchemaManifest {
         let isOptional = try reader.readBool()
         let isArray = try reader.readBool()
         let referenceTargetEntity = try readOptionalString(from: &reader)
+        let queryType: QueryColumnType? = try reader.readBool()
+            ? QueryColumnTypeWireCodec.decode(from: &reader) : nil
         let defaultValue: FieldValue?
         if try reader.readBool() {
             defaultValue = try FieldValue(from: &reader)
@@ -817,7 +825,8 @@ private extension SchemaManifest {
             isOptional: isOptional,
             isArray: isArray,
             referenceTargetEntity: referenceTargetEntity,
-            defaultValue: defaultValue
+            defaultValue: defaultValue,
+            queryType: queryType
         )
     }
 

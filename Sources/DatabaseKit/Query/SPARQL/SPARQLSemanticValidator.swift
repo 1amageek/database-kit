@@ -447,6 +447,13 @@ public enum SPARQLSemanticValidator {
 
     fileprivate static func literalContainsBlankNode(_ literal: Literal) -> Bool {
         switch literal {
+        case .queryValue(.primitive(let primitive), _):
+            switch primitive {
+            case .rdfTerm(let term): return rdfTermContainsBlankNode(term)
+            case .array(let values):
+                return values.contains { literalContainsBlankNode(.queryValue(.primitive($0))) }
+            default: return false
+            }
         case .blankNode:
             return true
         case .array(let values):
@@ -456,7 +463,7 @@ public enum SPARQLSemanticValidator {
             return false
         case .rdfTerm(let term):
             return rdfTermContainsBlankNode(term)
-        case .null, .bool, .int, .uint, .decimal, .double, .string, .date,
+        case .queryValue, .null, .bool, .int, .uint, .decimal, .double, .string, .date,
              .timestamp, .binary, .uuid, .iri, .typedLiteral, .langLiteral,
              .dirLangLiteral:
             return false
@@ -465,6 +472,16 @@ public enum SPARQLSemanticValidator {
 
     fileprivate static func blankNodeLabel(in literal: Literal) -> String? {
         switch literal {
+        case .queryValue(.primitive(let primitive), _):
+            switch primitive {
+            case .rdfTerm(let term): return blankNodeLabel(in: term)
+            case .array(let values):
+                for value in values {
+                    if let label = blankNodeLabel(in: .queryValue(.primitive(value))) { return label }
+                }
+                return nil
+            default: return nil
+            }
         case .blankNode(let label):
             return label
         case .array(let values):
@@ -476,7 +493,7 @@ public enum SPARQLSemanticValidator {
             return nil
         case .rdfTerm(let term):
             return blankNodeLabel(in: term)
-        case .null, .bool, .int, .uint, .decimal, .double, .string, .date,
+        case .queryValue, .null, .bool, .int, .uint, .decimal, .double, .string, .date,
              .timestamp, .binary, .uuid, .iri, .typedLiteral, .langLiteral,
              .dirLangLiteral:
             return nil
@@ -487,6 +504,17 @@ public enum SPARQLSemanticValidator {
         _ literal: Literal
     ) throws(SPARQLSemanticValidationError) {
         switch literal {
+        case .queryValue(let value, _):
+            guard case .primitive(let primitive) = value else {
+                throw .unsupportedQueryValue
+            }
+            do {
+                try validateCanonicalTermLiteral(primitive.queryLiteral)
+            } catch let error as SPARQLSemanticValidationError {
+                throw error
+            } catch {
+                throw .invalidTermLiteral
+            }
         case .iri, .blankNode:
             throw .nonCanonicalTermLiteral
         case .rdfTerm(let term):
@@ -508,6 +536,17 @@ public enum SPARQLSemanticValidator {
         _ literal: Literal
     ) throws(SPARQLSemanticValidationError) {
         switch literal {
+        case .queryValue(let value, _):
+            guard case .primitive(let primitive) = value else {
+                throw .unsupportedQueryValue
+            }
+            do {
+                try validateExpressionLiteral(primitive.queryLiteral)
+            } catch let error as SPARQLSemanticValidationError {
+                throw error
+            } catch {
+                throw .invalidTermLiteral
+            }
         case .iri(let iri):
             try validateIRI(iri)
         case .typedLiteral(_, let datatype):

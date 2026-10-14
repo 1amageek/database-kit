@@ -64,8 +64,8 @@ public enum QueryStructuralValidator {
 
     static func validateBoundStructure(
         _ statement: QueryStatement,
-        positionalParameters: [UInt32: FieldValue],
-        namedParameters: [String: FieldValue],
+        positionalParameters: [UInt32: QueryParameter],
+        namedParameters: [String: QueryParameter],
         limits: QueryStructuralLimits
     ) throws(QueryStructuralValidationError) {
         var validation = ValidationTraversal(
@@ -76,6 +76,71 @@ public enum QueryStructuralValidator {
             )
         )
         try validation.validate([rootValidationStep(for: statement)])
+    }
+
+    static func validateSQLLiteralSupport(_ value: MatchPattern) throws(QueryLiteralConversionError) {
+        try validateSQLLiteralSupport(.matchPattern(value, depth: 0))
+    }
+
+    static func validateSQLLiteralSupport(_ value: PathPattern) throws(QueryLiteralConversionError) {
+        try validateSQLLiteralSupport(.pathPattern(value, depth: 0))
+    }
+
+    static func validateSQLLiteralSupport(_ value: PathElement) throws(QueryLiteralConversionError) {
+        try validateSQLLiteralSupport(.pathElement(value, depth: 0))
+    }
+
+    static func validateSQLLiteralSupport(_ value: NodePattern) throws(QueryLiteralConversionError) {
+        try validateSQLLiteralSupport(.nodePattern(value, depth: 0))
+    }
+
+    static func validateSQLLiteralSupport(_ value: EdgePattern) throws(QueryLiteralConversionError) {
+        try validateSQLLiteralSupport(.edgePattern(value, depth: 0))
+    }
+
+    static func validateSQLLiteralSupport(_ value: Expression) throws(QueryLiteralConversionError) {
+        try validateSQLLiteralSupport(.expression(value, depth: 0))
+    }
+
+    static func validateSQLLiteralSupport(_ value: AggregateFunction) throws(QueryLiteralConversionError) {
+        try validateSQLLiteralSupport(.aggregate(value, depth: 0))
+    }
+
+    static func validateSQLLiteralSupport(_ value: SelectQuery) throws(QueryLiteralConversionError) {
+        try validateSQLLiteralSupport(.select(value, depth: 0))
+    }
+
+    static func validateSQLLiteralSupport(_ value: DataSource) throws(QueryLiteralConversionError) {
+        try validateSQLLiteralSupport(.source(value, depth: 0))
+    }
+
+    static func validateSQLLiteralSupport(_ value: Literal) throws(QueryLiteralConversionError) {
+        try validateSQLLiteralSupport(.literal(value, depth: 0))
+    }
+
+    static func validateSQLLiteralSupport(_ value: GraphTableSource) throws(QueryLiteralConversionError) {
+        try validateSQLLiteralSupport(.graphTableSource(value, depth: 0))
+    }
+
+
+
+
+
+
+    private static func validateSQLLiteralSupport(_ step: ValidationStep) throws(QueryLiteralConversionError) {
+        let unlimited = UInt64.max
+        var traversal = ValidationTraversal(limits: QueryStructuralLimits(
+            maximumNestingDepth: unlimited, maximumRetainedBytes: unlimited,
+            maximumInputTokens: unlimited, maximumTotalNodes: unlimited,
+            maximumCollectionElements: unlimited, maximumBasicGraphPatterns: unlimited,
+            maximumTriplePatterns: unlimited, maximumValuesRows: unlimited,
+            maximumValuesVariables: unlimited, maximumValuesCells: unlimited,
+            maximumReifiedTripleExpansions: unlimited
+        ))
+        traversal.sqlLiteralPreflight = true
+        do { try traversal.validate([step]) }
+        catch { throw .unsupportedFieldValue }
+        if traversal.unsupportedSQLLiteral { throw .unsupportedSQLLiteral }
     }
 
     private static func rootValidationStep(
@@ -155,6 +220,8 @@ private extension QueryStructuralValidator {
         case dataType(DataType, depth: UInt64)
         case term(SPARQLTerm, depth: UInt64)
         case literal(Literal, depth: UInt64)
+        case queryValue(QueryValue, QueryColumnType?, depth: UInt64)
+        case columnType(QueryColumnType, depth: UInt64)
         case boundParameterLiteral(FieldValue, depth: UInt64)
         case fieldValue(FieldValue, depth: UInt64)
         case persistableIdentifier(ReferenceIdentifier, depth: UInt64)
@@ -168,10 +235,10 @@ private extension QueryStructuralValidator {
     }
 
     struct ParameterValues {
-        let positions: [UInt32: FieldValue]
-        let names: [String: FieldValue]
+        let positions: [UInt32: QueryParameter]
+        let names: [String: QueryParameter]
 
-        func value(for reference: QueryParameterReference) -> FieldValue? {
+        func value(for reference: QueryParameterReference) -> QueryParameter? {
             switch reference {
             case .position(let position):
                 return positions[position]
@@ -185,6 +252,8 @@ private extension QueryStructuralValidator {
         let limits: QueryStructuralLimits
         let parameterValues: ParameterValues?
         var ledger: QueryStructuralResourceLedger
+        var sqlLiteralPreflight = false
+        var unsupportedSQLLiteral = false
 
         init(limits: QueryStructuralLimits) {
             self.limits = limits
@@ -208,7 +277,11 @@ private extension QueryStructuralValidator {
             while let validationStep = validationSteps.popLast() {
                 let depth = depth(of: validationStep)
                 try ledger.validateNestingDepth(depth)
-                try ledger.consume(.totalNodes)
+                if case .queryValue(.primitive, _, _) = validationStep {
+                    // The existing primitive traversal owns this node.
+                } else {
+                    try ledger.consume(.totalNodes)
+                }
                 let childDepth = try nextDepth(after: depth)
 
                 switch validationStep {
@@ -789,13 +862,16 @@ private extension QueryStructuralValidator {
                     case .literal(let literal):
                         validationSteps.append(.literal(literal, depth: childDepth))
                     case .parameter(let reference):
-                        if let value = parameterValues?.value(for: reference) {
-                            validationSteps.append(
-                                .boundParameterLiteral(
-                                    value,
-                                    depth: childDepth
-                                )
-                            )
+                        if let parameter = parameterValues?.value(for: reference) {
+                            if parameter.type == nil, case .primitive(let value) = parameter.value {
+                                let footprint: QueryValueFootprint
+                                do { footprint = try QueryValueValidator.measure(parameter.value) }
+                                catch { throw .invalidQueryValue(error) }
+                                try ledger.consume(.retainedBytes, amount: footprint.retainedByteCount)
+                                validationSteps.append(.boundParameterLiteral(value, depth: childDepth))
+                            } else {
+                                validationSteps.append(.literal(.queryValue(parameter.value, type: parameter.type), depth: childDepth))
+                            }
                         }
                     case .column, .variable, .bound:
                         break
@@ -853,8 +929,60 @@ private extension QueryStructuralValidator {
                         break
                     }
 
+                case .columnType(let type, _):
+                    if case .sql(let type) = type {
+                        validationSteps.append(.dataType(type, depth: childDepth))
+                    }
+
+                case .queryValue(let value, let type, _):
+                    if sqlLiteralPreflight { break }
+                    if case .primitive(let primitive) = value {
+                        if let type, !QueryValueValidator.accepts(value, type: type) {
+                            throw .invalidQueryValue(.incompatibleType)
+                        }
+                        let footprint: QueryValueFootprint
+                        do { footprint = try QueryValueValidator.measure(value) }
+                        catch { throw .invalidQueryValue(error) }
+                        try ledger.consume(.retainedBytes, amount: footprint.retainedByteCount)
+                        validationSteps.append(.fieldValue(primitive, depth: depth))
+                        if let type { validationSteps.append(.columnType(type, depth: childDepth)) }
+                        break
+                    }
+                    let valueLimits = QueryValueLimits(
+                        maximumRetainedBytes: limits.maximumRetainedBytes,
+                        maximumTotalNodes: limits.maximumTotalNodes,
+                        maximumNestingDepth: limits.maximumNestingDepth,
+                        maximumCollectionElements: limits.maximumCollectionElements
+                    )
+                    let footprint: QueryValueFootprint
+                    do {
+                        try QueryValueValidator.validate(value, type: type, limits: valueLimits)
+                        footprint = try QueryValueValidator.measure(value)
+                    } catch {
+                        throw .invalidQueryValue(error)
+                    }
+                    // This validation step already owns the root node.
+                    try ledger.consume(.totalNodes, amount: footprint.nodeCount - 1)
+                    try ledger.consume(.collectionElements, amount: footprint.collectionElementCount)
+                    try ledger.consume(.retainedBytes, amount: footprint.retainedByteCount)
+                    let (maximumDepth, overflow) = depth.addingReportingOverflow(footprint.maximumNestingDepth - 1)
+                    guard !overflow else {
+                        throw .resourceLimitExceeded(resource: .nestingDepth, actual: .max, maximum: limits.maximumNestingDepth)
+                    }
+                    try ledger.validateNestingDepth(maximumDepth)
+                    if let type { validationSteps.append(.columnType(type, depth: childDepth)) }
+
                 case .literal(let literal, _):
                     switch literal {
+                    case .queryValue(let value, let type):
+                        if sqlLiteralPreflight {
+                            guard case .primitive = value else {
+                                unsupportedSQLLiteral = true
+                                return
+                            }
+                        } else {
+                            validationSteps.append(.queryValue(value, type, depth: childDepth))
+                        }
                     case .array(let values):
                         try consumeCollection(values.count)
                         for value in values.reversed() {
@@ -1064,7 +1192,7 @@ private extension QueryStructuralValidator {
             var validationSteps: [ValidationStep] = []
             validationSteps.reserveCapacity(parameters.count)
             for parameter in parameters.reversed() {
-                validationSteps.append(.fieldValue(parameter.value, depth: 0))
+                validationSteps.append(.queryValue(parameter.value, parameter.type, depth: 0))
             }
             try validate(consume validationSteps)
         }
@@ -1099,6 +1227,7 @@ private extension QueryStructuralValidator {
                  .aggregate(_, let depth), .aggregateBinding(_, let depth),
                  .dataType(_, let depth), .term(_, let depth),
                  .literal(_, let depth),
+                 .queryValue(_, _, let depth), .columnType(_, let depth),
                  .boundParameterLiteral(_, let depth),
                  .fieldValue(_, let depth),
                  .persistableIdentifier(_, let depth),

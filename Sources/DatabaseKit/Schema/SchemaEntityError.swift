@@ -13,6 +13,10 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
     case missingReferenceTarget(fieldName: String)
     case referenceTargetOnNonReferenceField(fieldName: String)
     case invalidFieldDefault(fieldName: String)
+    case invalidQueryField(fieldName: String, cause: QueryValueError)
+    case invalidFieldDefaultConstruction(fieldName: String, cause: PersistableDefaultConstructionError)
+    case queryDirectoryField(fieldName: String)
+    case queryIndexField(indexName: String, fieldName: String)
     case emptyDirectoryPathComponent(position: Int)
     case unknownDirectoryField(String)
     case duplicateDirectoryField(String)
@@ -87,6 +91,14 @@ public enum SchemaEntityError: Error, Sendable, Equatable, CustomStringConvertib
             return "Reference field '\(fieldName)' must declare its target entity."
         case .referenceTargetOnNonReferenceField(let fieldName):
             return "Non-reference field '\(fieldName)' declares a reference target entity."
+        case .invalidFieldDefaultConstruction(let fieldName, _):
+            return "Field '\(fieldName)' has an invalid default constructor"
+        case .invalidQueryField(let fieldName, _):
+            return "Field '\(fieldName)' declares invalid query adaptation"
+        case .queryDirectoryField(let fieldName):
+            return "Directory field '\(fieldName)' cannot use query adaptation."
+        case .queryIndexField(let indexName, let fieldName):
+            return "Index '\(indexName)' cannot use query-adapted field '\(fieldName)'."
         case .invalidFieldDefault(let fieldName):
             return "Field '\(fieldName)' declares a canonical default that does not match its schema."
         case .emptyDirectoryPathComponent(let position):

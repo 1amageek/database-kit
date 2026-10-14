@@ -12,6 +12,73 @@ BUILD_TIMEOUT_SECONDS="${XCODE_TEST_BUILD_TIMEOUT_SECONDS:-1200}"
 TEST_TIMEOUT_SECONDS="${XCODE_TEST_TIMEOUT_SECONDS:-1200}"
 RESULT_DIRECTORY="${XCODE_TEST_RESULT_DIRECTORY:-${TMPDIR:-/tmp}/database-kit-xcode-results}"
 WORK_ROOT=""
+ONLY_TESTING=()
+EXPECTED_TEST_COUNT=""
+PRESERVE_WORK_ROOT=false
+REUSE_WORK_ROOT=""
+HARNESS_LOCK_OWNED=false
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/xcode-test-harness [options]
+  --only-testing <identifier>  Select a test target, suite, or method. Repeatable.
+  --expected-count <count>     Required exact positive count for focused tests.
+  --preserve-work-root         Preserve source and DerivedData for another run.
+  --reuse-work-root <path>     Resynchronize and rebuild a preserved work root.
+  -h, --help                  Show this help.
+EOF
+}
+
+while (( $# > 0 )); do
+  case "$1" in
+    --only-testing|--expected-count|--reuse-work-root)
+      if [[ -z "${2:-}" || "$2" == --* ]]; then
+        echo "error: $1 requires a value" >&2
+        exit 2
+      fi
+      case "$1" in
+        --only-testing) ONLY_TESTING+=("-only-testing:$2") ;;
+        --expected-count) EXPECTED_TEST_COUNT="$2" ;;
+        --reuse-work-root) REUSE_WORK_ROOT="$2"; PRESERVE_WORK_ROOT=true ;;
+      esac
+      shift 2
+      ;;
+    --preserve-work-root) PRESERVE_WORK_ROOT=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "error: unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+if (( ${#ONLY_TESTING[@]} > 0 )); then
+  if ! [[ "$EXPECTED_TEST_COUNT" =~ ^[1-9][0-9]*$ ]]; then
+    echo "error: focused tests require --expected-count with a positive integer" >&2
+    exit 2
+  fi
+elif [[ -n "$EXPECTED_TEST_COUNT" ]]; then
+  echo "error: --expected-count requires --only-testing; full counts are package-owned" >&2
+  exit 2
+fi
+
+temporary_root="${TMPDIR:-/tmp}"
+temporary_root="${temporary_root%/}"
+expected_prefix="$temporary_root/database-kit-xcode-test."
+if [[ -n "$REUSE_WORK_ROOT" ]]; then
+  suffix="${REUSE_WORK_ROOT#"$expected_prefix"}"
+  if [[ "$REUSE_WORK_ROOT" != "$expected_prefix"* \
+      || ! "$suffix" =~ ^[A-Za-z0-9]+$ \
+      || -L "$REUSE_WORK_ROOT" \
+      || ! -d "$REUSE_WORK_ROOT/source" || -L "$REUSE_WORK_ROOT/source" \
+      || ! -d "$REUSE_WORK_ROOT/DerivedData" || -L "$REUSE_WORK_ROOT/DerivedData" ]]; then
+    echo "error: invalid reusable harness work root: $REUSE_WORK_ROOT" >&2
+    exit 2
+  fi
+  if [[ ! -f "$REUSE_WORK_ROOT/.reusable-work-root" \
+      || -L "$REUSE_WORK_ROOT/.reusable-work-root" \
+      || "$(<"$REUSE_WORK_ROOT/.reusable-work-root")" != "database-kit-xcode-test-work-root-v1" ]]; then
+    echo "error: work root was not created for reuse: $REUSE_WORK_ROOT" >&2
+    exit 2
+  fi
+fi
 
 timeout_command() {
   local seconds="$1"
@@ -20,10 +87,17 @@ timeout_command() {
 }
 
 cleanup() {
-  if [[ -z "$WORK_ROOT" || ! -d "$WORK_ROOT" ]]; then
+  if [[ -z "$WORK_ROOT" || ! -d "$WORK_ROOT" \
+      || "$HARNESS_LOCK_OWNED" != true ]]; then
     return
   fi
-  local expected_prefix="${TMPDIR:-/tmp}/database-kit-xcode-test."
+  rm -f -- "$WORK_ROOT/.harness-lock/owner-pid"
+  rmdir "$WORK_ROOT/.harness-lock"
+  HARNESS_LOCK_OWNED=false
+  if [[ "$PRESERVE_WORK_ROOT" == true ]]; then
+    echo "Preserved harness work root: $WORK_ROOT" >&2
+    return
+  fi
   if [[ "$WORK_ROOT" != "$expected_prefix"* ]]; then
     echo "error: refusing to remove unexpected harness path: $WORK_ROOT" >&2
     return
@@ -32,6 +106,21 @@ cleanup() {
 }
 
 trap cleanup EXIT
+
+if [[ -n "$REUSE_WORK_ROOT" ]]; then
+  WORK_ROOT="$REUSE_WORK_ROOT"
+else
+  WORK_ROOT="$(mktemp -d "$expected_prefix"XXXXXX)"
+fi
+if ! mkdir "$WORK_ROOT/.harness-lock" 2>/dev/null; then
+  echo "error: harness work root is already in use: $WORK_ROOT" >&2
+  exit 2
+fi
+HARNESS_LOCK_OWNED=true
+printf '%s\n' "$$" > "$WORK_ROOT/.harness-lock/owner-pid"
+if [[ "$PRESERVE_WORK_ROOT" == true ]]; then
+  printf 'database-kit-xcode-test-work-root-v1\n' > "$WORK_ROOT/.reusable-work-root"
+fi
 
 prepend_library_path() {
   local plist="$1"
@@ -115,13 +204,12 @@ reject_internal_tool_errors() {
 }
 
 verify_pinned_toolchain() {
-  local swiftc_path
   local toolchain_root
   local toolchain_name
   local compiler_version
 
-  swiftc_path="$(xcrun --toolchain "$TOOLCHAINS" --find swiftc)"
-  toolchain_root="$(cd "$(dirname "$swiftc_path")/../.." && pwd)"
+  PINNED_SWIFTC="$(xcrun --toolchain "$TOOLCHAINS" --find swiftc)"
+  toolchain_root="$(cd "$(dirname "$PINNED_SWIFTC")/../.." && pwd)"
   toolchain_name="${toolchain_root##*/}"
   toolchain_name="${toolchain_name%.xctoolchain}"
   if [[ "$toolchain_name" != "$EXPECTED_SWIFT_SNAPSHOT" ]]; then
@@ -147,17 +235,17 @@ summary_number() {
 
 case "$TEST_TRAITS" in
   "")
-    default_expected_test_count=699
+    default_expected_test_count=805
     ;;
   "MultiBase")
-    default_expected_test_count=714
+    default_expected_test_count=820
     ;;
   *)
     echo "error: DATABASE_KIT_TEST_TRAITS must be empty or MultiBase" >&2
     exit 2
     ;;
 esac
-EXPECTED_TEST_COUNT="$default_expected_test_count"
+EXPECTED_TEST_COUNT="${EXPECTED_TEST_COUNT:-$default_expected_test_count}"
 
 for command in jq xcodebuild xcrun plutil perl rg rsync shasum tee; do
   if ! command -v "$command" >/dev/null 2>&1; then
@@ -195,25 +283,40 @@ fi
 source_package_digest="$(shasum -a 256 "$ROOT_DIR/Package.swift")"
 source_resolved_digest="$(shasum -a 256 "$ROOT_DIR/Package.resolved")"
 
-WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/database-kit-xcode-test.XXXXXX")"
 derived_data="$WORK_ROOT/DerivedData"
-mkdir -p "$derived_data" "$RESULT_DIRECTORY"
-build_root="$ROOT_DIR"
+source_root="$WORK_ROOT/source"
+mkdir -p "$source_root" "$derived_data" "$RESULT_DIRECTORY"
+normalized_package="$(mktemp "$WORK_ROOT/Package.swift.XXXXXX")"
+cp "$ROOT_DIR/Package.swift" "$normalized_package"
 if [[ -n "$TEST_TRAITS" ]]; then
-  source_root="$WORK_ROOT/source"
-  mkdir -p "$source_root"
-  rsync -a --delete \
-    --exclude '.git' \
-    --exclude '.build' \
-    --exclude '.swiftpm' \
-    --exclude '*.xcresult' \
-    "$ROOT_DIR/" "$source_root/"
   perl -0pi -e '
     my $insertions = s/(\n    traits: \[\n)/$1        .default(enabledTraits: ["MultiBase"]),\n/s;
     die "package trait list was not found\n" unless $insertions == 1;
-  ' "$source_root/Package.swift"
-  build_root="$source_root"
+  ' "$normalized_package"
 fi
+rsync_arguments=(-a --checksum --delete --exclude '.git' --exclude '.build' \
+  --exclude '.swiftpm' --exclude '*.xcresult')
+if [[ -n "$REUSE_WORK_ROOT" ]]; then
+  if ! cmp -s "$normalized_package" "$source_root/Package.swift" \
+      || ! cmp -s "$ROOT_DIR/Package.resolved" "$source_root/Package.resolved"; then
+    # A changed manifest or pin graph must not reuse incompatible products.
+    rm -rf -- "$derived_data"
+    mkdir -p "$derived_data"
+  fi
+  if cmp -s "$normalized_package" "$source_root/Package.swift"; then
+    rsync_arguments+=(--exclude '/Package.swift')
+  fi
+  if cmp -s "$ROOT_DIR/Package.resolved" "$source_root/Package.resolved"; then
+    rsync_arguments+=(--exclude '/Package.resolved')
+  fi
+fi
+rsync "${rsync_arguments[@]}" "$ROOT_DIR/" "$source_root/"
+if ! cmp -s "$normalized_package" "$source_root/Package.swift"; then
+  mv "$normalized_package" "$source_root/Package.swift"
+else
+  rm "$normalized_package"
+fi
+build_root="$source_root"
 run_identifier="$(date -u +%Y%m%d-%H%M%S)-$$"
 build_result="$RESULT_DIRECTORY/Build-$run_identifier.xcresult"
 test_result="$RESULT_DIRECTORY/Test-$run_identifier.xcresult"
@@ -223,7 +326,9 @@ test_log="$RESULT_DIRECTORY/Test-$run_identifier.log"
 set +e
 (
   cd "$build_root"
-  timeout_command "$BUILD_TIMEOUT_SECONDS" xcodebuild build-for-testing \
+  # Xcode evaluates manifests with its bundled toolchain; targets use the pin.
+  timeout_command "$BUILD_TIMEOUT_SECONDS" env \
+    TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault xcodebuild build-for-testing \
     -scheme "$SCHEME" \
     -destination "$DESTINATION" \
     -derivedDataPath "$derived_data" \
@@ -231,18 +336,24 @@ set +e
     -enableCodeCoverage NO \
     -onlyUsePackageVersionsFromResolvedFile \
     -skipPackageUpdates \
+    SWIFT_EXEC="$PINNED_SWIFTC" \
+    ${ONLY_TESTING[@]+"${ONLY_TESTING[@]}"} \
     2>&1 | tee "$build_log"
 )
 build_status=$?
 set -e
 reject_internal_tool_errors "$build_log"
+if ! rg -F -x -- "    SWIFT_EXEC = $PINNED_SWIFTC" "$build_log" >/dev/null; then
+  echo "error: build log did not confirm the pinned Swift compiler: $PINNED_SWIFTC" >&2
+  exit 1
+fi
 if (( build_status != 0 )); then
   echo "error: build-for-testing exited with status $build_status" >&2
   exit "$build_status"
 fi
 
 xctestrun_paths="$(find "$derived_data/Build/Products" -maxdepth 1 \
-  -type f -name '*.xctestrun' -print)"
+  -type f -name '*.xctestrun' ! -name '.configured-*' -print)"
 xctestrun_count="$(printf '%s\n' "$xctestrun_paths" | sed '/^$/d' | wc -l | tr -d ' ')"
 if [[ "$xctestrun_count" != 1 ]]; then
   echo "error: expected one xctestrun file, found $xctestrun_count" >&2
@@ -257,11 +368,13 @@ if ! inject_testing_runtime "$configured_xctestrun"; then
 fi
 
 set +e
-timeout_command "$TEST_TIMEOUT_SECONDS" xcodebuild test-without-building \
+timeout_command "$TEST_TIMEOUT_SECONDS" env \
+  TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault xcodebuild test-without-building \
   -xctestrun "$configured_xctestrun" \
   -destination "$DESTINATION" \
   -resultBundlePath "$test_result" \
   -enableCodeCoverage NO \
+  ${ONLY_TESTING[@]+"${ONLY_TESTING[@]}"} \
   2>&1 | tee "$test_log"
 test_status=$?
 set -e

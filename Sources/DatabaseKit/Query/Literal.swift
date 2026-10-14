@@ -51,6 +51,9 @@ public enum Literal: Sendable, Equatable, Hashable {
     /// Array of literals
     case array([Literal])
 
+    /// A query-domain value with an optional explicit type declaration.
+    case queryValue(QueryValue, type: QueryColumnType? = nil)
+
     // MARK: - SPARQL/RDF-Specific Literals
 
     /// IRI (Internationalized Resource Identifier)
@@ -92,6 +95,7 @@ extension Literal {
     /// Returns true if this literal is NULL
     public var isNull: Bool {
         if case .null = self { return true }
+        if case .queryValue(.primitive(.null), _) = self { return true }
         return false
     }
 
@@ -204,6 +208,23 @@ extension Literal {
 extension Literal: CustomStringConvertible {
     public var description: String {
         switch self {
+        case .queryValue(let value, let type):
+            let family: String
+            switch value {
+            case .primitive: family = "primitive"
+            case .numeric: family = "numeric"
+            case .json: family = "json"
+            case .jsonb: family = "jsonb"
+            case .array: family = "array"
+            case .interval: family = "interval"
+            }
+            let declaration: String
+            switch type {
+            case .none: declaration = "inferred"
+            case .some(.sql): declaration = "sql"
+            case .some(.primitive): declaration = "primitive"
+            }
+            return "queryValue(\(family), type: \(declaration))"
         case .null:
             return "NULL"
         case .bool(let v):

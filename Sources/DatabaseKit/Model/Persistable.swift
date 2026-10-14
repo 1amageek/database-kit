@@ -328,6 +328,12 @@ public extension Persistable {
         do {
             schemas = try fieldSchemas
         } catch {
+            if case .invalidQueryField(_, let cause) = error {
+                throw .invalidQueryValue(field: field.name, cause: cause)
+            }
+            if case .invalidFieldDefaultConstruction(_, let cause) = error {
+                throw .invalidFieldDefaultConstruction(field: field.name, cause: cause)
+            }
             throw .invalidSchemaDefault(
                 entity: persistableType,
                 field: field.name

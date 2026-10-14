@@ -2,6 +2,12 @@ public enum QueryLiteralConversionError: Error, Sendable, Equatable {
     /// The value belongs to the database value model but has no QueryIR literal representation.
     case unsupportedFieldValue
 
+    /// The current SQL serializer cannot represent this rich query value.
+    case unsupportedSQLLiteral
+
+    /// A SQL-specific query value cannot be represented as an RDF literal.
+    case unsupportedSPARQLLiteral
+
     /// The exact decimal value exceeds the coefficient or scale supported by QueryIR.
     case decimalOutOfRange
 
@@ -20,6 +26,10 @@ extension QueryLiteralConversionError: CustomStringConvertible {
         switch self {
         case .unsupportedFieldValue:
             return "The database value cannot be represented as a QueryIR literal"
+        case .unsupportedSQLLiteral:
+            return "The query value is not supported by the current SQL serializer"
+        case .unsupportedSPARQLLiteral:
+            return "The query value cannot be represented as an RDF literal"
         case .decimalOutOfRange:
             return "The exact decimal value exceeds the QueryIR decimal range"
         case .nonFiniteDecimal:

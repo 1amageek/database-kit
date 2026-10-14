@@ -452,6 +452,7 @@ private extension FieldSchema {
     func hasSameStorageShape(as other: FieldSchema) -> Bool {
         type == other.type &&
         isOptional == other.isOptional &&
-        isArray == other.isArray
+        isArray == other.isArray &&
+        queryType == other.queryType
     }
 }

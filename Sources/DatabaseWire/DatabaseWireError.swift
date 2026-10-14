@@ -67,6 +67,7 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidErrorCategory(UInt8)
     case invalidRetryability(UInt8)
     case invalidValueTag(UInt8)
+    case invalidQueryValue(QueryValueError)
     case emptyCustomIndexIdentifier
     case invalidReferenceIdentifierTag(UInt8)
     case invalidReferenceIdentifier(ReferenceIdentifierValidationError)

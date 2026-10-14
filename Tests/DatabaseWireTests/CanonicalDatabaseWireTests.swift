@@ -301,11 +301,16 @@ struct CanonicalDatabaseWireTests {
             .rows(
                 try makeTestQueryRowPage(
                     columns: [
-                        .init(number: 1, name: "title"),
+                        .init(
+                            number: 1,
+                            name: "title",
+                            type: .primitive(.string),
+                            isNullable: false
+                        ),
                     ],
                     rows: [
                         QueryRow(
-                            values: [.string("Event")],
+                            values: [.primitive(.string("Event"))],
                             version: [0x01, 0x02]
                         ),
                     ],

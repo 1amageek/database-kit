@@ -1,4 +1,5 @@
 import DatabaseTypes
+import DatabaseKit
 
 /// A single-pass iterator that materializes query rows on demand.
 public struct QueryRowIterator: Sendable {
@@ -7,7 +8,7 @@ public struct QueryRowIterator: Sendable {
         case encoded(
             reader: DatabaseWireReader,
             remaining: Int,
-            columnCount: Int
+            columns: [QueryColumn]
         )
     }
 
@@ -20,13 +21,13 @@ public struct QueryRowIterator: Sendable {
     init(
         encodedRows: ByteString,
         rowCount: Int,
-        columnCount: Int,
+        columns: [QueryColumn],
         limits: DatabaseWireLimits
     ) {
         storage = .encoded(
             reader: DatabaseWireReader(encodedRows, limits: limits),
             remaining: rowCount,
-            columnCount: columnCount
+            columns: columns
         )
     }
 
@@ -43,14 +44,14 @@ public struct QueryRowIterator: Sendable {
             )
             return rows[nextIndex]
 
-        case .encoded(var reader, let remaining, let columnCount):
+        case .encoded(var reader, let remaining, let columns):
             guard remaining > 0 else {
                 try reader.ensureFullyRead()
                 return nil
             }
             let row = try QueryRow(
                 from: &reader,
-                expectedValueCount: columnCount
+                columns: columns
             )
             let nextRemaining = remaining - 1
             if nextRemaining == 0 {
@@ -59,7 +60,7 @@ public struct QueryRowIterator: Sendable {
             storage = .encoded(
                 reader: reader,
                 remaining: nextRemaining,
-                columnCount: columnCount
+                columns: columns
             )
             return row
         }

@@ -75,6 +75,49 @@ flowchart LR
 - Foundation and JSON types stop at this native external boundary and never
   enter `DatabaseKit`, `DatabaseWire`, or Embedded source graphs.
 
+### S01 query descriptor JSON
+
+S01 consumes [Schema's queryType contract](../DatabaseKit/Schema/DESIGN.md#contracts-and-invariants)
+and [Query's semantic descriptor](../DatabaseKit/Query/DESIGN.md#s01-public-query-boundary).
+Every encoded field adds the required `queryType` key: JSON null for no
+descriptor, or one closed tagged descriptor object. Decoding requires the key
+and exact documented members; it does not infer a descriptor from an object
+default, accept an old missing-key layout or ignore unknown members.
+
+| Descriptor | Exact JSON members |
+|---|---|
+| Primitive | `kind` is `primitive`, `type` is FieldSchemaType.rawValue, `isArray` is Boolean |
+| SQL | `kind` is `sql`, `type` is the DataType object below |
+
+Each DataType object has `kind` equal to its existing enum case spelling.
+boolean/smallint/integer/bigint/real/doublePrecision/text/date/interval/blob/
+json/jsonb/uuid have no additional members. decimal has `precision` and `scale`,
+each an integer or explicit null. char/varchar/binary/varbinary have `length`,
+an integer or explicit null. time/timestamp have Boolean `withTimeZone`.
+array has `element`, recursively another DataType object. custom has string
+`name`. Counts, depth and integer ranges use the existing strict JSON budgets;
+the same Kit constructor validates type parameters and field admission before
+returning a manifest. Deterministic member order follows the order described
+here, but JSON input member order does not alter schema identity.
+
+The descriptor boundary admits resolved SQL types only. The closed grammar
+describes `custom` and nested arrays so malformed and unresolved descriptors
+receive explicit typed admission failures rather than an unknown-key fallback.
+
+SchemaJSONCodec+Encoding.swift and SchemaJSONCodec+Decoding.swift migrate their
+field grammar together; a native QueryColumnTypeJSONCodec owns reusable strict
+descriptor encode/decode for schema and CLI column metadata. It returns or
+consumes bounded JSON text at the public boundary rather than exposing this
+module's parser tree. SchemaJSONError preserves malformed descriptor paths and
+typed admission causes. FieldValueJSONCodec continues encoding the unchanged
+primitive default representation, including a declared rich-field envelope;
+it does not acquire query-type inference or SQL runtime policy.
+
+Canonical fingerprint equality is checked after JSON decode against the
+SchemaManifest containing queryType. Nil, primitive and rich descriptors remain
+distinct. This native adapter adds no Foundation conversion for rich values
+and does not change DatabaseKitFoundation's scalar contract.
+
 ## Runtime Flows
 
 ```mermaid
@@ -125,3 +168,11 @@ sequenceDiagram
 Changes to schema JSON keys, numeric or byte representations, or failure
 categories require this module design, the `SchemaManifest`/DatabaseWire
 contract, and the strict behavioral tests to be reviewed together.
+
+S01-C09/C13 in the [SQL acceptance ledger](../DatabaseKit/Query/SQL/DESIGN.md#s01-falsifiable-case-ids)
+require manual/generated schemas with rich defaults and queryType to round
+trip through canonical bytes and strict JSON, retain the same fingerprint,
+and distinguish descriptor changes. Missing/extra/unknown keys, mismatched
+defaults, integer/depth/byte limits and old layouts fail explicitly. Existing
+primitive field-value bytes and optional Foundation dependency boundaries are
+regression obligations. The workspace progress record owns S01 execution evidence.

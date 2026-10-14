@@ -299,10 +299,15 @@ struct BaseWireContractTests {
         #expect(try materializedOrigins.next() == nil)
 
         let page = try QueryRowPage(
-            columns: [.init(number: 1, name: "value")],
+            columns: [.init(
+                number: 1,
+                name: "value",
+                type: .primitive(.string),
+                isNullable: false
+            )],
             rows: [
-                QueryRow(values: [.string("a")], version: [0x01]),
-                QueryRow(values: [.string("shared")], version: [0x02]),
+                QueryRow(values: [.primitive(.string("a"))], version: [0x01]),
+                QueryRow(values: [.primitive(.string("shared"))], version: [0x02]),
             ],
             continuation: [0x03],
             provenance: provenance,

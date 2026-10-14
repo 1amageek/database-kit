@@ -313,6 +313,7 @@ public final class Schema: Sendable {
                         fieldName: field.name
                     )
                 }
+                try Self.validateQueryField(field)
                 if let defaultValue = field.defaultValue,
                    !Self.accepts(defaultValue, for: field) {
                     throw .invalidFieldDefault(fieldName: field.name)
@@ -346,6 +347,9 @@ public final class Schema: Sendable {
                     // single element to resolve to.
                     guard !field.isArray else {
                         throw .arrayDirectoryField(fieldName: fieldName)
+                    }
+                    guard !Self.hasRichQueryDescriptor(field) else {
+                        throw .queryDirectoryField(fieldName: fieldName)
                     }
                     guard field.type.hasCanonicalDirectoryComponent else {
                         throw .unsupportedDirectoryFieldKind(
@@ -549,6 +553,44 @@ public final class Schema: Sendable {
             return (fieldsByName, fieldsByNumber)
         }
 
+        private static func hasRichQueryDescriptor(_ field: FieldSchema) -> Bool {
+            guard case .sql(let type) = field.queryType else { return false }
+            switch type {
+            case .decimal, .json, .jsonb, .interval, .array:
+                return true
+            default:
+                return false
+            }
+        }
+
+        private static func validateQueryField(
+            _ field: FieldSchema
+        ) throws(SchemaEntityError) {
+            guard let type = field.queryType else { return }
+            do throws(QueryValueError) {
+                try QueryFieldStorageAdapter.validateDescriptor(
+                    type,
+                    fieldType: field.type,
+                    isArray: field.isArray
+                )
+                if let value = field.defaultValue {
+                    if case .null = value {
+                        guard field.isOptional else {
+                            throw QueryValueError.invalidPersistencePayload(reason: "A required field cannot default to SQL NULL")
+                        }
+                    } else {
+                        _ = try QueryFieldStorageAdapter.decode(
+                            value,
+                            type: type,
+                            limits: QueryFieldStorageAdapter.inferredLimits(for: value, type: type)
+                        )
+                    }
+                }
+            } catch let cause {
+                throw .invalidQueryField(fieldName: field.name, cause: cause)
+            }
+        }
+
         private static func accepts(
             _ value: FieldValue,
             for field: FieldSchema
@@ -604,7 +646,7 @@ public final class Schema: Sendable {
                 maxSplits: 1,
                 omittingEmptySubsequences: false
             )[0]
-            guard fieldsByName[String(rootFieldName)] != nil else {
+            guard let field = fieldsByName[String(rootFieldName)] else {
                 if included {
                     throw .unknownIncludedField(
                         indexName: indexName,
@@ -612,6 +654,9 @@ public final class Schema: Sendable {
                     )
                 }
                 throw .unknownIndexField(indexName: indexName, fieldName: fieldName)
+            }
+            if Self.hasRichQueryDescriptor(field) {
+                throw .queryIndexField(indexName: indexName, fieldName: fieldName)
             }
         }
 

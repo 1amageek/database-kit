@@ -101,15 +101,181 @@ The two protocol graphs are explicit:
 - `DatabaseWire` serializes semantic contracts; it does not decide query plans,
   storage keys, transactions, leases, or publication ownership.
 
-### Planned SQL codec and operation extensions
+### S01 frozen query codec contract
 
-S01+ extends QueryColumn/QueryRow/QueryRowPage and parameter/QueryIR codecs to
-encode the Query-owned typed column and query value contracts. Semantic type,
-typmod, nullability and column order remain available with zero rows; duplicate
-names are preserved. Value tags retain required SQL metadata and the existing
-ByteString owner. Columns are not serialized as a name-keyed map. Decoding
-validates row arity, intrinsic type/metadata invariants and checked dimensions
-before admitting a value, while rows remain lazily materialized.
+The semantic authorities are [Query](../DatabaseKit/Query/DESIGN.md#s01-public-query-boundary)
+and [SQL values](../DatabaseKit/Query/SQL/DESIGN.md#s01-frozen-value-and-persistence-interfaces).
+S01 moves QueryColumn to DatabaseKit and replaces query cells with QueryValue.
+Wire consumes those declarations through explicit DatabaseKit imports and
+codec extensions; it owns no duplicate declaration, typealias or re-export
+that hides the semantic owner. Primitive FieldValue and RDF codecs retain
+their existing tags, bytes, identity and failure contracts.
+
+The following grammar fixes field order and discriminators. Integer, Boolean,
+count, string, optional-string and bytes productions use the existing bounded
+DatabaseWireReader/Writer encodings. Unknown discriminators fail; they are not
+extension slots that can be skipped. Every recursive node participates in the
+same reader/writer nesting, object and collection ledger.
+
+| Production | Exact ordered payload |
+|---|---|
+| QueryColumnType tag 0 | bounded FieldSchemaType.rawValue string, Boolean isArray |
+| QueryColumnType tag 1 | existing QueryIRDataTypeWireCodec DataType payload |
+| QueryColumn | UInt32 number, string name, QueryColumnType, Boolean isNullable |
+| QueryParameter | UInt32 position, optional string name, Boolean explicit-type-present, QueryColumnType if present, QueryValue |
+| QueryValue tag 0 | unchanged FieldValue codec payload |
+| QueryValue tag 1 | Int128 canonical coefficient, Int32 canonical scale, Int32 displayScale |
+| QueryValue tag 2 | length-bounded original JSON UTF-8 bytes |
+| QueryValue tag 3 | one JSONB node |
+| QueryValue tag 4 | DataType elementType, dimension count, each Int32 lowerBound and Int32 length, element count, positional QueryValue elements |
+| QueryValue tag 5 | Int32 months, Int32 days, Int64 microseconds |
+| JSONB node tags 0/1/2/3 | null with no payload / Boolean / string / numeric payload from QueryValue tag 1 without another value discriminator |
+| JSONB node tag 4 | element count followed by JSONB nodes |
+| JSONB node tag 5 | member count followed by string key and JSONB node pairs in canonical member order |
+| QueryRow | value count, positional QueryValue cells, unchanged FieldObject annotations, unchanged optional version bytes |
+| SchemaManifest field queryType | Boolean presence followed by QueryColumnType when present, after referenceTargetEntity and before the existing default-value presence flag |
+| SchemaDescribe field queryType | Boolean presence followed by QueryColumnType when present, after the existing optional reference metadata and before the next field payload |
+
+Literal.queryValue receives discriminator 18 in QueryIRLiteralWireCodec,
+fixed in QueryIRWireFormat and golden vectors in the same change. Existing
+Literal cases retain discriminators 0 through 17. Its payload is Boolean
+explicit-type-present, QueryColumnType when present, then the QueryValue
+production; parameter binding does not erase explicit
+type or rich metadata. No separate parameter/result/persisted-value algebra is
+introduced. A Wire encoder does not encode a model persistence envelope in
+place of the direct query-value production.
+
+QueryColumnType's SQL production validates admitted DataType parameters before
+acceptance. Column numbers are consecutive one-based ordinals and are unrelated
+to persisted field numbers; duplicate/empty names are valid. QueryRowPage
+retains the existing page field order and standard snapshot or MultiBase
+provenance/consistency tail. Its columns are encoded before the row count even
+for an empty page. Row arity and cell/declaration compatibility are checked on
+both materialized encoding and encoded-page validation. A NULL cell is tag 0
+with primitive null and obtains its type from its column or parameter.
+Primitive array declarations permit NULL elements independently of the outer
+column's isNullable flag, matching Kit's primitive array adaptation. A
+nonnullable array column still rejects an outer NULL; non-NULL elements must
+match the declared primitive element kind during in-place validation and
+materialization alike.
+
+### S01 validation and retained ownership
+
+QueryValueLimits is derived from the admitting Wire limits without resetting
+or increasing the enclosing ledger. Decoding checks lengths/counts, dimension
+count/product/upper bounds, element compatibility, numeric coefficient/dscale,
+complete lexical JSON, canonical JSONB members and interval microsecond bounds
+before publishing a value or encoded page. Retention admission follows the
+owners that publication creates: an encoded page owns its frame and columns;
+materializing a row additionally admits each actual JSONB flat owner before
+returning that row. SchemaManifest carries queryType in its
+canonical fingerprint input and validates defaults through the Schema-owned
+admission. Missing, unknown or mismatched metadata never becomes inferred type,
+NULL, an empty page or a repaired canonical value. QueryValueError remains a
+typed cause of DatabaseWireError; malformed wire and resource exhaustion stay
+distinct.
+Primitive type mismatches consult the FieldValue grammar validator before
+reporting incompatibleType, so an unrecognized primitive tag retains
+invalidValueTag in scalar, outer-array and array-element positions. Query
+validation does not maintain a separate set of recognized primitive tags.
+
+#### One-frame retention accounting
+
+The reader owns one immutable root ByteString; readBytes, length-prefixed
+subreaders and consumed row ranges produce bounded views of that root. Query
+decoding validates the root's known retainedByteCount once against the admitting
+retention bound, separately from maximumFrameBytes' visible encoded-size check.
+An oversized backing or unknown retained capacity fails explicitly; visible
+slice length is not a substitute for retained capacity. A caller may explicitly
+copy into a known owned buffer before admission. No public owner identity API
+or raw-pointer identity is needed for this structurally known source.
+
+| Ledger | Counts and ownership |
+|---|---|
+| Root retained storage | One known backing capacity per admitted root, retained through its last page/iterator/value owner |
+| View representation | Each bounded view's visible length and reference/node count; a second slice does not allocate or charge a second root backing |
+| New materialization | Cumulative decoded JSONB strings/keys and other newly owned UTF-8, plus admitted node/array/column storage; check before constructing the destination |
+| Materialized JSONB retention | Cumulative finished-owner backing-array bytes plus UTF-8 content across JSONB values, array elements, row cells and child readers; admit each independently decoded owner once before returning it |
+| Structural validation | Cumulative nodes/elements and enclosing depth across child readers; no reset or increased quota at a subtree boundary |
+
+Root retention and new materialization are distinct claims. Neither encoded
+frame length nor aggregate visible view length is reported as a physical
+allocation measurement. Framework's destination admission combines retained
+owner claims and layout/capacity charges; Wire's structural limits alone are
+not a peak-process-memory guarantee. Multiplying a byte budget by reference
+count is not an admissible way to pass shared-frame values.
+
+Public Kit QueryValue validators and footprint measurement keep conservative
+per-reference known-capacity accounting for arbitrary caller-owned value
+graphs. That upper bound is not unique-owner physical usage. Unknown capacity
+remains a typed failure when a retained-byte bound must be proved. Codec-owned
+assembly instead uses package-only
+`QueryArrayValue.init(admittedElementType:dimensions:elements:) throws(QueryValueError)`
+after the root and child ledgers have admitted all decoded elements. It calls
+the same intrinsic shape/type validator as the public initializer and skips
+only the aggregate repeated-reference retained-capacity measurement. It cannot
+skip checked dimensions/product, element compatibility or any metadata rule.
+Only codec-created children from this admitted root may enter that path;
+external arbitrary QueryValue graphs use public conservative validation.
+
+An individual QueryJSONValue uses its existing public validating initializer
+with the unchanged admitted root-retention bound. Its cached footprint remains
+the conservative per-reference capacity; the Wire ledger does not sum that
+capacity again. No JSON constructor bypass is required. JSONB string creation
+uses the separate cumulative new-UTF8 ledger and cannot consume an enlarged
+alias quota. Package assembly is not public authority to bypass a value budget.
+These rules apply equally to lazy iteration and encoded-page revalidation;
+their root provenance survives slicing while destination ledgers retain the
+current depth/object/materialization state.
+
+JSONB decoding uses the Kit [flat ownership construction contract](../DatabaseKit/Query/SQL/DESIGN.md#flat-jsonb-ownership-and-construction):
+open collection frames retain child IDs, and one package builder appends each
+scalar and collection once before finishing one immutable owner. It does not
+rebuild completed subtrees through public composite factories. Binary tags and
+canonical member ordering stay unchanged. The finished owner admits its actual
+backing-array capacities and UTF-8 content before publication; the value's
+retained metadata includes that whole owner even when a child view is retained.
+Validation-only traversal keeps bounded frames without materializing the owner.
+It admits encoded ownership and logical counts, depth and UTF-8 content, and
+does not predict the capacities Swift Array growth will select. Iterator.next()
+may therefore throw a typed retained-resource failure when an otherwise valid
+encoded row's actual flat owner exceeds the materialization limit. It returns
+no partially materialized row. Eagerly building and discarding every owner is
+not required to publish a lazy encoded page.
+The reader carries this actual JSONB retention ledger through length-prefixed
+children and iterator progress; separate owners cannot each reuse the full
+retained-byte quota. The existing new-UTF8 ledger admits content before String
+creation. UTF-8 content appears in both independent checks, but those ledgers
+are not added together or claimed as two physical allocations. Root-frame
+retention remains a separate once-per-root admission.
+
+Page decoding validates the complete encoded row subtree in place, then retains
+its ByteString range and immutable typed columns. It does not eagerly allocate
+all QueryValue trees to validate them. QueryRowIterator materializes only the
+requested row and byte/JSON values retain bounded views of the original owner.
+Validation and row materialization share the same grammar and intrinsic
+invariants, including columns when no rows exist. Re-encoding an encoded page
+validates with the destination writer's current depth/object ledger before
+copying its retained range; it cannot reset limits at a nested page boundary.
+Truncation, trailing input, invalid tag/shape/type and encoded-validation limit
+failure publish neither a partial page nor a partially accepted operation.
+Actual materialization capacity is reconciled at the row publication boundary.
+
+The source migration updates QueryColumn.swift (semantic declaration moves to
+Kit), QueryRow.swift, QueryRowPage.swift, QueryRowIterator.swift,
+QueryParameter+Wire.swift, QueryIRLiteralWireCodec.swift,
+QueryIRDataTypeWireCodec.swift, QueryIRWireFormat.swift, SchemaManifest.swift,
+DatabaseWireError.swift and the reader/writer validation and size-accounting
+paths. A single QueryValueWireCodec and its in-place validator own the new
+production. Schema JSON consumes the same declaration through its native
+[adapter contract](../DatabaseSchemaJSON/DESIGN.md); it is not a binary codec.
+
+This is a coordinated pre-release layout change within target-free v3 and
+opt-in target-bound v5. It changes neither header version nor target authority.
+All source consumers, schema fingerprints, golden vectors and dependency pins
+migrate together; there is no old-layout decode fallback or negotiation.
+
+### Later statement and block operations
 
 Later SQL statement/block descriptors are closed DatabaseWire operations, with
 results distinguishing rows, command count and schema change in statement
@@ -179,10 +345,26 @@ outside this module.
 | Truncation, bounds, malformed, non-canonical, and trailing-input rejection | `Tests/DatabaseWireTests` decoder suites |
 | Retained owner, lazy page, iterator, and exact-frame behavior | `Tests/DatabaseWireTests` result and byte-ownership suites |
 | Planned typed SQL results and statement/block payloads | QueryResultPage/QueryIR codec suites expanded for duplicate names, zero-row metadata, SQL-specific values, full malformed-input boundaries and standard/MultiBase golden vectors; SQL semantics use the [Query evidence contract](../DatabaseKit/Query/DESIGN.md#verification-and-change-impact) |
-| Standard and `MultiBase` protocol graphs | Isolated native package harness runs (699 and 714 total package tests) |
+| Standard and `MultiBase` protocol graphs | Isolated native package harness runs with reviewed exact counts owned by scripts/xcode-test-harness |
 | Standard and Embedded compatibility | Package README release builds for `DatabaseWire` |
 
 Any change to a wire byte, operation family, version, target field, limit,
 failure category, or ownership boundary requires this module design, the
 package design, golden/behavioral tests, and all downstream mapping consumers
 to be reviewed together.
+
+S01-C04–C11/C13 in the [SQL acceptance ledger](../DatabaseKit/Query/SQL/DESIGN.md#s01-falsifiable-case-ids)
+own query-value golden, malformed-input, lazy ownership, schema fingerprint and
+trait regression obligations. Native focused execution requires the package
+harness to support selectors without weakening final exact-count lanes. WASM
+and Embedded gates use the package's pinned toolchain/matching SDKs and scoped
+SDK lookup; compile/link does not replace native behavioral evidence. Required
+harness support and the complete affected native lanes precede S01 completion.
+These frozen interfaces are pending implementation and runtime evidence.
+
+S01-C11 additionally rejects double charging two JSON views of one 4 MiB
+owner as two physical allocations, oversized backing behind a small visible
+frame, unknown-capacity admission, JSONB exact/one-past materialization bytes,
+and child/lazy-reader ledger reset. The alias fixture checks one root retention
+claim and two view representations, not an expanded byte budget. Arbitrary
+public value measurement continues to report its conservative upper bound.

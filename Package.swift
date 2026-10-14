@@ -2,6 +2,17 @@
 import PackageDescription
 import CompilerPluginSupport
 
+// The verification harness supplies the selected Embedded SDK archive only for
+// its executable lane. Target scoping keeps host macro linkage unchanged.
+let queryValueRuntimeLinkerSettings: [LinkerSetting]
+if let archive = Context.environment["DATABASE_KIT_QUERY_VALUE_UNICODE_ARCHIVE"], !archive.isEmpty {
+    queryValueRuntimeLinkerSettings = [
+        .unsafeFlags(["-Xlinker", archive], .when(platforms: [.wasi])),
+    ]
+} else {
+    queryValueRuntimeLinkerSettings = []
+}
+
 let package = Package(
     name: "database-kit",
     platforms: [
@@ -43,7 +54,13 @@ let package = Package(
                 "DatabaseKitMacros",
                 .product(name: "DatabaseTypes", package: "database-types"),
             ],
-            exclude: ["DESIGN.md"],
+            exclude: [
+                "DESIGN.md",
+                "Model/DESIGN.md",
+                "Query/DESIGN.md",
+                "Query/SQL/DESIGN.md",
+                "Schema/DESIGN.md",
+            ],
             swiftSettings: [
                 .define(
                     "DATABASE_KIT_MULTI_BASE",
@@ -106,6 +123,20 @@ let package = Package(
                 .product(name: "DatabaseTypes", package: "database-types"),
             ],
             path: "Tests/DatabaseKitDeclarationContract"
+        ),
+        .executableTarget(
+            name: "QueryValueRuntimeContract",
+            dependencies: [
+                "DatabaseKit",
+                "DatabaseWire",
+                .product(name: "DatabaseTypes", package: "database-types"),
+            ],
+            path: "Tests/QueryValueRuntimeContract",
+            exclude: ["run.mjs"],
+            swiftSettings: [
+                .define("DATABASE_KIT_MULTI_BASE", .when(traits: ["MultiBase"])),
+            ],
+            linkerSettings: queryValueRuntimeLinkerSettings
         ),
         .testTarget(
             name: "DatabaseKitTests",

@@ -2,6 +2,37 @@ import DatabaseTypes
 
 /// Entry points used by macro-generated, statically typed persistence code.
 public enum PersistableFieldEncoder {
+    /// Captures a stable query constructor without inheriting a property's forced try.
+    public static func querySchemaDefault<Value: FieldValueEncodable>(
+        constructing value: () throws(PersistableDefaultConstructionError) -> Value,
+        fieldName: String
+    ) throws(SchemaEntityError) -> FieldValue {
+        let constructed: Value
+        do {
+            constructed = try value()
+        } catch let cause {
+            switch cause {
+            case .queryValue(let error):
+                throw .invalidQueryField(fieldName: fieldName, cause: error)
+            case .timeSpan:
+                throw .invalidFieldDefaultConstruction(fieldName: fieldName, cause: cause)
+            }
+        }
+        return try schemaDefault(from: constructed, fieldName: fieldName)
+    }
+
+    /// Preserves one statically known constructor failure in the default boundary.
+    public static func queryDefaultComponent<Value, Failure: Error>(
+        constructing value: () throws(Failure) -> Value,
+        mapError: (Failure) -> PersistableDefaultConstructionError
+    ) throws(PersistableDefaultConstructionError) -> Value {
+        do {
+            return try value()
+        } catch let cause {
+            throw mapError(cause)
+        }
+    }
+
     public static func schemaDefault<Value: FieldValueEncodable>(
         from value: borrowing Value,
         fieldName: String
@@ -9,6 +40,9 @@ public enum PersistableFieldEncoder {
         do {
             return try value.encodeFieldValue()
         } catch {
+            if case .invalidQueryValue(let cause) = error {
+                throw .invalidQueryField(fieldName: fieldName, cause: cause)
+            }
             throw .invalidFieldDefault(fieldName: fieldName)
         }
     }

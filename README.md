@@ -131,20 +131,33 @@ host transport contract.
 
 | Lane | Entry point | Acceptance contract |
 |---|---|---|
-| Standard native | `TOOLCHAINS=org.swift.64202608141a scripts/xcode-test-harness` | Exactly 699 tests, all passed, with zero failures, skips, expected failures, runtime warnings, compiler/plugin internal errors, profile errors, or debug-information verification warnings |
-| `MultiBase` native | `TOOLCHAINS=org.swift.64202608141a DATABASE_KIT_TEST_TRAITS=MultiBase scripts/xcode-test-harness` | An isolated source copy with exactly 714 tests and the same strict zero conditions; the source manifest keeps the trait non-default |
-| WASM release matrix | `TOOLCHAINS=org.swift.64202608141a scripts/wasm-build-harness` | Exactly five locked release builds on the matching standard and Embedded SDKs, with preserved logs and the same compiler-diagnostic rejection |
+| Standard native | `TOOLCHAINS=org.swift.64202608141a scripts/xcode-test-harness` | The harness-owned exact count, all passed, with zero failures, skips, expected failures, runtime warnings, compiler/plugin internal errors, profile errors, or debug-information verification warnings |
+| `MultiBase` native | `TOOLCHAINS=org.swift.64202608141a DATABASE_KIT_TEST_TRAITS=MultiBase scripts/xcode-test-harness` | An isolated source copy with the harness-owned exact count and the same strict zero conditions; the source manifest keeps the trait non-default |
+| WASM release matrix | `TOOLCHAINS=org.swift.64202608141a scripts/wasm-build-harness` | Seven locked release builds and two query-value runtime executions on the matching standard and Embedded SDKs, with preserved logs, strict completion markers and compiler-diagnostic rejection |
 | Binary ownership | Native behavior tests | Payload pages borrow ranges from the single final frame allocation |
 | Decoder safety | Native behavior tests | Truncation, limits, malformed values, non-canonical input, and cyclic RDF lists are covered |
 
-The WASM harness executes these five lanes with
+The WASM harness executes these seven build lanes with
 `--disable-default-traits --only-use-versions-from-resolved-file` and
 `-debug-info-format none`:
 
 | SDK | Build targets |
 |---|---|
-| `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm` | `DatabaseKit`, `DatabaseWire` |
-| `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm-embedded` | `DatabaseKit`, `DatabaseWire`, `DatabaseKitDeclarationContract` |
+| `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm` | `DatabaseKit`, `DatabaseWire`, test-only `QueryValueRuntimeContract` executable |
+| `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm-embedded` | `DatabaseKit`, `DatabaseWire`, `DatabaseKitDeclarationContract`, test-only `QueryValueRuntimeContract` executable |
+
+Both query-value executables run under Node's standard-library WASI Preview 1
+host. The bounded fixture checks all five rich values, typed duplicate and
+zero-row pages, parameters, persistence, depth-4096 JSONB ownership and typed
+failure paths. Runtime logs retain Node's host WASI experimental-status warning
+separately from Swift/WASM failures. Build parallelism defaults to six jobs
+(`DATABASE_KIT_WASM_BUILD_JOBS`); every build and execution has an external
+timeout. This executable is verification support, not a supported public product.
+`DATABASE_KIT_WASM_WORK_ROOT` may name an absolute caller-owned cache directory.
+The harness accepts an empty directory or its matching ownership marker, locks
+it exclusively, and validates toolchain, SDK and URL pins before reuse. Every
+build still runs; caller-owned caches survive success and failure. Omitting this
+option keeps the isolated temporary-directory lifecycle.
 
 The current baseline is
 `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a` with the exactly matching
