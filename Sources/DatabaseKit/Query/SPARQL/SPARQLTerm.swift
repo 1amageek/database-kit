@@ -164,7 +164,12 @@ extension Literal {
     /// Generate SPARQL literal syntax
     public func toSPARQL() throws(QueryLiteralConversionError) -> String {
         switch self {
-        case .queryValue(let value, _):
+        case .sqlUnknownString:
+            throw .unsupportedSPARQLLiteral
+        case .queryValue(let value, let type):
+            if let type, !QueryValueValidator.accepts(value, type: type) {
+                throw .unsupportedSPARQLLiteral
+            }
             guard case .primitive(let primitive) = value else {
                 throw .unsupportedSPARQLLiteral
             }

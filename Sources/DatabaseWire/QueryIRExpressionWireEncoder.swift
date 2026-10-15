@@ -542,7 +542,8 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.aggregate(aggregate))
 
         case .function(let function):
-            writer.writeUInt8(28)
+            writer.writeUInt8(function.schema == nil ? 28 : 43)
+            if let schema = function.schema { try writer.writeString(schema) }
             try writer.writeString(function.name)
             try writer.writeCount(function.arguments.count)
             encodingSteps.append(.bool(function.distinct))

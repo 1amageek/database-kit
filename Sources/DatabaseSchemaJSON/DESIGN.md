@@ -118,6 +118,18 @@ SchemaManifest containing queryType. Nil, primitive and rich descriptors remain
 distinct. This native adapter adds no Foundation conversion for rich values
 and does not change DatabaseKitFoundation's scalar contract.
 
+### S03 qualified custom type shape
+
+The custom DataType object's exact grammar is kind/name/schema, where schema
+is a required String or explicit null and name is one exact terminal component.
+This adapts [Query's S03 model](../DatabaseKit/Query/DESIGN.md#s03-semantic-carriage-and-occurrence-addresses);
+it does not add catalog resolution. QueryColumnTypeJSONCodec and schema field
+admission remain resolved-descriptor boundaries and continue to reject custom
+types, including qualified or nested custom types, with typed unresolved-type
+failure. Updating the internal grammar must not turn unresolved descriptors
+into a successful schema/column round trip. Native strict-key/budget tests and
+the existing resolved descriptor regression satisfy S03-C12.
+
 ## Runtime Flows
 
 ```mermaid

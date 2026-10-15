@@ -10,7 +10,7 @@ SELECT implementation does not satisfy this profile.
 
 Status: **S00 accepted design; S01 implemented and verified on the frozen local
 graph, with full FoundationDB regression deferred by the user to S18;
-S02–S18 pending.** This does not claim full FoundationDB or final URL-graph
+S02 committed and verified on the frozen local graph; S03–S18 pending.** This does not claim full FoundationDB or final URL-graph
 acceptance. Interfaces explicitly labeled planned are not existing capabilities.
 Inventory rows state required behavior, not current implementation completion.
 The reference dialect is PostgreSQL 18; the accepted differential-server pin
@@ -667,6 +667,93 @@ constructors and typmods. SQL-only forms fail explicitly at SPARQL/RDF gates.
 Existing SQL-producing extensions move out of Kit into Framework; Kit retains
 pure value formatting, primitive adaptation and SPARQL generation, with no
 Framework import and no duplicate SQL spelling policy.
+
+### S03 frozen semantic binding boundary
+
+S03 owns L05/T11 and the name/type portions of Q02/Q03/Q08/Q11 needed by
+already-executable expressions. It changes binding and its actual execution
+inputs, not the deferred S04–S10 algorithms, S11 dynamic catalog/search path,
+or S16 remote SQLSTATE/details/CLI presentation. The following are planned
+S03 contracts until their behavioral evidence and commits are recorded.
+
+| Meaning | Semantic owner and guarantee |
+|---|---|
+| Unknown SQL string | A distinct Literal alternative retains the decoded string without declaring text. Existing Literal.string remains typed text and retains SPARQL meaning. Unknown is a binding state, never a QueryValue, DataType or public column-type alternative. Unconstrained final SQL output becomes text. |
+| Qualified function | FunctionCall retains optional exact schema separately from its exact terminal name. A dot inside one quoted identifier remains part of that one name. Qualification is never recovered by splitting a String. |
+| Qualified custom type | DataType.custom retains optional exact schema separately from its exact terminal name. Unresolved names remain CAST input until Framework resolves or rejects them; NULL cannot bypass name resolution. |
+| Parameter identity | QueryParameter.position and optional exact name identify one supplied parameter. SQL references and declarations survive admission until Framework binding. Kit retains context-free substitution for existing SPARQL/GraphTerm consumers and owns duplicate/missing/reference/structural checks, not SQL inference. |
+| Occurrence address | Query owns source-independent addresses defined by QueryIR child/field roles and collection indices. The same semantic value in two occurrences has two addresses. Source bytes, spans and quoted state remain outside semantic AST nodes. |
+
+Every new semantic alternative reaches equality/hash, structural validation,
+retained-byte accounting, parameter traversal, language validation, Wire,
+strict native descriptor adapters and all direct consumers in one coherent
+model migration. QueryValue's six alternatives and DatabaseTypes remain
+unchanged. SQL-only unknown literals and qualified SQL calls cannot silently
+gain RDF meaning. Existing primitive execution capabilities remain available
+under their existing non-SQL/product contracts.
+
+#### Resolution rules and reference authority
+
+Framework owns the binding algorithm in
+[QueryExecution](../../../../../database-framework/Sources/DatabaseEngine/QueryExecution/DESIGN.md#s03-executable-binding-contract).
+It selects an available overload/coercion once and executes that selection.
+The reference facts below were observed on one isolated PostgreSQL 18.6
+instance: [summary](../../../../../.codex-tools/sql-s03-evidence/postgresql-binding-summary.json),
+[fixture](../../../../../.codex-tools/sql-s03-evidence/postgresql-binding.sql).
+All 43 observations matched their recorded outcome; identity, authoritative
+stop, negative readiness and owned container/network absence were checked.
+These are dialect facts, not evidence that Framework already implements them.
+
+| Decision | Required S03 behavior |
+|---|---|
+| Unknown versus text | Unknown can adopt a known compatible operand or common type; explicit text does not acquire integer equality. All-unknown CASE/COALESCE resolve as text; mixed known categories must have a legal common type. |
+| Parameter base type | Explicit QueryParameter.type wins. Without it, a non-NULL typed Wire payload supplies its intrinsic base type, preserving primitive width/rich metadata. NULL and empty primitive arrays require context. This existing typed invocation contract differs from PostgreSQL's untyped textual PREPARE inputs and is tested separately. |
+| Contextual inference order | Infer one base type for each parameter in PostgreSQL semantic visitation order, retain every occurrence and validate its permitted use-site coercion. Do not globally optimize or retroactively repair unresolved earlier occurrences. A final bare NULL parameter output resolves to text; IS NULL alone remains unresolved. A prior unresolved IS NULL is not rescued by a later integer CAST; a prior integer CAST permits a later explicit text CAST. Projection abs($1) selects double precision before the WHERE integer comparison. |
+| Operator/function resolution | Apply exact matches, admitted implicit conversions, type categories and preferred overloads for the executable subset. Unknown abs input prefers double precision; typed abs retains smallint/integer/bigint/real/double precision overload width. length(text/bytea) returns integer with checked result bounds. Signature, NULL behavior, runtime capability and output metadata agree even with zero rows. |
+| SQL namespace | Existing built-ins match exact lowercase terminal names, unqualified or explicitly in pg_catalog. Quoted uppercase and quoted dotted identifiers are different names. Resolve admitted pg_catalog type names without dropping the schema. Other schema-qualified functions/types fail explicitly until an admitted owner provides them; schema-qualified tables fail until S11 rather than looking up their terminal relation in the static registry. |
+| Product SQL/SPARQL boundary | The SQL-embedded product SPARQL call matches only its exact unqualified semantic name. Its established SQL spelling and SPARQL language case policy remain distinct. The existing graph signature, parent transaction and retained prepared storage are preserved. |
+| CAST of NULL | Bare untyped NULL may acquire any valid resolved target type. A typed NULL retains its incoming type and must pass the same source-to-target cast-signature check as a non-NULL operand. Legal same-family temporal precision casts preserve NULL and target precision without performing S06 rounding. Unknown/custom targets and illegal chains fail before reads. |
+| ORDER/GROUP names | Bare ORDER BY names prefer output labels; matching duplicate labels are valid only when the output expressions are equivalent, otherwise ambiguous. Bare GROUP BY names prefer an input column, then output labels. Names inside a larger expression resolve against input scope. Integer ordinals address the expanded output list and reject zero/negative/out-of-range values; GROUP ordinals cannot select aggregates. |
+| CTE and nested scope | Bind every nonrecursive CTE body in declaration order, including unused bodies; only earlier siblings and inherited CTEs are visible. Local names shadow inherited names. Bind derived/subquery/LATERAL/ON scopes before row iteration; local qualifier presence prevents fallback to the same outer qualifier when its column is missing. |
+
+Numeric arithmetic/aggregate rounding remains S04/S09, string algorithms S05,
+temporal interpretation S06, general ARRAY/JSON operations S07, relation
+algorithms S08, new grouping/windows S09 and recursive/table functions S10.
+Already-working primitive operations are retained. A selected signature that
+requires a deferred kernel fails explicitly before the affected read even
+on empty input; it cannot be advertised by metadata while failing only when
+a row reaches the evaluator. Contextual unknown conversion uses existing
+executable input capabilities, not a new general conversion framework.
+
+#### S03 falsifiable case IDs
+
+| ID | Required counterexample-detecting evidence |
+|---|---|
+| S03-C01 | Public SQL unknown '7' versus explicit TEXT '7' in comparison; CASE/COALESCE known/unknown/all-unknown types, values and zero-row columns; existing AST.string remains typed text. |
+| S03-C02 | Explicit typed NULL, empty primitive array, non-NULL primitive width and rich metadata survive native/Wire invocation; absent declarations infer one identity across positional/name aliases; missing/duplicate supplied parameters fail. |
+| S03-C03 | Contextual NULL parameter in column comparison, predicate, CAST, nested query and CASE; unresolved IS NULL, earlier unresolved occurrence, incompatible integer/text operator contexts and legal integer-then-text CAST distinguish errors from legal per-use conversions. |
+| S03-C04 | Exact/unqualified/pg_catalog calls and type names, quoted uppercase and quoted dotted names round trip; unrelated schema names and qualified tables cannot resolve by dropping qualification; product SPARQL recognition and language policy regressions. |
+| S03-C05 | abs preferred/typed-width overload and length integer output agree with actual evaluation on empty/nonempty input; unavailable rich/deferred signatures fail before scan; primitive product capabilities remain covered. |
+| S03-C06 | Bare NULL target identity, typed legal precision identity, illegal uuid-to-integer and integer-to-timestamp chains, unresolved custom targets and malformed target descriptors; parser normalization cannot erase source type. |
+| S03-C07 | ORDER output precedence, GROUP input precedence, implicit labels, identical/different duplicate aliases, valid/zero/negative/one-past ordinals and aggregate GROUP ordinal rejection; metadata independent of row presence. |
+| S03-C08 | Unused invalid CTE, forward CTE, inherited/local shadowing, derived arity, ambiguous JOIN columns, correlated local/outer addresses and missing local-qualified column; empty LATERAL still rejects invalid right expressions. |
+| S03-C09 | Selected coercions/functions/column addresses affect actual JOIN/filter/group/projection/sort/CASE/subquery results; canonical scan and admitted index pushdown yield equal values/types/multiplicity/order, including rich outer-column retention. |
+| S03-C10 | Public local binding diagnostics resolve the correct occurrence for repeated identical nodes in different scopes, multibyte/CRLF/comment input, normalized casts and alias/ordinal/SPARQL rewrites; direct IR supplies no fabricated source position. |
+| S03-C11 | Exact/one-past source/map/address/plan budgets fail before growth; binding/cancel failure releases claims, starts no affected scan and leaves the same container usable; correlated outer payload owners survive suspension. |
+| S03-C12 | Canonical Wire/goldens/strict JSON/native plus separately identified standard WASM/Embedded compile/link/runtime cases preserve the new distinctions; SQL/SPARQL/graph/MultiBase ownership, zero-row metadata and existing retained-page behavior regressions pass. |
+
+On 2026-10-15, the user moved the graph-enabled Database standard WASM and
+Embedded compile/link/runtime portion of S03-C12 to S18. That portion remains
+unverified and is required for overall task completion; Native graph evidence
+does not substitute for it. S03 retains the separate Kit/Wire/QueryAST/Engine
+portable cases and Native SQL/SPARQL/graph/MultiBase regressions. The deferred
+runtime path is owned by [Database](../../../../../database-framework/Sources/Database/DESIGN.md#verification-and-change-impact).
+
+The referenced PostgreSQL cases determine dialect behavior. Cases requiring
+not-yet-admitted algorithms remain explicit deferred failures under their
+owning sprint; they do not become S03 success claims. Engine failures retain
+typed category and semantic occurrence; Database adds optional local source
+position. S16 owns final SQLSTATE/remote details and CLI formatting.
 
 ## Runtime Flows
 

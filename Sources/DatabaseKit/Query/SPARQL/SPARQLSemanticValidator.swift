@@ -463,7 +463,7 @@ public enum SPARQLSemanticValidator {
             return false
         case .rdfTerm(let term):
             return rdfTermContainsBlankNode(term)
-        case .queryValue, .null, .bool, .int, .uint, .decimal, .double, .string, .date,
+        case .sqlUnknownString, .queryValue, .null, .bool, .int, .uint, .decimal, .double, .string, .date,
              .timestamp, .binary, .uuid, .iri, .typedLiteral, .langLiteral,
              .dirLangLiteral:
             return false
@@ -493,7 +493,7 @@ public enum SPARQLSemanticValidator {
             return nil
         case .rdfTerm(let term):
             return blankNodeLabel(in: term)
-        case .queryValue, .null, .bool, .int, .uint, .decimal, .double, .string, .date,
+        case .sqlUnknownString, .queryValue, .null, .bool, .int, .uint, .decimal, .double, .string, .date,
              .timestamp, .binary, .uuid, .iri, .typedLiteral, .langLiteral,
              .dirLangLiteral:
             return nil
@@ -504,7 +504,12 @@ public enum SPARQLSemanticValidator {
         _ literal: Literal
     ) throws(SPARQLSemanticValidationError) {
         switch literal {
-        case .queryValue(let value, _):
+        case .sqlUnknownString:
+            throw .unsupportedSQLExpression
+        case .queryValue(let value, let type):
+            if let type, !QueryValueValidator.accepts(value, type: type) {
+                throw .unsupportedQueryValue
+            }
             guard case .primitive(let primitive) = value else {
                 throw .unsupportedQueryValue
             }
@@ -536,7 +541,12 @@ public enum SPARQLSemanticValidator {
         _ literal: Literal
     ) throws(SPARQLSemanticValidationError) {
         switch literal {
-        case .queryValue(let value, _):
+        case .sqlUnknownString:
+            throw .unsupportedSQLExpression
+        case .queryValue(let value, let type):
+            if let type, !QueryValueValidator.accepts(value, type: type) {
+                throw .unsupportedQueryValue
+            }
             guard case .primitive(let primitive) = value else {
                 throw .unsupportedQueryValue
             }
@@ -1097,7 +1107,7 @@ private struct QueryScopeState {
             // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission cannot interpret SQL temporal precision.
             // S06 must provide SQL conversion; this RDF boundary rejects nested temporal modifiers.
             switch scalarType {
-            case .time(_, .some), .timestamp(_, .some): throw .unsupportedSQLExpression
+            case .time(_, .some), .timestamp(_, .some), .custom(_, .some): throw .unsupportedSQLExpression
             default: break
             }
             try validate(value, context: context)
@@ -1149,6 +1159,7 @@ private struct QueryScopeState {
             }
             try validateAggregate(aggregate)
         case .function(let function):
+            guard function.schema == nil else { throw .unsupportedSQLExpression }
             for argument in function.arguments {
                 try validate(argument, context: context)
             }

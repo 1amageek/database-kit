@@ -67,7 +67,7 @@ public enum QueryStructuralValidator {
         positionalParameters: [UInt32: QueryParameter],
         namedParameters: [String: QueryParameter],
         limits: QueryStructuralLimits
-    ) throws(QueryStructuralValidationError) {
+    ) throws(QueryStructuralValidationError) -> QueryParameterReference? {
         var validation = ValidationTraversal(
             limits: limits,
             parameterValues: ParameterValues(
@@ -76,6 +76,7 @@ public enum QueryStructuralValidator {
             )
         )
         try validation.validate([rootValidationStep(for: statement)])
+        return validation.firstMissingParameter
     }
 
     private static func rootValidationStep(
@@ -186,6 +187,7 @@ private extension QueryStructuralValidator {
     struct ValidationTraversal {
         let limits: QueryStructuralLimits
         let parameterValues: ParameterValues?
+        var firstMissingParameter: QueryParameterReference?
         var ledger: QueryStructuralResourceLedger
 
         init(limits: QueryStructuralLimits) {
@@ -768,6 +770,9 @@ private extension QueryStructuralValidator {
                     case .aggregate(let aggregate):
                         validationSteps.append(.aggregate(aggregate, depth: childDepth))
                     case .function(let function):
+                        if let schema = function.schema {
+                            try ledger.consume(.retainedBytes, amount: UInt64(schema.utf8.count))
+                        }
                         try consumeCollection(function.arguments.count)
                         appendExpressions(
                             function.arguments,
@@ -805,6 +810,8 @@ private extension QueryStructuralValidator {
                             } else {
                                 validationSteps.append(.literal(.queryValue(parameter.value, type: parameter.type), depth: childDepth))
                             }
+                        } else if parameterValues != nil, firstMissingParameter == nil {
+                            firstMissingParameter = reference
                         }
                     case .column, .variable, .bound:
                         break
@@ -836,6 +843,8 @@ private extension QueryStructuralValidator {
 
                 case .dataType(let dataType, _):
                     switch dataType {
+                    case .custom(_, let schema):
+                        if let schema { try ledger.consume(.retainedBytes, amount: UInt64(schema.utf8.count)) }
                     case .array(let element):
                         validationSteps.append(.dataType(element, depth: childDepth))
                     case .time(_, let precision), .timestamp(_, let precision):
@@ -913,6 +922,8 @@ private extension QueryStructuralValidator {
 
                 case .literal(let literal, _):
                     switch literal {
+                    case .sqlUnknownString(let value):
+                        try ledger.consume(.retainedBytes, amount: UInt64(value.utf8.count))
                     case .queryValue(let value, let type):
                         validationSteps.append(.queryValue(value, type, depth: childDepth))
                     case .array(let values):

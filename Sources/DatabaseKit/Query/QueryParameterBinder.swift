@@ -52,11 +52,13 @@ public struct QueryParameterBinder: Sendable {
         self.structuralLimits = structuralLimits
     }
 
-    public func bind(
+    /// Admits every parameter occurrence without substituting the semantic tree.
+    public func validate(
         _ statement: QueryStatement
-    ) throws(QueryParameterBindingError) -> QueryStatement {
+    ) throws(QueryParameterBindingError) {
+        let missing: QueryParameterReference?
         do {
-            try QueryStructuralValidator.validateBoundStructure(
+            missing = try QueryStructuralValidator.validateBoundStructure(
                 statement,
                 positionalParameters: positions,
                 namedParameters: names,
@@ -65,6 +67,18 @@ public struct QueryParameterBinder: Sendable {
         } catch {
             throw .invalidStructure(error)
         }
+        if let missing {
+            switch missing {
+            case .position(let position): throw .missingPosition(position)
+            case .name(let name): throw .missingName(name)
+            }
+        }
+    }
+
+    public func bind(
+        _ statement: QueryStatement
+    ) throws(QueryParameterBindingError) -> QueryStatement {
+        try validate(statement)
         var traversal = QueryParameterBindingTraversal(
             positions: positions,
             names: names

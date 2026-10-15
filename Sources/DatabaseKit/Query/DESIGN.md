@@ -160,6 +160,66 @@ ledger. Callers do not mirror ledger counters. Rejected claims preserve the
 remaining budget; leaving a nesting scope restores depth capacity without
 releasing cumulative node, byte, token or collection consumption.
 
+### S03 semantic carriage and occurrence addresses
+
+DataType.sparqlFunction uses a throwing QueryLiteralConversionError getter.
+It owns SPARQL type-name generation and rejects schema-qualified custom types
+and existing explicit temporal modifiers, including nested types, with
+unsupportedSPARQLLiteral. Expression serialization consumes that same path.
+
+The [SQL child](SQL/DESIGN.md#s03-frozen-semantic-binding-boundary) owns S03
+resolution meaning. Query adds Literal.sqlUnknownString(String), optional
+exact FunctionCall.schema via init(name:arguments:distinct:schema:), and
+DataType.custom(String, schema: String? = nil). Existing Literal.string
+remains typed text. These changes retain QueryValue's six cases and do not
+alter primitive storage. Every shared consumer/traversal migrates; qualified
+SQL forms and unknown strings fail at SPARQL boundaries rather than inheriting
+SQL coercion or name policy. QueryValue literals with an explicit declaration
+must pass its intrinsic type validator before SPARQL primitive adaptation;
+unresolved custom declarations cannot be ignored merely because the payload
+is primitive. Existing valid typed primitive literals retain their RDF path.
+
+QueryParameterBinder.validate(_:) validates supplied parameters and statement
+structure/references without substitution. SQL uses this admission path and
+passes original references plus parameters to Framework. Existing bind(_:) can
+delegate validation then retain context-free replacement for consumers whose
+contract requires it. Position/name maps still retain complete QueryParameter;
+Framework alone resolves SQL base types and legal occurrence coercions.
+
+QueryOccurrenceID is a UInt32 arena-local index. QueryOccurrenceField is a
+closed semantic edge-role enum; an occurrence retains parent ID, field and
+optional collection index. One QueryOccurrenceArena owns entries, child lookup
+index and structural ledger. append(parent:field:index:) checks parent, unique
+edge, depth/count/byte/overflow admission before growing; child(of:field:index:)
+and occurrence(_:) resolve within that arena. IDs are meaningful only with
+their owning arena/root; parser and binder receive that same provenance rather
+than independently guessing traversal numbers. QueryOccurrenceError preserves
+invalid-address and resource failures. The immutable operation result retains
+arena ownership; no source text or source range enters these values.
+
+| Semantic position | Edge meaning |
+|---|---|
+| Root | One statement root; statement index distinguishes batch roots. SELECT itself is the query root without a redundant wrapper. |
+| Query clauses | cte/projection/groupBy/orderBy use ordered indices; source/filter/having are singular. |
+| Source/nested query | joinLeft/joinRight/joinCondition and subquery preserve scope boundaries. |
+| Expression children | operand(index) follows ordered operands including unary/binary/BETWEEN/CAST; argument(index) follows function/COALESCE/IN-value/constructor children. |
+| Conditional/type/aggregate children | caseCondition/caseResult indices, caseElse, castType, elementType, aggregateArgument and aggregateOrderBy indices preserve their distinct roles. |
+
+Required edges may be refined by their semantic owner without introducing a
+second AST; parser and binder must use identical meaning. Shared parent/edge
+storage and lookup indexes use O(nodes + edges) retained space. No per-node
+full ancestor-path allocation, Expression-equality identity, parser-state
+reference or global mutable identity service is part of this contract. Counts,
+depth, lookup entries and logical retained representation bytes are admitted
+using existing structural limits before growth. This does not claim exact Swift
+allocator capacity; Framework separately retains its existing actual-owner/
+capacity-based plan claim under the runtime work meter.
+
+S03-C01–C04/C10–C12 verify semantic distinction, parameter validation,
+occurrence uniqueness, bounded failures, language isolation and canonical
+native/WASM/Embedded carriage. Parser source annotations remain QueryAST-owned;
+runtime binding/execution and lifetime remain Framework-owned.
+
 ## Runtime Flows
 
 ```text

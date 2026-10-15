@@ -144,7 +144,10 @@ public enum AggregateFunction: Sendable, Equatable, Hashable {
 
 /// Function call
 public struct FunctionCall: Sendable, Equatable, Hashable {
-    /// Function name (possibly qualified)
+    /// Exact optional schema identity; quoted syntax is owned by the parser.
+    public let schema: String?
+
+    /// Exact unqualified function name.
     public let name: String
 
     /// Arguments
@@ -153,7 +156,8 @@ public struct FunctionCall: Sendable, Equatable, Hashable {
     /// DISTINCT modifier (for aggregate-like functions)
     public let distinct: Bool
 
-    public init(name: String, arguments: [Expression], distinct: Bool = false) {
+    public init(name: String, arguments: [Expression], distinct: Bool = false, schema: String? = nil) {
+        self.schema = schema
         self.name = name
         self.arguments = arguments
         self.distinct = distinct
@@ -234,7 +238,7 @@ public indirect enum DataType: Sendable, Equatable, Hashable {
     case jsonb
     case uuid
     case array(DataType)
-    case custom(String)  // For database-specific types
+    case custom(String, schema: String? = nil)  // For database-specific types
 }
 
 /// Unified expression representation

@@ -139,8 +139,9 @@ private extension QueryIRDataTypeWireCodec {
         case .array(let element):
             writer.writeUInt8(20)
             encodingSteps.append(.dataType(element))
-        case .custom(let name):
-            writer.writeUInt8(21)
+        case .custom(let name, let schema):
+            writer.writeUInt8(schema == nil ? 21 : 24)
+            if let schema { try writer.writeString(schema) }
             try writer.writeString(name)
         }
     }
@@ -209,6 +210,9 @@ private extension QueryIRDataTypeWireCodec {
             return .uuid
         case 21:
             return .custom(try reader.readString())
+        case 24:
+            let schema = try reader.readString()
+            return .custom(try reader.readString(), schema: schema)
         default:
             throw .invalidValueTag(tag)
         }

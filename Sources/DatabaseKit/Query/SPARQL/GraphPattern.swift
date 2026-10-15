@@ -360,6 +360,7 @@ extension Expression {
 
         // Functions
         case .function(let call):
+            guard call.schema == nil else { throw .unsupportedSPARQLLiteral }
             let args = try call.arguments.map { (value) throws(QueryLiteralConversionError) -> String in try value.toSPARQL(prefixes: prefixes) }.joined(separator: ", ")
             return "\(call.name.uppercased())(\(args))"
 
@@ -386,15 +387,7 @@ extension Expression {
 
         // Type conversion
         case .cast(let e, let targetType):
-            var scalarType = targetType
-            while case .array(let element) = scalarType { scalarType = element }
-            // FIXME(INCOMPLETE_IMPLEMENTATION): RDF generation cannot represent SQL temporal precision.
-            // S06 must supply SQL conversion without dropping nested modifiers at this RDF boundary.
-            switch scalarType {
-            case .time(_, .some), .timestamp(_, .some): throw .unsupportedSPARQLLiteral
-            default: break
-            }
-            return "\(targetType.sparqlFunction)(\(try e.toSPARQL(prefixes: prefixes)))"
+            return "\(try targetType.sparqlFunction)(\(try e.toSPARQL(prefixes: prefixes)))"
 
         // RDF-star operations
         case .triple(let subject, let predicate, let object):
@@ -481,35 +474,44 @@ extension AggregateFunction {
 extension DataType {
     /// Get the SPARQL function name for this data type
     public var sparqlFunction: String {
-        switch self {
-        case .boolean:
-            return "xsd:boolean"
-        case .smallint, .integer, .bigint:
-            return "xsd:integer"
-        case .real, .doublePrecision:
-            return "xsd:double"
-        case .decimal:
-            return "xsd:decimal"
-        case .char, .varchar, .text:
-            return "xsd:string"
-        case .date:
-            return "xsd:date"
-        case .time:
-            return "xsd:time"
-        case .timestamp:
-            return "xsd:dateTime"
-        case .binary, .varbinary, .blob:
-            return "xsd:base64Binary"
-        case .uuid:
-            return "xsd:string"
-        case .json, .jsonb:
-            return "xsd:string"
-        case .interval:
-            return "xsd:duration"
-        case .array:
-            return "xsd:string"
-        case .custom(let name):
-            return name
+        get throws(QueryLiteralConversionError) {
+            var scalarType = self
+            while case .array(let element) = scalarType { scalarType = element }
+            switch scalarType {
+            case .time(_, .some), .timestamp(_, .some), .custom(_, .some):
+                throw .unsupportedSPARQLLiteral
+            default: break
+            }
+            switch self {
+            case .boolean:
+                return "xsd:boolean"
+            case .smallint, .integer, .bigint:
+                return "xsd:integer"
+            case .real, .doublePrecision:
+                return "xsd:double"
+            case .decimal:
+                return "xsd:decimal"
+            case .char, .varchar, .text:
+                return "xsd:string"
+            case .date:
+                return "xsd:date"
+            case .time:
+                return "xsd:time"
+            case .timestamp:
+                return "xsd:dateTime"
+            case .binary, .varbinary, .blob:
+                return "xsd:base64Binary"
+            case .uuid:
+                return "xsd:string"
+            case .json, .jsonb:
+                return "xsd:string"
+            case .interval:
+                return "xsd:duration"
+            case .array:
+                return "xsd:string"
+            case .custom(let name, _):
+                return name
+            }
         }
     }
 }

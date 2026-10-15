@@ -318,6 +318,27 @@ unknown-tag rejection remains deliberate; there is no permissive compatibility
 decode or runtime version negotiation. SQL parsing/serialization stays in
 Framework and is not reimplemented by the codec.
 
+### S03 unknown and qualified-name grammar
+
+Wire consumes the [S03 Query carriage contract](../DatabaseKit/Query/DESIGN.md#s03-semantic-carriage-and-occurrence-addresses).
+Literal tag 19 carries sqlUnknownString as one bounded String. Existing tag 4
+remains typed string. DataType tag 24 carries qualified custom type as schema
+String then terminal name String; nil-schema custom retains tag 21. Expression
+tag 43 carries qualified FunctionCall as schema String, terminal name String,
+existing expression-list production and distinct Boolean; nil-schema function
+retains tag 28. All identifiers are exact components, including embedded dots.
+Existing tags retain their meanings and standard v3/MultiBase v5 selection is
+unchanged. No QueryValue or FieldValue alternative is added.
+
+Structural walks and decoders charge the additional string/children before
+growth, preserve parameter references/declarations and reject unknown tags,
+truncation, invalid names and one-past limits explicitly. Pure carriage of an
+unresolved custom CAST input is distinct from resolved result/schema type
+admission. Occurrence arenas/source sidecars are local binding provenance and
+do not add a Wire source-text or runtime-plan production. S03-C02/C04/C12 require
+goldens, typed failure and standard/MultiBase/native/WASM/Embedded runtime
+evidence; direct semantic round trips preserve exact enum identity.
+
 ## Runtime Flows
 
 ```mermaid

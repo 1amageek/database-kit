@@ -128,6 +128,9 @@ private extension QueryIRLiteralWireCodec {
         case .double(let value):
             writer.writeUInt8(3)
             writer.writeDouble(value)
+        case .sqlUnknownString(let value):
+            writer.writeUInt8(19)
+            try writer.writeString(value)
         case .string(let value):
             writer.writeUInt8(4)
             try writer.writeString(value)
@@ -206,6 +209,8 @@ private extension QueryIRLiteralWireCodec {
             return .int(try reader.readInt64())
         case 3:
             return .double(try reader.readDouble())
+        case 19:
+            return .sqlUnknownString(try reader.readString())
         case 4:
             return .string(try reader.readString())
         case 5:

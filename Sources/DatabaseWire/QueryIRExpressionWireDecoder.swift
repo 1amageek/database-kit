@@ -179,7 +179,7 @@ private extension QueryIRExpressionWireDecoder {
         case sortKeyCursorAppend(CollectionCursor<SortKey>)
         case sortKey
         case sortKeyTail
-        case functionTail(name: String)
+        case functionTail(name: String, schema: String?)
         case caseWhenPairCursor(CollectionCursor<CaseWhenPair>)
         case caseWhenPairAfterCondition(CollectionCursor<CaseWhenPair>)
         case caseWhenPairAppend(
@@ -557,13 +557,14 @@ private extension QueryIRExpressionWireDecoder {
                     )
                 )
 
-            case .functionTail(let name):
+            case .functionTail(let name, let schema):
                 expressions.append(
                     .function(
                         FunctionCall(
                             name: name,
                             arguments: try popExpressionCollection(),
-                            distinct: try reader.readBool()
+                            distinct: try reader.readBool(),
+                            schema: schema
                         )
                     )
                 )
@@ -1689,11 +1690,12 @@ private extension QueryIRExpressionWireDecoder {
             case 27:
                 decodingSteps.append(.endNestedValue)
                 decodingSteps.append(.aggregate)
-            case 28:
+            case 28, 43:
+                let schema = tag == 43 ? try reader.readString() : nil
                 let name = try reader.readString()
                 let count = try reader.readCount()
                 decodingSteps.append(.endNestedValue)
-                decodingSteps.append(.functionTail(name: name))
+                decodingSteps.append(.functionTail(name: name, schema: schema))
                 decodingSteps.append(.expressionCursor(CollectionCursor(count: count)))
             case 29:
                 let pairCount = try reader.readCount()

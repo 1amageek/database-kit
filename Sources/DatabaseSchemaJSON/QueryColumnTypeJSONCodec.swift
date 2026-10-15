@@ -117,7 +117,9 @@ public struct QueryColumnTypeJSONCodec: Sendable {
         case .array(let element):
             kind = "array"
             members = [("element", try encodeDataType(element, depth: depth + 1))]
-        case .custom(let name): kind = "custom"; members = [("name", .string(name))]
+        case .custom(let name, let schema):
+            kind = "custom"
+            members = [("name", .string(name)), ("schema", schema.map { .string($0) } ?? .null)]
         }
         return .object([("kind", .string(kind))] + members)
     }
@@ -163,8 +165,12 @@ public struct QueryColumnTypeJSONCodec: Sendable {
             try object.validateKeys(["kind", "element"])
             return .array(try decodeDataType(object.required("element"), path: object.child("element"), depth: depth + 1))
         case "custom":
-            try object.validateKeys(["kind", "name"])
-            return .custom(try object.required("name").string(path: object.child("name")))
+            try object.validateKeys(["kind", "name", "schema"])
+            let schemaNode = try object.required("schema")
+            let schema: String?
+            if case .null = schemaNode { schema = nil }
+            else { schema = try schemaNode.string(path: object.child("schema")) }
+            return .custom(try object.required("name").string(path: object.child("name")), schema: schema)
         default:
             throw SchemaJSONError.invalidValue(path: object.child("kind"), reason: "Unknown SQL type")
         }

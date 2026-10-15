@@ -1219,7 +1219,8 @@ private extension QueryParameterBindingTraversal {
                         FunctionCall(
                             name: function.name,
                             arguments: arguments.value,
-                            distinct: function.distinct
+                            distinct: function.distinct,
+                            schema: function.schema
                         )
                     )
                     : expression,

@@ -73,7 +73,7 @@ struct QueryColumnTypeJSONCodecTests {
     }
 
     @Test("Invalid and unresolved descriptors preserve their admission cause", arguments: [
-        #"{"kind":"sql","type":{"kind":"custom","name":"money"}}"#,
+        #"{"kind":"sql","type":{"kind":"custom","name":"money","schema":null}}"#,
         #"{"kind":"sql","type":{"kind":"array","element":{"kind":"array","element":{"kind":"text"}}}}"#,
         #"{"kind":"sql","type":{"kind":"varchar","length":0}}"#,
         #"{"kind":"sql","type":{"kind":"decimal","precision":0,"scale":0}}"#,

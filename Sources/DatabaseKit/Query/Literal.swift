@@ -36,6 +36,9 @@ public enum Literal: Sendable, Equatable, Hashable {
     /// String value
     case string(String)
 
+    /// An untyped SQL string constant awaiting contextual coercion.
+    case sqlUnknownString(String)
+
     /// Date value (date only, no time)
     case date(CivilDate)
 
@@ -237,6 +240,8 @@ extension Literal: CustomStringConvertible {
             return QueryLiteralEncoding.decimal(value)
         case .double(let v):
             return String(v)
+        case .sqlUnknownString(let value):
+            return "sqlUnknownString(\(value))"
         case .string(let v):
             return "\"\(v)\""
         case .date(let v):
