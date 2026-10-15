@@ -363,13 +363,29 @@ public indirect enum Expression: Sendable, Hashable {
     // MARK: - Conditional Expressions
 
     /// CASE WHEN: CASE WHEN c1 THEN r1 ... ELSE r END
-    case caseWhen(cases: [CaseWhenPair], elseResult: Expression?)
+    case caseWhen(operand: Expression? = nil, cases: [CaseWhenPair], elseResult: Expression?)
 
     /// COALESCE: COALESCE(e1, e2, ...)
     case coalesce([Expression])
 
     /// NULLIF: NULLIF(e1, e2)
     case nullIf(Expression, Expression)
+
+    /// Eager SQL maximum, ignoring NULL operands.
+    case greatest([Expression])
+
+    /// Eager SQL minimum, ignoring NULL operands.
+    case least([Expression])
+
+    /// A nonnullable Boolean SQL truth predicate.
+    case truthTest(Expression, value: TruthValue, negated: Bool)
+
+    /// A nonnullable Boolean null-safe SQL comparison.
+    case isDistinctFrom(Expression, Expression, negated: Bool)
+
+    /// A scalar SQL comparison reduced over an array or one-column subquery.
+    case quantifiedComparison(Expression, comparison: ComparisonOperator,
+                              quantifier: ComparisonQuantifier, source: QuantifiedComparisonSource)
 
     // MARK: - Type Conversion
 
@@ -529,267 +545,16 @@ extension Expression {
     }
 }
 
-// MARK: - Equatable Conformance
+// MARK: - Representation Identity
 
 extension Expression: Equatable {
     public static func == (lhs: Expression, rhs: Expression) -> Bool {
-        switch (lhs, rhs) {
-        case (.literal(let l1), .literal(let l2)):
-            return l1 == l2
-        case (.array(let l), .array(let r)), (.row(let l), .row(let r)):
-            return l == r
-        case (.column(let c1), .column(let c2)):
-            return c1 == c2
-        case (.variable(let v1), .variable(let v2)):
-            return v1 == v2
-        case (.parameter(let p1), .parameter(let p2)):
-            return p1 == p2
-        case (.add(let l1, let r1), .add(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.subtract(let l1, let r1), .subtract(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.multiply(let l1, let r1), .multiply(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.divide(let l1, let r1), .divide(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.modulo(let l1, let r1), .modulo(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.negate(let e1), .negate(let e2)):
-            return e1 == e2
-        case (.equal(let l1, let r1), .equal(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.notEqual(let l1, let r1), .notEqual(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.lessThan(let l1, let r1), .lessThan(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.lessThanOrEqual(let l1, let r1), .lessThanOrEqual(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.greaterThan(let l1, let r1), .greaterThan(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.greaterThanOrEqual(let l1, let r1), .greaterThanOrEqual(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.and(let l1, let r1), .and(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.or(let l1, let r1), .or(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.not(let e1), .not(let e2)):
-            return e1 == e2
-        case (.isNull(let e1), .isNull(let e2)):
-            return e1 == e2
-        case (.isNotNull(let e1), .isNotNull(let e2)):
-            return e1 == e2
-        case (.bound(let v1), .bound(let v2)):
-            return v1 == v2
-        case (.like(let e1, let p1), .like(let e2, let p2)):
-            return e1 == e2 && p1 == p2
-        case (.regex(let e1, let p1, let f1), .regex(let e2, let p2, let f2)):
-            return e1 == e2 && p1 == p2 && f1 == f2
-        case (.between(let e1, let l1, let h1), .between(let e2, let l2, let h2)):
-            return e1 == e2 && l1 == l2 && h1 == h2
-        case (.inList(let e1, let v1), .inList(let e2, let v2)):
-            return e1 == e2 && v1 == v2
-        case (.notInList(let e1, let v1), .notInList(let e2, let v2)):
-            return e1 == e2 && v1 == v2
-        case (.inSubquery(let e1, let s1), .inSubquery(let e2, let s2)):
-            return e1 == e2 && s1 == s2
-        case (.aggregate(let a1), .aggregate(let a2)):
-            return a1 == a2
-        case (.function(let f1), .function(let f2)):
-            return f1 == f2
-        case (.caseWhen(let c1, let e1), .caseWhen(let c2, let e2)):
-            return c1 == c2 && e1 == e2
-        case (.coalesce(let e1), .coalesce(let e2)):
-            return e1 == e2
-        case (.nullIf(let l1, let r1), .nullIf(let l2, let r2)):
-            return l1 == l2 && r1 == r2
-        case (.cast(let e1, let t1), .cast(let e2, let t2)):
-            return e1 == e2 && t1 == t2
-        case (.triple(let s1, let p1, let o1), .triple(let s2, let p2, let o2)):
-            return s1 == s2 && p1 == p2 && o1 == o2
-        case (.isTriple(let e1), .isTriple(let e2)):
-            return e1 == e2
-        case (.subject(let e1), .subject(let e2)):
-            return e1 == e2
-        case (.predicate(let e1), .predicate(let e2)):
-            return e1 == e2
-        case (.object(let e1), .object(let e2)):
-            return e1 == e2
-        case (.subquery(let s1), .subquery(let s2)):
-            return s1 == s2
-        case (.exists(let s1), .exists(let s2)):
-            return s1 == s2
-        default:
-            return false
-        }
+        ExpressionIdentity.areEqual(lhs, rhs)
     }
 }
 
-// MARK: - Hashable Conformance
-
 extension Expression {
     public func hash(into hasher: inout Hasher) {
-        switch self {
-        case .literal(let lit):
-            hasher.combine(0)
-            hasher.combine(lit)
-        case .array(let expressions):
-            hasher.combine(41)
-            hasher.combine(expressions)
-        case .row(let expressions):
-            hasher.combine(42)
-            hasher.combine(expressions)
-        case .column(let col):
-            hasher.combine(1)
-            hasher.combine(col)
-        case .variable(let v):
-            hasher.combine(2)
-            hasher.combine(v)
-        case .parameter(let parameter):
-            hasher.combine(40)
-            hasher.combine(parameter)
-        case .add(let l, let r):
-            hasher.combine(3)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .subtract(let l, let r):
-            hasher.combine(4)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .multiply(let l, let r):
-            hasher.combine(5)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .divide(let l, let r):
-            hasher.combine(6)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .modulo(let l, let r):
-            hasher.combine(7)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .negate(let e):
-            hasher.combine(8)
-            hasher.combine(e)
-        case .equal(let l, let r):
-            hasher.combine(9)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .notEqual(let l, let r):
-            hasher.combine(10)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .lessThan(let l, let r):
-            hasher.combine(11)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .lessThanOrEqual(let l, let r):
-            hasher.combine(12)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .greaterThan(let l, let r):
-            hasher.combine(13)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .greaterThanOrEqual(let l, let r):
-            hasher.combine(14)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .and(let l, let r):
-            hasher.combine(15)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .or(let l, let r):
-            hasher.combine(16)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .not(let e):
-            hasher.combine(17)
-            hasher.combine(e)
-        case .isNull(let e):
-            hasher.combine(18)
-            hasher.combine(e)
-        case .isNotNull(let e):
-            hasher.combine(19)
-            hasher.combine(e)
-        case .bound(let v):
-            hasher.combine(20)
-            hasher.combine(v)
-        case .like(let e, let pattern):
-            hasher.combine(21)
-            hasher.combine(e)
-            hasher.combine(pattern)
-        case .regex(let e, let pattern, let flags):
-            hasher.combine(22)
-            hasher.combine(e)
-            hasher.combine(pattern)
-            hasher.combine(flags)
-        case .between(let e, let low, let high):
-            hasher.combine(23)
-            hasher.combine(e)
-            hasher.combine(low)
-            hasher.combine(high)
-        case .inList(let e, let values):
-            hasher.combine(24)
-            hasher.combine(e)
-            for v in values {
-                hasher.combine(v)
-            }
-        case .notInList(let e, let values):
-            hasher.combine(39)
-            hasher.combine(e)
-            for v in values {
-                hasher.combine(v)
-            }
-        case .inSubquery(let e, let subquery):
-            hasher.combine(25)
-            hasher.combine(e)
-            hasher.combine(subquery)
-        case .aggregate(let agg):
-            hasher.combine(26)
-            hasher.combine(agg)
-        case .function(let func_):
-            hasher.combine(27)
-            hasher.combine(func_)
-        case .caseWhen(let cases, let elseResult):
-            hasher.combine(28)
-            hasher.combine(cases)
-            hasher.combine(elseResult)
-        case .coalesce(let exprs):
-            hasher.combine(29)
-            for e in exprs {
-                hasher.combine(e)
-            }
-        case .nullIf(let l, let r):
-            hasher.combine(30)
-            hasher.combine(l)
-            hasher.combine(r)
-        case .cast(let e, let targetType):
-            hasher.combine(31)
-            hasher.combine(e)
-            hasher.combine(targetType)
-        case .triple(let subject, let predicate, let object):
-            hasher.combine(32)
-            hasher.combine(subject)
-            hasher.combine(predicate)
-            hasher.combine(object)
-        case .isTriple(let e):
-            hasher.combine(33)
-            hasher.combine(e)
-        case .subject(let e):
-            hasher.combine(34)
-            hasher.combine(e)
-        case .predicate(let e):
-            hasher.combine(35)
-            hasher.combine(e)
-        case .object(let e):
-            hasher.combine(36)
-            hasher.combine(e)
-        case .subquery(let query):
-            hasher.combine(37)
-            hasher.combine(query)
-        case .exists(let query):
-            hasher.combine(38)
-            hasher.combine(query)
-        }
+        ExpressionIdentity.hash(self, into: &hasher)
     }
 }

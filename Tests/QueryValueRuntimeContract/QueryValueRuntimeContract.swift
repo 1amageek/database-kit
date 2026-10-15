@@ -31,7 +31,7 @@ struct QueryValueRuntimeContract {
         print("QUERY_VALUE_RUNTIME_BEGIN")
         do {
             try run()
-            print("QUERY_VALUE_RUNTIME_PASS cases=8")
+            print("QUERY_VALUE_RUNTIME_PASS cases=9")
         } catch {
             switch error {
             case .assertion(let code): print("QUERY_VALUE_RUNTIME_FAIL assertion=\(code)")
@@ -116,6 +116,75 @@ struct QueryValueRuntimeContract {
         pass("wire-errors")
         try sqlConstructorsAndTemporalDescriptors()
         pass("sql-constructors-temporal-descriptors")
+        try sqlConditionalCarriage()
+        pass("sql-conditional-carriage")
+    }
+
+    private static func sqlConditionalCarriage() throws(Failure) {
+        var nested: Expression = .int(1)
+        var different: Expression = .int(2)
+        var differentArity: Expression = .row([.int(1), .int(1)])
+        for _ in 0..<24 {
+            nested = .array([.row([nested])])
+            different = .array([.row([different])])
+            differentArity = .array([.row([differentArity])])
+        }
+        let nestedStatement = select(nested)
+        let nestedBytes = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(nestedStatement) }
+        let restoredNested = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(nestedBytes) }
+        try require(restoredNested == nestedStatement && restoredNested.hashValue == nestedStatement.hashValue, code: 55)
+        try require(nested != different && nested != differentArity, code: 56)
+        try require(Set([nested, nested, different, differentArity]).count == 3, code: 57)
+        let parameter = Expression.parameter(.position(1))
+        let typedNull = Expression.literal(.queryValue(.primitive(.null), type: .sql(.integer)))
+        func conditional(_ child: Expression) -> Expression {
+            .row([
+                .caseWhen(operand: child, cases: [CaseWhenPair(condition: .literal(.sqlUnknownString("Exact")), result: child)], elseResult: .null),
+                .greatest([child, .null]), .least([.null, child]), .truthTest(child, value: .unknown, negated: true),
+                .isDistinctFrom(child, .null, negated: false),
+                .quantifiedComparison(child, comparison: .lessThanOrEqual, quantifier: .any, source: .array(child)),
+                .quantifiedComparison(child, comparison: .greaterThan, quantifier: .all, source: .subquery(
+                    SelectQuery(projection: .items([ProjectionItem(child)]), source: .values([], columnNames: nil)))),
+            ])
+        }
+        let statement = select(conditional(parameter))
+        let bound: QueryStatement
+        do {
+            let binder = try QueryParameterBinder(parameters: [QueryParameter(position: 1, value: .primitive(.null), type: .sql(.integer))])
+            try binder.validate(statement)
+            bound = try binder.bind(statement)
+        } catch { throw .binding(error) }
+        try require(bound == select(conditional(typedNull)), code: 50)
+        for original in [statement, bound] {
+            let bytes = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(original) }
+            try require(try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(bytes) } == original, code: 51)
+            let request = QueryExecuteOperation.Request(input: .ir(original))
+            let frame = try wire { () throws(DatabaseWireError) in
+                #if DATABASE_KIT_MULTI_BASE
+                try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 51, target: .database, request: request)
+                #else
+                try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 51, request: request)
+                #endif
+            }
+            let decoded = try wire { () throws(DatabaseWireError) in try DatabaseWireDecoder().decodeRequest(DatabaseOperationCatalog.queryExecute, from: frame) }
+            try require(decoded.request == request, code: 52)
+            for end in 0..<bytes.count {
+                var rejected = false
+                do { _ = try QueryIRWireFormat.decode(ByteString(Array(bytes[0..<end]))) }
+                catch { rejected = true }
+                try require(rejected, code: 53)
+            }
+        }
+        let simple = Expression.caseWhen(operand: parameter, cases: [CaseWhenPair(condition: parameter, result: parameter)], elseResult: parameter)
+        do { try QueryStructuralValidator.validate(simple, limits: QueryStructuralLimits(maximumTotalNodes: 5)) }
+        catch { throw .structure(error) }
+        var rejected = false
+        do { try QueryStructuralValidator.validate(simple, limits: QueryStructuralLimits(maximumTotalNodes: 4)) }
+        catch {
+            guard error == .resourceLimitExceeded(resource: .totalNodes, actual: 5, maximum: 4) else { throw .structure(error) }
+            rejected = true
+        }
+        try require(rejected, code: 54)
     }
 
     private static func richValues(time: TimeSpan) throws(QueryValueError) -> [QueryValue] {

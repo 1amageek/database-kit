@@ -26,7 +26,18 @@ struct QueryIRWireFormatTests {
         for _ in 0..<24 { nested = .array([.row([nested])]) }
         let statement = QueryStatement.select(SelectQuery(
             projection: .items([ProjectionItem(nested)]), source: .values([], columnNames: nil)))
-        #expect(try QueryIRWireFormat.decode(QueryIRWireFormat.encode(statement)) == statement)
+        let restored = try QueryIRWireFormat.decode(QueryIRWireFormat.encode(statement))
+        #expect(restored == statement)
+        #expect(restored.hashValue == statement.hashValue)
+        var differentLeaf: Expression = .int(2)
+        var differentArity: Expression = .row([.int(1), .int(1)])
+        for _ in 0..<24 {
+            differentLeaf = .array([.row([differentLeaf])])
+            differentArity = .array([.row([differentArity])])
+        }
+        #expect(nested != differentLeaf)
+        #expect(nested != differentArity)
+        #expect(Set([nested, nested, differentLeaf, differentArity]).count == 3)
     }
 
     @Test("SQL constructor decoding rejects truncated, unknown, and oversized child lists")

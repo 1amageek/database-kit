@@ -306,15 +306,16 @@ run_runtime() {
     'QUERY_VALUE_RUNTIME_CASE invalid-values PASS' \
     'QUERY_VALUE_RUNTIME_CASE wire-errors PASS' \
     'QUERY_VALUE_RUNTIME_CASE sql-constructors-temporal-descriptors PASS' \
-    'QUERY_VALUE_RUNTIME_PASS cases=8' \
+    'QUERY_VALUE_RUNTIME_CASE sql-conditional-carriage PASS' \
+    'QUERY_VALUE_RUNTIME_PASS cases=9' \
     'QUERY_VALUE_WASI_EXIT code=0'; do
     if [[ "$(rg -F -x -c -- "$marker" "$log_path" || true)" != 1 ]]; then
       echo "error: expected exactly one runtime marker: $marker" >&2
       return 1
     fi
   done
-  if [[ "$(rg -c '^QUERY_VALUE_RUNTIME_CASE ' "$log_path" || true)" != 8 \
-      || "$(rg -c '^QUERY_VALUE_RUNTIME_' "$log_path" || true)" != 10 ]]; then
+  if [[ "$(rg -c '^QUERY_VALUE_RUNTIME_CASE ' "$log_path" || true)" != 9 \
+      || "$(rg -c '^QUERY_VALUE_RUNTIME_' "$log_path" || true)" != 11 ]]; then
     echo "error: unexpected runtime case or completion marker count" >&2
     return 1
   fi

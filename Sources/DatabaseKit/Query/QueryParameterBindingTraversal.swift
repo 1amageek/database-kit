@@ -406,12 +406,14 @@ private extension QueryParameterBindingTraversal {
              .greaterThanOrEqual(let lhs, let rhs),
              .and(let lhs, let rhs),
              .or(let lhs, let rhs),
-             .nullIf(let lhs, let rhs):
+             .nullIf(let lhs, let rhs),
+             .isDistinctFrom(let lhs, let rhs, _):
             bindingSteps.append(.assembleExpression(expression))
             bindingSteps.append(.expression(rhs))
             bindingSteps.append(.expression(lhs))
         case .negate(let value),
              .not(let value),
+             .truthTest(let value, _, _),
              .isNull(let value),
              .isNotNull(let value),
              .like(let value, _),
@@ -443,7 +445,14 @@ private extension QueryParameterBindingTraversal {
         case .function(let function):
             bindingSteps.append(.assembleExpression(expression))
             enqueueExpressionBindings(function.arguments)
-        case .caseWhen(let cases, let elseResult):
+        case .quantifiedComparison(let lhs, _, _, let source):
+            bindingSteps.append(.assembleExpression(expression))
+            switch source {
+            case .array(let value): bindingSteps.append(.expression(value))
+            case .subquery(let query): bindingSteps.append(.select(query))
+            }
+            bindingSteps.append(.expression(lhs))
+        case .caseWhen(let operand, let cases, let elseResult):
             bindingSteps.append(.assembleExpression(expression))
             if let elseResult {
                 bindingSteps.append(.expression(elseResult))
@@ -452,7 +461,8 @@ private extension QueryParameterBindingTraversal {
                 bindingSteps.append(.expression(pair.result))
                 bindingSteps.append(.expression(pair.condition))
             }
-        case .coalesce(let values), .array(let values), .row(let values):
+            if let operand { bindingSteps.append(.expression(operand)) }
+        case .coalesce(let values), .array(let values), .row(let values), .greatest(let values), .least(let values):
             bindingSteps.append(.assembleExpression(expression))
             enqueueExpressionBindings(values)
         case .triple(let subject, let predicate, let object):
@@ -1226,13 +1236,32 @@ private extension QueryParameterBindingTraversal {
                     : expression,
                 changed: arguments.changed
             )
-        case .caseWhen(let cases, let elseResult):
+        case .truthTest(_, let truth, let negated):
+            let value = try popExpression()
+            bound = Bound(value: value.changed ? .truthTest(value.value, value: truth, negated: negated) : expression, changed: value.changed)
+        case .isDistinctFrom(_, _, let negated):
+            bound = try popBinaryExpression(original: expression) { .isDistinctFrom($0, $1, negated: negated) }
+        case .quantifiedComparison(_, let comparison, let quantifier, let source):
+            let boundSource: QuantifiedComparisonSource
+            let sourceChanged: Bool
+            switch source {
+            case .array:
+                let value = try popExpression(); boundSource = .array(value.value); sourceChanged = value.changed
+            case .subquery:
+                let value = try popSelect(); boundSource = .subquery(value.value); sourceChanged = value.changed
+            }
+            let lhs = try popExpression()
+            let changed = lhs.changed || sourceChanged
+            bound = Bound(value: changed ? .quantifiedComparison(lhs.value, comparison: comparison, quantifier: quantifier, source: boundSource) : expression, changed: changed)
+        case .caseWhen(let operand, let cases, let elseResult):
             let boundElse = try popOptionalExpression(elseResult)
             let boundCases = try popCaseWhenPairs(cases)
-            let changed = boundElse.changed || boundCases.changed
+            let boundOperand = try popOptionalExpression(operand)
+            let changed = boundOperand.changed || boundElse.changed || boundCases.changed
             bound = Bound(
                 value: changed
                     ? .caseWhen(
+                        operand: boundOperand.value,
                         cases: boundCases.value,
                         elseResult: boundElse.value
                     )
@@ -1246,6 +1275,12 @@ private extension QueryParameterBindingTraversal {
             else { rebuilt = .row(boundValues.value) }
             bound = Bound(value: boundValues.changed ? rebuilt : expression,
                           changed: boundValues.changed)
+        case .greatest(let values), .least(let values):
+            let boundValues = try popExpressions(values)
+            let rebuilt: Expression
+            if case .greatest = expression { rebuilt = .greatest(boundValues.value) }
+            else { rebuilt = .least(boundValues.value) }
+            bound = Bound(value: boundValues.changed ? rebuilt : expression, changed: boundValues.changed)
         case .coalesce(let values):
             let boundValues = try popExpressions(values)
             bound = Bound(

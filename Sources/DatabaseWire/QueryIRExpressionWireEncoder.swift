@@ -99,6 +99,7 @@ private extension QueryIRExpressionWireEncoder {
         case expressionArrayCursor([Expression], index: Int)
         case optionalExpression(Expression?)
         case casePairCursor([CaseWhenPair], index: Int)
+        case caseWhenTail([CaseWhenPair], Expression?)
         case aggregate(AggregateFunction)
         case arrayAggregateTail([SortKey]?, distinct: Bool)
         case sortKeyCursor([SortKey], index: Int)
@@ -112,6 +113,11 @@ private extension QueryIRExpressionWireEncoder {
         encodingSteps: inout [EncodingStep]
     ) throws(DatabaseWireError) {
         switch consume encodingStep {
+        case .caseWhenTail(let pairs, let fallback):
+            try writer.writeCount(pairs.count)
+            encodingSteps.append(.optionalExpression(fallback))
+            encodingSteps.append(.casePairCursor(pairs, index: 0))
+
         case .expression(let expression):
             try begin(expression, writer: &writer, encodingSteps: &encodingSteps)
 
@@ -549,11 +555,39 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.bool(function.distinct))
             encodingSteps.append(.expressionArrayCursor(function.arguments, index: 0))
 
-        case .caseWhen(let pairs, let elseResult):
-            writer.writeUInt8(29)
-            try writer.writeCount(pairs.count)
-            encodingSteps.append(.optionalExpression(elseResult))
-            encodingSteps.append(.casePairCursor(pairs, index: 0))
+        case .caseWhen(let operand, let pairs, let elseResult):
+            writer.writeUInt8(operand == nil ? 29 : 44)
+            encodingSteps.append(.caseWhenTail(pairs, elseResult))
+            if let operand { encodingSteps.append(.expression(operand)) }
+
+        case .greatest(let values), .least(let values):
+            if case .greatest = expression { writer.writeUInt8(45) }
+            else { writer.writeUInt8(46) }
+            encodingSteps.append(.expressionArray(values))
+
+        case .truthTest(let value, let truth, let negated):
+            writer.writeUInt8(47)
+            encodingSteps.append(.bool(negated))
+            encodingSteps.append(.byte(QueryIRPredicateWireCodec.tag(truth)))
+            encodingSteps.append(.expression(value))
+
+        case .isDistinctFrom(let lhs, let rhs, let negated):
+            writer.writeUInt8(48)
+            encodingSteps.append(.bool(negated))
+            encodingSteps.append(.expression(rhs))
+            encodingSteps.append(.expression(lhs))
+
+        case .quantifiedComparison(let lhs, let comparison, let quantifier, let source):
+            writer.writeUInt8(49)
+            switch source {
+            case .array(let value):
+                encodingSteps.append(.expression(value)); encodingSteps.append(.byte(0))
+            case .subquery(let query):
+                encodingSteps.append(.select(query)); encodingSteps.append(.byte(1))
+            }
+            encodingSteps.append(.byte(QueryIRPredicateWireCodec.tag(quantifier)))
+            encodingSteps.append(.byte(QueryIRPredicateWireCodec.tag(comparison)))
+            encodingSteps.append(.expression(lhs))
 
         case .coalesce(let values):
             writer.writeUInt8(30)

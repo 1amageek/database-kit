@@ -8,10 +8,10 @@ The feature inventory below is the complete implementation target, including
 analysis queries, mutations, basic DDL, and one-request SQL blocks. A limited
 SELECT implementation does not satisfy this profile.
 
-Status: **S00 accepted design; S01 implemented and verified on the frozen local
-graph, with full FoundationDB regression deferred by the user to S18;
-S02 committed and verified on the frozen local graph; S03–S18 pending.** This does not claim full FoundationDB or final URL-graph
-acceptance. Interfaces explicitly labeled planned are not existing capabilities.
+Implementation and verification status is owned by the workspace
+[PROGRESS.md](../../../../../PROGRESS.md). Full FoundationDB, Graph-enabled
+Database WASM/Embedded and final URL-graph acceptance remain S18 evidence.
+Interfaces explicitly labeled planned are not existing capabilities.
 Inventory rows state required behavior, not current implementation completion.
 The reference dialect is PostgreSQL 18; the accepted differential-server pin
 is 18.6, verified by the harness before its evidence is accepted.
@@ -889,3 +889,112 @@ backend/target matrix, normal task-only upstream publication and URL-pin
 reconciliation, followed by final verification against that published URL graph.
 S00 does not supply this later integration evidence. Tags, releases and deployment
 remain outside this implementation task.
+
+### S04 frozen numeric and conditional semantics
+
+This section freezes T01–T04 and every named F01–F03 obligation for S04.
+It consumes the [Decimal primitive contract](../../../../../database-types/Sources/DatabaseTypes/Decimal/DESIGN.md#s04-frozen-explicit-rounding-boundary)
+and delegates execution to [QueryExecution](../../../../../database-framework/Sources/DatabaseEngine/QueryExecution/DESIGN.md#s04-frozen-selected-value-execution).
+The SQL profile remains finite normalized coefficient at most 38 digits,
+typmod precision 1...38 / scale -1000...1000, and displayScale 0...16383.
+Division/AVG and decimal SQRT/EXP/LN/LOG/POWER select a result scale capped at
+1000. Add/subtract/MOD/GCD/LCM/SUM preserve the maximum input display scale;
+multiplication uses the sum of input display scales, rounded only at the packed
+16383 limit. Explicit ROUND/TRUNC follow their retained operation-specific
+scale rules. These policies do not replace the packed display-scale range.
+Typmod rounds half away from zero before
+checking absolute value < 10^(precision-scale); displayed scale is max(0,scale).
+Kit validates the rounded carrier and never performs the SQL rounding itself.
+
+| Owner | Guarantee consumed above the boundary |
+|---|---|
+| Types Decimal | Pure exact/explicit rounded arithmetic, canonical identity and full Int128 range. |
+| Kit Query/SQL | Lossless QueryNumericValue, semantic expressions, occurrences and bounded validation. |
+| Kit Wire | Canonical bounded carriage of those semantic distinctions. |
+| Framework QueryAST | Grammar/quotes/source locations and one canonical SQL serializer. |
+| Framework QueryExecution | Selected overload/coercion, numeric scales/math, NULL/control flow and exact bounded aggregates. |
+| Framework Base | Composes the same selected SQL value/aggregate contract under MultiBase admission. |
+
+The reference snapshot is PostgreSQL 18.6 REL_18_6 at
+`724edf9bde9d356724ad384a2e196edc3c9f80f7`. The task's retained
+[reference summary](../../../../../.codex-tools/sql-s04-evidence/reference-summary.md),
+[operator/function matrices](../../../../../.codex-tools/sql-s04-evidence/overload-matrices.json),
+and [observations](../../../../../.codex-tools/sql-s04-evidence/oracle-results.json)
+contain 897 valid SQL observations; one malformed constant-folding probe is
+excluded. They are reference evidence, never product verification. Operator
+selection differs from conditional common-type selection. Real mixed with
+integer/numeric arithmetic selects double; real-real stays real. Conditional
+numeric/real common type selects real. All named F02/F03 overloads follow that
+snapshot: F03 and CBRT have only double signatures, so numeric arguments may
+coerce to double there; a selected decimal signature never demotes to float.
+Nonfinite input is explicitly unsupported within this product profile.
+
+#### S04 semantic additions and scope
+
+The minimal planned semantic shapes are:
+
+```swift
+case caseWhen(operand: Expression? = nil, cases: [CaseWhenPair], elseResult: Expression?)
+case greatest([Expression])
+case least([Expression])
+case truthTest(Expression, value: TruthValue, negated: Bool)
+case isDistinctFrom(Expression, Expression, negated: Bool)
+case quantifiedComparison(Expression, comparison: ComparisonOperator,
+                          quantifier: ComparisonQuantifier, source: QuantifiedComparisonSource)
+```
+
+`TruthValue` is true/false/unknown; `ComparisonOperator` is equal/notEqual/
+lessThan/lessThanOrEqual/greaterThan/greaterThanOrEqual;
+`ComparisonQuantifier` is any/all; `QuantifiedComparisonSource` is
+`array(Expression)` or `subquery(SelectQuery)`. Each is a Query-owned closed
+semantic enum with its own source file. A simple CASE stores its operand once;
+CaseWhenPair.condition is the match value for that form. Each WHEN independently
+selects equality and its input coercions against the original typed operand;
+one WHEN cannot widen or round the operand used by another WHEN. The original
+operand evaluates once and its saved value is coerced separately for each
+examined equality. Searched CASE retains nil operand and Boolean conditions. CASE/COALESCE are lazy after all branches
+bind. NULLIF evaluates both operands after equality overload coercion and
+returns its coerced first operand or NULL. GREATEST/LEAST evaluate all operands,
+ignore NULL and return NULL only for all-NULL input. Unquoted unqualified
+GREATEST/LEAST are dedicated syntax; quoted or schema-qualified calls retain
+exact generic function identity and receive normal function resolution.
+
+Truth tests and DISTINCT predicates return nonnullable Boolean. Scalar
+ANY/ALL consume existing typed QueryArrayValue values/parameters, or existing
+single-column subqueries; NULL arrays yield NULL, empty arrays/relations yield
+false/true even for a NULL left operand, and nonempty NULL elements use SQL
+three-valued reduction. Operands evaluate once and only examined comparisons
+contribute to the reduction. WIDTH_BUCKET's threshold overload uses those
+same existing arrays and admitted comparable scalar types, with empty
+thresholds yielding zero and sorted thresholds a documented caller precondition.
+The threshold overload rejects multidimensional arrays and any NULL element
+before searching, including a NULL that binary search would not visit, as
+specified by [REL_18_6 width_bucket_array](https://raw.githubusercontent.com/postgres/postgres/REL_18_6/src/backend/utils/adt/arrayfuncs.c).
+General ARRAY constructors/kernels remain S07; ROW comparison remains S08.
+RDF identity, raw primitive evaluator exact arithmetic and SQL source-alignment
+identity remain their current contracts.
+
+#### S04 falsifiable case IDs
+
+| ID | Evidence required from the real selected execution path |
+|---|---|
+| S04-C01 / T01 | Six-type operator matrix, narrow integer result types, width limits, min negation/ABS/divide overflow, min remainder -1 = zero, zero divisors, empty typed output. |
+| S04-C02 / T02 | Division 1/3 and 1/10 scale20, 5/2 scale16, tiny quotient scale28; add/sub/mod scale max, multiply sum scale, DIV/ceil/floor scale0; 38-digit final admission and decimal-only computation. |
+| S04-C03 / T02 | Typmod negative scale and scale>precision, both-sign ties and rounding carry before overflow; zero retains requested displayScale; packed dscale16383 versus division/math selection cap1000, including arithmetic display scales above1000. |
+| S04-C04 / T03 | Real-real width, mixed-real double selection, representable subnormals, nonzero underflow/overflow, finite-only rejection, exact result type on empty input. |
+| S04-C05 / T01-T03 | Numeric-to-integer ties-away, float-to-integer reference rounding, float-to-numeric6/15 significant digits, integer narrowing, only integer/Boolean direct casts; typed NULL validates the same legal signature before null propagation. |
+| S04-C06 / F02-F03 | Every named function and all six input types against catalog matrices; ambiguous smallint GCD/LCM, rejected floating MOD/scaled ROUND/base LOG, decimal SQRT/EXP/LN/LOG/POWER exact value+scale fixtures, float domains and WIDTH_BUCKET both overloads. |
+| S04-C07 / F01 | Searched/simple CASE and COALESCE lazy branches, simple operand evaluate-once, all branches bound, NULLIF equality coercion/eager failure, GREATEST/LEAST eager failure and NULL skipping, quote/schema distinction. |
+| S04-C08 / T04 | Complete Boolean/NULL truth tables and predicates; null-safe distinct; typed NULL plus empty/nonempty/NULL typed-array parameter and one-column subquery ANY/ALL, including NULL elements and comparison failure. |
+| S04-C09 / T02-T03 | SUM/AVG type matrix, empty/all-NULL typed results, numeric max input scale, recurring AVG, max38+max38 AVG success, final39 SUM rejection and max38+max38-max38 SUM success; real SUM overflow versus double AVG success. |
+| S04-C10 | Exact/one-past numeric scratch admission, cancellation/deadline/work exhaustion, scalar/aggregate failure release, Base aggregate release and subsequent valid query; retained claims survive until the true owner ends. |
+| S04-C11 | Semantic equality/hash/walk/parameter/occurrence/Wire/parser/serializer round trips, malformed tags/discriminators/limits, simple operand occurs once, exact source diagnostics and standard/MultiBase carriage; the [Query-owned expression representation identity](../DESIGN.md#expression-representation-identity) must safely compare and hash the legal 48-edge ARRAY/ROW fixture without recursive Expression frames or a reduced admission depth; existing value/type/schema strict JSON adapters regress under their own contracts. |
+| S04-C12 | Native and separately identified ordinary/Embedded WASM executable cases; raw primitive exact/RDF/source-alignment, persisted numeric displayScale, actual public SQL and MultiBase aggregation regressions. |
+
+Verification compares type, NULL, exact value, displayScale and failure category.
+The 52 distinguishing oracle assertions and overload matrices are retained;
+libm behavior is verified on each admitted runtime rather than generalized
+from the Linux reference. One comprehensive final review and one concrete
+finding-limited recheck are sufficient for an unchanged contract. Full
+FoundationDB, final URL dependency graph and graph-enabled Database portable
+verification remain S18 as previously deferred by the user.

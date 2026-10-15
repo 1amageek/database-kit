@@ -180,13 +180,19 @@ private extension QueryIRExpressionWireDecoder {
         case sortKey
         case sortKeyTail
         case functionTail(name: String, schema: String?)
-        case caseWhenPairCursor(CollectionCursor<CaseWhenPair>)
-        case caseWhenPairAfterCondition(CollectionCursor<CaseWhenPair>)
+        case caseWhenPairCursor(CollectionCursor<CaseWhenPair>, operand: Expression?)
+        case caseWhenPairAfterCondition(CollectionCursor<CaseWhenPair>, operand: Expression?)
         case caseWhenPairAppend(
             CollectionCursor<CaseWhenPair>,
-            condition: Expression
+            condition: Expression, operand: Expression?
         )
-        case caseWhenFinish([CaseWhenPair])
+        case caseWhenFinish([CaseWhenPair], operand: Expression?)
+        case simpleCaseTail
+        case assembleExtremum(isGreatest: Bool)
+        case truthTestTail
+        case distinctTail
+        case quantifiedTail
+        case quantifiedFinish(Expression, ComparisonOperator, ComparisonQuantifier, isSubquery: Bool)
         case assembleCoalesce
         case assembleConstructor(isArray: Bool)
         case castTail
@@ -569,45 +575,79 @@ private extension QueryIRExpressionWireDecoder {
                     )
                 )
 
-            case .caseWhenPairCursor(let cursor):
+            case .caseWhenPairCursor(let cursor, let operand):
                 guard cursor.remaining > 0 else {
                     if try reader.readBool() {
-                        decodingSteps.append(.caseWhenFinish(cursor.values))
+                        decodingSteps.append(.caseWhenFinish(cursor.values, operand: operand))
                         decodingSteps.append(.expression)
                     } else {
                         expressions.append(
-                            .caseWhen(cases: cursor.values, elseResult: nil)
+                            .caseWhen(operand: operand, cases: cursor.values, elseResult: nil)
                         )
                     }
                     return
                 }
-                decodingSteps.append(.caseWhenPairAfterCondition(cursor))
+                decodingSteps.append(.caseWhenPairAfterCondition(cursor, operand: operand))
                 decodingSteps.append(.expression)
 
-            case .caseWhenPairAfterCondition(let cursor):
+            case .caseWhenPairAfterCondition(let cursor, let operand):
                 let condition = try popExpression()
                 decodingSteps.append(
                     .caseWhenPairAppend(
                         cursor,
-                        condition: condition
+                        condition: condition, operand: operand
                     )
                 )
                 decodingSteps.append(.expression)
 
-            case .caseWhenPairAppend(var cursor, let condition):
+            case .caseWhenPairAppend(var cursor, let condition, let operand):
                 let result = try popExpression()
                 try cursor.append(
                     CaseWhenPair(condition: condition, result: result)
                 )
-                decodingSteps.append(.caseWhenPairCursor(cursor))
+                decodingSteps.append(.caseWhenPairCursor(cursor, operand: operand))
 
-            case .caseWhenFinish(let pairs):
+            case .caseWhenFinish(let pairs, let operand):
                 expressions.append(
                     .caseWhen(
+                        operand: operand,
                         cases: pairs,
                         elseResult: try popExpression()
                     )
                 )
+
+            case .simpleCaseTail:
+                let operand = try popExpression()
+                let count = try reader.readCount()
+                decodingSteps.append(.caseWhenPairCursor(CollectionCursor(count: count), operand: operand))
+
+            case .assembleExtremum(let isGreatest):
+                let values = try popExpressionCollection()
+                expressions.append(isGreatest ? .greatest(values) : .least(values))
+
+            case .truthTestTail:
+                let value = try popExpression()
+                let truth = try QueryIRPredicateWireCodec.truth(reader.readUInt8())
+                expressions.append(.truthTest(value, value: truth, negated: try reader.readBool()))
+
+            case .distinctTail:
+                let rhs = try popExpression()
+                let lhs = try popExpression()
+                expressions.append(.isDistinctFrom(lhs, rhs, negated: try reader.readBool()))
+
+            case .quantifiedTail:
+                let lhs = try popExpression()
+                let comparison = try QueryIRPredicateWireCodec.comparison(reader.readUInt8())
+                let quantifier = try QueryIRPredicateWireCodec.quantifier(reader.readUInt8())
+                let source = try reader.readUInt8()
+                guard source <= 1 else { throw .invalidValueTag(source) }
+                decodingSteps.append(.quantifiedFinish(lhs, comparison, quantifier, isSubquery: source == 1))
+                decodingSteps.append(source == 1 ? .select : .expression)
+
+            case .quantifiedFinish(let lhs, let comparison, let quantifier, let isSubquery):
+                let source: QuantifiedComparisonSource = isSubquery
+                    ? .subquery(try popSelectQuery()) : .array(try popExpression())
+                expressions.append(.quantifiedComparison(lhs, comparison: comparison, quantifier: quantifier, source: source))
 
             case .assembleConstructor(let isArray):
                 let values = try popExpressionCollection()
@@ -1702,9 +1742,31 @@ private extension QueryIRExpressionWireDecoder {
                 decodingSteps.append(.endNestedValue)
                 decodingSteps.append(
                     .caseWhenPairCursor(
-                        CollectionCursor(count: pairCount)
+                        CollectionCursor(count: pairCount), operand: nil
                     )
                 )
+            case 44:
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.simpleCaseTail)
+                decodingSteps.append(.expression)
+            case 45, 46:
+                let count = try reader.readCount()
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.assembleExtremum(isGreatest: tag == 45))
+                decodingSteps.append(.expressionCursor(CollectionCursor(count: count)))
+            case 47:
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.truthTestTail)
+                decodingSteps.append(.expression)
+            case 48:
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.distinctTail)
+                decodingSteps.append(.expression)
+                decodingSteps.append(.expression)
+            case 49:
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.quantifiedTail)
+                decodingSteps.append(.expression)
             case 30:
                 let count = try reader.readCount()
                 decodingSteps.append(.endNestedValue)

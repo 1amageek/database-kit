@@ -738,11 +738,13 @@ private extension QueryStructuralValidator {
                          .greaterThanOrEqual(let lhs, let rhs),
                          .and(let lhs, let rhs),
                          .or(let lhs, let rhs),
-                         .nullIf(let lhs, let rhs):
+                         .nullIf(let lhs, let rhs),
+                         .isDistinctFrom(let lhs, let rhs, _):
                         validationSteps.append(.expression(rhs, depth: childDepth))
                         validationSteps.append(.expression(lhs, depth: childDepth))
                     case .negate(let value),
                          .not(let value),
+                         .truthTest(let value, _, _),
                          .isNull(let value),
                          .isNotNull(let value),
                          .isTriple(let value),
@@ -779,7 +781,13 @@ private extension QueryStructuralValidator {
                             depth: childDepth,
                             to: &validationSteps
                         )
-                    case .caseWhen(let cases, let elseResult):
+                    case .quantifiedComparison(let lhs, _, _, let source):
+                        switch source {
+                        case .array(let value): validationSteps.append(.expression(value, depth: childDepth))
+                        case .subquery(let query): validationSteps.append(.select(query, depth: childDepth))
+                        }
+                        validationSteps.append(.expression(lhs, depth: childDepth))
+                    case .caseWhen(let operand, let cases, let elseResult):
                         try consumeCollection(cases.count)
                         if let elseResult {
                             validationSteps.append(.expression(elseResult, depth: childDepth))
@@ -788,7 +796,8 @@ private extension QueryStructuralValidator {
                             validationSteps.append(.expression(pair.result, depth: childDepth))
                             validationSteps.append(.expression(pair.condition, depth: childDepth))
                         }
-                    case .coalesce(let expressions), .array(let expressions), .row(let expressions):
+                        if let operand { validationSteps.append(.expression(operand, depth: childDepth)) }
+                    case .coalesce(let expressions), .array(let expressions), .row(let expressions), .greatest(let expressions), .least(let expressions):
                         try consumeCollection(expressions.count)
                         appendExpressions(expressions, depth: childDepth, to: &validationSteps)
                     case .triple(let subject, let predicate, let object):

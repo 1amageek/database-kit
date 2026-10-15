@@ -1097,6 +1097,8 @@ private struct QueryScopeState {
         context: SPARQLExpressionSemanticContext
     ) throws(SPARQLSemanticValidationError) {
         switch expression {
+        case .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
+            throw .unsupportedSQLExpression
         // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
         // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.
         case .array, .row:
@@ -1163,7 +1165,8 @@ private struct QueryScopeState {
             for argument in function.arguments {
                 try validate(argument, context: context)
             }
-        case .caseWhen(let cases, let elseResult):
+        case .caseWhen(let operand, let cases, let elseResult):
+            guard operand == nil else { throw .unsupportedSQLExpression }
             for pair in cases {
                 try validate(pair.condition, context: context)
                 try validate(pair.result, context: context)
@@ -1307,9 +1310,9 @@ private struct QueryScopeState {
              .lessThanOrEqual(let lhs, let rhs),
              .greaterThan(let lhs, let rhs),
              .greaterThanOrEqual(let lhs, let rhs), .and(let lhs, let rhs),
-             .or(let lhs, let rhs), .nullIf(let lhs, let rhs):
+             .or(let lhs, let rhs), .nullIf(let lhs, let rhs), .isDistinctFrom(let lhs, let rhs, _):
             return [lhs, rhs]
-        case .negate(let value), .not(let value), .isNull(let value),
+        case .negate(let value), .not(let value), .isNull(let value), .truthTest(let value, _, _),
              .isNotNull(let value), .cast(let value, _),
              .isTriple(let value), .subject(let value),
              .predicate(let value), .object(let value), .like(let value, _),
@@ -1322,10 +1325,16 @@ private struct QueryScopeState {
             return [value] + values
         case .inSubquery(let value, _):
             return [value]
+        case .quantifiedComparison(let lhs, _, _, let source):
+            switch source {
+            case .array(let value): return [lhs, value]
+            case .subquery: return [lhs]
+            }
         case .function(let function):
             return function.arguments
-        case .caseWhen(let cases, let elseResult):
+        case .caseWhen(let operand, let cases, let elseResult):
             var values: [Expression] = []
+            if let operand { values.append(operand) }
             values.reserveCapacity(cases.count * 2 + (elseResult == nil ? 0 : 1))
             for pair in cases {
                 values.append(pair.condition)
@@ -1333,7 +1342,7 @@ private struct QueryScopeState {
             }
             if let elseResult { values.append(elseResult) }
             return values
-        case .coalesce(let expressions), .array(let expressions), .row(let expressions):
+        case .coalesce(let expressions), .array(let expressions), .row(let expressions), .greatest(let expressions), .least(let expressions):
             return expressions
         case .triple(let subject, let predicate, let object):
             return [subject, predicate, object]

@@ -73,6 +73,30 @@ flowchart LR
 - Default declarations are target-free. MultiBase-only declarations remain
   trait-gated; SQL does not provide a route around target or authority rules.
 
+### Expression representation identity
+
+The Bool-returning Equatable witness compares exact declaration identity,
+including ordered children, absent versus present operands, exact names, type
+metadata and conditional flags. Expression-building comparison operators keep
+their existing API and do not participate in this representation comparison.
+Equality and hashing traverse direct Expression edges with explicit work
+stacks, including edges inside functions, aggregates, CASE pairs and sort
+keys. Collection cursors retain the immutable input arrays and advance by
+index; they do not copy or flatten a subtree or push one work item per sibling.
+Temporary work is bounded by input depth, with constant call-stack depth for
+those Expression edges. There is no guessed depth cap or failure-to-false
+fallback. Literal, DataType and SelectQuery payload identity remains owned by
+those existing representations; this change does not redefine SQL value
+equality or subquery semantics. Equal expressions feed identical ordered
+identity tokens to Hasher; numeric hash values are not persistent identifiers.
+
+The legal 48-edge alternating ARRAY/ROW Wire fixture exercises equal,
+different-leaf and different-child-count comparisons and equal-value hashing.
+The existing conditional identity fixtures cover flags, source discriminators,
+simple/searched CASE and exact name/type metadata. Native, ordinary WASM and
+Embedded runtime witnesses must execute this identity path after decoding;
+compilation alone does not close the stack-exhaustion counterexample.
+
 ### SELECT source language applicability
 
 `DataSource.usesSPARQLSemantics` owns the language applicability of a SELECT's
@@ -263,3 +287,16 @@ parameter traversals, codecs, and direct runtime callers to be checked. Changes
 to the SQL child contract propagate through this component to DatabaseKit and
 DatabaseWire without copying the profile into those parents. This S00 document
 fixes intended contracts; it is not evidence that S01+ behavior is implemented.
+
+### S04 semantic carriage and occurrence edges
+
+[S04 SQL](SQL/DESIGN.md#s04-semantic-additions-and-scope) owns the added closed
+forms and their meaning. Query owns exhaustive equality/hash, structural
+validation, parameter transforms and semantic occurrence traversal. Simple
+CASE has one `.operand` child; its WHEN matches/results retain indexed
+`.caseCondition` / `.caseResult` and fallback `.caseElse`. GREATEST/LEAST use
+indexed `.argument`. Truth test uses `.operand`; DISTINCT uses indexed
+`.operand`; quantified comparison uses left `.operand` and right `.argument`
+for array expression or `.subquery` for the query. Every walker uses the same
+edges and charges each child once. No source text or mutable runtime state
+enters these values. RDF/SPARQL consumers explicitly gate SQL-only forms.

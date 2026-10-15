@@ -417,3 +417,24 @@ frame, unknown-capacity admission, JSONB exact/one-past materialization bytes,
 and child/lazy-reader ledger reset. The alias fixture checks one root retention
 claim and two view representations, not an expanded byte budget. Arbitrary
 public value measurement continues to report its conservative upper bound.
+
+### S04 conditional expression grammar
+
+Consume [Query semantic additions](../DatabaseKit/Query/SQL/DESIGN.md#s04-semantic-additions-and-scope)
+without runtime policy. Existing searched CASE tag29 retains its exact bytes
+when operand is nil. Allocate expression tags44...49 respectively to simple
+CASE, GREATEST, LEAST, truth test, DISTINCT predicate, quantified comparison.
+Simple CASE is operand expression then existing CASE-pair count/pairs/optional
+ELSE production. GREATEST/LEAST use the existing expression-list production.
+Truth test is operand then truth byte (0=false,1=true,2=unknown), negated Bool.
+DISTINCT is left expression, right expression, negated Bool. Quantified
+comparison is left expression, comparison byte (0=equal,1=notEqual,2=lessThan,
+3=lessThanOrEqual,4=greaterThan,5=greaterThanOrEqual), quantifier byte
+(0=any,1=all), source byte (0=array expression,1=SelectQuery), then its payload.
+Unknown discriminators, invalid structure, truncation, trailing bytes and
+one-past limits fail typed before growth. Standard v3/MultiBase v5 remain
+unchanged. Existing value/type/schema JSON adapters retain their own closed
+contracts; this change adds no Expression or QueryStatement JSON boundary.
+Occurrence/source sidecars and selected runtime signatures remain local.
+S04-C11/C12 require canonical goldens and actual native/WASM/Embedded decode,
+not only generated declarations.

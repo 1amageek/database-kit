@@ -246,6 +246,8 @@ extension Expression {
     /// Independent implementation for proper SPARQL semantics
     public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
         switch self {
+        case .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
+            throw .unsupportedSPARQLLiteral
         // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
         // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.
         case .array, .row:
@@ -365,7 +367,8 @@ extension Expression {
             return "\(call.name.uppercased())(\(args))"
 
         // Conditional
-        case .caseWhen(let cases, let elseResult):
+        case .caseWhen(let operand, let cases, let elseResult):
+            guard operand == nil else { throw .unsupportedSPARQLLiteral }
             // SPARQL uses IF for conditionals
             if cases.count == 1, let first = cases.first {
                 let elseStr = try elseResult?.toSPARQL(prefixes: prefixes) ?? "UNDEF"

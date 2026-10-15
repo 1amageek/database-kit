@@ -424,14 +424,27 @@ extension SelectQuery {
              .divide(let l, let r), .modulo(let l, let r), .equal(let l, let r),
              .notEqual(let l, let r), .lessThan(let l, let r), .lessThanOrEqual(let l, let r),
              .greaterThan(let l, let r), .greaterThanOrEqual(let l, let r),
-             .and(let l, let r), .or(let l, let r):
+             .and(let l, let r), .or(let l, let r), .isDistinctFrom(let l, let r, _):
             collectVariables(from: l, into: &vars)
             collectVariables(from: r, into: &vars)
-        case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e),
+        case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e), .truthTest(let e, _, _),
              .isTriple(let e), .subject(let e), .predicate(let e), .object(let e):
             collectVariables(from: e, into: &vars)
-        case .array(let expressions), .row(let expressions):
+        case .array(let expressions), .row(let expressions), .greatest(let expressions), .least(let expressions):
             for expression in expressions { collectVariables(from: expression, into: &vars) }
+        case .caseWhen(let operand, let cases, let fallback):
+            if let operand { collectVariables(from: operand, into: &vars) }
+            for pair in cases {
+                collectVariables(from: pair.condition, into: &vars)
+                collectVariables(from: pair.result, into: &vars)
+            }
+            if let fallback { collectVariables(from: fallback, into: &vars) }
+        case .quantifiedComparison(let lhs, _, _, let source):
+            collectVariables(from: lhs, into: &vars)
+            switch source {
+            case .array(let value): collectVariables(from: value, into: &vars)
+            case .subquery(let query): vars.formUnion(query.referencedVariables)
+            }
         case .bound(let v):
             vars.insert(v.name)
         case .function(let call):
@@ -505,10 +518,10 @@ extension SelectQuery {
              .divide(let l, let r), .modulo(let l, let r), .equal(let l, let r),
              .notEqual(let l, let r), .lessThan(let l, let r), .lessThanOrEqual(let l, let r),
              .greaterThan(let l, let r), .greaterThanOrEqual(let l, let r),
-             .and(let l, let r), .or(let l, let r), .nullIf(let l, let r):
+             .and(let l, let r), .or(let l, let r), .nullIf(let l, let r), .isDistinctFrom(let l, let r, _):
             collectColumns(from: l, into: &cols)
             collectColumns(from: r, into: &cols)
-        case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e):
+        case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e), .truthTest(let e, _, _):
             collectColumns(from: e, into: &cols)
         case .like(let expression, _), .regex(let expression, _, _),
              .cast(let expression, _), .isTriple(let expression),
@@ -528,13 +541,20 @@ extension SelectQuery {
         case .inSubquery(let expression, let query):
             collectColumns(from: expression, into: &cols)
             cols.formUnion(query.referencedColumns)
+        case .quantifiedComparison(let lhs, _, _, let source):
+            collectColumns(from: lhs, into: &cols)
+            switch source {
+            case .array(let value): collectColumns(from: value, into: &cols)
+            case .subquery(let query): cols.formUnion(query.referencedColumns)
+            }
         case .aggregate(let aggregate):
             collectColumns(from: aggregate, into: &cols)
         case .function(let call):
             for arg in call.arguments {
                 collectColumns(from: arg, into: &cols)
             }
-        case .caseWhen(let cases, let elseResult):
+        case .caseWhen(let operand, let cases, let elseResult):
+            if let operand { collectColumns(from: operand, into: &cols) }
             for pair in cases {
                 collectColumns(from: pair.condition, into: &cols)
                 collectColumns(from: pair.result, into: &cols)
@@ -542,7 +562,7 @@ extension SelectQuery {
             if let elseResult {
                 collectColumns(from: elseResult, into: &cols)
             }
-        case .coalesce(let expressions), .array(let expressions), .row(let expressions):
+        case .coalesce(let expressions), .array(let expressions), .row(let expressions), .greatest(let expressions), .least(let expressions):
             for expression in expressions {
                 collectColumns(from: expression, into: &cols)
             }
