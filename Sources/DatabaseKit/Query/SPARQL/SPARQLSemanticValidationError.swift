@@ -55,6 +55,9 @@ public enum SPARQLSemanticValidationError: Error, Sendable, Equatable {
     /// A non-RDF value was embedded as a graph term literal.
     case unsupportedQueryValue
 
+    /// A SQL constructor or temporal modifier has no RDF expression meaning.
+    case unsupportedSQLExpression
+
     case invalidTermLiteral
 
     /// A blank node occurred in a DELETE form where SPARQL forbids it.
@@ -123,6 +126,8 @@ extension SPARQLSemanticValidationError: CustomStringConvertible {
             return "Blank node label '_:\(label)' occurs in more than one INSERT DATA operation"
         case .nonCanonicalTermLiteral:
             return "SPARQLTerm.literal must contain an RDF literal, not another RDF node representation"
+        case .unsupportedSQLExpression:
+            return "A SQL expression cannot be represented in SPARQL"
         case .unsupportedQueryValue:
             return "A SQL-specific query value is not valid in SPARQL"
         case .invalidTermLiteral:

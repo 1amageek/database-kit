@@ -70,35 +70,6 @@ struct QueryValueIntegrationTests {
         }
     }
 
-    @Test("Direct, array-nested and query-nested rich SQL generation fail explicitly")
-    func richSQLGenerationFails() throws {
-        for value in try richValues() {
-            let literal = Literal.queryValue(value)
-            #expect(throws: QueryLiteralConversionError.unsupportedSQLLiteral) {
-                _ = try literal.toSQL()
-            }
-            #expect(throws: QueryLiteralConversionError.unsupportedSQLLiteral) {
-                _ = try Literal.array([.int(1), literal]).toSQL()
-            }
-            #expect(throws: QueryLiteralConversionError.unsupportedSQLLiteral) {
-                guard case .select(let query) = select(.add(.literal(.int(1)), .literal(literal))) else {
-                    Issue.record("Expected SELECT fixture")
-                    return
-                }
-                _ = try query.toSQL()
-            }
-        }
-    }
-
-    @Test("Wrapped primitive SQL generation follows the existing lossless path")
-    func primitiveSQLGenerationPreservesBehavior() throws {
-        #expect(try Literal.queryValue(.primitive(.uint64(.max))).toSQL() == String(UInt64.max))
-        #expect(try Literal.queryValue(.primitive(.string("a'b"))).toSQL() == "'a''b'")
-        #expect(throws: QueryLiteralConversionError.unsupportedFieldValue) {
-            _ = try Literal.queryValue(.primitive(.object(FieldObject()))).toSQL()
-        }
-    }
-
     @Test("SPARQL rejects each rich value at validation and serialization")
     func richSPARQLValuesFail() throws {
         for value in try richValues() {

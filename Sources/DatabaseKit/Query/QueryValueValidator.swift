@@ -27,9 +27,9 @@ public enum QueryValueValidator {
                  (.integer, .primitive(.int32)), (.bigint, .primitive(.int64)),
                  (.text, .primitive(.string)), (.char, .primitive(.string)),
                  (.varchar, .primitive(.string)), (.date, .primitive(.date)),
-                 (.time(false), .primitive(.time)),
-                 (.timestamp(false), .primitive(.dateTime)),
-                 (.timestamp(true), .primitive(.timestamp)),
+                 (.time(false, _), .primitive(.time)),
+                 (.timestamp(false, _), .primitive(.dateTime)),
+                 (.timestamp(true, _), .primitive(.timestamp)),
                  (.binary, .primitive(.bytes)), (.varbinary, .primitive(.bytes)),
                  (.blob, .primitive(.bytes)), (.uuid, .primitive(.uuid)),
                  (.json, .json), (.jsonb, .jsonb), (.interval, .interval): return true
@@ -64,6 +64,8 @@ public enum QueryValueValidator {
             return true
         case .char(let length), .varchar(let length), .binary(let length), .varbinary(let length):
             return length == nil || length! > 0
+        case .time(_, let precision), .timestamp(_, let precision):
+            return precision == nil || (0...6).contains(precision!)
         case .array(let element):
             if case .array = element { return false }
             return isResolved(element)

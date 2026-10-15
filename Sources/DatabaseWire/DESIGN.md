@@ -290,6 +290,34 @@ fabricate a standard target, or import runtime SQL semantics into Wire. SPARQL
 boolean/RDF result contracts and MultiBase provenance/consistency fields retain
 their distinct meanings.
 
+### S02 type and constructor Wire grammar
+
+S02 consumes the [SQL semantic changes](../DatabaseKit/Query/SQL/DESIGN.md#s02-frozen-syntax-to-value-boundary)
+without changing standard v3 versus MultiBase v5 authority selection. QueryIR
+expression tags 0...40 keep their existing meanings. New tag 41 encodes an
+ARRAY constructor and tag 42 a ROW constructor; each contains the existing
+bounded expression-list count followed by its ordered children. Unknown tags,
+truncation and one-past structural counts fail explicitly in the codec. The
+consuming SQL/SPARQL semantic gate rejects invalid child languages before
+execution; the representation codec does not introduce language policy.
+No QueryValue tag or primitive field codec is added for ROW.
+
+DataType tags 11 and 12 retain the existing time/timestamp Boolean payload and
+mean precision nil. New tags 22 and 23 carry respectively time/timestamp with
+withTimeZone Boolean followed by UInt8 precision in 0...6; encoding chooses
+these tags only for explicit precision, including zero. Decoder never silently
+drops precision or treats an invalid value as nil. Existing DataType tags 0...21
+and their nil-precision goldens remain unchanged. Extended metadata uses the
+same bounded type validator, structural walk and nested-value ownership as
+existing casts, columns, parameters and schema query descriptors.
+
+Pure codecs must round-trip both constructors, deeply nested bounded children,
+all seven temporal precision values and both timezone flags. Direct consumers
+and typed JSON adapters migrate before this coherent sprint completes. Old
+unknown-tag rejection remains deliberate; there is no permissive compatibility
+decode or runtime version negotiation. SQL parsing/serialization stays in
+Framework and is not reimplemented by the codec.
+
 ## Runtime Flows
 
 ```mermaid

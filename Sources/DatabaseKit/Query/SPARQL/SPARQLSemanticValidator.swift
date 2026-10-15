@@ -1087,6 +1087,20 @@ private struct QueryScopeState {
         context: SPARQLExpressionSemanticContext
     ) throws(SPARQLSemanticValidationError) {
         switch expression {
+        // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
+        // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.
+        case .array, .row:
+            throw .unsupportedSQLExpression
+        case .cast(let value, let targetType):
+            var scalarType = targetType
+            while case .array(let element) = scalarType { scalarType = element }
+            // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission cannot interpret SQL temporal precision.
+            // S06 must provide SQL conversion; this RDF boundary rejects nested temporal modifiers.
+            switch scalarType {
+            case .time(_, .some), .timestamp(_, .some): throw .unsupportedSQLExpression
+            default: break
+            }
+            try validate(value, context: context)
         case .add(let lhs, let rhs),
              .subtract(let lhs, let rhs),
              .multiply(let lhs, let rhs),
@@ -1107,7 +1121,6 @@ private struct QueryScopeState {
              .not(let value),
              .isNull(let value),
              .isNotNull(let value),
-             .cast(let value, _),
              .isTriple(let value),
              .subject(let value),
              .predicate(let value),
@@ -1309,7 +1322,7 @@ private struct QueryScopeState {
             }
             if let elseResult { values.append(elseResult) }
             return values
-        case .coalesce(let expressions):
+        case .coalesce(let expressions), .array(let expressions), .row(let expressions):
             return expressions
         case .triple(let subject, let predicate, let object):
             return [subject, predicate, object]

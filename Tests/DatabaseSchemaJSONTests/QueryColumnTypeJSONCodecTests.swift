@@ -6,6 +6,31 @@ import Testing
 
 @Suite("Query column type JSON")
 struct QueryColumnTypeJSONCodecTests {
+
+    @Test("Temporal JSON descriptors retain nil, zero, all precisions, and timezone flags")
+    func temporalPrecisionRoundTrip() throws {
+        let codec = QueryColumnTypeJSONCodec()
+        for zone in [false, true] {
+            for precision: Int? in [nil, 0, 1, 2, 3, 4, 5, 6] {
+                for type: DataType in [.time(withTimeZone: zone, precision: precision),
+                                      .timestamp(withTimeZone: zone, precision: precision)] {
+                    let descriptor = QueryColumnType.sql(type)
+                    #expect(try codec.decode(codec.encode(descriptor)) == descriptor)
+                }
+            }
+        }
+        #expect(try codec.encode(.sql(.time(withTimeZone: false, precision: 0))) ==
+                #"{"kind":"sql","type":{"kind":"time","withTimeZone":false,"precision":0}}"#)
+        for text in [
+            #"{"kind":"sql","type":{"kind":"time","withTimeZone":false}}"#,
+            #"{"kind":"sql","type":{"kind":"time","withTimeZone":false,"precision":7}}"#,
+            #"{"kind":"sql","type":{"kind":"timestamp","withTimeZone":true,"precision":-1}}"#,
+            #"{"kind":"sql","type":{"kind":"timestamp","withTimeZone":true,"precision":1.0}}"#,
+        ] {
+            #expect(throws: SchemaJSONError.self) { try codec.decode(text) }
+        }
+    }
+
     @Test("Resolved descriptors preserve exact type parameters and primitive arrays")
     func resolvedTypesRoundTrip() throws {
         let types: [QueryColumnType] = [

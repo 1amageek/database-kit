@@ -50,31 +50,6 @@ extension GraphTableSource {
     }
 }
 
-// MARK: - SQL Generation
-
-extension GraphTableSource {
-    /// Generate SQL/PGQ GRAPH_TABLE syntax
-    public func toSQL() throws(QueryLiteralConversionError) -> String {
-        try QueryStructuralValidator.validateSQLLiteralSupport(self)
-        return try sqlText()
-    }
-
-    func sqlText() throws(QueryLiteralConversionError) -> String {
-        var result = "GRAPH_TABLE(\(graphName),\n"
-        result += "  \(try matchPattern.sqlText())"
-        if let cols = columns, !cols.isEmpty {
-            result += "\n  COLUMNS ("
-            result += try cols.map { (value) throws(QueryLiteralConversionError) -> String in "\(try value.expression.sqlText()) AS \(value.alias)" }.joined(separator: ", ")
-            result += ")"
-        }
-        result += "\n)"
-        if let alias {
-            result += " AS \(SQLEscape.identifier(alias))"
-        }
-        return result
-    }
-}
-
 // MARK: - Graph Table Analysis
 
 extension GraphTableSource {
@@ -145,6 +120,8 @@ extension GraphTableSource {
             collectVariablesRecursive(from: r, into: &vars)
         case .not(let e), .negate(let e), .isNull(let e), .isNotNull(let e):
             collectVariablesRecursive(from: e, into: &vars)
+        case .array(let expressions), .row(let expressions):
+            for expression in expressions { collectVariablesRecursive(from: expression, into: &vars) }
         case .function(let call):
             for arg in call.arguments {
                 collectVariablesRecursive(from: arg, into: &vars)

@@ -78,71 +78,6 @@ public enum QueryStructuralValidator {
         try validation.validate([rootValidationStep(for: statement)])
     }
 
-    static func validateSQLLiteralSupport(_ value: MatchPattern) throws(QueryLiteralConversionError) {
-        try validateSQLLiteralSupport(.matchPattern(value, depth: 0))
-    }
-
-    static func validateSQLLiteralSupport(_ value: PathPattern) throws(QueryLiteralConversionError) {
-        try validateSQLLiteralSupport(.pathPattern(value, depth: 0))
-    }
-
-    static func validateSQLLiteralSupport(_ value: PathElement) throws(QueryLiteralConversionError) {
-        try validateSQLLiteralSupport(.pathElement(value, depth: 0))
-    }
-
-    static func validateSQLLiteralSupport(_ value: NodePattern) throws(QueryLiteralConversionError) {
-        try validateSQLLiteralSupport(.nodePattern(value, depth: 0))
-    }
-
-    static func validateSQLLiteralSupport(_ value: EdgePattern) throws(QueryLiteralConversionError) {
-        try validateSQLLiteralSupport(.edgePattern(value, depth: 0))
-    }
-
-    static func validateSQLLiteralSupport(_ value: Expression) throws(QueryLiteralConversionError) {
-        try validateSQLLiteralSupport(.expression(value, depth: 0))
-    }
-
-    static func validateSQLLiteralSupport(_ value: AggregateFunction) throws(QueryLiteralConversionError) {
-        try validateSQLLiteralSupport(.aggregate(value, depth: 0))
-    }
-
-    static func validateSQLLiteralSupport(_ value: SelectQuery) throws(QueryLiteralConversionError) {
-        try validateSQLLiteralSupport(.select(value, depth: 0))
-    }
-
-    static func validateSQLLiteralSupport(_ value: DataSource) throws(QueryLiteralConversionError) {
-        try validateSQLLiteralSupport(.source(value, depth: 0))
-    }
-
-    static func validateSQLLiteralSupport(_ value: Literal) throws(QueryLiteralConversionError) {
-        try validateSQLLiteralSupport(.literal(value, depth: 0))
-    }
-
-    static func validateSQLLiteralSupport(_ value: GraphTableSource) throws(QueryLiteralConversionError) {
-        try validateSQLLiteralSupport(.graphTableSource(value, depth: 0))
-    }
-
-
-
-
-
-
-    private static func validateSQLLiteralSupport(_ step: ValidationStep) throws(QueryLiteralConversionError) {
-        let unlimited = UInt64.max
-        var traversal = ValidationTraversal(limits: QueryStructuralLimits(
-            maximumNestingDepth: unlimited, maximumRetainedBytes: unlimited,
-            maximumInputTokens: unlimited, maximumTotalNodes: unlimited,
-            maximumCollectionElements: unlimited, maximumBasicGraphPatterns: unlimited,
-            maximumTriplePatterns: unlimited, maximumValuesRows: unlimited,
-            maximumValuesVariables: unlimited, maximumValuesCells: unlimited,
-            maximumReifiedTripleExpansions: unlimited
-        ))
-        traversal.sqlLiteralPreflight = true
-        do { try traversal.validate([step]) }
-        catch { throw .unsupportedFieldValue }
-        if traversal.unsupportedSQLLiteral { throw .unsupportedSQLLiteral }
-    }
-
     private static func rootValidationStep(
         for statement: QueryStatement
     ) -> ValidationStep {
@@ -252,8 +187,6 @@ private extension QueryStructuralValidator {
         let limits: QueryStructuralLimits
         let parameterValues: ParameterValues?
         var ledger: QueryStructuralResourceLedger
-        var sqlLiteralPreflight = false
-        var unsupportedSQLLiteral = false
 
         init(limits: QueryStructuralLimits) {
             self.limits = limits
@@ -850,7 +783,7 @@ private extension QueryStructuralValidator {
                             validationSteps.append(.expression(pair.result, depth: childDepth))
                             validationSteps.append(.expression(pair.condition, depth: childDepth))
                         }
-                    case .coalesce(let expressions):
+                    case .coalesce(let expressions), .array(let expressions), .row(let expressions):
                         try consumeCollection(expressions.count)
                         appendExpressions(expressions, depth: childDepth, to: &validationSteps)
                     case .triple(let subject, let predicate, let object):
@@ -902,8 +835,15 @@ private extension QueryStructuralValidator {
                     validationSteps.append(.aggregate(binding.aggregate, depth: childDepth))
 
                 case .dataType(let dataType, _):
-                    if case .array(let element) = dataType {
+                    switch dataType {
+                    case .array(let element):
                         validationSteps.append(.dataType(element, depth: childDepth))
+                    case .time(_, let precision), .timestamp(_, let precision):
+                        if let precision, !(0...6).contains(precision) {
+                            throw .invalidQueryValue(.incompatibleType)
+                        }
+                    default:
+                        break
                     }
 
                 case .term(let term, _):
@@ -935,7 +875,6 @@ private extension QueryStructuralValidator {
                     }
 
                 case .queryValue(let value, let type, _):
-                    if sqlLiteralPreflight { break }
                     if case .primitive(let primitive) = value {
                         if let type, !QueryValueValidator.accepts(value, type: type) {
                             throw .invalidQueryValue(.incompatibleType)
@@ -975,14 +914,7 @@ private extension QueryStructuralValidator {
                 case .literal(let literal, _):
                     switch literal {
                     case .queryValue(let value, let type):
-                        if sqlLiteralPreflight {
-                            guard case .primitive = value else {
-                                unsupportedSQLLiteral = true
-                                return
-                            }
-                        } else {
-                            validationSteps.append(.queryValue(value, type, depth: childDepth))
-                        }
+                        validationSteps.append(.queryValue(value, type, depth: childDepth))
                     case .array(let values):
                         try consumeCollection(values.count)
                         for value in values.reversed() {

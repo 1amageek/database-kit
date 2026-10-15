@@ -246,6 +246,10 @@ extension Expression {
     /// Independent implementation for proper SPARQL semantics
     public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
         switch self {
+        // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
+        // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.
+        case .array, .row:
+            throw .unsupportedSPARQLLiteral
         case .literal(let lit):
             return try lit.toSPARQL()
 
@@ -382,6 +386,14 @@ extension Expression {
 
         // Type conversion
         case .cast(let e, let targetType):
+            var scalarType = targetType
+            while case .array(let element) = scalarType { scalarType = element }
+            // FIXME(INCOMPLETE_IMPLEMENTATION): RDF generation cannot represent SQL temporal precision.
+            // S06 must supply SQL conversion without dropping nested modifiers at this RDF boundary.
+            switch scalarType {
+            case .time(_, .some), .timestamp(_, .some): throw .unsupportedSPARQLLiteral
+            default: break
+            }
             return "\(targetType.sparqlFunction)(\(try e.toSPARQL(prefixes: prefixes)))"
 
         // RDF-star operations

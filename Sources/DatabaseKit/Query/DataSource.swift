@@ -52,14 +52,18 @@ public struct TableRef: Sendable, Equatable, Hashable {
 }
 
 extension TableRef: CustomStringConvertible {
+    /// Diagnostic text only; executable SQL is owned by QueryAST's serializer.
     public var description: String {
+        let quoted: (String) -> String = { name in
+            "\"" + name.map { $0 == "\"" ? "\"\"" : String($0) }.joined() + "\""
+        }
         var result = ""
         if let schema = schema {
-            result += "\(SQLEscape.identifier(schema))."
+            result += "\(quoted(schema))."
         }
-        result += SQLEscape.identifier(table)
+        result += quoted(table)
         if let alias = alias {
-            result += " AS \(SQLEscape.identifier(alias))"
+            result += " AS \(quoted(alias))"
         }
         return result
     }
@@ -67,7 +71,7 @@ extension TableRef: CustomStringConvertible {
 
 extension TableRef {
     /// Generate unquoted table reference (for display purposes only)
-    /// WARNING: Do not use this for SQL generation - use description instead
+    /// Executable SQL is owned by QueryAST's serializer.
     public var displayName: String {
         var result = ""
         if let schema = schema {

@@ -452,7 +452,7 @@ private extension QueryParameterBindingTraversal {
                 bindingSteps.append(.expression(pair.result))
                 bindingSteps.append(.expression(pair.condition))
             }
-        case .coalesce(let values):
+        case .coalesce(let values), .array(let values), .row(let values):
             bindingSteps.append(.assembleExpression(expression))
             enqueueExpressionBindings(values)
         case .triple(let subject, let predicate, let object):
@@ -1238,6 +1238,13 @@ private extension QueryParameterBindingTraversal {
                     : expression,
                 changed: changed
             )
+        case .array(let values), .row(let values):
+            let boundValues = try popExpressions(values)
+            let rebuilt: Expression
+            if case .array = expression { rebuilt = .array(boundValues.value) }
+            else { rebuilt = .row(boundValues.value) }
+            bound = Bound(value: boundValues.changed ? rebuilt : expression,
+                          changed: boundValues.changed)
         case .coalesce(let values):
             let boundValues = try popExpressions(values)
             bound = Bound(

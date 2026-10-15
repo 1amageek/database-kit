@@ -4,6 +4,30 @@ import Testing
 
 @Suite("Query parameter binding")
 struct QueryParameterBinderTests {
+
+    @Test("SQL ARRAY and ROW binding preserves order, NULL, and declared temporal precision")
+    func sqlConstructorParametersBind() throws {
+        let type = QueryColumnType.sql(.timestamp(withTimeZone: true, precision: 3))
+        let statement = QueryStatement.select(SelectQuery(
+            projection: .items([ProjectionItem(.array([
+                .row([.parameter(.position(1)), .null]), .parameter(.name("clock"))
+            ]))]), source: .values([], columnNames: nil)))
+        let binder = try QueryParameterBinder(parameters: [
+            QueryParameter(position: 1, value: .primitive(.int64(7))),
+            QueryParameter(position: 2, name: "clock", value: .primitive(.null), type: type),
+        ])
+        guard case .select(let query) = try binder.bind(statement) else {
+            Issue.record("Expected a bound SELECT"); return
+        }
+        #expect(query.projection == .items([ProjectionItem(.array([
+            .row([.int(7), .null]), .literal(.queryValue(.primitive(.null), type: type))
+        ]))]))
+        #expect(throws: QueryParameterBindingError.missingName("clock")) {
+            try QueryParameterBinder(parameters: [QueryParameter(position: 1, value: .primitive(.int64(7)))])
+                .bind(statement)
+        }
+    }
+
     @Test("parameters bind inside Fusion filters and ordering")
     func fusionParametersBind() throws {
         let fusion = FusionSource(

@@ -4,6 +4,30 @@ import Testing
 
 @Suite("SPARQL semantic validation")
 struct SPARQLSemanticValidatorTests {
+
+    @Test("SQL-only constructors and temporal modifiers remain outside RDF semantics")
+    func sqlOnlyExpressionsFailSPARQLAdmission() throws {
+        let expressions: [Expression] = [.array([.int(1)]), .row([.null]),
+            .cast(.null, targetType: .timestamp(withTimeZone: true, precision: 3)),
+            .cast(.string("12:00"), targetType: .array(.time(withTimeZone: false, precision: 3))),
+            .cast(.string("12:00"), targetType: .array(.array(.timestamp(withTimeZone: true, precision: 0))))]
+        for expression in expressions {
+            let query = SelectQuery(projection: .items([ProjectionItem(expression, alias: "value")]),
+                                    source: .graphPattern(.basic([])))
+            #expect(throws: SPARQLSemanticValidationError.unsupportedSQLExpression) {
+                try SPARQLSemanticValidator.validate(query)
+            }
+            #expect(throws: QueryLiteralConversionError.unsupportedSPARQLLiteral) {
+                try expression.toSPARQL()
+            }
+        }
+        let plainArrayCast = Expression.cast(.string("12:00"), targetType: .array(.time(withTimeZone: false)))
+        let plainQuery = SelectQuery(projection: .items([ProjectionItem(plainArrayCast, alias: "value")]),
+                                     source: .graphPattern(.basic([])))
+        try SPARQLSemanticValidator.validate(plainQuery)
+        #expect(try plainArrayCast.toSPARQL() == "xsd:string(\"12:00\")")
+    }
+
     @Test("One blank node label can be reused inside one basic graph pattern")
     func labelWithinOneBasicGraphPatternIsValid() throws {
         let query = SelectQuery(

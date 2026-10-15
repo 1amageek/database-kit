@@ -430,6 +430,8 @@ extension SelectQuery {
         case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e),
              .isTriple(let e), .subject(let e), .predicate(let e), .object(let e):
             collectVariables(from: e, into: &vars)
+        case .array(let expressions), .row(let expressions):
+            for expression in expressions { collectVariables(from: expression, into: &vars) }
         case .bound(let v):
             vars.insert(v.name)
         case .function(let call):
@@ -540,7 +542,7 @@ extension SelectQuery {
             if let elseResult {
                 collectColumns(from: elseResult, into: &cols)
             }
-        case .coalesce(let expressions):
+        case .coalesce(let expressions), .array(let expressions), .row(let expressions):
             for expression in expressions {
                 collectColumns(from: expression, into: &cols)
             }

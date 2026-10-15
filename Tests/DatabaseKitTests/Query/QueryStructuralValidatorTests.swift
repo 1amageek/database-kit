@@ -4,6 +4,102 @@ import Testing
 
 @Suite("Query structural validation")
 struct QueryStructuralValidatorTests {
+
+    @Test("Residual limits compose child admission without releasing cumulative usage")
+    func residualLimitsComposeChildAdmission() throws {
+        var ledger = QueryStructuralResourceLedger(limits: QueryStructuralLimits(
+            maximumNestingDepth: 3, maximumRetainedBytes: 11,
+            maximumInputTokens: 12, maximumTotalNodes: 5,
+            maximumCollectionElements: 14, maximumBasicGraphPatterns: 15,
+            maximumTriplePatterns: 16, maximumValuesRows: 17,
+            maximumValuesVariables: 18, maximumValuesCells: 19,
+            maximumReifiedTripleExpansions: 20
+        ))
+        try ledger.enterNesting()
+        try ledger.enterNesting()
+        let resources: [QueryStructuralValidationError.Resource] = [
+            .retainedBytes, .inputTokens, .totalNodes, .collectionElements,
+            .basicGraphPatterns, .triplePatterns, .valuesRows,
+            .valuesVariables, .valuesCells, .reifiedTripleExpansions,
+        ]
+        for resource in resources { try ledger.consume(resource, amount: 2) }
+        #expect(ledger.remainingLimits == QueryStructuralLimits(
+            maximumNestingDepth: 1, maximumRetainedBytes: 9,
+            maximumInputTokens: 10, maximumTotalNodes: 3,
+            maximumCollectionElements: 12, maximumBasicGraphPatterns: 13,
+            maximumTriplePatterns: 14, maximumValuesRows: 15,
+            maximumValuesVariables: 16, maximumValuesCells: 17,
+            maximumReifiedTripleExpansions: 18
+        ))
+
+        var child = QueryStructuralResourceLedger(limits: ledger.remainingLimits)
+        try child.consume(.totalNodes, amount: 3)
+        try child.enterNesting()
+        #expect(child.remainingLimits.maximumTotalNodes == 0)
+        #expect(child.remainingLimits.maximumNestingDepth == 0)
+        #expect(throws: QueryStructuralValidationError.self) {
+            try child.consume(.totalNodes)
+        }
+        #expect(throws: QueryStructuralValidationError.self) { try child.enterNesting() }
+        #expect(child.remainingLimits.maximumTotalNodes == 0)
+        #expect(child.remainingLimits.maximumNestingDepth == 0)
+        try ledger.consume(.totalNodes, amount: 3)
+        try ledger.leaveNesting()
+        #expect(ledger.remainingLimits.maximumNestingDepth == 2)
+        #expect(ledger.remainingLimits.maximumTotalNodes == 0)
+        #expect(ledger.remainingLimits.maximumRetainedBytes == 9)
+
+        var overflow = QueryStructuralResourceLedger(
+            limits: QueryStructuralLimits(maximumRetainedBytes: .max)
+        )
+        try overflow.consume(.retainedBytes, amount: .max)
+        #expect(throws: QueryStructuralValidationError.self) {
+            try overflow.consume(.retainedBytes)
+        }
+        #expect(overflow.remainingLimits.maximumRetainedBytes == 0)
+    }
+
+    @Test("SQL constructors charge child collections, depth, and retained literal bytes")
+    func sqlConstructorStructuralBoundaries() throws {
+        let expression: Expression = .array([.row([.string("abcd")])])
+        try QueryStructuralValidator.validate(expression)
+        #expect(throws: QueryStructuralValidationError.resourceLimitExceeded(
+            resource: .nestingDepth, actual: 3, maximum: 2)) {
+            try QueryStructuralValidator.validate(expression, limits: QueryStructuralLimits(maximumNestingDepth: 2))
+        }
+        #expect(throws: QueryStructuralValidationError.resourceLimitExceeded(
+            resource: .collectionElements, actual: 2, maximum: 1)) {
+            try QueryStructuralValidator.validate(expression, limits: QueryStructuralLimits(maximumCollectionElements: 1))
+        }
+        #expect(throws: QueryStructuralValidationError.self) {
+            try QueryStructuralValidator.validate(.array([.literal(.queryValue(.primitive(.string("abcd")), type: .sql(.text)))]),
+                limits: QueryStructuralLimits(maximumRetainedBytes: 3))
+        }
+        let query = SelectQuery(projection: .items([ProjectionItem(.row([
+            .col("visible"), .array([.col("nested")])
+        ]))]), source: .values([], columnNames: nil))
+        #expect(query.referencedColumns == [ColumnRef("visible"), ColumnRef("nested")])
+        #expect(Expression.row([.int(1), .null]) != Expression.array([.int(1), .null]))
+        #expect(Set([Expression.row([.int(1)]), .row([.int(1)]), .array([.int(1)])]).count == 2)
+    }
+
+    @Test("Temporal precision is bounded at semantic admission and never collapsed into nil")
+    func temporalPrecisionSemanticAdmission() throws {
+        for precision in 0...6 {
+            let type = DataType.timestamp(withTimeZone: true, precision: precision)
+            try QueryStructuralValidator.validate(.cast(.null, targetType: type))
+            #expect(QueryValueValidator.accepts(.primitive(.null), type: .sql(type)))
+            #expect(type != .timestamp(withTimeZone: true))
+        }
+        for precision in [-1, 7, Int.max] {
+            let type = DataType.time(withTimeZone: false, precision: precision)
+            #expect(!QueryValueValidator.accepts(.primitive(.null), type: .sql(type)))
+            #expect(throws: QueryStructuralValidationError.invalidQueryValue(.incompatibleType)) {
+                try QueryStructuralValidator.validate(.cast(.null, targetType: type))
+            }
+        }
+    }
+
     @Test("Fusion stages, inputs, and schema fields consume structural limits")
     func fusionCollectionsConsumeStructuralLimits() {
         let query = SelectQuery(

@@ -430,6 +430,12 @@ private extension QueryIRExpressionWireEncoder {
         encodingSteps.append(.endNestedValue)
 
         switch expression {
+        case .array(let values):
+            writer.writeUInt8(41)
+            encodingSteps.append(.expressionArray(values))
+        case .row(let values):
+            writer.writeUInt8(42)
+            encodingSteps.append(.expressionArray(values))
         case .literal(let value):
             writer.writeUInt8(0)
             encodingSteps.append(.literal(value))

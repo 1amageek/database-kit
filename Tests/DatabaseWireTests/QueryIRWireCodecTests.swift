@@ -5,6 +5,87 @@ import Testing
 
 @Suite("QueryIR wire codec")
 struct QueryIRWireFormatTests {
+
+    @Test("SQL constructors preserve ordered children, tags, and bounded nested traversal")
+    func sqlConstructorWireRoundTrip() throws {
+        let value: Expression = .array([.row([.parameter(.position(1)), .null]), .int(7)])
+        let bytes = try DatabaseWireWriter.encode {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try QueryIRWireFormat.encodeExpression(value, into: &writer)
+        }
+        #expect(bytes[0] == 41)
+        var reader = DatabaseWireReader(bytes)
+        #expect(try QueryIRWireFormat.decodeExpression(from: &reader) == value)
+        try reader.ensureFullyRead()
+        let rowBytes = try DatabaseWireWriter.encode {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try QueryIRWireFormat.encodeExpression(.row([]), into: &writer)
+        }
+        #expect(rowBytes == ByteString([42, 0, 0, 0, 0]))
+        var nested: Expression = .int(1)
+        for _ in 0..<24 { nested = .array([.row([nested])]) }
+        let statement = QueryStatement.select(SelectQuery(
+            projection: .items([ProjectionItem(nested)]), source: .values([], columnNames: nil)))
+        #expect(try QueryIRWireFormat.decode(QueryIRWireFormat.encode(statement)) == statement)
+    }
+
+    @Test("SQL constructor decoding rejects truncated, unknown, and oversized child lists")
+    func invalidSQLConstructorWireFails() throws {
+        for bytes: [UInt8] in [[41], [42, 1, 0, 0, 0], [41, 1, 0, 0, 0, 255]] {
+            #expect(throws: DatabaseWireError.self) {
+                var reader = DatabaseWireReader(bytes)
+                _ = try QueryIRWireFormat.decodeExpression(from: &reader)
+            }
+        }
+        let limits = try DatabaseWireLimits(maximumFrameBytes: 4_096, maximumStringBytes: 4_096,
+            maximumByteStringBytes: 4_096, maximumCollectionCount: 1, maximumNestingDepth: 64, maximumObjectCount: 1_000)
+        #expect(throws: DatabaseWireError.self) {
+            var reader = DatabaseWireReader([41, 2, 0, 0, 0], limits: limits)
+            _ = try QueryIRWireFormat.decodeExpression(from: &reader)
+        }
+    }
+
+    @Test("Temporal Wire tags preserve nil goldens and every explicit precision")
+    func temporalPrecisionWireRoundTrip() throws {
+        for zone in [false, true] {
+            for precision: Int? in [nil, 0, 1, 2, 3, 4, 5, 6] {
+                for isTime in [false, true] {
+                    let type: DataType = isTime ? .time(withTimeZone: zone, precision: precision)
+                        : .timestamp(withTimeZone: zone, precision: precision)
+                    let bytes = try DatabaseWireWriter.encode {
+                        (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+                        try QueryIRWireFormat.encodeDataType(type, into: &writer)
+                    }
+                    let tag: UInt8 = precision == nil ? (isTime ? 11 : 12) : (isTime ? 22 : 23)
+                    var golden: [UInt8] = [tag, zone ? 1 : 0]
+                    if let precision { golden.append(UInt8(precision)) }
+                    #expect(bytes == ByteString(golden))
+                    var reader = DatabaseWireReader(bytes)
+                    #expect(try QueryIRWireFormat.decodeDataType(from: &reader) == type)
+                    try reader.ensureFullyRead()
+                }
+            }
+        }
+    }
+
+    @Test("Temporal precision cannot be omitted, out of range, or truncated on Wire")
+    func invalidTemporalPrecisionWireFails() {
+        for bytes: [UInt8] in [[22], [23, 0], [22, 0, 7], [23, 1, 255]] {
+            #expect(throws: DatabaseWireError.self) {
+                var reader = DatabaseWireReader(bytes)
+                _ = try QueryIRWireFormat.decodeDataType(from: &reader)
+            }
+        }
+        for precision in [-1, 7, Int.max] {
+            #expect(throws: DatabaseWireError.invalidQueryValue(.incompatibleType)) {
+                try DatabaseWireWriter.encode {
+                    (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+                    try QueryIRWireFormat.encodeDataType(.time(withTimeZone: false, precision: precision), into: &writer)
+                }
+            }
+        }
+    }
+
     @Test("cross-entity Fusion traversal round-trips")
     func connectedFusionSourceRoundTrips() throws {
         let connected = FusionConnectedSource(

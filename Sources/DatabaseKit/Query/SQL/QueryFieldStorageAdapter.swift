@@ -179,9 +179,9 @@ public enum QueryFieldStorageAdapter {
             case .char, .varchar, .text: expected = .string
             case .binary, .varbinary, .blob: expected = .bytes
             case .date: expected = .date
-            case .time(false): expected = .time
-            case .time(true): throw .invalidPersistenceDescriptor
-            case .timestamp(let withTimeZone): expected = withTimeZone ? .timestamp : .dateTime
+            case .time(false, _): expected = .time
+            case .time(true, _): throw .invalidPersistenceDescriptor
+            case .timestamp(let withTimeZone, _): expected = withTimeZone ? .timestamp : .dateTime
             case .uuid: expected = .uuid
             case .custom: throw .invalidPersistenceDescriptor
             }
@@ -201,10 +201,13 @@ public enum QueryFieldStorageAdapter {
                   scale == nil || (-1000...1000).contains(scale!) else { throw .invalidPersistenceDescriptor }
         case .char(let length), .varchar(let length), .binary(let length), .varbinary(let length):
             guard length == nil || length! > 0 else { throw .invalidPersistenceDescriptor }
+        case .time(_, let precision), .timestamp(_, let precision):
+            guard precision == nil || (0...6).contains(precision!) else { throw .invalidPersistenceDescriptor }
+            if case .time(true, _) = type { throw .invalidPersistenceDescriptor }
         case .array(let element):
             guard allowsArray else { throw .invalidPersistenceDescriptor }
             try validateSQLType(element, allowsArray: false)
-        case .custom, .time(true): throw .invalidPersistenceDescriptor
+        case .custom: throw .invalidPersistenceDescriptor
         default: break
         }
     }

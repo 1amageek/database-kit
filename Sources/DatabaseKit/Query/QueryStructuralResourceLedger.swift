@@ -22,6 +22,26 @@ public struct QueryStructuralResourceLedger: Sendable {
         self.limits = limits
     }
 
+    /// The capacity available for admission of a child payload.
+    ///
+    /// This projection uses the ledger's owned counters. Rejected claims leave
+    /// it unchanged; leaving a nesting scope restores only depth capacity.
+    public var remainingLimits: QueryStructuralLimits {
+        QueryStructuralLimits(
+            maximumNestingDepth: limits.maximumNestingDepth - nestingDepth,
+            maximumRetainedBytes: limits.maximumRetainedBytes - retainedBytes,
+            maximumInputTokens: limits.maximumInputTokens - inputTokens,
+            maximumTotalNodes: limits.maximumTotalNodes - totalNodes,
+            maximumCollectionElements: limits.maximumCollectionElements - collectionElements,
+            maximumBasicGraphPatterns: limits.maximumBasicGraphPatterns - basicGraphPatterns,
+            maximumTriplePatterns: limits.maximumTriplePatterns - triplePatterns,
+            maximumValuesRows: limits.maximumValuesRows - valuesRows,
+            maximumValuesVariables: limits.maximumValuesVariables - valuesVariables,
+            maximumValuesCells: limits.maximumValuesCells - valuesCells,
+            maximumReifiedTripleExpansions: limits.maximumReifiedTripleExpansions - reifiedTripleExpansions
+        )
+    }
+
     public mutating func enterNesting(
     ) throws(QueryStructuralValidationError) {
         let next = try checkedTotal(

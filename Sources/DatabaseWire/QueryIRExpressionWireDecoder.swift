@@ -188,6 +188,7 @@ private extension QueryIRExpressionWireDecoder {
         )
         case caseWhenFinish([CaseWhenPair])
         case assembleCoalesce
+        case assembleConstructor(isArray: Bool)
         case castTail
         case selectExpression(SelectKind)
         case selectExpressionFinish(SelectKind)
@@ -606,6 +607,10 @@ private extension QueryIRExpressionWireDecoder {
                         elseResult: try popExpression()
                     )
                 )
+
+            case .assembleConstructor(let isArray):
+                let values = try popExpressionCollection()
+                expressions.append(isArray ? .array(values) : .row(values))
 
             case .assembleCoalesce:
                 expressions.append(
@@ -1724,6 +1729,11 @@ private extension QueryIRExpressionWireDecoder {
             case 39:
                 decodingSteps.append(.endNestedValue)
                 decodingSteps.append(.selectExpression(.exists))
+            case 41, 42:
+                let count = try reader.readCount()
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.assembleConstructor(isArray: tag == 41))
+                decodingSteps.append(.expressionCursor(CollectionCursor(count: count)))
             case 40:
                 switch try reader.readUInt8() {
                 case 1:

@@ -623,6 +623,51 @@ Authoritative dialect references: [lexical structure](https://www.postgresql.org
 [INSERT](https://www.postgresql.org/docs/18/sql-insert.html),
 [MERGE](https://www.postgresql.org/docs/18/sql-merge.html).
 
+### S02 frozen syntax-to-value boundary
+
+S01 is committed; S02 is a syntax and canonical-text sprint, not completion of
+later binding, temporal/array functions, relational features, DDL, or blocks.
+L01-L08 retain their complete acceptance obligations. Syntax acceptance and
+value-preserving text carriage are reported separately from execution support.
+The canonical SQL spellings and constant normalization are owned once by
+[Builder](../../../../../database-framework/Sources/QueryAST/Builder/DESIGN.md#s02-canonical-sql-and-constant-normalization).
+
+| Semantic responsibility | S02 frozen contract |
+|---|---|
+| Names | QueryIR strings are exact logical identifiers. Parsing folds unquoted ASCII A-Z to a-z and preserves quoted Unicode scalar content; quoted state is not a new Kit field. Static schema/entity/field registration is quoted-equivalent and never renamed or searched with a fallback. |
+| Integer constants | Fold a unary sign applied directly to a numeric literal before selecting its type; intervening whitespace does not change classification. Choose SQL integer when Int32 fits, bigint when only Int64 fits, otherwise numeric within the bounded profile. The integer-width declaration uses the existing typed query literal; the SQL parser never selects unsigned solely because a positive constant exceeds Int64. Shared SPARQL and primitive integer parsing retain their separate contracts. |
+| Decimal/exponent constants | Any decimal point or exponent selects numeric. Preserve exact coefficient and displayScale, including zero and trailing zeros, without Double intermediates. Parse ASCII digits, supported base prefixes and digit separators with checked arithmetic. Reject nonfinite, invalid separators, exponent/scale overflow and values outside the numeric profile. Normalization may remove coefficient zeros but cannot remove display metadata. |
+| Explicit typed constants | Existing cast plus string is the semantic representation of typed lexical input whose conversion requires later binding/runtime policy. Intrinsically decidable canonical rich constants normalize to the existing QueryValue literal through Builder's one constant adapter. Date/timezone-dependent interpretation is never performed by a parser using host defaults. |
+| Constructor expressions | Add SQL-only Expression.array([Expression]) and Expression.row([Expression]); retain order, NULLs, parameters and structural children. These are expressions, not new persisted query-value alternatives. QueryValue remains its six S01 cases; no row-valued public result is invented in S02. |
+| Temporal typmods | Extend existing DataType.time and .timestamp with optional precision Int?, valid only in 0...6. Nil differs from explicit precision. Preserve withTimeZone and precision through binding inputs, equality, hashing, parameters, schema/query descriptors, JSON and Wire. S06 owns conversion, rounding and timezone semantics. |
+| Other typmods | Decimal precision is 1...38 and scale is -1000...1000; scale may exceed precision. Length modifiers are positive bounded integers. Parse aliases into existing canonical types, including bytea, int2/int4/int8, float4/float8, numeric/decimal, character varying and timestamptz/timetz. Array suffix dimensions do not pretend to enforce declared lengths. |
+| Parameter declarations | Existing position/name identity and explicit type survive serialization. SQL $n is canonical; existing :name and ? remain accepted product forms. Preserve the existing rejection of mixed anonymous/explicit positional numbering and invalid zero/overflow markers. Named parameters retain exact identity. |
+
+Unknown literal coercion and overload inference remain S03. General ARRAY
+construction/operations belong to S07; ROW comparison, result typing and
+relational execution belong to S08; temporal interpretation belongs to S06.
+Every newly reachable unsupported runtime/language branch returns its typed
+unsupported failure and carries the required INCOMPLETE_IMPLEMENTATION marker.
+Parsing a ROW or precision-modified temporal cast cannot become synthetic NULL,
+primitive object, omitted modifier, or successful row-valued execution.
+
+S02 extends existing QueryStructuralLimits/ledger use rather than introducing
+a second semantic AST or source-position model. Source UTF-8, decoded token
+content and serializer output are bounded by the admitting boundary's existing
+maximumRetainedBytes policy; token/node/collection/depth counters remain
+independent. This is a bounded representation contract, not allocator-size
+measurement. Wire's new grammar is owned by
+[DatabaseWire](../../../DatabaseWire/DESIGN.md#s02-type-and-constructor-wire-grammar).
+Source-token spans remain QueryAST-owned; S03 later introduces and verifies the
+parse-to-binding diagnostic annotation boundary when that owner consumes it.
+
+S02 must migrate every exhaustive semantic walker, parameter binder,
+structural ledger, fingerprint, codec and language validator for the added
+constructors and typmods. SQL-only forms fail explicitly at SPARQL/RDF gates.
+Existing SQL-producing extensions move out of Kit into Framework; Kit retains
+pure value formatting, primitive adaptation and SPARQL generation, with no
+Framework import and no duplicate SQL spelling policy.
+
 ## Runtime Flows
 
 ```text

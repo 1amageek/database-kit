@@ -81,7 +81,7 @@ private extension QueryIRDataTypeWireCodec {
         into writer: inout DatabaseWireWriter,
         encodingSteps: inout [EncodingStep]
     ) throws(DatabaseWireError) {
-        switch consume type {
+        switch type {
         case .boolean:
             writer.writeUInt8(0)
         case .smallint:
@@ -108,12 +108,18 @@ private extension QueryIRDataTypeWireCodec {
             writer.writeUInt8(9)
         case .date:
             writer.writeUInt8(10)
-        case .time(let withTimeZone):
-            writer.writeUInt8(11)
-            writer.writeBool(withTimeZone)
-        case .timestamp(let withTimeZone):
-            writer.writeUInt8(12)
-            writer.writeBool(withTimeZone)
+        case .time(let withTimeZone, let precision), .timestamp(let withTimeZone, let precision):
+            let isTime: Bool
+            if case .time = type { isTime = true } else { isTime = false }
+            if let precision {
+                guard (0...6).contains(precision) else { throw .invalidQueryValue(.incompatibleType) }
+                writer.writeUInt8(isTime ? 22 : 23)
+                writer.writeBool(withTimeZone)
+                writer.writeUInt8(UInt8(precision))
+            } else {
+                writer.writeUInt8(isTime ? 11 : 12)
+                writer.writeBool(withTimeZone)
+            }
         case .interval:
             writer.writeUInt8(13)
         case .binary(let length):
@@ -177,6 +183,12 @@ private extension QueryIRDataTypeWireCodec {
             return .time(withTimeZone: try reader.readBool())
         case 12:
             return .timestamp(withTimeZone: try reader.readBool())
+        case 22, 23:
+            let withTimeZone = try reader.readBool()
+            let precision = try reader.readUInt8()
+            guard precision <= 6 else { throw .invalidQueryValue(.incompatibleType) }
+            return tag == 22 ? .time(withTimeZone: withTimeZone, precision: Int(precision))
+                : .timestamp(withTimeZone: withTimeZone, precision: Int(precision))
         case 13:
             return .interval
         case 14:

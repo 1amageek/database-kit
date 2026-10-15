@@ -154,9 +154,9 @@ enum QueryValueWireValidator {
         case .decimal: return tag == 12
         case .char, .varchar, .text: return tag == 13
         case .date: return tag == 15
-        case .time(false): return tag == 16
-        case .timestamp(false): return tag == 17
-        case .timestamp(true): return tag == 18
+        case .time(false, _): return tag == 16
+        case .timestamp(false, _): return tag == 17
+        case .timestamp(true, _): return tag == 18
         case .binary, .varbinary, .blob: return tag == 14
         case .uuid: return tag == 24
         default: return false

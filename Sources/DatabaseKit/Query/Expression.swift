@@ -47,17 +47,21 @@ public struct ColumnRef: Sendable, Equatable, Hashable {
 }
 
 extension ColumnRef: CustomStringConvertible {
+    /// Diagnostic text only; executable SQL is owned by QueryAST's serializer.
     public var description: String {
-        if let table = table {
-            return "\(SQLEscape.identifier(table)).\(SQLEscape.identifier(column))"
+        let quoted: (String) -> String = { name in
+            "\"" + name.map { $0 == "\"" ? "\"\"" : String($0) }.joined() + "\""
         }
-        return SQLEscape.identifier(column)
+        if let table = table {
+            return "\(quoted(table)).\(quoted(column))"
+        }
+        return quoted(column)
     }
 }
 
 extension ColumnRef {
     /// Generate unquoted column reference (for display purposes only)
-    /// WARNING: Do not use this for SQL generation - use description instead
+    /// Executable SQL is owned by QueryAST's serializer.
     public var displayName: String {
         if let table = table {
             return "\(table).\(column)"
@@ -220,8 +224,8 @@ public indirect enum DataType: Sendable, Equatable, Hashable {
     case varchar(length: Int?)
     case text
     case date
-    case time(withTimeZone: Bool)
-    case timestamp(withTimeZone: Bool)
+    case time(withTimeZone: Bool, precision: Int? = nil)
+    case timestamp(withTimeZone: Bool, precision: Int? = nil)
     case interval
     case binary(length: Int?)
     case varbinary(length: Int?)
@@ -240,6 +244,12 @@ public indirect enum Expression: Sendable, Hashable {
 
     /// Literal value
     case literal(Literal)
+
+    /// Ordered SQL ARRAY constructor children; execution is owned by the SQL runtime.
+    case array([Expression])
+
+    /// Ordered SQL ROW constructor children; this is not a persisted query value.
+    case row([Expression])
 
     // MARK: - Identifiers
 
@@ -522,6 +532,8 @@ extension Expression: Equatable {
         switch (lhs, rhs) {
         case (.literal(let l1), .literal(let l2)):
             return l1 == l2
+        case (.array(let l), .array(let r)), (.row(let l), .row(let r)):
+            return l == r
         case (.column(let c1), .column(let c2)):
             return c1 == c2
         case (.variable(let v1), .variable(let v2)):
@@ -616,6 +628,12 @@ extension Expression {
         case .literal(let lit):
             hasher.combine(0)
             hasher.combine(lit)
+        case .array(let expressions):
+            hasher.combine(41)
+            hasher.combine(expressions)
+        case .row(let expressions):
+            hasher.combine(42)
+            hasher.combine(expressions)
         case .column(let col):
             hasher.combine(1)
             hasher.combine(col)

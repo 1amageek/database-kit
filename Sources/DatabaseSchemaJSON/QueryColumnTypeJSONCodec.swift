@@ -108,8 +108,12 @@ public struct QueryColumnTypeJSONCodec: Sendable {
         case .varchar(let length): kind = "varchar"; members = [("length", optionalInteger(length))]
         case .binary(let length): kind = "binary"; members = [("length", optionalInteger(length))]
         case .varbinary(let length): kind = "varbinary"; members = [("length", optionalInteger(length))]
-        case .time(let withTimeZone): kind = "time"; members = [("withTimeZone", .bool(withTimeZone))]
-        case .timestamp(let withTimeZone): kind = "timestamp"; members = [("withTimeZone", .bool(withTimeZone))]
+        case .time(let withTimeZone, let precision):
+            kind = "time"
+            members = [("withTimeZone", .bool(withTimeZone)), ("precision", optionalInteger(precision))]
+        case .timestamp(let withTimeZone, let precision):
+            kind = "timestamp"
+            members = [("withTimeZone", .bool(withTimeZone)), ("precision", optionalInteger(precision))]
         case .array(let element):
             kind = "array"
             members = [("element", try encodeDataType(element, depth: depth + 1))]
@@ -150,9 +154,11 @@ public struct QueryColumnTypeJSONCodec: Sendable {
             default: return .varbinary(length: length)
             }
         case "time", "timestamp":
-            try object.validateKeys(["kind", "withTimeZone"])
+            try object.validateKeys(["kind", "withTimeZone", "precision"])
             let zone = try object.required("withTimeZone").bool(path: object.child("withTimeZone"))
-            return kind == "time" ? .time(withTimeZone: zone) : .timestamp(withTimeZone: zone)
+            let precision = try optionalInteger(object, "precision")
+            return kind == "time" ? .time(withTimeZone: zone, precision: precision)
+                : .timestamp(withTimeZone: zone, precision: precision)
         case "array":
             try object.validateKeys(["kind", "element"])
             return .array(try decodeDataType(object.required("element"), path: object.child("element"), depth: depth + 1))

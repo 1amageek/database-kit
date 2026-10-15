@@ -136,6 +136,30 @@ declaration is SQL, primitive, or inferred. It neither reflects a generic value
 or optional type nor serializes a payload. SQL/SPARQL generation continues to use
 its own typed, fallible contract rather than diagnostic text.
 
+### S02 declaration migration
+
+The [SQL child contract](SQL/DESIGN.md#s02-frozen-syntax-to-value-boundary) owns
+integer-width selection, exact numeric constants, constructor expressions and
+temporal typmod meaning. Query composes these changes into existing Expression,
+DataType, Literal, parameters and structural validation. It introduces neither
+a parallel SQL AST nor QueryValue.row. Every new child is visited by binding,
+validation, resource accounting, hashing and canonical Wire traversal.
+
+Kit no longer owns executable SQL generation after S02. SQL methods on semantic
+values, SQL type-name generation and SQL escape policy are removed from this
+package after Framework callers/tests migrate. Non-SQL metadata and RDF
+expressions cannot gain SQL meaning through a serializer fallback. SPARQL
+serialization and diagnostic/value formatting remain here under their existing
+language contracts. Quoted state and parser source spans are not Kit metadata.
+
+QueryStructuralResourceLedger.remainingLimits is a read-only projection of its
+owned counters. It subtracts admitted usage from every limit, including current
+nesting depth. A caller may admit a child payload against that residual budget
+before constructing it, then charge the measured payload to the same parent
+ledger. Callers do not mirror ledger counters. Rejected claims preserve the
+remaining budget; leaving a nesting scope restores depth capacity without
+releasing cumulative node, byte, token or collection consumption.
+
 ## Runtime Flows
 
 ```text

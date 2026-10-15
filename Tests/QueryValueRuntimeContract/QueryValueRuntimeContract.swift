@@ -18,6 +18,8 @@ struct QueryValueRuntimeContract {
         case wire(DatabaseWireError)
         case time(TimeSpanError)
         case wireLimits(DatabaseWireLimitsError)
+        case structure(QueryStructuralValidationError)
+        case binding(QueryParameterBindingError)
     }
 
     private static let limits = QueryValueLimits(
@@ -29,7 +31,7 @@ struct QueryValueRuntimeContract {
         print("QUERY_VALUE_RUNTIME_BEGIN")
         do {
             try run()
-            print("QUERY_VALUE_RUNTIME_PASS cases=7")
+            print("QUERY_VALUE_RUNTIME_PASS cases=8")
         } catch {
             switch error {
             case .assertion(let code): print("QUERY_VALUE_RUNTIME_FAIL assertion=\(code)")
@@ -37,6 +39,8 @@ struct QueryValueRuntimeContract {
             case .wire: print("QUERY_VALUE_RUNTIME_FAIL wire")
             case .time: print("QUERY_VALUE_RUNTIME_FAIL time")
             case .wireLimits: print("QUERY_VALUE_RUNTIME_FAIL wire-limits")
+            case .structure: print("QUERY_VALUE_RUNTIME_FAIL structure")
+            case .binding: print("QUERY_VALUE_RUNTIME_FAIL binding")
             }
             exit(1)
         }
@@ -110,6 +114,8 @@ struct QueryValueRuntimeContract {
         pass("invalid-values")
         try wireFailures(columns: columns, row: expected)
         pass("wire-errors")
+        try sqlConstructorsAndTemporalDescriptors()
+        pass("sql-constructors-temporal-descriptors")
     }
 
     private static func richValues(time: TimeSpan) throws(QueryValueError) -> [QueryValue] {
@@ -253,6 +259,153 @@ struct QueryValueRuntimeContract {
             rejected = true
         }
         try require(rejected, code: 28)
+    }
+
+    private static func sqlConstructorsAndTemporalDescriptors() throws(Failure) {
+        for zone in [false, true] {
+            for precision: Int? in [nil, 0, 3, 6] {
+                for isTime in [false, true] {
+                    let type: DataType = isTime ? .time(withTimeZone: zone, precision: precision)
+                        : .timestamp(withTimeZone: zone, precision: precision)
+                    let parameter = QueryParameter(position: 1, name: "instant", value: .primitive(.null), type: .sql(type))
+                    let expression: Expression = .row([
+                        .array([.parameter(.position(1)), .null]),
+                        .cast(.parameter(.name("instant")), targetType: type), .row([]), .array([]),
+                    ])
+                    let statement = select(expression)
+                    do { try QueryStructuralValidator.validate(statement) }
+                    catch { throw .structure(error) }
+                    let expectedValue: Expression = .literal(.queryValue(.primitive(.null), type: .sql(type)))
+                    let expected = select(.row([
+                        .array([expectedValue, .null]), .cast(expectedValue, targetType: type), .row([]), .array([]),
+                    ]))
+                    let bound: QueryStatement
+                    do { bound = try QueryParameterBinder(parameters: [parameter]).bind(statement) }
+                    catch { throw .binding(error) }
+                    try require(bound == expected, code: 34)
+                    for original in [statement, bound] {
+                        let bytes = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(original) }
+                        let decoded = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(bytes) }
+                        try require(decoded == original && decoded.hashValue == original.hashValue, code: 35)
+                    }
+                    let request = QueryExecuteOperation.Request(input: .ir(statement), parameters: [parameter])
+                    let frame = try wire { () throws(DatabaseWireError) in
+                        #if DATABASE_KIT_MULTI_BASE
+                        try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 20,
+                            target: .database, request: request)
+                        #else
+                        try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 20, request: request)
+                        #endif
+                    }
+                    let decoded = try wire { () throws(DatabaseWireError) in
+                        try DatabaseWireDecoder().decodeRequest(DatabaseOperationCatalog.queryExecute, from: frame)
+                    }
+                    try require(decoded.request == request, code: 36)
+                    if precision != nil {
+                        let inferred: DataType = isTime ? .time(withTimeZone: zone) : .timestamp(withTimeZone: zone)
+                        try require(type != inferred, code: 37)
+                    }
+                }
+            }
+        }
+        let missing = select(.array([.row([.parameter(.position(2))])]))
+        var rejected = false
+        do { _ = try QueryParameterBinder(parameters: []).bind(missing) }
+        catch {
+            guard error == .missingPosition(2) else { throw .binding(error) }
+            rejected = true
+        }
+        try require(rejected, code: 38)
+        let nested: Expression = .array([.row([.string("abcd")])])
+        do { try QueryStructuralValidator.validate(nested) }
+        catch { throw .structure(error) }
+        for (bounded, expected): (QueryStructuralLimits, QueryStructuralValidationError) in [
+            (QueryStructuralLimits(maximumNestingDepth: 2), .resourceLimitExceeded(resource: .nestingDepth, actual: 3, maximum: 2)),
+            (QueryStructuralLimits(maximumCollectionElements: 1), .resourceLimitExceeded(resource: .collectionElements, actual: 2, maximum: 1)),
+        ] {
+            rejected = false
+            do { try QueryStructuralValidator.validate(nested, limits: bounded) }
+            catch {
+                guard error == expected else { throw .structure(error) }
+                rejected = true
+            }
+            try require(rejected, code: 39)
+        }
+        rejected = false
+        let retained: Expression = .array([.literal(.queryValue(.primitive(.string("abcd")), type: .sql(.text)))])
+        do { try QueryStructuralValidator.validate(retained, limits: QueryStructuralLimits(maximumRetainedBytes: 3)) }
+        catch {
+            guard error == .resourceLimitExceeded(resource: .retainedBytes, actual: 4, maximum: 3) else { throw .structure(error) }
+            rejected = true
+        }
+        try require(rejected, code: 50)
+        for precision in [-1, 7, Int.max] {
+            for type: DataType in [.time(withTimeZone: false, precision: precision), .timestamp(withTimeZone: true, precision: precision)] {
+                try require(!QueryValueValidator.accepts(.primitive(.null), type: .sql(type)), code: 40)
+                rejected = false
+                do { try QueryStructuralValidator.validate(.cast(.null, targetType: type)) }
+                catch {
+                    guard error == .invalidQueryValue(.incompatibleType) else { throw .structure(error) }
+                    rejected = true
+                }
+                try require(rejected, code: 41)
+                try rejectWire(.invalidQueryValue(.incompatibleType), code: 42) { () throws(DatabaseWireError) in
+                    _ = try QueryIRWireFormat.encode(select(.cast(.null, targetType: type)))
+                }
+            }
+        }
+        let oneChild: DatabaseWireLimits
+        do {
+            oneChild = try DatabaseWireLimits(maximumFrameBytes: 4_096, maximumStringBytes: 4_096,
+                maximumByteStringBytes: 4_096, maximumCollectionCount: 1, maximumNestingDepth: 64, maximumObjectCount: 1_000)
+        } catch { throw .wireLimits(error) }
+        for constructor: Expression in [.array([.null]), .row([.null])] {
+            let encoded = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(select(constructor)) }
+            let tag: UInt8 = if case .array = constructor { 41 } else { 42 }
+            // Mutate the unique constructor tag in a canonical public statement, preserving its envelope.
+            var bytes = Array(encoded)
+            guard let offset = bytes.firstIndex(of: tag), bytes[offset + 1] == 1 else { throw .assertion(43) }
+            try rejectWire(.truncated, code: 44) { () throws(DatabaseWireError) in
+                _ = try QueryIRWireFormat.decode(encoded[0..<(offset + 5)])
+            }
+            bytes[offset + 1] = 2
+            try rejectWire(.collectionTooLarge(actual: 2, maximum: 1), code: 49) { () throws(DatabaseWireError) in
+                _ = try QueryIRWireFormat.decode(ByteString(bytes), limits: oneChild)
+            }
+            bytes[offset + 1] = 1
+            bytes[offset] = 255
+            try rejectWire(.invalidValueTag(255), code: 45) { () throws(DatabaseWireError) in
+                _ = try QueryIRWireFormat.decode(ByteString(bytes))
+            }
+        }
+        for type: DataType in [.time(withTimeZone: false, precision: 3), .timestamp(withTimeZone: true, precision: 3)] {
+            let encoded = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(select(.cast(.null, targetType: type))) }
+            let tag: UInt8 = if case .time = type { 22 } else { 23 }
+            var bytes = Array(encoded)
+            guard let offset = bytes.firstIndex(of: tag), bytes[offset + 2] == 3 else { throw .assertion(46) }
+            try rejectWire(.truncated, code: 47) { () throws(DatabaseWireError) in
+                _ = try QueryIRWireFormat.decode(encoded[0..<(offset + 2)])
+            }
+            bytes[offset + 2] = 7
+            try rejectWire(.invalidQueryValue(.incompatibleType), code: 48) { () throws(DatabaseWireError) in
+                _ = try QueryIRWireFormat.decode(ByteString(bytes))
+            }
+        }
+    }
+
+    private static func select(_ expression: Expression) -> QueryStatement {
+        .select(SelectQuery(projection: .items([ProjectionItem(expression)]), source: .values([], columnNames: nil)))
+    }
+
+    private static func rejectWire(_ expected: DatabaseWireError, code: UInt8,
+                                   _ body: () throws(DatabaseWireError) -> Void) throws(Failure) {
+        var rejected = false
+        do { try body() }
+        catch {
+            guard error == expected else { throw .wire(error) }
+            rejected = true
+        }
+        try require(rejected, code: code)
     }
 
     private static func query<Value>(_ body: () throws(QueryValueError) -> Value) throws(Failure) -> Value {
