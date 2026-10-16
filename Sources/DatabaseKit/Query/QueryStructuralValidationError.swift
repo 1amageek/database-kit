@@ -22,6 +22,8 @@ public enum QueryStructuralValidationError: Error, Sendable, Equatable {
         maximum: UInt64
     )
     case invalidResourceClaim(Resource)
+    case invalidArrayAccessSubscriptCount(Int)
+    case emptyVariadicFunctionArguments
     case invalidPatternEscape
     case unbalancedNesting
     case invalidQueryValue(QueryValueError)
@@ -35,6 +37,10 @@ extension QueryStructuralValidationError: CustomStringConvertible {
             return "Query \(resource.rawValue) limit exceeded: \(actual) > \(maximum)"
         case .invalidResourceClaim(let resource):
             return "Query \(resource.rawValue) must use its dedicated admission operation"
+        case .invalidArrayAccessSubscriptCount(let count):
+            return "Array access requires one through six subscripts, received \(count)"
+        case .emptyVariadicFunctionArguments:
+            return "Explicit VARIADIC requires a final array argument"
         case .invalidPatternEscape:
             return "ERE pattern predicates do not accept an escape expression"
         case .unbalancedNesting:

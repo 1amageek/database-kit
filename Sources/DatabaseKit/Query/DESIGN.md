@@ -370,3 +370,96 @@ comparison stay in Framework. All traversals handle currentValue as a leaf;
 SPARQL rejects SQL-only temporal forms explicitly rather than assuming their
 presence gives RDF semantics. Tests prove constructor/descriptor bounds,
 lossless persistence/carriage and malformed input under the respective owners.
+
+
+### S07 collection expression carriage
+
+Consume the single [SQL S07 semantic and intrinsic authority](SQL/DESIGN.md#s07-frozen-array-and-json-contract).
+Query owns these exact Foundation-independent declarations; execution, scalar
+conversion, runtime admission and cursor lifecycle remain Framework concerns.
+
+```swift
+case arrayAccess(Expression, subscripts: [ArraySubscript])
+case collectionOperation(CollectionOperator, left: Expression, right: Expression)
+
+public enum ArraySubscript: Sendable, Hashable {
+    case index(Expression)
+    case slice(lower: Expression?, upper: Expression?)
+}
+
+public enum CollectionOperator: UInt8, Sendable, Hashable {
+    case contains = 0
+    case containedBy = 1
+    case overlaps = 2
+    case jsonField = 3
+    case jsonFieldText = 4
+    case jsonPath = 5
+    case jsonPathText = 6
+    case jsonHasKey = 7
+    case jsonHasAnyKey = 8
+    case jsonHasAllKeys = 9
+    case jsonDeletePath = 10
+}
+```
+
+Each arrayAccess is one contiguous group of one through six subscripts. A later
+group is another arrayAccess node; identities/serialization must not flatten
+nested groups. An index and a slice with omitted/present bounds are distinct.
+Reuse subtract for JSONB `-`, concatenate for array/JSONB `||`, and ordinary
+FunctionCall for F08–F10. No SQL policy enters QueryValue structural identity.
+
+| Child | Canonical source occurrence edge |
+|---|---|
+| Access base | operand |
+| Index or lower bound in zero-based dimension d | argument(2*d) |
+| Upper bound in dimension d | argument(2*d+1) |
+| Collection operation operands | left / right |
+
+Absent slice bounds create no expression occurrence. Every semantic identity,
+hash, deep equality, iterative walk, node/depth/byte admission, parameter
+collection/substitution, structural validator and source-occurrence consumer
+must cover both cases and each present child exactly once. Retain existing
+literal owner accounting; expression metadata does not bypass it. SQL parser,
+serializer and [Wire](../../DatabaseWire/DESIGN.md#s07-collection-expression-carriage)
+share these declarations. RDF/SPARQL translation and execution explicitly
+reject SQL-only collection expressions with their existing typed language
+failures. Existing array/JSON values, model adaptation and storage/Wire value
+productions remain unchanged.
+
+Behavioral evidence covers grouped element/slice roundtrips, every operator,
+missing bounds versus NULL expressions, nested/deep parameters and malformed
+count/metadata, plus explicit non-SQL language gates. Scalar and bounded cursor
+semantics and S08/S10 integration gates are defined only by the SQL authority.
+
+
+### S07 explicit variadic function carriage
+
+FunctionCall adds `public let finalArrayIsVariadic: Bool` and extends its existing
+initializer with the trailing defaulted parameter, preserving ordinary calls:
+
+```swift
+public init(
+    name: String,
+    arguments: [Expression],
+    distinct: Bool = false,
+    schema: String? = nil,
+    finalArrayIsVariadic: Bool = false
+)
+```
+
+The flag means explicit SQL VARIADIC on the final array expression. It is not
+inferred from an argument's type or parentheses. True requires at least one
+argument structurally; selected binding restricts it to registered admitted
+signatures under the [SQL semantic contract](SQL/DESIGN.md#s07-function-and-mutation-details).
+An unflagged array stays one argument. No new child expression or occurrence
+edge is added: arguments retain their indexed argument edges, and the flag
+belongs to function identity. Structural equality/hash, iterative rebuilds,
+walks, parameter replacement and serialization retain it exactly. A rebuild
+must never silently restore the default false. Non-SQL language adapters reject
+unsupported explicit variadic calls with typed failures.
+
+[Wire](../../DatabaseWire/DESIGN.md#s07-explicit-variadic-function-layout) keeps
+ordinary false calls byte-for-byte on tags28/43 and uses tag55 only for true.
+Required evidence distinguishes flagged/unflagged array arguments, NULL/empty
+variadic arrays, qualified identity, nested parameters and empty-argument
+structural rejection across parser, identity, rebuild and codecs.

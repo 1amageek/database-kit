@@ -1,9 +1,9 @@
 /// A task-local builder edge, not a retained JSONB semantic value.
-package struct QueryJSONBIndexedMember: Sendable {
-    package let key: String
-    package let value: Int
+public struct QueryJSONBIndexedMember: Sendable {
+    public let key: String
+    public let value: Int
 
-    package init(key: String, value: Int) {
+    public init(key: String, value: Int) {
         self.key = key
         self.value = value
     }

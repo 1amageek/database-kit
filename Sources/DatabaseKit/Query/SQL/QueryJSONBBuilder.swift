@@ -1,5 +1,5 @@
-/// Package-only postorder construction. Failed builders cannot publish a root.
-package struct QueryJSONBBuilder {
+/// Bounded postorder construction. Failed builders cannot publish a root.
+public struct QueryJSONBBuilder {
     private let limits: QueryValueLimits
     private var records: [QueryJSONBStorage.Record] = []
     private var elements: [Int] = []
@@ -8,8 +8,90 @@ package struct QueryJSONBBuilder {
     private var parented: [Bool] = []
     private var utf8Bytes: UInt64 = 0
     private var failed = false
+    private let plannedNodeCapacity: Int?
+    private let plannedElementIndexCapacity: Int?
+    private let plannedMemberCapacity: Int?
+    /// Canonical Array container/slot budget, including construction scratch.
+    /// UTF-8 payload and allocator-internal slack are not included.
+    public private(set) var constructionRetainedByteCount: UInt64
 
-    package init(limits: QueryValueLimits) { self.limits = limits }
+
+    public init(limits: QueryValueLimits) {
+        self.limits = limits
+        plannedNodeCapacity = nil
+        plannedElementIndexCapacity = nil
+        plannedMemberCapacity = nil
+        constructionRetainedByteCount = Self.containerByteCount
+    }
+
+    /// Selects logical ceilings before allocating. Extra Array capacity never
+    /// raises these ceilings. Callers admit and reconcile the observed budget.
+    public init(limits: QueryValueLimits, nodeCapacity: Int, elementIndexCapacity: Int,
+                memberCapacity: Int) throws(QueryValueError) {
+        _ = try Self.constructionByteCount(nodeCapacity: nodeCapacity,
+            elementIndexCapacity: elementIndexCapacity, memberCapacity: memberCapacity)
+        try QueryJSONParser.check(UInt64(nodeCapacity), maximum: limits.maximumTotalNodes, resource: "nodes")
+        let edges = UInt64(elementIndexCapacity).addingReportingOverflow(UInt64(memberCapacity))
+        guard !edges.overflow else { throw .arithmeticOverflow }
+        try QueryJSONParser.check(edges.partialValue, maximum: limits.maximumCollectionElements, resource: "collectionElements")
+        let output = try QueryJSONBStorageFootprint.storageByteCount(nodeCapacity: UInt64(nodeCapacity),
+            elementIndexCapacity: UInt64(elementIndexCapacity), memberCapacity: UInt64(memberCapacity))
+        try QueryJSONParser.check(output, maximum: limits.maximumRetainedBytes, resource: "retainedBytes")
+        self.limits = limits
+        plannedNodeCapacity = nodeCapacity
+        plannedElementIndexCapacity = elementIndexCapacity
+        plannedMemberCapacity = memberCapacity
+        constructionRetainedByteCount = Self.containerByteCount
+        records.reserveCapacity(nodeCapacity)
+        depths.reserveCapacity(nodeCapacity)
+        parented.reserveCapacity(nodeCapacity)
+        elements.reserveCapacity(elementIndexCapacity)
+        members.reserveCapacity(memberCapacity)
+        try reconcileConstructionCapacity()
+    }
+
+    /// Canonical budget units, not an allocator/OS physical-allocation promise.
+    public static func constructionByteCount(nodeCapacity: Int, elementIndexCapacity: Int,
+                                             memberCapacity: Int) throws(QueryValueError) -> UInt64 {
+        guard nodeCapacity >= 0, elementIndexCapacity >= 0, memberCapacity >= 0 else { throw .nonCanonicalJSONB }
+        var bytes = containerByteCount
+        for (capacity, stride) in [
+            (nodeCapacity, MemoryLayout<QueryJSONBStorage.Record>.stride),
+            (elementIndexCapacity, MemoryLayout<Int>.stride),
+            (memberCapacity, MemoryLayout<QueryJSONBStorage.Member>.stride),
+            (nodeCapacity, MemoryLayout<UInt64>.stride),
+            (nodeCapacity, MemoryLayout<Bool>.stride),
+        ] {
+            let product = UInt64(capacity).multipliedReportingOverflow(by: UInt64(max(1, stride)))
+            let sum = bytes.addingReportingOverflow(product.partialValue)
+            guard !product.overflow, !sum.overflow else { throw .arithmeticOverflow }
+            bytes = sum.partialValue
+        }
+        return bytes
+    }
+
+    private static var containerByteCount: UInt64 {
+        UInt64(MemoryLayout<[QueryJSONBStorage.Record]>.stride + MemoryLayout<[Int]>.stride
+            + MemoryLayout<[QueryJSONBStorage.Member]>.stride + MemoryLayout<[UInt64]>.stride
+            + MemoryLayout<[Bool]>.stride)
+    }
+
+    private mutating func reconcileConstructionCapacity() throws(QueryValueError) {
+        // Scratch arrays can have different observed capacities despite one
+        // logical node ceiling. Charge every container and observed slot.
+        var bytes = try Self.constructionByteCount(nodeCapacity: records.capacity,
+            elementIndexCapacity: elements.capacity, memberCapacity: members.capacity)
+        let assumedScratch = UInt64(records.capacity).multipliedReportingOverflow(
+            by: UInt64(MemoryLayout<UInt64>.stride + MemoryLayout<Bool>.stride))
+        guard !assumedScratch.overflow else { throw .arithmeticOverflow }
+        bytes -= assumedScratch.partialValue
+        let depthBytes = UInt64(depths.capacity).multipliedReportingOverflow(by: UInt64(MemoryLayout<UInt64>.stride))
+        let parentBytes = UInt64(parented.capacity).multipliedReportingOverflow(by: UInt64(MemoryLayout<Bool>.stride))
+        let sum = bytes.addingReportingOverflow(depthBytes.partialValue)
+        let total = sum.partialValue.addingReportingOverflow(parentBytes.partialValue)
+        guard !depthBytes.overflow, !parentBytes.overflow, !sum.overflow, !total.overflow else { throw .arithmeticOverflow }
+        constructionRetainedByteCount = total.partialValue
+    }
 
     var appendedNodeCount: UInt64 { UInt64(records.count) }
 
@@ -18,7 +100,7 @@ package struct QueryJSONBBuilder {
         try QueryJSONParser.check(depth, maximum: limits.maximumNestingDepth, resource: "depth")
     }
 
-    package mutating func append(_ scalar: QueryJSONBNode) throws(QueryValueError) -> Int {
+    public mutating func append(_ scalar: QueryJSONBNode) throws(QueryValueError) -> Int {
         guard !failed else { throw .nonCanonicalJSONB }
         failed = true
         try admitNode(depth: 1)
@@ -32,29 +114,33 @@ package struct QueryJSONBBuilder {
         case .number(let value): record = .number(value)
         case .array, .object: throw .nonCanonicalJSONB
         }
-        let index = appendRecord(record, depth: 1)
+        let index = try appendRecord(record, depth: 1)
         failed = false
         return index
     }
 
-    package mutating func appendArray(_ children: [Int]) throws(QueryValueError) -> Int {
+    public mutating func appendArray(_ children: [Int]) throws(QueryValueError) -> Int {
         guard !failed else { throw .nonCanonicalJSONB }
         failed = true
         try admitCollection(children.count)
+        try admitPlanned(try added(UInt64(elements.count), UInt64(children.count)),
+                         maximum: plannedElementIndexCapacity, resource: "jsonbPlannedElementIndexCapacity")
         var depth: UInt64 = 1
         for child in children { depth = max(depth, try claim(child)) }
         try admitNode(depth: depth)
         let start = elements.count
         elements.append(contentsOf: children)
-        let index = appendRecord(.array(start..<elements.count), depth: depth)
+        let index = try appendRecord(.array(start..<elements.count), depth: depth)
         failed = false
         return index
     }
 
-    package mutating func appendObject(_ children: [QueryJSONBIndexedMember]) throws(QueryValueError) -> Int {
+    public mutating func appendObject(_ children: [QueryJSONBIndexedMember]) throws(QueryValueError) -> Int {
         guard !failed else { throw .nonCanonicalJSONB }
         failed = true
         try admitCollection(children.count)
+        try admitPlanned(try added(UInt64(members.count), UInt64(children.count)),
+                         maximum: plannedMemberCapacity, resource: "jsonbPlannedMemberCapacity")
         var depth: UInt64 = 1
         var previous: String?
         for child in children {
@@ -68,12 +154,12 @@ package struct QueryJSONBBuilder {
         try admitNode(depth: depth)
         let start = members.count
         for child in children { members.append(.init(key: child.key, value: child.value)) }
-        let index = appendRecord(.object(start..<members.count), depth: depth)
+        let index = try appendRecord(.object(start..<members.count), depth: depth)
         failed = false
         return index
     }
 
-    package consuming func finish(root: Int) throws(QueryValueError) -> QueryJSONBNode {
+    public consuming func finish(root: Int) throws(QueryValueError) -> QueryJSONBNode {
         guard !failed, !records.isEmpty, root == records.count - 1, !parented[root] else {
             throw .nonCanonicalJSONB
         }
@@ -99,15 +185,22 @@ package struct QueryJSONBBuilder {
         return storage.node(at: root)
     }
 
-    private mutating func appendRecord(_ record: QueryJSONBStorage.Record, depth: UInt64) -> Int {
+    private mutating func appendRecord(_ record: QueryJSONBStorage.Record, depth: UInt64) throws(QueryValueError) -> Int {
         let index = records.count
         records.append(record)
         depths.append(depth)
         parented.append(false)
+        try reconcileConstructionCapacity()
         return index
     }
 
+    private func admitPlanned(_ actual: UInt64, maximum: Int?, resource: String) throws(QueryValueError) {
+        if let maximum { try QueryJSONParser.check(actual, maximum: UInt64(maximum), resource: resource) }
+    }
+
     private func admitNode(depth: UInt64) throws(QueryValueError) {
+        try admitPlanned(try added(UInt64(records.count), 1), maximum: plannedNodeCapacity,
+                         resource: "jsonbPlannedNodeCapacity")
         try QueryJSONParser.check(try added(UInt64(records.count), 1),
                                   maximum: limits.maximumTotalNodes, resource: "nodes")
         try QueryJSONParser.check(depth, maximum: limits.maximumNestingDepth, resource: "depth")

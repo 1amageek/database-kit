@@ -729,7 +729,8 @@ private extension QueryStructuralValidator {
                         guard precision == nil || kind != .date && (0...6).contains(precision!) else {
                             throw .invalidQueryValue(.incompatibleType)
                         }
-                    case .add(let lhs, let rhs), .concatenate(let lhs, let rhs),
+                    case .collectionOperation(_, let lhs, let rhs),
+                         .add(let lhs, let rhs), .concatenate(let lhs, let rhs),
                          .subtract(let lhs, let rhs),
                          .multiply(let lhs, let rhs),
                          .divide(let lhs, let rhs),
@@ -757,6 +758,20 @@ private extension QueryStructuralValidator {
                          .object(let value),
                          .regex(let value, _, _):
                         validationSteps.append(.expression(value, depth: childDepth))
+                    case .arrayAccess(let base, let subscripts):
+                        guard (1...6).contains(subscripts.count) else {
+                            throw .invalidArrayAccessSubscriptCount(subscripts.count)
+                        }
+                        try consumeCollection(subscripts.count)
+                        for subscriptValue in subscripts.reversed() {
+                            switch subscriptValue {
+                            case .index(let value): validationSteps.append(.expression(value, depth: childDepth))
+                            case .slice(let lower, let upper):
+                                if let upper { validationSteps.append(.expression(upper, depth: childDepth)) }
+                                if let lower { validationSteps.append(.expression(lower, depth: childDepth)) }
+                            }
+                        }
+                        validationSteps.append(.expression(base, depth: childDepth))
                     case .patternMatch(let subject, let pattern, let escape, let kind):
                         guard kind.permitsEscape || escape == nil else { throw .invalidPatternEscape }
                         if let escape { validationSteps.append(.expression(escape, depth: childDepth)) }
@@ -780,6 +795,9 @@ private extension QueryStructuralValidator {
                     case .aggregate(let aggregate):
                         validationSteps.append(.aggregate(aggregate, depth: childDepth))
                     case .function(let function):
+                        guard !function.finalArrayIsVariadic || !function.arguments.isEmpty else {
+                            throw .emptyVariadicFunctionArguments
+                        }
                         if let schema = function.schema {
                             try ledger.consume(.retainedBytes, amount: UInt64(schema.utf8.count))
                         }

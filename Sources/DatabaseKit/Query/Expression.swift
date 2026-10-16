@@ -156,11 +156,16 @@ public struct FunctionCall: Sendable, Equatable, Hashable {
     /// DISTINCT modifier (for aggregate-like functions)
     public let distinct: Bool
 
-    public init(name: String, arguments: [Expression], distinct: Bool = false, schema: String? = nil) {
+    /// Explicit SQL VARIADIC expansion of the final array argument.
+    public let finalArrayIsVariadic: Bool
+
+    public init(name: String, arguments: [Expression], distinct: Bool = false, schema: String? = nil,
+                finalArrayIsVariadic: Bool = false) {
         self.schema = schema
         self.name = name
         self.arguments = arguments
         self.distinct = distinct
+        self.finalArrayIsVariadic = finalArrayIsVariadic
     }
 }
 
@@ -257,6 +262,12 @@ public indirect enum Expression: Sendable, Hashable {
 
     /// Ordered SQL ROW constructor children; this is not a persisted query value.
     case row([Expression])
+
+    /// One contiguous group of SQL array subscripts; later groups remain nested.
+    case arrayAccess(Expression, subscripts: [ArraySubscript])
+
+    /// A selected array or JSON collection operator.
+    case collectionOperation(CollectionOperator, left: Expression, right: Expression)
 
     // MARK: - Identifiers
 

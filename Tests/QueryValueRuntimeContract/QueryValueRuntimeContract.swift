@@ -536,7 +536,93 @@ struct QueryValueRuntimeContract {
         try require(rejected, code: 28)
     }
 
+    /// Extends the existing constructor case without changing harness markers.
+    private static func sqlCollectionCarriage() throws(Failure) {
+        let input = try query { () throws(QueryValueError) in
+            try QueryArrayInput(sqlLexicalForm: #"[-1:1]={NULL,"NULL",a\,b}"#, limits: limits)
+        }
+        try require(input.count == 3 && input.dimensions[0].lowerBound == -1, code: 190)
+        let texts = try query { () throws(QueryValueError) in
+            (try input.elementText(at: 0), try input.elementText(at: 1), try input.elementText(at: 2))
+        }
+        try require(texts.0 == nil && texts.1 == "NULL" && texts.2 == "a,b", code: 191)
+        let whitespace = try query { () throws(QueryValueError) in
+            let value = try QueryArrayInput(sqlLexicalForm: #"{x\  ,\ ,  a  }"#, limits: limits)
+            return (try value.elementText(at: 0), try value.elementText(at: 1), try value.elementText(at: 2))
+        }
+        try require(whitespace.0 == "x " && whitespace.1 == " " && whitespace.2 == "a", code: 202)
+        try rejectQuery(.invalidArrayInputIndex(index: 3, count: 3), code: 192) {
+            () throws(QueryValueError) in _ = try input.elementText(at: 3)
+        }
+        let exact = QueryValueLimits(maximumRetainedBytes: input.retainedByteCount, maximumTotalNodes: 4,
+            maximumNestingDepth: 2, maximumCollectionElements: 3)
+        _ = try query { () throws(QueryValueError) in
+            try QueryArrayInput(sqlLexicalForm: #"[-1:1]={NULL,"NULL",a\,b}"#, limits: exact)
+        }
+        let root = try query { () throws(QueryValueError) in
+            var builder = try QueryJSONBBuilder(limits: limits, nodeCapacity: 513, elementIndexCapacity: 512, memberCapacity: 0)
+            var child = try builder.append(.string("leaf"))
+            for _ in 0..<512 { child = try builder.appendArray([child]) }
+            return try builder.finish(root: child)
+        }
+        var leaf = root
+        for _ in 0..<512 {
+            guard case .array(let children) = leaf else { throw .assertion(193) }
+            leaf = children[0]
+        }
+        try require(leaf == .string("leaf"), code: 194)
+        try rejectQuery(.resourceLimit(resource: "jsonbPlannedNodeCapacity", actual: 1, maximum: 0), code: 195) {
+            () throws(QueryValueError) in
+            var builder = try QueryJSONBBuilder(limits: limits, nodeCapacity: 0, elementIndexCapacity: 0, memberCapacity: 0)
+            _ = try builder.append(.null)
+        }
+        let parameter = QueryParameter(position: 1, value: .primitive(.int64(1)))
+        let grouped = Expression.arrayAccess(.parameter(.position(1)), subscripts: [
+            .index(.parameter(.position(1))), .slice(lower: nil, upper: .parameter(.position(1))),
+        ])
+        for byte in UInt8(0)...10 {
+            guard let operation = CollectionOperator(rawValue: byte) else { throw .assertion(196) }
+            let expression = Expression.collectionOperation(operation, left: grouped,
+                right: .function(FunctionCall(name: "f", arguments: [.parameter(.position(1))],
+                    schema: "s", finalArrayIsVariadic: true)))
+            let bound: QueryStatement
+            do { bound = try QueryParameterBinder(parameters: [parameter]).bind(select(expression)) }
+            catch { throw .binding(error) }
+            try patternRequestRoundTrip(bound)
+            let bytes = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(bound) }
+            let restored = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(bytes) }
+            try require(restored == bound && restored.hashValue == bound.hashValue, code: 197)
+        }
+        var rejected = false
+        do {
+            try QueryStructuralValidator.validate(.function(FunctionCall(name: "f", arguments: [], finalArrayIsVariadic: true)))
+        } catch {
+            guard error == .emptyVariadicFunctionArguments else { throw .structure(error) }
+            rejected = true
+        }
+        try require(rejected, code: 198)
+        let variadic = select(.function(FunctionCall(name: "f", arguments: [.null], finalArrayIsVariadic: true)))
+        let encoded = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(variadic) }
+        // This bounded fixture contains no byte55 in names or preceding counts.
+        // Corrupt the actual new production's hasSchema Boolean, then its count.
+        guard let tag = encoded.firstIndex(of: 55) else { throw .assertion(199) }
+        var invalid = Array(encoded)
+        invalid[tag + 1] = 2
+        let invalidBoolean = ByteString(invalid)
+        try rejectWire(.invalidBool(2), code: 200) { () throws(DatabaseWireError) in
+            _ = try QueryIRWireFormat.decode(invalidBoolean)
+        }
+        invalid = Array(encoded)
+        // Tag, hasSchema, String length and one-byte name precede UInt32 count.
+        for offset in 7..<11 { invalid[tag + offset] = 0 }
+        let emptyVariadic = ByteString(invalid)
+        try rejectWire(.invalidQueryIRWireState, code: 201) { () throws(DatabaseWireError) in
+            _ = try QueryIRWireFormat.decode(emptyVariadic)
+        }
+    }
+
     private static func sqlConstructorsAndTemporalDescriptors() throws(Failure) {
+        try sqlCollectionCarriage()
         for zone in [false, true] {
             for precision: Int? in [nil, 0, 3, 6] {
                 for isTime in [false, true] {

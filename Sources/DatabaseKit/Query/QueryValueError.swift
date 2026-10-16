@@ -7,6 +7,8 @@ public enum QueryValueError: Error, Sendable, Equatable {
     case invalidJSON(offset: UInt64, reason: String)
     case invalidUTF8(offset: UInt64)
     case nonCanonicalJSONB
+    case malformedArrayInput(offset: UInt64, reason: String)
+    case invalidArrayInputIndex(index: Int, count: Int)
     case invalidDimensionCount(Int)
     case invalidDimension(lowerBound: Int32, length: Int32)
     case dimensionProductOverflow

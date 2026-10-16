@@ -192,11 +192,11 @@ does not discharge this contract. The replacement has these exact interfaces:
 | `QueryJSONBNode.object(_:limits:)` | Corresponding overload accepting `[QueryJSONBMember]`; validates unique canonical key order rather than silently normalizing arbitrary callers. |
 | `QueryJSONBNode.storageFootprint` | Public QueryJSONBStorageFootprint with UInt64 nodeCapacity, elementIndexCapacity, memberCapacity, retainedStorageByteCount and utf8ByteCount. It separates actual backing-array capacities and their checked retainedStorageByteCount from retained string content. It measures the whole retained owner, including unreachable records left by duplicate-key normalization, not merely the visible subtree. Scalars have no flat owner. String content size is not a claim about physical String capacity. |
 | `QueryJSONBStorageFootprint.storageByteCount(nodeCapacity:elementIndexCapacity:memberCapacity:)` | Public checked, allocation-free byte calculation for explicitly chosen capacities using Kit-owned record layouts. Logical counts do not predict capacities selected by Swift Array growth. |
-| `QueryJSONBBuilder.init(limits:)` | Package-only task-local mutable builder. Resource limits are explicit; no public bypass or ambient runtime authority. |
-| `QueryJSONBBuilder.append(_:)` | Package-only throwing scalar append returning Int node ID; composite inputs are rejected. |
-| `QueryJSONBBuilder.appendArray(_:)` | Package-only throwing `[Int]` child-ID append returning the new node ID. |
-| `QueryJSONBBuilder.appendObject(_:)` | Package-only throwing `[QueryJSONBIndexedMember]` append, where each indexed member has immutable key String and value Int. Canonical keys and child ownership are checked. |
-| `QueryJSONBBuilder.finish(root:)` | Package-only consuming throwing operation returning QueryJSONBNode. A root ID must identify the last completed record. Invalid IDs, repeated parent ownership, noncanonical members or incomplete construction are typed QueryValueError.nonCanonicalJSONB failures. |
+| `QueryJSONBBuilder.init(limits:)` | Public task-local mutable builder from S07. Resource limits are explicit; construction confers no ambient runtime authority. |
+| `QueryJSONBBuilder.append(_:)` | Public throwing scalar append returning Int node ID; composite inputs are rejected. |
+| `QueryJSONBBuilder.appendArray(_:)` | Public throwing `[Int]` child-ID append returning the new node ID. |
+| `QueryJSONBBuilder.appendObject(_:)` | Public throwing `[QueryJSONBIndexedMember]` append, where each indexed member has immutable key String and value Int. Canonical keys and child ownership are checked. |
+| `QueryJSONBBuilder.finish(root:)` | Public consuming throwing operation returning QueryJSONBNode. A root ID must identify the last completed record. Invalid IDs, repeated parent ownership, noncanonical members or incomplete construction are typed QueryValueError.nonCanonicalJSONB failures. |
 
 The immutable storage owns only raw scalar/container records, integer child
 indices and key/index member records. It stores neither QueryJSONBNode nor
@@ -380,7 +380,7 @@ depth and collection checks; workspace growth is bounded by the admitted input
 nodes and depth rather than collection width. This temporary traversal allocation
 is not a destination envelope allocation and is released when measurement returns
 or throws. JSONB field encoding writes shallow prefix records and decoding uses
-the package flat builder. The complete destination footprint is admitted before
+the intrinsic flat builder. The complete destination footprint is admitted before
 assembly; traversal descends one child at a time and preserves declared member
 order and exact closed node layouts. The encoded FieldValue and decoded JSONB
 owners both have nonrecursive destruction. Adapter inferred limits include the
@@ -1016,7 +1016,7 @@ They establish reference behavior, not implementation success.
 | CHAR/VARCHAR | Explicit declared lengths are 1…10,485,760, the intrinsic PostgreSQL descriptor bound, independent of execution quotas. CHAR pads with U+0020. Explicit casts truncate codepoints; assignment rejects excess non-space characters and discards an excess consisting only of U+0020. VARCHAR does not pad. |
 | CHAR coercion/identity | SQL CHAR equality, order, grouping, DISTINCT and join keys ignore trailing U+0020. Ordinary text coercion trims it; CHAR polymorphic type output and OCTET_LENGTH retain its padding. Primitive String/RDF identity does not change. |
 | F04 | Every name in the F04 inventory binds a selected overload before reads. SUBSTRING/POSITION/TRIM special syntax normalizes to the same function contract. Substring intervals are 1-based and clipped; negative length fails. SPLIT_PART allows negative fields, rejects zero. LEFT/RIGHT negative lengths exclude from the opposite end; nonpositive repeat/pad targets yield empty text. Default trim removes only U+0020. |
-| Polymorphic text output | CONCAT skips NULL, returns empty text for all NULL; CONCAT_WS returns NULL for a NULL separator and skips other NULLs. Core finite integer, floating, NUMERIC, Boolean, text/CHAR/VARCHAR, UUID and BYTEA output is admitted. Boolean output is t/f, while an explicit Boolean-to-text cast is true/false. Numeric output preserves displayScale; floating output uses the PostgreSQL shortest roundtrip style. Temporal/interval and general array/JSON output remain explicitly unsupported until S06/S07 supplies their contracts. |
+| Polymorphic text output | CONCAT skips NULL, returns empty text for all NULL; CONCAT_WS returns NULL for a NULL separator and skips other NULLs. Core finite integer, floating, NUMERIC, Boolean, text/CHAR/VARCHAR, UUID and BYTEA output is admitted. Boolean output is t/f, while an explicit Boolean-to-text cast is true/false. Numeric output preserves displayScale; floating output uses the PostgreSQL shortest roundtrip style. Temporal/interval output consumes the S06 contract; general array/JSON output consumes the S07 contract below. A stage contract alone does not establish an executable implementation. |
 | Pattern expression | One closed `patternMatch(subject:pattern:escape:kind:)` owns LIKE, ILIKE, SIMILAR and case-sensitive/insensitive ERE. Pattern and escape are expressions. A nil escape means disabled; SQL omitted ESCAPE explicitly supplies a backslash literal. An ESCAPE NULL expression remains distinct and propagates NULL. ERE kinds reject an escape operand. Negation uses the existing NOT expression. SPARQL regex is a separate language. |
 | Concatenation expression | `concatenate(Expression, Expression)` carries strict SQL `||`; binding selects text or BYTEA. It is distinct from numeric addition and the non-strict CONCAT function. Regex SUBSTRING(text,text[,escape]) belongs F04; unrelated additional REGEXP function names do not enter S05 by convenience. |
 | Pattern semantics | LIKE/SIMILAR match the whole input; ERE searches earliest start then longest match, retaining POSIX capture distinctions. LIKE wildcards consume codepoints. ERE flags and supported syntax follow the child contract; pattern backreferences/lookaround and BRE are outside this profile and fail explicitly. Replacement capture references remain supported output syntax. |
@@ -1098,3 +1098,225 @@ Framework implementation evidence. Exact constructors/persistence:
 carriage: [DatabaseWire](../../../DatabaseWire/DESIGN.md),
 [SchemaJSON](../../../DatabaseSchemaJSON/DESIGN.md);
 text: [QueryAST](../../../../../database-framework/Sources/QueryAST/DESIGN.md).
+
+
+### S07 frozen array and JSON contract
+
+This section is the single semantic authority for T09/T10 and F08–F10.
+The validated existing paths and PostgreSQL18.6 observations are recorded in
+[array execution](../../../../../.codex-tools/sql-s07-evidence/array-execution-understanding.json),
+[JSON execution](../../../../../.codex-tools/sql-s07-evidence/json-execution-understanding.json),
+[value/storage ownership](../../../../../.codex-tools/sql-s07-evidence/value-storage-understanding.json),
+and [reference facts and function signatures](../../../../../.codex-tools/sql-s07-evidence/postgresql-contract-observations.json).
+Those observations establish the reference contract, not S07 implementation
+success. The existing QueryValue, DataType, multidimensional flat QueryArrayValue,
+lexical QueryJSONValue and flat-owner QueryJSONBValue representations stay intact;
+S07 adds no scalar ROW/composite value or persistence envelope.
+
+| ID | Required semantic contract |
+|---|---|
+| S07-C01 | ARRAY constructors select one common element type before evaluation, using the existing common-type rules and preserving explicit casts. All-unknown/NULL elements resolve to text; an empty constructor requires an explicit array element type. Nested constructors must be rectangular and produce the existing flat row-major carrier, at most six dimensions; a nested DataType.array element is invalid. Array-valued children require identical inner dimensions and lower bounds; construction adds outer lower bound one and preserves inner bounds. All NULL/empty subarrays produce canonical empty; mixing those with a nonempty subarray fails shape validation. |
+| S07-C02 | SQL array input/output preserves shape, lower bounds, NULL cells and selected scalar input/output. Empty arrays have no dimensions. Text grammar accepts explicit bounds, braces, quoted cells and backslash escapes; unquoted, unescaped case-insensitive NULL is SQL NULL. Bounds/product must agree with cells; textual input rejects an upper bound of Int32.max as well as reversed/overflowing bounds. This lexical restriction does not narrow QueryArrayDimension's existing intrinsic carrier range. Scalar conversion follows the selected element type and runtime environment; no host defaults or fallback repair. |
+| S07-C03 | Element access supplies exactly the array rank; NULL array/index, out-of-range or too few/many indices return typed SQL NULL. Any slice in a contiguous group makes the whole group slicing: an index becomes 1:upper, omitted limits use actual bounds, and trailing dimensions remain whole. Clip partial intersections; disjoint/reversed/rank-excess/empty slices return canonical empty. NULL explicit bounds return SQL NULL. Every nonempty slice resets all lower bounds to one. Nested access groups remain separate expressions. |
+| S07-C04 | Array comparison visits row-major cells using selected SQL equality/order, with NULL equal to NULL and ordered above non-NULL, then cell count, rank, lengths and lower bounds. Containment/overlap ignore dimensions, bounds and multiplicity; NULL never matches NULL. Empty containment is true and empty overlap false. Concatenation admits equal rank or rank difference one and requires equal inner lengths AND bounds. Equal-rank output keeps the left outer lower bound; differing rank keeps the higher-rank outer lower bound. NULL/empty arrays act as identities; both SQL NULL arrays yield NULL. Append/prepend admit only empty/rank-one arrays and retain a NULL element. Unknown NULL overload resolution remains distinct from an explicitly typed NULL scalar. |
+| S07-C05 | F08 scalar signatures, strictness, actual subscript positions, null-safe searches, rank restrictions, empty behavior and scalar text conversion follow the function table below. Dimensions and subscripts are values, not zero-based Swift offsets. |
+| S07-C06 | UNNEST and GENERATE_SUBSCRIPTS have bounded noncopyable cursors and typed output metadata in S07. UNNEST emits flattened row-major cells; multi-array FROM form pads shorter arrays with SQL NULL through the longest stream. GENERATE_SUBSCRIPTS emits actual dimension bounds forward or reverse. NULL/empty/nonexistent dimensions emit no rows as applicable. Public general relation composition remains a required S10 gate. |
+| S07-C07 | TO_JSON/TO_JSONB are strict for SQL NULL. Numeric/Boolean become JSON scalars; arrays/composites recurse, omitting lower bounds; other admitted scalars use selected SQL output unless a JSON cast applies. JSON null and SQL NULL remain distinct. ARRAY_TO_JSON preserves dimensional nesting; pretty output adds first-level linefeeds. Build functions retain SQL NULL arguments as JSON null, accept zero arguments, and preserve heterogeneous argument types. Object builders reject odd arity, NULL keys and composite/array/JSON keys; Boolean keys use JSON true/false spelling; other scalar keys use selected SQL output. JSON preserves duplicate members; JSONB keeps the last. |
+| S07-C08 | JSON extraction retains lexical whitespace/order/duplicates/numeric spelling for returned JSON subtrees; object lookup chooses the last duplicate. JSON iteration still enumerates duplicates in source order. Text extraction decodes only the selected string/scalar and maps JSON null to SQL NULL. Array JSON indices are zero-based and support negatives. Missing/wrong shape/bad extraction index/out-of-bounds return SQL NULL. Path text[] is flattened even when multidimensional; any NULL path cell returns NULL; empty path returns the whole value (or decoded scalar text). Lexical JSON admits its existing syntactically valid escaped NUL/surrogate and large-number forms; a requested decode or JSONB conversion can fail explicitly. Unicode comparison uses exact UTF-8 identity without normalization. |
+| S07-C09 | JSON has no general SQL equality/order. JSONB SQL equality, ordering and hashing use semantic numeric equality independent of retained displayScale, canonical key order and recursive values. General type order is null < string < number < boolean < array < object; preserve PostgreSQL's top-level empty-array exception, which sorts below scalar values. Array/object comparison checks element/member counts before recursive contents and canonical keys, following compareJsonbContainers in the pinned reference source. Containment is recursive; array order/multiplicity do not matter, and an array may contain a directly matching primitive but the reverse is false. Top-level key operators match object keys, string array members or a matching raw scalar string, never stringify numeric members; any/all key arrays skip NULL cells and preserve empty-any=false/empty-all=true. JSONB concatenation merges object keys with right winning, joins arrays, and promotes other operands to singleton arrays; it is top-level only and strict for SQL NULL. |
+| S07-C10 | JSONB deletion, SET and INSERT follow the mutation table below and construct one bounded flat destination iteratively. STRIP_NULLS recursively removes object JSON-null fields; PostgreSQL18's optional Boolean also removes array JSON-null elements, defaults false, and is strict for explicit SQL NULL. Root JSON null and empty containers remain values. No operation silently repairs malformed input or converts a resource failure to an unchanged result. |
+| S07-C11 | ROW_TO_JSON's lower conversion kernel consumes ordered QueryColumn metadata plus an equal-arity QueryValue row, preserving descriptor names and types (anonymous fields f1...fN). It does not pretend a scalar ROW carrier exists. JSON/JSONB set functions have bounded noncopyable cursors, exact typed columns, source/canonical order and wrong-root failures. Public ROW operand typing and TO_JSON composite integration are REQUIRED S08; public general SRF relation composition is REQUIRED S10. |
+| S07-C12 | Every scan, shape index, requested cell decode, traversal frame, destination buffer and retained result is admitted before its owned work/growth. Runtime owns prospective capacity choice, meter/lease attachment, deadline/cancellation and reconciliation before publication; Kit limits do not confer execution authority. Preserve full-owner retention, final-owner release and failure cleanup. Required evidence includes native behavior, separately identified ordinary/Embedded execution, storage/Wire/model regression and public SQL integration at each stage's actual gate; final URL/integrated lanes remain S18. |
+
+#### S07 intrinsic construction and ownership
+
+The following are the exact new/promoted Kit contracts. They describe bounded
+value construction, never callbacks, SQL execution policy, clocks or resource
+services.
+
+```swift
+public struct QueryArrayInput: Sendable {
+    public init(sqlLexicalForm: String, limits: QueryValueLimits) throws(QueryValueError)
+    public var dimensions: [QueryArrayDimension] { get }
+    public var count: Int { get }
+    public var retainedByteCount: UInt64 { get }
+    public func elementText(at index: Int) throws(QueryValueError) -> String?
+}
+
+// Additional intrinsic failures in the existing QueryValueError algebra:
+case malformedArrayInput(offset: UInt64, reason: String)
+case invalidArrayInputIndex(index: Int, count: Int)
+
+public struct QueryJSONBBuilder {
+    public init(limits: QueryValueLimits)
+    public init(
+        limits: QueryValueLimits,
+        nodeCapacity: Int,
+        elementIndexCapacity: Int,
+        memberCapacity: Int
+    ) throws(QueryValueError)
+    public static func constructionByteCount(
+        nodeCapacity: Int,
+        elementIndexCapacity: Int,
+        memberCapacity: Int
+    ) throws(QueryValueError) -> UInt64
+    public var constructionRetainedByteCount: UInt64 { get }
+    public mutating func append(_ scalar: QueryJSONBNode) throws(QueryValueError) -> Int
+    public mutating func appendArray(_ children: [Int]) throws(QueryValueError) -> Int
+    public mutating func appendObject(_ children: [QueryJSONBIndexedMember]) throws(QueryValueError) -> Int
+    public consuming func finish(root: Int) throws(QueryValueError) -> QueryJSONBNode
+}
+
+public struct QueryJSONBIndexedMember: Sendable {
+    public let key: String
+    public let value: Int
+    public init(key: String, value: Int)
+}
+```
+
+QueryArrayInput owns one immutable ByteString and bounded flat cell ranges plus
+dimension metadata, without eagerly producing `[String]` cells. Its initializer
+extracts the existing QueryAST array-shape grammar rather than adding a second
+grammar. It validates shape and lexical bounds under QueryValueLimits; the
+retainedByteCount includes the complete input owner and actual retained range
+and dimension capacities with checked arithmetic. `elementText(at:)` uses a
+zero-based cell index, decodes/unescapes only that cell and returns nil only for
+SQL NULL. An invalid index throws invalidArrayInputIndex; it never aliases SQL
+NULL. Malformed syntax carries its UTF-8 offset. Returned String ownership is
+independent of the input; raw pointers never escape synchronous borrowing.
+
+QueryAST's constant adapter and Framework's selected scalar caster consume that
+same intrinsic grammar and retain their own conversion/environment policies.
+Existing working intrinsic constant conversion must remain working. Migrate
+callers and prove replacement behavior before removing the private parser; no
+parallel grammar or temporary success fallback remains. Per-cell materialization
+is justified only at the existing scalar String input boundary. The lower caller
+reserves/charges full input/metadata and requested output text before decoding;
+Kit checks intrinsic logical/owned limits and reports physical retention.
+
+The promoted JSONB methods retain the flat-owner guarantees above. Child IDs
+must be completed, in bounds and not already parented; object members are unique
+and canonical. Failure poisons the builder; finish publishes only its last
+completed unparented root after checking actual capacities and UTF-8 content.
+Private buffers, depth/parent tracking, copy traversal and appendTree helpers
+remain nonpublic. Framework traverses source views and appends each destination
+node once, avoiding repeated whole-subtree ancestor copying or serialize/parse
+bridges. Builder scratch and caller traversal/ID buffers are separately admitted
+transient owners, not silently included in output storageFootprint.
+
+The planned initializer is the required Framework construction path. The
+existing init(limits:) may retain its growable behavior for intrinsic factories;
+it does not meet runtime pre-admission by itself. Existing public array/object
+factories and package parser/Wire/storage callers retain their working growable
+behavior and typed failures; planned mode does not silently restrict those
+callers. Their existing roundtrip and malformed/limit tests remain regression
+obligations. Capacities are nonnegative
+logical slot ceilings: nodeCapacity bounds records, depths and parented;
+elementIndexCapacity bounds child indices; memberCapacity bounds members.
+Validate counts against intrinsic node/collection limits and checked byte
+arithmetic before reserveCapacity. Planned append checks its selected logical
+ceilings before any mutation/reservation and fails instead of growing secretly.
+Allocator-reported extra capacity never raises those logical ceilings.
+
+constructionByteCount computes canonical budget units for all five Array
+containers and selected capacity slots: each container's inline Array stride
+plus its selected slots times max(1, element stride). It includes depths and
+parented scratch, not just published records/indices/members. UTF-8 payload is
+charged separately. These units follow the existing
+[DatabaseRetainedArrayLayout admission contract](../../../../../database-framework/Sources/DatabaseEngine/Execution/DatabaseRetainedArrayLayout.swift);
+Kit owns its intrinsic representation arithmetic and does not import Framework.
+The count is not malloc/OS physical allocation introspection; allocator internal
+slack is excluded, and no guessed capacity multiplier is permitted.
+
+constructionRetainedByteCount uses observed capacities in that same canonical
+formula for the five containers, including construction scratch; UTF-8 content
+remains separate. Framework first scans/counts the selected output and scratch,
+chooses exact or bounded logical capacities, admits the selected construction
+budget, and only then initializes the builder. It reconciles observed capacity
+against its reservation before appending and before publication. An additional
+claim failure releases the unexposed builder and scratch. Final storageFootprint
+accounts only the retained output owner; consuming finish releases depths and
+parented, while the output lease is transferred before the scratch lease ends.
+Caller traversal/child-ID buffers are still separate transient owners.
+
+Negative planned capacities fail nonCanonicalJSONB; checked arithmetic overflow
+fails arithmeticOverflow. Intrinsic limits and planned-ceiling failures use
+QueryValueError.resourceLimit(resource:actual:maximum:), never clamps or fallback.
+Planned ceiling resource names are jsonbPlannedNodeCapacity,
+jsonbPlannedElementIndexCapacity and jsonbPlannedMemberCapacity, with required
+count as actual and selected count as maximum. Existing intrinsic node,
+collection, depth and retained-output limit meanings remain intact; construction
+scratch is measured by the seam and admitted by Framework, not silently
+redefined as output retained bytes. Failure poisons a mutated builder as above.
+A builder is a Swift value whose copies can share COW buffers and cause extra
+allocations on mutation. Framework uses one task-local unique builder without
+copying or aliasing it, then consumes finish; the seam makes no global uniqueness
+or runtime authority claim.
+
+Lexical extraction needs no validation-bypass API: use the existing ByteString
+slice plus QueryJSONValue(bytes:limits:) and account locating, UTF-8 and syntax
+work plus the complete retained owner. A visible slice length cannot replace
+full-owner retention. JSONB conversion continues enforcing the existing bounded
+numeric profile (38 coefficient digits), even when lexical JSON admits a larger
+number. Representation equality and SQL equality remain separate contracts.
+
+#### S07 function and mutation details
+
+| Family | Frozen signature/behavior |
+|---|---|
+| array_length / array_lower / array_upper | (array, integer) -> integer, strict; empty/missing/nonpositive dimension returns NULL. |
+| array_ndims / array_dims / cardinality | (array) -> integer/text/integer, strict; empty yields NULL/NULL/0. |
+| array_append / array_prepend / array_cat | Existing common-compatible element/array polymorphism; non-strict identities and shape rules are C04. |
+| array_position / array_positions | position(array, element [, integer start]) -> integer; positions(array, element) -> integer[]. One-dimensional, IS NOT DISTINCT FROM matching including NULL. Return actual input subscripts; positions output lower bound one. Missing -> NULL/empty respectively. NULL array -> NULL; explicit NULL start fails22004 after applicable NULL/empty short-circuit. |
+| array_remove / array_replace | NULL-safe search; remove requires rank one, replace accepts any rank; preserve lower bounds; removing every cell yields canonical empty. NULL array -> NULL. |
+| array_to_string | (array, text separator [, text nullString]) -> text; strict array/separator, absent/NULL nullString skips NULL cells, supplied nullString substitutes. Flatten row-major; empty -> empty text. |
+| string_to_array | (text input, text delimiter [, text nullString]) -> text[]; NULL input -> NULL, NULL delimiter splits Unicode characters, empty delimiter keeps a nonempty input whole, empty input -> canonical empty. Equal nullString cells become NULL. |
+| unnest / generate_subscripts | C06; exact selected element columns for UNNEST and integer for GENERATE_SUBSCRIPTS. Reverse defaults false; a NULL reverse emits zero rows. |
+| to_json / to_jsonb / array_to_json / row_to_json | C07/C11; optional pretty Boolean is strict, defaults false and applies only to lexical JSON output. ROW conversion requires ordered metadata and exact arity. |
+| json_build_array / jsonb_build_array | Zero arguments -> empty array; SQL NULL arguments -> JSON null. Explicit final-array VARIADIC expands cells row-major; a NULL variadic array -> SQL NULL and an empty variadic array -> empty result. An unflagged array argument is one recursively converted array value. |
+| json_build_object / jsonb_build_object | Even argument count, scalar non-NULL keys; C07 duplicate/value conversion rules. Explicit NULL variadic array -> SQL NULL. |
+| json_typeof / jsonb_typeof | Strict text result; JSON null -> text "null", SQL NULL -> SQL NULL. |
+| json_array_length / jsonb_array_length | Strict integer result; only an array root is valid, otherwise22023. |
+| json_extract_path / jsonb_extract_path and *_text | Same C08 semantics as #>/#>>; ->/->> additionally select text key or integer index. |
+| json_each / jsonb_each / *_each_text | Strict NULL -> zero rows; object root required (22023 otherwise). Columns key:text and value:json/jsonb/text; text variant maps JSON null to SQL NULL. JSON duplicates/source order and JSONB canonical order are preserved. |
+| json_array_elements / jsonb_array_elements / *_array_elements_text | Strict NULL -> zero rows; array root required (22023 otherwise). One value column of the family or text, in array order; text JSON null -> SQL NULL. |
+| json_object_keys / jsonb_object_keys | Strict NULL -> zero rows; object root required (22023 otherwise); one text column named after the function, preserving JSON duplicate keys or JSONB canonical keys. |
+| jsonb - text / text[] / integer | Text removes object key/all equal string array members; text[] ignores NULL keys; integer deletes an array position, supports negatives and leaves out-of-range unchanged. Integer deletion on object/scalar fails22023. Multidimensional key arrays fail2202E. |
+| jsonb #- text[] | Empty or missing path leaves value unchanged; earlier steps must exist; multidimensional path fails2202E, reached malformed array integer fails22P02, scalar root fails22023. |
+| jsonb_set(jsonb,text[],jsonb[,boolean]) | createMissing defaults true; only final component may be created. Existing earlier components are required, otherwise unchanged, including an intermediate scalar. Missing final object key is added only when permitted; out-of-range final array index prepends/appends when permitted. Empty path leaves nonscalar root unchanged; scalar root fails22023. |
+| jsonb_insert(jsonb,text[],jsonb[,boolean]) | insertAfter defaults false; array insertion before/after with out-of-range prepend/append. Missing final object key is added; existing key fails22023. Earlier components must exist. Empty path leaves nonscalar root unchanged; scalar root fails22023. |
+| jsonb_set / jsonb_insert path/null rules | SQL NULL arguments, including replacement/flag, are strict NULL; JSON null replacement is a value. Reached NULL path cell fails22004, malformed array index22P02, multidimensional path2202E. Unreached suffix cells do not invent errors after an earlier unchanged-result exit. |
+| jsonb_strip_nulls | Recursive object-null removal; optional stripInArrays Boolean follows C10; explicit NULL flag -> NULL. |
+
+Explicit SQL VARIADIC is represented by FunctionCall.finalArrayIsVariadic,
+never inferred from a parenthesized array argument. The last expression must
+bind to the admitted array type; at least one argument is required. Only
+registered built-ins whose signatures explicitly admit final-array expansion
+accept the flag. Builders expand cells preserving NULL values and per-element
+selected type; a NULL variadic builder array returns SQL NULL. Path extraction
+expands its final text[] as the existing path sequence, preserving C08's empty,
+NULL-cell and multidimensional flattening semantics. Unsupported functions,
+non-array final arguments and invalid forms fail during binding before reads.
+The [Query carriage contract](../DESIGN.md#s07-explicit-variadic-function-carriage)
+owns the flag and identity; Wire owns the exact tag55 layout.
+
+The required noncopyable cursor contracts expose typed row metadata before
+iteration, retain input owners/leases until completion or close, and produce
+one admitted row per step without an eager all-results array. Stop/cancel/error
+releases cursor scratch and claims without invalidating already retained rows.
+S07 proves these kernels directly. Following the existing
+[S05 iterator precedent](#s05-frozen-string-pattern-binary-and-lexical-conversion-semantics), general
+public relation invocation must fail explicitly before source reads until the
+S10 relation composition gate is implemented; S07 does not claim that surface
+as complete. ROW/composite expression binding and TO_JSON composite invocation
+similarly remain required S08 integration, not a fabricated QueryValue case.
+
+#### S07 verification and change impact
+
+| Owner | Required falsifiable evidence |
+|---|---|
+| Kit SQL | Constructor/common-type failures; array lexical braces/quotes/escapes/NULL/bounds/empty/rank and malformed UTF-8 offsets; exact/one-past logical/retained limits; requested-cell-only decode and invalid-index versus NULL; promoted builder separate-consumer construction, repeated-parent/noncanonical/poisoned/limit failures, deep iterative owner release and retained child after root release; planned zero/exact/one-past node/index/member ceilings, pre-reservation invalid/overflow failures, observed-capacity reconciliation, separately charged UTF-8 and scratch release on finish/error. |
+| Query / Wire / QueryAST | Every new expression identity/hash, iterative walk, structural/depth/node admission, parameter substitution and source occurrence; SQL serialization and parser roundtrip preserve grouped slicing and overload identity; standard/MultiBase golden, invalid metadata/operator/flags, truncation and unknown-language rejection. |
+| Framework | C01–C11 exact reference outcomes, SQL NULL versus JSON null, lexical versus JSONB duplicate/numeric/Unicode distinctions, lower bounds, dimensional slices, mutation unchanged/error exits and SRF exact metadata; semantic equality/hash/group/order consistency. C12 exact/one-past input/output/scratch admission, cancellation/deadline, cleanup, retained views/rows and successful later operation. |
+| Model / FieldStorage / Wire consumers | Existing rich envelopes, declared element types, lower bounds, primitive distinctions, eager/lazy values and last-owner retention remain unchanged. Public result paths attach output leases before publication; standalone Kit validation is not proof of Framework admission. |
+| Stage gates | S07 direct scalar/cursor and supported public SQL paths; REQUIRED S08 ROW/composite invocation; REQUIRED S10 general SRF/FROM/LATERAL/ordinality composition; S18 final integrated/URL matrix. Deferred composition never removes F08–F10 from the fixed inventory. |

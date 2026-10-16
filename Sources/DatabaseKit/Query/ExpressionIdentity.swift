@@ -40,6 +40,7 @@ enum ExpressionIdentity {
         case expression(Expression)
         case optionalExpression(Expression?)
         case expressions([Expression], index: Int)
+        case subscripts([ArraySubscript], index: Int)
         case pairs([CaseWhenPair], index: Int)
         case sortKeys([SortKey], index: Int)
         case aggregate(AggregateFunction)
@@ -66,6 +67,18 @@ enum ExpressionIdentity {
                     guard index < values.count else { continue }
                     steps.append(.expressions(values, index: index + 1))
                     steps.append(.expression(values[index]))
+                case .subscripts(let values, let index):
+                    guard index < values.count else { continue }
+                    steps.append(.subscripts(values, index: index + 1))
+                    switch values[index] {
+                    case .index(let value):
+                        steps.append(.expression(value))
+                        return .kind(0)
+                    case .slice(let lower, let upper):
+                        steps.append(.optionalExpression(upper))
+                        steps.append(.optionalExpression(lower))
+                        return .kind(1)
+                    }
                 case .pairs(let values, let index):
                     guard index < values.count else { continue }
                     steps.append(.pairs(values, index: index + 1))
@@ -103,6 +116,15 @@ enum ExpressionIdentity {
 
         private mutating func enqueue(_ expression: Expression) -> Token {
             switch expression {
+            case .arrayAccess(let base, let subscripts):
+                steps.append(.subscripts(subscripts, index: 0))
+                steps.append(.expression(base))
+                steps.append(.token(.count(subscripts.count)))
+                return .kind(53)
+            case .collectionOperation(let operation, let left, let right):
+                let kind = binary(left, right, kind: 54)
+                steps.append(.token(.kind(Int(operation.rawValue))))
+                return kind
             case .currentValue(let kind, let precision):
                 steps.append(.token(.optionalInt(precision)))
                 steps.append(.token(.current(kind)))
@@ -160,6 +182,7 @@ enum ExpressionIdentity {
                 steps.append(.aggregate(value)); return .kind(26)
             case .function(let value):
                 list(value.arguments)
+                steps.append(.token(.bool(value.finalArrayIsVariadic)))
                 steps.append(.token(.bool(value.distinct)))
                 steps.append(.token(.string(value.name)))
                 steps.append(.token(.optionalString(value.schema)))

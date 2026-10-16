@@ -1143,7 +1143,7 @@ private struct QueryScopeState {
                 throw .unsupportedSQLExpression
             }
             try validate(subject, context: context)
-        case .concatenate, .currentValue:
+        case .arrayAccess, .collectionOperation, .concatenate, .currentValue:
             throw .unsupportedSQLExpression
         case .regex(let value, _, _):
             try validate(value, context: context)
@@ -1168,7 +1168,7 @@ private struct QueryScopeState {
             }
             try validateAggregate(aggregate)
         case .function(let function):
-            guard function.schema == nil else { throw .unsupportedSQLExpression }
+            guard function.schema == nil, !function.finalArrayIsVariadic else { throw .unsupportedSQLExpression }
             for argument in function.arguments {
                 try validate(argument, context: context)
             }
@@ -1327,7 +1327,18 @@ private struct QueryScopeState {
             return [value]
         case .patternMatch(let subject, let pattern, let escape, _):
             return [subject, pattern] + (escape.map { [$0] } ?? [])
-        case .concatenate(let lhs, let rhs): return [lhs, rhs]
+        case .concatenate(let lhs, let rhs), .collectionOperation(_, let lhs, let rhs): return [lhs, rhs]
+        case .arrayAccess(let base, let subscripts):
+            var values = [base]
+            for subscriptValue in subscripts {
+                switch subscriptValue {
+                case .index(let value): values.append(value)
+                case .slice(let lower, let upper):
+                    if let lower { values.append(lower) }
+                    if let upper { values.append(upper) }
+                }
+            }
+            return values
         case .between(let value, let low, let high):
             return [value, low, high]
         case .inList(let value, let values),

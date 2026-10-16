@@ -502,3 +502,85 @@ kind, invalid Boolean, forbidden precision and truncation fail typed. Generic
 FunctionCall tags 28/43 remain distinct and never reconstruct this expression.
 S06-W01/W03 additionally require exact current-value goldens, quoted generic
 identity separation, malformed precision and truncation coverage.
+
+
+### S07 collection expression carriage
+
+This layout consumes [Query declarations](../DatabaseKit/Query/DESIGN.md#s07-collection-expression-carriage)
+and the [SQL semantic authority](../DatabaseKit/Query/SQL/DESIGN.md#s07-frozen-array-and-json-contract).
+Existing QueryValue/DataType/FieldStorage productions do not change. Expression
+53 and 54 are the next unused tags after currentValue52; existing expression
+and standard v3/MultiBase v5 envelope tags keep their meanings.
+
+| Tag | Exact payload order after UInt8 tag |
+|---|---|
+| 53 arrayAccess | Collection count using the existing bounded count production; all subscript metadata in dimension order; base expression; present child expressions in dimension order. Count must be1...6. |
+| 54 collectionOperation | UInt8 operator; left expression; right expression. |
+
+Each tag53 metadata entry starts with UInt8 kind: 0 index, 1 slice. Index has
+no additional metadata and exactly one child. Slice carries Bool hasLower then
+Bool hasUpper and has only those present children, lower before upper. Metadata
+for the entire group precedes expressions so the decoder validates the closed
+kinds, Boolean values, count and checked child total before allocating or
+scheduling children. The base is decoded first after metadata. An all-omitted
+slice is valid; an empty access group is invalid. One expression represents
+one contiguous group, preserving nested group boundaries without flattening.
+
+Tag54 operator bytes are fixed as follows; no String operator fallback exists.
+
+| Byte | CollectionOperator |
+|---|---|
+| 0 | contains |
+| 1 | containedBy |
+| 2 | overlaps |
+| 3 | jsonField |
+| 4 | jsonFieldText |
+| 5 | jsonPath |
+| 6 | jsonPathText |
+| 7 | jsonHasKey |
+| 8 | jsonHasAnyKey |
+| 9 | jsonHasAllKeys |
+| 10 | jsonDeletePath |
+
+Both encoding and decoding enforce the same shape and existing byte, object,
+collection and nesting budgets. Count/metadata and child-frame storage are
+bounded before allocation; present children are charged once. Unknown tag,
+kind/operator byte, non-Boolean presence, count0/count7+, incompatible
+structure, overflow and every truncated prefix fail with typed DatabaseWireError.
+No malformed metadata becomes an omitted bound or a default operator. Reuse the
+existing subtract and concatenate productions for their S07 overloads; generic
+functions retain their existing productions.
+
+Required S07-W01 evidence is deterministic goldens for both cases, all operator
+bytes and all slice-presence combinations in standard and MultiBase frames.
+S07-W02 proves nested groups, parameters and deep iterative roundtrips with
+source-independent structural identity. S07-W03 proves invalid count/kind/
+operator/Boolean, every truncation and exact/one-past byte/node/depth/collection
+limits before publication/allocation. S07-W04 preserves existing array/JSON
+value, lazy-cell, declared-type and retained-owner behavior across native,
+ordinary WASM and Embedded. SQL execution and SRF composition are outside this
+codec's proof and follow the semantic authority's stage gates.
+
+
+### S07 explicit variadic function layout
+
+Consume [FunctionCall's explicit final-array flag](../DatabaseKit/Query/DESIGN.md#s07-explicit-variadic-function-carriage).
+False retains existing tags28/43 and their exact payload bytes. True uses the
+next unused expression tag55, for qualified and unqualified functions alike:
+
+| Tag | Exact payload order after UInt8 tag |
+|---|---|
+| 55 | Bool hasSchema; optional schema String; name String; bounded argument count >=1; Bool distinct; all argument expressions in order. |
+
+Tag55 itself denotes finalArrayIsVariadic=true; there is no redundant Boolean
+flag. Metadata precedes children, with the existing bounded string/count
+productions and strict Boolean grammar. Validate nonzero count, byte/node/depth
+budgets and checked child-frame admission before allocating/scheduling argument
+storage. Decode never infers the flag from an array argument or downgrades
+unknown/invalid metadata to an ordinary call. Unknown tags, bad Booleans, zero
+count, excess count and every truncated prefix fail typed DatabaseWireError.
+The codec preserves metadata; registered-function/type admission is binding's
+responsibility. Required goldens prove false calls unchanged and tag55 true
+calls with/without schema; roundtrips preserve distinct, nested arguments,
+parameters and identity. Malformed-count/Boolean/truncation and exact/one-past
+budget tests apply in standard/MultiBase and portable codec lanes.

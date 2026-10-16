@@ -12,6 +12,8 @@ public enum QueryOccurrenceField: Sendable, Equatable, Hashable {
     case joinRight
     case joinCondition
     case subquery
+    case left
+    case right
     case operand
     case argument
     case caseCondition

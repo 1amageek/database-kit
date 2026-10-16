@@ -420,7 +420,7 @@ extension SelectQuery {
         switch expr {
         case .variable(let v):
             vars.insert(v.name)
-        case .add(let l, let r), .concatenate(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
+        case .collectionOperation(_, let l, let r), .add(let l, let r), .concatenate(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
              .divide(let l, let r), .modulo(let l, let r), .equal(let l, let r),
              .notEqual(let l, let r), .lessThan(let l, let r), .lessThanOrEqual(let l, let r),
              .greaterThan(let l, let r), .greaterThanOrEqual(let l, let r),
@@ -430,6 +430,16 @@ extension SelectQuery {
         case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e), .truthTest(let e, _, _),
              .isTriple(let e), .subject(let e), .predicate(let e), .object(let e):
             collectVariables(from: e, into: &vars)
+        case .arrayAccess(let base, let subscripts):
+            collectVariables(from: base, into: &vars)
+            for subscriptValue in subscripts {
+                switch subscriptValue {
+                case .index(let value): collectVariables(from: value, into: &vars)
+                case .slice(let lower, let upper):
+                    if let lower { collectVariables(from: lower, into: &vars) }
+                    if let upper { collectVariables(from: upper, into: &vars) }
+                }
+            }
         case .patternMatch(let subject, let pattern, let escape, _):
             collectVariables(from: subject, into: &vars)
             collectVariables(from: pattern, into: &vars)
@@ -518,7 +528,7 @@ extension SelectQuery {
         switch expr {
         case .column(let col):
             cols.insert(col)
-        case .add(let l, let r), .concatenate(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
+        case .collectionOperation(_, let l, let r), .add(let l, let r), .concatenate(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
              .divide(let l, let r), .modulo(let l, let r), .equal(let l, let r),
              .notEqual(let l, let r), .lessThan(let l, let r), .lessThanOrEqual(let l, let r),
              .greaterThan(let l, let r), .greaterThanOrEqual(let l, let r),
@@ -527,6 +537,16 @@ extension SelectQuery {
             collectColumns(from: r, into: &cols)
         case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e), .truthTest(let e, _, _):
             collectColumns(from: e, into: &cols)
+        case .arrayAccess(let base, let subscripts):
+            collectColumns(from: base, into: &cols)
+            for subscriptValue in subscripts {
+                switch subscriptValue {
+                case .index(let value): collectColumns(from: value, into: &cols)
+                case .slice(let lower, let upper):
+                    if let lower { collectColumns(from: lower, into: &cols) }
+                    if let upper { collectColumns(from: upper, into: &cols) }
+                }
+            }
         case .patternMatch(let subject, let pattern, let escape, _):
             collectColumns(from: subject, into: &cols)
             collectColumns(from: pattern, into: &cols)

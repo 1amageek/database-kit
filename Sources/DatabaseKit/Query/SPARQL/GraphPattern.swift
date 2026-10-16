@@ -246,7 +246,7 @@ extension Expression {
     /// Independent implementation for proper SPARQL semantics
     public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
         switch self {
-        case .currentValue, .concatenate, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
+        case .arrayAccess, .collectionOperation, .currentValue, .concatenate, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
             throw .unsupportedSPARQLLiteral
         // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
         // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.
@@ -366,7 +366,7 @@ extension Expression {
 
         // Functions
         case .function(let call):
-            guard call.schema == nil else { throw .unsupportedSPARQLLiteral }
+            guard call.schema == nil, !call.finalArrayIsVariadic else { throw .unsupportedSPARQLLiteral }
             let args = try call.arguments.map { (value) throws(QueryLiteralConversionError) -> String in try value.toSPARQL(prefixes: prefixes) }.joined(separator: ", ")
             return "\(call.name.uppercased())(\(args))"
 

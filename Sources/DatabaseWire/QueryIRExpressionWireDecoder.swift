@@ -152,6 +152,11 @@ private extension QueryIRExpressionWireDecoder {
         }
     }
 
+    enum ArraySubscriptMetadata {
+        case index
+        case slice(hasLower: Bool, hasUpper: Bool)
+    }
+
     enum DecodingStep {
         case expression
         case select
@@ -162,6 +167,9 @@ private extension QueryIRExpressionWireDecoder {
         case assembleBinary(BinaryKind)
         case assembleBetween
         case assembleTriple
+        case assembleArrayAccess([ArraySubscriptMetadata])
+        case assembleCollectionOperation(CollectionOperator)
+        case variadicFunctionFinish(name: String, schema: String?, distinct: Bool)
         case assemblePatternMatch(PatternMatchKind, hasEscape: Bool)
         case regexTail
         case listTail(ListKind)
@@ -564,6 +572,27 @@ private extension QueryIRExpressionWireDecoder {
                     )
                 )
 
+            case .assembleArrayAccess(let metadata):
+                var subscripts: [ArraySubscript] = []
+                subscripts.reserveCapacity(metadata.count)
+                for entry in metadata.reversed() {
+                    switch entry {
+                    case .index: subscripts.append(.index(try popExpression()))
+                    case .slice(let hasLower, let hasUpper):
+                        let upper = hasUpper ? try popExpression() : nil
+                        let lower = hasLower ? try popExpression() : nil
+                        subscripts.append(.slice(lower: lower, upper: upper))
+                    }
+                }
+                subscripts.reverse()
+                expressions.append(.arrayAccess(try popExpression(), subscripts: subscripts))
+            case .assembleCollectionOperation(let operation):
+                let right = try popExpression()
+                let left = try popExpression()
+                expressions.append(.collectionOperation(operation, left: left, right: right))
+            case .variadicFunctionFinish(let name, let schema, let distinct):
+                expressions.append(.function(FunctionCall(name: name, arguments: try popExpressionCollection(),
+                    distinct: distinct, schema: schema, finalArrayIsVariadic: true)))
             case .functionTail(let name, let schema):
                 expressions.append(
                     .function(
@@ -1702,6 +1731,45 @@ private extension QueryIRExpressionWireDecoder {
                     )
                 )
                 try reader.endNestedValue()
+            case 53:
+                let count = try reader.readCount()
+                guard (1...6).contains(count) else { throw .invalidQueryIRWireState }
+                var metadata: [ArraySubscriptMetadata] = []
+                metadata.reserveCapacity(count)
+                var childCount = 1
+                for _ in 0..<count {
+                    switch try reader.readUInt8() {
+                    case 0:
+                        metadata.append(.index)
+                        childCount += 1
+                    case 1:
+                        let hasLower = try reader.readBool()
+                        let hasUpper = try reader.readBool()
+                        metadata.append(.slice(hasLower: hasLower, hasUpper: hasUpper))
+                        childCount += (hasLower ? 1 : 0) + (hasUpper ? 1 : 0)
+                    case let tag: throw .invalidValueTag(tag)
+                    }
+                }
+                // At most thirteen children, validated before scheduling frames.
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.assembleArrayAccess(metadata))
+                for _ in 0..<childCount { decodingSteps.append(.expression) }
+            case 54:
+                let byte = try reader.readUInt8()
+                guard let operation = CollectionOperator(rawValue: byte) else { throw .invalidValueTag(byte) }
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.assembleCollectionOperation(operation))
+                decodingSteps.append(.expression)
+                decodingSteps.append(.expression)
+            case 55:
+                let schema = try QueryIRWireFormat.readOptionalString(from: &reader)
+                let name = try reader.readString()
+                let count = try reader.readCount()
+                guard count > 0 else { throw .invalidQueryIRWireState }
+                let distinct = try reader.readBool()
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.variadicFunctionFinish(name: name, schema: schema, distinct: distinct))
+                decodingSteps.append(.expressionCursor(CollectionCursor(count: count)))
             case 52:
                 let kind = try SQLTemporalWireCodec.currentKind(reader.readUInt8())
                 let precision: Int?

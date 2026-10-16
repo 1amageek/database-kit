@@ -442,6 +442,33 @@ private extension QueryIRExpressionWireEncoder {
         case .row(let values):
             writer.writeUInt8(42)
             encodingSteps.append(.expressionArray(values))
+        case .arrayAccess(let base, let subscripts):
+            guard (1...6).contains(subscripts.count) else { throw .invalidQueryIRWireState }
+            writer.writeUInt8(53)
+            try writer.writeCount(subscripts.count)
+            for subscriptValue in subscripts {
+                switch subscriptValue {
+                case .index: writer.writeUInt8(0)
+                case .slice(let lower, let upper):
+                    writer.writeUInt8(1)
+                    writer.writeBool(lower != nil)
+                    writer.writeBool(upper != nil)
+                }
+            }
+            for subscriptValue in subscripts.reversed() {
+                switch subscriptValue {
+                case .index(let value): encodingSteps.append(.expression(value))
+                case .slice(let lower, let upper):
+                    if let upper { encodingSteps.append(.expression(upper)) }
+                    if let lower { encodingSteps.append(.expression(lower)) }
+                }
+            }
+            encodingSteps.append(.expression(base))
+        case .collectionOperation(let operation, let left, let right):
+            writer.writeUInt8(54)
+            writer.writeUInt8(operation.rawValue)
+            encodingSteps.append(.expression(right))
+            encodingSteps.append(.expression(left))
         case .currentValue(let kind, let precision):
             guard precision == nil || kind != .date && (0...6).contains(precision!) else {
                 throw .invalidQueryIRWireState
@@ -572,11 +599,20 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.aggregate(aggregate))
 
         case .function(let function):
-            writer.writeUInt8(function.schema == nil ? 28 : 43)
-            if let schema = function.schema { try writer.writeString(schema) }
-            try writer.writeString(function.name)
-            try writer.writeCount(function.arguments.count)
-            encodingSteps.append(.bool(function.distinct))
+            if function.finalArrayIsVariadic {
+                guard !function.arguments.isEmpty else { throw .invalidQueryIRWireState }
+                writer.writeUInt8(55)
+                try QueryIRWireFormat.writeOptionalString(function.schema, into: &writer)
+                try writer.writeString(function.name)
+                try writer.writeCount(function.arguments.count)
+                writer.writeBool(function.distinct)
+            } else {
+                writer.writeUInt8(function.schema == nil ? 28 : 43)
+                if let schema = function.schema { try writer.writeString(schema) }
+                try writer.writeString(function.name)
+                try writer.writeCount(function.arguments.count)
+                encodingSteps.append(.bool(function.distinct))
+            }
             encodingSteps.append(.expressionArrayCursor(function.arguments, index: 0))
 
         case .caseWhen(let operand, let pairs, let elseResult):

@@ -114,12 +114,22 @@ extension GraphTableSource {
         case .column(let col):
             // In GRAPH_TABLE context, columns might reference pattern variables
             vars.insert(col.column)
-        case .add(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
+        case .collectionOperation(_, let l, let r), .add(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
              .divide(let l, let r), .equal(let l, let r), .and(let l, let r), .or(let l, let r):
             collectVariablesRecursive(from: l, into: &vars)
             collectVariablesRecursive(from: r, into: &vars)
         case .not(let e), .negate(let e), .isNull(let e), .isNotNull(let e):
             collectVariablesRecursive(from: e, into: &vars)
+        case .arrayAccess(let base, let subscripts):
+            collectVariablesRecursive(from: base, into: &vars)
+            for subscriptValue in subscripts {
+                switch subscriptValue {
+                case .index(let value): collectVariablesRecursive(from: value, into: &vars)
+                case .slice(let lower, let upper):
+                    if let lower { collectVariablesRecursive(from: lower, into: &vars) }
+                    if let upper { collectVariablesRecursive(from: upper, into: &vars) }
+                }
+            }
         case .array(let expressions), .row(let expressions):
             for expression in expressions { collectVariablesRecursive(from: expression, into: &vars) }
         case .function(let call):

@@ -393,7 +393,8 @@ private extension QueryParameterBindingTraversal {
                     )
                 )
             )
-        case .add(let lhs, let rhs), .concatenate(let lhs, let rhs),
+        case .collectionOperation(_, let lhs, let rhs),
+             .add(let lhs, let rhs), .concatenate(let lhs, let rhs),
              .subtract(let lhs, let rhs),
              .multiply(let lhs, let rhs),
              .divide(let lhs, let rhs),
@@ -424,6 +425,17 @@ private extension QueryParameterBindingTraversal {
              .object(let value):
             bindingSteps.append(.assembleExpression(expression))
             bindingSteps.append(.expression(value))
+        case .arrayAccess(let base, let subscripts):
+            bindingSteps.append(.assembleExpression(expression))
+            for subscriptValue in subscripts.reversed() {
+                switch subscriptValue {
+                case .index(let value): bindingSteps.append(.expression(value))
+                case .slice(let lower, let upper):
+                    if let upper { bindingSteps.append(.expression(upper)) }
+                    if let lower { bindingSteps.append(.expression(lower)) }
+                }
+            }
+            bindingSteps.append(.expression(base))
         case .patternMatch(let subject, let pattern, let escape, _):
             bindingSteps.append(.assembleExpression(expression))
             if let escape { bindingSteps.append(.expression(escape)) }
@@ -1120,6 +1132,32 @@ private extension QueryParameterBindingTraversal {
     ) throws(QueryParameterBindingError) {
         let bound: Bound<Expression>
         switch expression {
+        case .collectionOperation(let operation, _, _):
+            bound = try popBinaryExpression(original: expression) {
+                .collectionOperation(operation, left: $0, right: $1)
+            }
+        case .arrayAccess(_, let subscripts):
+            var rebuilt: [ArraySubscript] = []
+            rebuilt.reserveCapacity(subscripts.count)
+            var changed = false
+            for subscriptValue in subscripts.reversed() {
+                switch subscriptValue {
+                case .index:
+                    let value = try popExpression()
+                    changed = changed || value.changed
+                    rebuilt.append(.index(value.value))
+                case .slice(let lower, let upper):
+                    let boundUpper = try popOptionalExpression(upper)
+                    let boundLower = try popOptionalExpression(lower)
+                    changed = changed || boundLower.changed || boundUpper.changed
+                    rebuilt.append(.slice(lower: boundLower.value, upper: boundUpper.value))
+                }
+            }
+            let base = try popExpression()
+            rebuilt.reverse()
+            changed = changed || base.changed
+            bound = Bound(value: changed ? .arrayAccess(base.value, subscripts: rebuilt) : expression,
+                          changed: changed)
         case .add:
             bound = try popBinaryExpression(original: expression) { .add($0, $1) }
         case .concatenate:
@@ -1239,7 +1277,8 @@ private extension QueryParameterBindingTraversal {
                             name: function.name,
                             arguments: arguments.value,
                             distinct: function.distinct,
-                            schema: function.schema
+                            schema: function.schema,
+                            finalArrayIsVariadic: function.finalArrayIsVariadic
                         )
                     )
                     : expression,
