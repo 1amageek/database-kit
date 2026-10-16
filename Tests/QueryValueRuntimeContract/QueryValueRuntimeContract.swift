@@ -31,7 +31,7 @@ struct QueryValueRuntimeContract {
         print("QUERY_VALUE_RUNTIME_BEGIN")
         do {
             try run()
-            print("QUERY_VALUE_RUNTIME_PASS cases=11")
+            print("QUERY_VALUE_RUNTIME_PASS cases=12")
         } catch {
             switch error {
             case .assertion(let code): print("QUERY_VALUE_RUNTIME_FAIL assertion=\(code)")
@@ -53,7 +53,7 @@ struct QueryValueRuntimeContract {
         let values = try query { () throws(QueryValueError) in try richValues(time: time) }
         let types: [QueryColumnType] = [
             .sql(.decimal(precision: nil, scale: nil)), .sql(.json), .sql(.jsonb),
-            .sql(.array(.integer)), .sql(.interval),
+            .sql(.array(.integer)), .sql(.interval()),
         ]
         try require(values.count == 5, code: 1)
         guard case .numeric(let numeric) = values[0], case .json(let json) = values[1],
@@ -122,6 +122,8 @@ struct QueryValueRuntimeContract {
         pass("sql-lexical-value-construction")
         try sqlPatternConcatenationCarriage()
         pass("sql-pattern-concatenation-carriage")
+        try sqlTemporalValueCarriage()
+        pass("sql-temporal-value-carriage")
     }
 
     private static func sqlLexicalValueConstruction() throws(Failure) {
@@ -338,6 +340,57 @@ struct QueryValueRuntimeContract {
             rejected = true
         }
         try require(rejected, code: 54)
+    }
+
+    private static func sqlTemporalValueCarriage() throws(Failure) {
+        let zero = try query { () throws(QueryValueError) in try QueryTimeValue(microsecondsSinceMidnight: 0) }
+        let endpoint = try query { () throws(QueryValueError) in
+            try QueryTimeValue(microsecondsSinceMidnight: 86_400_000_000)
+        }
+        let primitive: FieldValue
+        do { primitive = .time(try CivilTime(hour: 0, minute: 0, second: 0)) }
+        catch { throw .assertion(180) }
+        let values: [QueryValue] = [
+            .time(zero), .time(endpoint),
+            .timeWithTimeZone(QueryTimeWithTimeZoneValue(time: zero, utcOffsetSeconds: Int32.min)),
+            .timeWithTimeZone(QueryTimeWithTimeZoneValue(time: endpoint, utcOffsetSeconds: Int32.max)),
+            .dateInfinity(.negative), .dateInfinity(.positive),
+            .timestampInfinity(.negative, withTimeZone: false), .timestampInfinity(.positive, withTimeZone: true),
+            .intervalInfinity(.negative), .intervalInfinity(.positive), .primitive(primitive),
+        ]
+        let types: [DataType] = [
+            .time(withTimeZone: false), .time(withTimeZone: false, precision: 0),
+            .time(withTimeZone: true), .time(withTimeZone: true), .date, .date,
+            .timestamp(withTimeZone: false, precision: 3), .timestamp(withTimeZone: true, precision: 6),
+            .interval(fields: .year), .interval(fields: .dayToSecond, precision: 3), .time(withTimeZone: false),
+        ]
+        var columns: [QueryColumn] = []
+        for index in values.indices {
+            let payload = try query { () throws(QueryValueError) in
+                try QueryFieldStorageAdapter.encode(values[index], type: .sql(types[index]), limits: limits)
+            }
+            let restored = try query { () throws(QueryValueError) in
+                try QueryFieldStorageAdapter.decode(payload, type: .sql(types[index]), limits: limits)
+            }
+            try require(restored == values[index], code: 181)
+            columns.append(try query { () throws(QueryValueError) in
+                try QueryColumn(number: UInt32(index + 1), name: "temporal", type: .sql(types[index]), isNullable: false)
+            })
+        }
+        try require(values[0] != values[10], code: 182)
+        try require(values[0] != values[1], code: 183)
+        let expected = QueryRow(values: values)
+        let retained = try retainedPage(columns: columns, rows: [expected])
+        var iterator = retained.makeRowIterator()
+        try require(try wire { () throws(DatabaseWireError) in try iterator.next() } == expected, code: 184)
+        try require(retained.columns == columns, code: 185)
+        try rejectQuery(.timeOutOfRange, code: 186) { () throws(QueryValueError) in
+            _ = try QueryTimeValue(microsecondsSinceMidnight: 86_400_000_001)
+        }
+        try require(!QueryValueValidator.accepts(.primitive(.null),
+            type: .sql(.interval(fields: .day, precision: 3))), code: 187)
+        let measured = try query { () throws(QueryValueError) in try QueryValueValidator.measure(.time(endpoint)) }
+        try require(measured.nodeCount == 1 && measured.retainedByteCount == 0, code: 188)
     }
 
     private static func richValues(time: TimeSpan) throws(QueryValueError) -> [QueryValue] {

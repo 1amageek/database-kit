@@ -1106,10 +1106,10 @@ private struct QueryScopeState {
         case .cast(let value, let targetType):
             var scalarType = targetType
             while case .array(let element) = scalarType { scalarType = element }
-            // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission cannot interpret SQL temporal precision.
-            // S06 must provide SQL conversion; this RDF boundary rejects nested temporal modifiers.
+            // SQL temporal modifiers have no corresponding RDF cast policy.
             switch scalarType {
-            case .time(_, .some), .timestamp(_, .some), .custom(_, .some): throw .unsupportedSQLExpression
+            case .time(_, .some), .timestamp(_, .some), .custom(_, .some),
+                 .interval(.some, _), .interval(_, .some): throw .unsupportedSQLExpression
             default: break
             }
             try validate(value, context: context)
@@ -1143,7 +1143,7 @@ private struct QueryScopeState {
                 throw .unsupportedSQLExpression
             }
             try validate(subject, context: context)
-        case .concatenate:
+        case .concatenate, .currentValue:
             throw .unsupportedSQLExpression
         case .regex(let value, _, _):
             try validate(value, context: context)
@@ -1356,7 +1356,7 @@ private struct QueryScopeState {
             return expressions
         case .triple(let subject, let predicate, let object):
             return [subject, predicate, object]
-        case .aggregate, .subquery, .exists, .literal, .column, .variable,
+        case .aggregate, .subquery, .exists, .literal, .currentValue, .column, .variable,
              .bound, .parameter:
             return []
         }

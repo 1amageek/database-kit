@@ -230,7 +230,7 @@ public indirect enum DataType: Sendable, Equatable, Hashable {
     case date
     case time(withTimeZone: Bool, precision: Int? = nil)
     case timestamp(withTimeZone: Bool, precision: Int? = nil)
-    case interval
+    case interval(fields: SQLIntervalFields? = nil, precision: Int? = nil)
     case binary(length: Int?)
     case varbinary(length: Int?)
     case blob
@@ -248,6 +248,9 @@ public indirect enum Expression: Sendable, Hashable {
 
     /// Literal value
     case literal(Literal)
+
+    /// A SQL current-value form with optional constant fractional-second precision.
+    case currentValue(kind: SQLCurrentValueKind, precision: Int?)
 
     /// Ordered SQL ARRAY constructor children; execution is owned by the SQL runtime.
     case array([Expression])

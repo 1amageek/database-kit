@@ -89,12 +89,12 @@ struct SQLSemanticFoundationWireTests {
             var reader = DatabaseWireReader([20])
             _ = try QueryIRWireFormat.decodeLiteral(from: &reader)
         }
-        #expect(throws: DatabaseWireError.invalidValueTag(25)) {
-            var reader = DatabaseWireReader([25])
+        #expect(throws: DatabaseWireError.invalidValueTag(255)) {
+            var reader = DatabaseWireReader([255])
             _ = try QueryIRWireFormat.decodeDataType(from: &reader)
         }
-        #expect(throws: DatabaseWireError.invalidValueTag(52)) {
-            var reader = DatabaseWireReader([52])
+        #expect(throws: DatabaseWireError.invalidValueTag(255)) {
+            var reader = DatabaseWireReader([255])
             _ = try QueryIRWireFormat.decodeExpression(from: &reader)
         }
     }

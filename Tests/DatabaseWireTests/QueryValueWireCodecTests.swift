@@ -59,7 +59,7 @@ struct QueryValueWireCodecTests {
             let value = try QueryValueWireCodec.decode(from: &reader)
             guard case .interval(let interval) = value else { Issue.record("Expected interval"); return }
             #expect(interval.microseconds == microseconds)
-            try roundTrip(value, type: .sql(.interval))
+            try roundTrip(value, type: .sql(.interval()))
         }
     }
 

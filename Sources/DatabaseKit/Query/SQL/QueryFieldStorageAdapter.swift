@@ -123,10 +123,11 @@ public enum QueryFieldStorageAdapter {
                 counts.maximumNestingDepth = parsed.maximumNestingDepth
                 counts.utf8ByteCount = UInt64(bytes.count)
                 return counts
-            case .decimal, .interval:
-                _ = try decodeValue(payload, type: type, limits: QueryValueLimits(
+            case .decimal, .interval, .date, .time, .timestamp:
+                let value = try decodeValue(payload, type: type, limits: QueryValueLimits(
                     maximumRetainedBytes: 0, maximumTotalNodes: 1,
                     maximumNestingDepth: 1, maximumCollectionElements: 0))
+                guard QueryValueValidator.accepts(value, type: type) else { throw .incompatibleType }
                 return counts
             default: break
             }
@@ -180,7 +181,7 @@ public enum QueryFieldStorageAdapter {
             case .binary, .varbinary, .blob: expected = .bytes
             case .date: expected = .date
             case .time(false, _): expected = .time
-            case .time(true, _): throw .invalidPersistenceDescriptor
+            case .time(true, _): expected = .object
             case .timestamp(let withTimeZone, _): expected = withTimeZone ? .timestamp : .dateTime
             case .uuid: expected = .uuid
             case .custom: throw .invalidPersistenceDescriptor
@@ -195,6 +196,9 @@ public enum QueryFieldStorageAdapter {
     }
 
     private static func validateSQLType(_ type: DataType, allowsArray: Bool) throws(QueryValueError) {
+        guard QueryValueValidator.accepts(.primitive(.null), type: .sql(type)) else {
+            throw .invalidPersistenceDescriptor
+        }
         switch type {
         case .decimal(let precision, let scale):
             guard precision == nil || (1...38).contains(precision!),
@@ -203,7 +207,6 @@ public enum QueryFieldStorageAdapter {
             guard length == nil || length! > 0 else { throw .invalidPersistenceDescriptor }
         case .time(_, let precision), .timestamp(_, let precision):
             guard precision == nil || (0...6).contains(precision!) else { throw .invalidPersistenceDescriptor }
-            if case .time(true, _) = type { throw .invalidPersistenceDescriptor }
         case .array(let element):
             guard allowsArray else { throw .invalidPersistenceDescriptor }
             try validateSQLType(element, allowsArray: false)
@@ -230,6 +233,19 @@ public enum QueryFieldStorageAdapter {
                                ("months", .int32(Int32(interval.period.months))),
                                ("days", .int32(Int32(interval.period.days))),
                                ("microseconds", .int64(interval.microseconds))])
+        case (.time(let time), .sql(.time(false, _))):
+            return try object([("kind", .string("time")),
+                               ("microseconds", .int64(time.microsecondsSinceMidnight))])
+        case (.timeWithTimeZone(let time), .sql(.time(true, _))):
+            return try object([("kind", .string("timeWithTimeZone")),
+                               ("microseconds", .int64(time.time.microsecondsSinceMidnight)),
+                               ("utcOffsetSeconds", .int32(time.utcOffsetSeconds))])
+        case (.dateInfinity(let sign), .sql(.date)):
+            return try object([("kind", .string("dateInfinity")), ("sign", .int8(sign == .negative ? -1 : 1))])
+        case (.timestampInfinity(let sign, _), .sql(.timestamp)):
+            return try object([("kind", .string("timestampInfinity")), ("sign", .int8(sign == .negative ? -1 : 1))])
+        case (.intervalInfinity(let sign), .sql(.interval)):
+            return try object([("kind", .string("intervalInfinity")), ("sign", .int8(sign == .negative ? -1 : 1))])
         case (.array(let array), .sql(.array(let elementType))):
             var dimensions: [FieldValue] = []
             dimensions.reserveCapacity(array.dimensions.count)
@@ -294,6 +310,28 @@ public enum QueryFieldStorageAdapter {
         if case .null = payload { return .primitive(.null) }
         guard case .sql(let sqlType) = type else { return .primitive(payload) }
         switch sqlType {
+        case .date:
+            if case .object = payload {
+                return .dateInfinity(try decodeInfinity(payload, kind: "dateInfinity"))
+            }
+            return .primitive(payload)
+        case .timestamp(let withTimeZone, _):
+            if case .object = payload {
+                return .timestampInfinity(try decodeInfinity(payload, kind: "timestampInfinity"),
+                                          withTimeZone: withTimeZone)
+            }
+            return .primitive(payload)
+        case .time(let withTimeZone, _):
+            if !withTimeZone, case .time = payload { return .primitive(payload) }
+            let fields = try envelope(payload, kind: withTimeZone ? "timeWithTimeZone" : "time",
+                                      keys: withTimeZone ? ["microseconds", "utcOffsetSeconds"] : ["microseconds"])
+            guard case .int64(let microseconds) = fields["microseconds"] else { throw malformed() }
+            let time = try QueryTimeValue(microsecondsSinceMidnight: microseconds)
+            if withTimeZone {
+                guard case .int32(let offset) = fields["utcOffsetSeconds"] else { throw malformed() }
+                return .timeWithTimeZone(QueryTimeWithTimeZoneValue(time: time, utcOffsetSeconds: offset))
+            }
+            return .time(time)
         case .decimal:
             let fields = try envelope(payload, kind: "numeric", keys: ["value", "displayScale"])
             guard case .decimal(let value) = fields["value"],
@@ -308,6 +346,10 @@ public enum QueryFieldStorageAdapter {
             guard case .array(let records) = fields["nodes"] else { throw malformed() }
             return .jsonb(try QueryJSONBValue(root: decodeNode(records, limits: limits), limits: limits))
         case .interval:
+            if case .object(let fields) = payload,
+               fields["kind"] == .string("intervalInfinity") {
+                return .intervalInfinity(try decodeInfinity(payload, kind: "intervalInfinity"))
+            }
             let fields = try envelope(payload, kind: "interval", keys: ["months", "days", "microseconds"])
             guard case .int32(let months) = fields["months"], case .int32(let days) = fields["days"],
                   case .int64(let microseconds) = fields["microseconds"] else { throw malformed() }
@@ -485,5 +527,16 @@ public enum QueryFieldStorageAdapter {
 
     private static func malformed() -> QueryValueError {
         .invalidPersistencePayload(reason: "Invalid declared field envelope")
+    }
+
+    private static func decodeInfinity(_ payload: FieldValue, kind: String) throws(QueryValueError)
+        -> QueryTemporalInfinity {
+        let fields = try envelope(payload, kind: kind, keys: ["sign"])
+        guard case .int8(let sign) = fields["sign"] else { throw malformed() }
+        switch sign {
+        case -1: return .negative
+        case 1: return .positive
+        default: throw malformed()
+        }
     }
 }

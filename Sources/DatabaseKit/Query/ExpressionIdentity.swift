@@ -28,6 +28,8 @@ enum ExpressionIdentity {
         case query(SelectQuery)
         case direction(SortDirection)
         case nulls(NullOrdering?)
+        case current(SQLCurrentValueKind)
+        case optionalInt(Int?)
         case pattern(PatternMatchKind)
         case truth(TruthValue)
         case comparison(ComparisonOperator)
@@ -101,6 +103,10 @@ enum ExpressionIdentity {
 
         private mutating func enqueue(_ expression: Expression) -> Token {
             switch expression {
+            case .currentValue(let kind, let precision):
+                steps.append(.token(.optionalInt(precision)))
+                steps.append(.token(.current(kind)))
+                return .kind(52)
             case .literal(let value):
                 steps.append(.token(.literal(value))); return .kind(0)
             case .array(let values): list(values); return .kind(41)

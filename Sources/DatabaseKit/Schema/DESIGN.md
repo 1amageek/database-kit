@@ -4,7 +4,7 @@
 
 Schema owns validated database declaration catalogs and their identity/evolution
 contracts inside [DatabaseKit](../DESIGN.md). Children: none. This document
-fixes S01 field query-metadata admission only; existing unrelated catalog
+fixes S01/S06 field query-metadata admission; existing unrelated catalog
 features retain their contracts.
 
 ## Responsibilities and Boundaries
@@ -74,6 +74,61 @@ S01 contract:
   reject rich descriptors until their owning SQL index contract is implemented.
   Existing unwrapped ExactDecimal primitive behavior remains unchanged.
 
+### S06 declared temporal storage
+
+The [Query authority](../Query/DESIGN.md) owns temporal value identity and pure
+declared-value validation; [Model](../Model/DESIGN.md#s06-temporal-model-adaptation)
+fixes the exact temporal persistence productions. Schema owns
+which FieldSchema combinations admit those productions. The explicit
+queryType is authoritative; an object shape without that declaration never
+acquires temporal meaning.
+
+| Declared SQL family | Admitted scalar FieldSchemaType | Payload admission |
+|---|---|---|
+| DATE | `.date` | Existing finite primitive date or the Query-owned date-infinity production |
+| TIME WITHOUT TIME ZONE | `.time` | Existing primitive time or the distinct full-range SQL TIME production |
+| TIMESTAMP WITHOUT TIME ZONE | `.dateTime` | Existing finite primitive dateTime or the matching timestamp-infinity production |
+| TIMESTAMP WITH TIME ZONE | `.timestamp` | Existing finite primitive timestamp or the matching timestamp-infinity production |
+| TIME WITH TIME ZONE | `.object` | The Query-owned offset-preserving SQL TIMETZ production |
+| INTERVAL, including admitted modifiers | `.object` | Existing finite interval production or interval infinity |
+
+All rows require `isArray == false`. The existing SQL array wrapper uses scalar
+object storage with its explicit element type; ordinary primitive arrays keep
+their existing shape and do not become temporal envelope arrays.
+
+For a declared field, Schema validates the descriptor/storage combination and
+then validates a non-NULL default through QueryFieldStorageAdapter. That
+successful declared validation is the physical payload authority: a later
+primitive-case-only check must not reject an admitted temporal extension.
+Fields with nil queryType continue to use the existing primitive-only gate.
+Nonoptional NULL, unknown or extra envelope members, invalid sign/offset/time,
+wrong temporal family and invalid precision fail schema construction. There
+is no permissive shape inference or fallback decode.
+
+This union preserves all existing finite primitive payloads, field kinds and
+unmodified descriptor bytes. New SQL TIME values retain their envelope for the
+whole carrier range, including values below 24:00, so encoding does not erase
+their structural distinction from primitive TIME. No all-finite object layout
+migration is performed. Descriptor modifiers remain schema identity and an
+actual descriptor change retains changedFieldEncoding migration semantics.
+
+Temporal storage recognition is distinct from index/Directory capability.
+Existing DATE/TIME/TIMESTAMP declarations retain their prior admitted
+capabilities. Framework owns total, injective, descriptor-aware Directory
+encoding/decoding and ordered index keys for their newly admitted extension
+values, while preserving existing finite key bytes. It must not pass extension
+objects through a generic object tuple ordering or reject an admitted Directory
+value only at runtime. Index key projection never rewrites the original stored
+or included/covering payload. The newly admitted object-backed TIMETZ family
+may retain rich-descriptor index/Directory rejection until its owning index
+contract admits it; this removes no existing capability. Existing interval and
+other rich-family capability gates remain unchanged.
+
+SQL temporal range and precision checks belong to Query's declared admission;
+rounding, timezone/calendar evaluation and operation clocks belong to
+Framework. Schema admits completed, representable values and never invokes
+those runtime services during declaration validation.
+
 ## Runtime Flows
 
 Manual and macro-generated declarations use the same intrinsic admission.
@@ -111,6 +166,16 @@ and generated schemas, rich defaults/NULL, mismatched envelope rejection,
 descriptor fingerprint/evolution change, Directory/index rejection and
 unchanged primitive interpretation. Wire tests own exact SchemaManifest
 round-trip/malformed bytes. The workspace progress record owns runtime evidence.
+
+S06 adds manual/generated temporal descriptor and default cases covering every
+union alternative, both infinity signs and timestamp zone declarations; wrong
+physical kind, malformed extensions and nonoptional NULL must fail. Compare
+existing finite manifests/fingerprints and capability declarations without
+changes; explicit interval modifiers must differ in identity and evolution.
+Framework-owned golden and behavioral tests prove unchanged finite keys,
+extension ordering, total Directory round trips, and original covering payload
+retention. Codec and ordinary/Embedded runtime tests separately prove bounded
+lossless carriage. These are required proof subjects, not executed results.
 
 Changes propagate to Model Field metadata/conformances, macro generation,
 canonical Wire schema bytes/fingerprint tests and Framework catalog adaptation;

@@ -26,13 +26,43 @@ public enum QueryValueValidator {
             case (.boolean, .primitive(.bool)), (.smallint, .primitive(.int16)),
                  (.integer, .primitive(.int32)), (.bigint, .primitive(.int64)),
                  (.text, .primitive(.string)), (.char, .primitive(.string)),
-                 (.varchar, .primitive(.string)), (.date, .primitive(.date)),
-                 (.time(false, _), .primitive(.time)),
-                 (.timestamp(false, _), .primitive(.dateTime)),
-                 (.timestamp(true, _), .primitive(.timestamp)),
+                 (.varchar, .primitive(.string)),
                  (.binary, .primitive(.bytes)), (.varbinary, .primitive(.bytes)),
                  (.blob, .primitive(.bytes)), (.uuid, .primitive(.uuid)),
-                 (.json, .json), (.jsonb, .jsonb), (.interval, .interval): return true
+                 (.json, .json), (.jsonb, .jsonb): return true
+            case (.date, .primitive(.date(let value))): return acceptsSQLDate(value)
+            case (.date, .dateInfinity): return true
+            case (.time(false, let precision), .primitive(.time(let value))):
+                return value.nanoseconds.isMultiple(of: 1000)
+                    && aligned(timeMicroseconds(value), precision: precision)
+            case (.time(false, let precision), .time(let value)):
+                return aligned(value.microsecondsSinceMidnight, precision: precision)
+            case (.time(true, let precision), .timeWithTimeZone(let value)):
+                return aligned(value.time.microsecondsSinceMidnight, precision: precision)
+            case (.timestamp(false, let precision), .primitive(.dateTime(let value))):
+                guard value.time.nanoseconds.isMultiple(of: 1000) else { return false }
+                let micros = Int128(dateDays(value.date)) * 86_400_000_000
+                    + Int128(timeMicroseconds(value.time))
+                return acceptsSQLTimestamp(micros, precision: precision)
+            case (.timestamp(true, let precision), .primitive(.timestamp(let value))):
+                guard value.nanoseconds.isMultiple(of: 1000) else { return false }
+                let micros = (Int128(value.secondsSinceUnixEpoch) - 946_684_800) * 1_000_000
+                    + Int128(value.nanoseconds / 1000)
+                return acceptsSQLTimestamp(micros, precision: precision)
+            case (.timestamp(let zone, _), .timestampInfinity(_, let valueZone)):
+                return zone == valueZone
+            case (.interval(let fields, let precision), .interval(let value)):
+                guard aligned(value.microseconds, precision: precision) else { return false }
+                switch fields {
+                case .year: return value.period.months.isMultiple(of: 12)
+                    && value.period.days == 0 && value.microseconds == 0
+                case .month, .yearToMonth: return value.period.days == 0 && value.microseconds == 0
+                case .day: return value.microseconds == 0
+                case .hour, .dayToHour: return value.microseconds.isMultiple(of: 3_600_000_000)
+                case .minute, .dayToMinute, .hourToMinute: return value.microseconds.isMultiple(of: 60_000_000)
+                case .none, .second, .dayToSecond, .hourToSecond, .minuteToSecond: return true
+                }
+            case (.interval, .intervalInfinity): return true
             case (.real, .primitive(.float32(let value))): return value.isFinite
             case (.doublePrecision, .primitive(.float64(let value))): return value.isFinite
             case (.decimal(let precision, let scale), .numeric(let numeric)):
@@ -68,11 +98,53 @@ public enum QueryValueValidator {
             return length == nil || length! > 0
         case .time(_, let precision), .timestamp(_, let precision):
             return precision == nil || (0...6).contains(precision!)
+        case .interval(let fields, let precision):
+            guard precision == nil || (0...6).contains(precision!) else { return false }
+            if precision != nil, let fields {
+                switch fields {
+                case .second, .dayToSecond, .hourToSecond, .minuteToSecond: break
+                default: return false
+                }
+            }
+            return true
         case .array(let element):
             if case .array = element { return false }
             return isResolved(element)
         default: return true
         }
+    }
+
+    private static func aligned<T: BinaryInteger>(_ microseconds: T, precision: Int?) -> Bool {
+        var quantum: T = 1
+        for _ in 0..<(6 - (precision ?? 6)) { quantum *= 10 }
+        return microseconds.isMultiple(of: quantum)
+    }
+
+    private static func timeMicroseconds(_ time: CivilTime) -> Int64 {
+        (Int64(time.hour) * 3600 + Int64(time.minute) * 60 + Int64(time.second))
+            * 1_000_000 + Int64(time.nanoseconds / 1000)
+    }
+
+    /// Proleptic Gregorian days from 2000-01-01; Int64 covers every Int32 year.
+    private static func dateDays(_ date: CivilDate) -> Int64 {
+        let year = Int64(date.year) - (date.month <= 2 ? 1 : 0)
+        let era = (year >= 0 ? year : year - 399) / 400
+        let yearOfEra = year - era * 400
+        let month = Int64(date.month) + (date.month > 2 ? -3 : 9)
+        let dayOfYear = (153 * month + 2) / 5 + Int64(date.day) - 1
+        let dayOfEra = yearOfEra * 365 + yearOfEra / 4 - yearOfEra / 100 + dayOfYear
+        return era * 146_097 + dayOfEra - 730_425
+    }
+
+    private static func acceptsSQLDate(_ date: CivilDate) -> Bool {
+        let days = dateDays(date)
+        return days >= -2_451_545 && days < 2_145_031_949
+    }
+
+    private static func acceptsSQLTimestamp(_ microseconds: Int128, precision: Int?) -> Bool {
+        microseconds >= -211_813_488_000_000_000
+            && microseconds < 9_223_371_331_200_000_000
+            && aligned(microseconds, precision: precision)
     }
 
     private static func tryNumeric(_ value: ExactDecimal) -> QueryNumericValue? {
@@ -125,7 +197,9 @@ public enum QueryValueValidator {
                 nodeDepth = current
                 switch value {
                 case .primitive(let value): stack.append(.primitive(value, current)); continue
-                case .numeric, .interval: nodes = try added(nodes, 1)
+                case .numeric, .interval, .time, .timeWithTimeZone,
+                     .dateInfinity, .timestampInfinity, .intervalInfinity:
+                    nodes = try added(nodes, 1)
                 case .json(let value):
                     let footprint = try value.measure()
                     nodes = try added(nodes, footprint.nodeCount)

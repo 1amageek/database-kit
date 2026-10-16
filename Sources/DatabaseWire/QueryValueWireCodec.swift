@@ -29,7 +29,7 @@ enum QueryValueWireCodec {
         case .jsonb(let jsonb):
             writer.writeUInt8(3)
             try QueryJSONBWireCodec.encode(jsonb.root, into: &writer)
-        case .numeric, .json, .interval:
+        case .numeric, .json, .interval, .time, .timeWithTimeZone, .dateInfinity, .timestampInfinity, .intervalInfinity:
             try writer.withNestedValue { writer throws(DatabaseWireError) in
                 switch value {
                 case .numeric(let numeric): writer.writeUInt8(1); encodeNumeric(numeric, into: &writer)
@@ -37,6 +37,23 @@ enum QueryValueWireCodec {
                     writer.writeUInt8(2)
                     try chargeJSON(try jsonFootprint(json), writer: &writer)
                     try writer.writeBytes(json.bytes)
+                case .time(let value):
+                    writer.writeUInt8(6)
+                    writer.writeInt64(value.microsecondsSinceMidnight)
+                case .timeWithTimeZone(let value):
+                    writer.writeUInt8(7)
+                    writer.writeInt64(value.time.microsecondsSinceMidnight)
+                    writer.writeInt32(value.utcOffsetSeconds)
+                case .dateInfinity(let direction):
+                    writer.writeUInt8(8)
+                    writer.writeUInt8(SQLTemporalWireCodec.encode(direction))
+                case .timestampInfinity(let direction, let withTimeZone):
+                    writer.writeUInt8(9)
+                    writer.writeUInt8(SQLTemporalWireCodec.encode(direction))
+                    writer.writeBool(withTimeZone)
+                case .intervalInfinity(let direction):
+                    writer.writeUInt8(10)
+                    writer.writeUInt8(SQLTemporalWireCodec.encode(direction))
                 case .interval(let interval):
                     writer.writeUInt8(5)
                     guard let months = Int32(exactly: interval.period.months),
@@ -95,6 +112,10 @@ enum QueryValueWireCodec {
         switch tag {
         case 0: return .primitive(try FieldValueWireCodec.decodeValue(from: &reader))
         case 3: return .jsonb(try QueryJSONBWireCodec.decode(from: &reader))
+        case 6...10:
+            return try reader.withNestedValue { reader throws(DatabaseWireError) in
+                try decodeTemporalPayload(tag: tag, from: &reader)
+            }
         case 1, 2, 5:
             return try reader.withNestedValue { reader throws(DatabaseWireError) in
                 switch tag {
@@ -108,6 +129,24 @@ enum QueryValueWireCodec {
                 }
             }
         case 4: throw .invalidQueryValue(.incompatibleType)
+        default: throw .invalidValueTag(tag)
+        }
+    }
+
+    static func decodeTemporalPayload(tag: UInt8, from reader: inout DatabaseWireReader) throws(DatabaseWireError) -> QueryValue {
+        switch tag {
+        case 6, 7:
+            let micros = try reader.readInt64()
+            let time: QueryTimeValue
+            do throws(QueryValueError) { time = try QueryTimeValue(microsecondsSinceMidnight: micros) }
+            catch let error { throw .invalidQueryValue(error) }
+            if tag == 6 { return .time(time) }
+            return .timeWithTimeZone(QueryTimeWithTimeZoneValue(time: time, utcOffsetSeconds: try reader.readInt32()))
+        case 8: return .dateInfinity(try SQLTemporalWireCodec.infinity(reader.readUInt8()))
+        case 9:
+            let direction = try SQLTemporalWireCodec.infinity(reader.readUInt8())
+            return .timestampInfinity(direction, withTimeZone: try reader.readBool())
+        case 10: return .intervalInfinity(try SQLTemporalWireCodec.infinity(reader.readUInt8()))
         default: throw .invalidValueTag(tag)
         }
     }

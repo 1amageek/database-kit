@@ -246,7 +246,7 @@ extension Expression {
     /// Independent implementation for proper SPARQL semantics
     public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
         switch self {
-        case .concatenate, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
+        case .currentValue, .concatenate, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
             throw .unsupportedSPARQLLiteral
         // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
         // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.
@@ -489,7 +489,8 @@ extension DataType {
             var scalarType = self
             while case .array(let element) = scalarType { scalarType = element }
             switch scalarType {
-            case .time(_, .some), .timestamp(_, .some), .custom(_, .some):
+            case .time(_, .some), .timestamp(_, .some), .custom(_, .some),
+                 .interval(.some, _), .interval(_, .some):
                 throw .unsupportedSPARQLLiteral
             default: break
             }

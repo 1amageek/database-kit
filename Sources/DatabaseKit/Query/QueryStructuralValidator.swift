@@ -725,6 +725,10 @@ private extension QueryStructuralValidator {
 
                 case .expression(let expression, _):
                     switch expression {
+                    case .currentValue(let kind, let precision):
+                        guard precision == nil || kind != .date && (0...6).contains(precision!) else {
+                            throw .invalidQueryValue(.incompatibleType)
+                        }
                     case .add(let lhs, let rhs), .concatenate(let lhs, let rhs),
                          .subtract(let lhs, let rhs),
                          .multiply(let lhs, let rhs),
@@ -860,6 +864,10 @@ private extension QueryStructuralValidator {
                         if let schema { try ledger.consume(.retainedBytes, amount: UInt64(schema.utf8.count)) }
                     case .array(let element):
                         validationSteps.append(.dataType(element, depth: childDepth))
+                    case .interval:
+                        guard QueryValueValidator.accepts(.primitive(.null), type: .sql(dataType)) else {
+                            throw .invalidQueryValue(.incompatibleType)
+                        }
                     case .time(_, let precision), .timestamp(_, let precision):
                         if let precision, !(0...6).contains(precision) {
                             throw .invalidQueryValue(.incompatibleType)

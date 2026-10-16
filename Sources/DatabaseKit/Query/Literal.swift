@@ -220,6 +220,11 @@ extension Literal: CustomStringConvertible {
             case .jsonb: family = "jsonb"
             case .array: family = "array"
             case .interval: family = "interval"
+            case .time: family = "time"
+            case .timeWithTimeZone: family = "timeWithTimeZone"
+            case .dateInfinity: family = "dateInfinity"
+            case .timestampInfinity: family = "timestampInfinity"
+            case .intervalInfinity: family = "intervalInfinity"
             }
             let declaration: String
             switch type {

@@ -37,7 +37,7 @@ struct QueryColumnTypeJSONCodecTests {
             .primitive(.rdfTerm), .primitive(.reference), .primitive(.vector, isArray: true),
             .sql(.boolean), .sql(.smallint), .sql(.integer), .sql(.bigint),
             .sql(.real), .sql(.doublePrecision), .sql(.text), .sql(.date),
-            .sql(.interval), .sql(.blob), .sql(.json), .sql(.jsonb), .sql(.uuid),
+            .sql(.interval()), .sql(.blob), .sql(.json), .sql(.jsonb), .sql(.uuid),
             .sql(.decimal(precision: nil, scale: nil)), .sql(.decimal(precision: 18, scale: -2)),
             .sql(.char(length: nil)), .sql(.varchar(length: 42)),
             .sql(.binary(length: 1)), .sql(.varbinary(length: nil)),

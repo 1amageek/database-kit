@@ -188,3 +188,19 @@ and distinguish descriptor changes. Missing/extra/unknown keys, mismatched
 defaults, integer/depth/byte limits and old layouts fail explicitly. Existing
 primitive field-value bytes and optional Foundation dependency boundaries are
 regression obligations. The workspace progress record owns S01 execution evidence.
+
+
+### S06 interval descriptor JSON
+
+The existing QueryColumnTypeJSONCodec adapts the Kit-owned interval descriptor
+without a second temporal model. Its SQL interval object contains exactly kind,
+fields and precision: kind is "interval", fields is null for the full range or
+one exact SQLIntervalFields case name, and precision is null or an integer.
+The codec preserves both modifiers through schemas and fingerprints. It uses
+QueryValueValidator.accepts with a NULL value for intrinsic descriptor admission;
+it does not execute interval truncation or precision rounding. Missing keys,
+unknown keys, unknown field names, invalid combinations and nonintegral or
+out-of-range precision fail with the existing path-aware SchemaJSONError.
+S06-W02 requires nested/array/schema round trips, exact modifier identity, and
+typed rejection on both encode and decode. Temporal QueryValue binary carriage
+remains DatabaseWire-owned; JSON adds no competing value representation.

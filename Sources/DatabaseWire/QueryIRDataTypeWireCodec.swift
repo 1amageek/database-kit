@@ -120,8 +120,18 @@ private extension QueryIRDataTypeWireCodec {
                 writer.writeUInt8(isTime ? 11 : 12)
                 writer.writeBool(withTimeZone)
             }
-        case .interval:
-            writer.writeUInt8(13)
+        case .interval(let fields, let precision):
+            guard QueryValueValidator.accepts(.primitive(.null), type: .sql(type)) else {
+                throw .invalidQueryValue(.incompatibleType)
+            }
+            if fields == nil && precision == nil { writer.writeUInt8(13) }
+            else {
+                writer.writeUInt8(25)
+                writer.writeBool(fields != nil)
+                if let fields { writer.writeUInt8(SQLTemporalWireCodec.encode(fields)) }
+                writer.writeBool(precision != nil)
+                if let precision { writer.writeUInt8(UInt8(precision)) }
+            }
         case .binary(let length):
             writer.writeUInt8(14)
             try QueryIRWireFormat.writeOptionalInt(length, into: &writer)
@@ -191,7 +201,20 @@ private extension QueryIRDataTypeWireCodec {
             return tag == 22 ? .time(withTimeZone: withTimeZone, precision: Int(precision))
                 : .timestamp(withTimeZone: withTimeZone, precision: Int(precision))
         case 13:
-            return .interval
+            return .interval()
+        case 25:
+            let fields: SQLIntervalFields?
+            if try reader.readBool() { fields = try SQLTemporalWireCodec.intervalFields(reader.readUInt8()) }
+            else { fields = nil }
+            let precision: Int?
+            if try reader.readBool() { precision = Int(try reader.readUInt8()) }
+            else { precision = nil }
+            let type = DataType.interval(fields: fields, precision: precision)
+            guard fields != nil || precision != nil,
+                  QueryValueValidator.accepts(.primitive(.null), type: .sql(type)) else {
+                throw .invalidQueryValue(.incompatibleType)
+            }
+            return type
         case 14:
             return .binary(
                 length: try QueryIRWireFormat.readOptionalInt(from: &reader)

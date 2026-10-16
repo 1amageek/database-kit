@@ -96,7 +96,9 @@ public struct QueryColumnTypeJSONCodec: Sendable {
         case .doublePrecision: kind = "doublePrecision"
         case .text: kind = "text"
         case .date: kind = "date"
-        case .interval: kind = "interval"
+        case .interval(let fields, let precision):
+            kind = "interval"
+            members = [("fields", fields.map { .string($0.rawValue) } ?? .null), ("precision", optionalInteger(precision))]
         case .blob: kind = "blob"
         case .json: kind = "json"
         case .jsonb: kind = "jsonb"
@@ -138,7 +140,19 @@ public struct QueryColumnTypeJSONCodec: Sendable {
         case "doublePrecision": type = .doublePrecision
         case "text": type = .text
         case "date": type = .date
-        case "interval": type = .interval
+        case "interval":
+            try object.validateKeys(["kind", "fields", "precision"])
+            let fieldsNode = try object.required("fields")
+            let fields: SQLIntervalFields?
+            if case .null = fieldsNode { fields = nil }
+            else {
+                let name = try fieldsNode.string(path: object.child("fields"))
+                guard let value = SQLIntervalFields(rawValue: name) else {
+                    throw SchemaJSONError.invalidValue(path: object.child("fields"), reason: "Unknown interval fields")
+                }
+                fields = value
+            }
+            return .interval(fields: fields, precision: try optionalInteger(object, "precision"))
         case "blob": type = .blob
         case "json": type = .json
         case "jsonb": type = .jsonb

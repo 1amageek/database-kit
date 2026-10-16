@@ -1488,6 +1488,10 @@ private func isStableQueryDefaultExpression(_ expression: ExprSyntax) -> Bool {
         admitted = labels == ["bytes", "limits"]
     case "QueryJSONBValue":
         admitted = labels == ["json", "limits"] || labels == ["root", "limits"]
+    case "QueryTimeValue":
+        admitted = labels == ["microsecondsSinceMidnight"]
+    case "QueryTimeWithTimeZoneValue":
+        admitted = labels == ["time", "utcOffsetSeconds"]
     case "QueryIntervalValue":
         admitted = labels == ["period", "time"]
     case "QueryArray":
@@ -1546,7 +1550,7 @@ private final class QueryDefaultConstructorBuilder: SyntaxRewriter {
         let errorCase: String
         switch name {
         case "QueryNumericValue", "QueryJSONValue", "QueryJSONBValue",
-             "QueryIntervalValue", "QueryArray", "QueryArrayDimension":
+             "QueryIntervalValue", "QueryTimeValue", "QueryArray", "QueryArrayDimension":
             errorType = "DatabaseKit.QueryValueError"
             errorCase = "queryValue"
         case "TimeSpan":
@@ -1572,7 +1576,7 @@ private func isRichQueryPersistedType(_ rawType: String) -> Bool {
         .split(separator: "<", maxSplits: 1).first.map(String.init)?
         .split(separator: ".").last.map(String.init) ?? ""
     return ["QueryNumericValue", "QueryJSONValue", "QueryJSONBValue",
-            "QueryIntervalValue", "QueryArray"].contains(type)
+            "QueryIntervalValue", "QueryTimeValue", "QueryTimeWithTimeZoneValue", "QueryArray"].contains(type)
 }
 
 private func isEnumLikePersistedType(_ rawType: String) -> Bool {

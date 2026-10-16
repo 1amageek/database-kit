@@ -357,3 +357,16 @@ are typed unsupported there. SPARQL regex keeps its separate contract.
 Verification covers expression identity/hash/deep traversal, dynamic parameter
 children, malformed escape structure and bounded values; Wire and QueryAST
 round trips consume the same declarations.
+
+
+### S06 temporal composition
+
+The [SQL S06 contract](SQL/DESIGN.md#s06-frozen-temporal-contract) adds exact
+SQL time/offset/infinity values, interval modifiers and the dedicated
+currentValue expression. Existing primitive representations and structural
+QueryValue losslessness remain intact. Query consumes the Model/Schema
+adaptation and Wire/SchemaJSON codecs; clocks, timezone services and SQL
+comparison stay in Framework. All traversals handle currentValue as a leaf;
+SPARQL rejects SQL-only temporal forms explicitly rather than assuming their
+presence gives RDF semantics. Tests prove constructor/descriptor bounds,
+lossless persistence/carriage and malformed input under the respective owners.

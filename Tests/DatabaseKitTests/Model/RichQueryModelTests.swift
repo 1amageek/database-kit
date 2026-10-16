@@ -173,7 +173,7 @@ struct RichQueryModelTests {
         #expect(decoded.interval == source.interval)
         #expect(decoded.interval.period == CalendarPeriod(months: -2, days: 3))
         #expect(decoded.interval.microseconds == -500_000)
-        #expect(source.interval.queryLiteral == .queryValue(.interval(source.interval), type: .sql(.interval)))
+        #expect(source.interval.queryLiteral == .queryValue(.interval(source.interval), type: .sql(.interval())))
     }
 
     @Test("S01-C09 generated Field and schema use the full declared type metadata")

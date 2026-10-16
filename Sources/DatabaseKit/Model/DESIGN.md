@@ -4,7 +4,7 @@
 
 Model owns static application-model adaptation and persisted field identity
 inside [DatabaseKit](../DESIGN.md). Children: none. This document fixes only the
-current model boundary and S01 query-field adaptation changes; it does not
+current model boundary and S01/S06 query-field adaptation changes; it does not
 redesign unrelated metadata, graph or relationship capabilities.
 
 ## Responsibilities and Boundaries
@@ -75,6 +75,70 @@ S01 public contract:
   PersistableEncodingError/PersistableDecodingError. An unrepresentable rich
   value is not coerced into a primitive success or a default.
 
+### S06 temporal model adaptation
+
+The [Query contract](../Query/DESIGN.md) owns the temporal carriers and their
+intrinsic bounds. This Model section fixes the temporal persistence grammar
+consumed by the Query-owned adapter and static model adaptation; it does not
+own SQL rounding, calendar resolution or timezone lookup.
+The [Schema contract](../Schema/DESIGN.md#s06-declared-temporal-storage)
+admits their descriptor-authoritative storage union.
+
+| Concrete model type | Static adaptation |
+|---|---|
+| Existing CivilDate, CivilTime, CivilDateTime and Timestamp | Preserve their existing primitive FieldValue representation and nil queryType. No finite primitive wrapper or automatic SQL conversion is introduced. |
+| QueryTimeValue | Scalar fieldSchemaType `.time`, queryType `.sql(.time(withTimeZone: false))`; QueryLiteralConvertible and QueryArrayElement consume the same SQL value. Its declared envelope is retained even below 24:00. |
+| QueryTimeWithTimeZoneValue | Scalar fieldSchemaType `.object`, queryType `.sql(.time(withTimeZone: true))`; literal and typed-array adaptation retain wall time and the complete east-positive Int32 offset. |
+| QueryIntervalValue | Preserve its existing scalar object adaptation with unmodified `.interval()`. Field-range and precision modifiers belong to the declaration, not to this value. |
+| QueryTemporalInfinity / infinity QueryValue cases | No standalone polymorphic Persistable or QueryArrayElement conformance. Dynamic declared QueryValue adaptation preserves the matching DATE, TIMESTAMP or INTERVAL domain. |
+
+TIME option B preserves structural losslessness: existing primitive TIME and
+the new SQL TIME carrier remain distinct QueryValue cases and distinct stored
+payloads. Model encoding and reconstruction never collapse one into the other.
+Framework may explicitly convert them under its bound SQL equality/cast policy;
+that does not change primitive or QueryValue Hashable identity.
+
+Every new scalar production is a FieldValue.object with exactly the members
+below. The kind is a primitive string. No additional version, inferred type or
+optional alternate member is admitted. Finite primitive temporal payloads and
+the existing finite interval envelope retain their prior representation.
+
+| QueryValue case | Exact envelope members after kind |
+|---|---|
+| time | kind `time`; microseconds is Int64 in the complete carrier range |
+| timeWithTimeZone | kind `timeWithTimeZone`; microseconds is Int64 in the complete carrier range; utcOffsetSeconds is Int32 |
+| dateInfinity | kind `dateInfinity`; sign is Int8, exactly -1 or 1 |
+| timestampInfinity | kind `timestampInfinity`; sign is Int8, exactly -1 or 1; withTimeZone is supplied by the required matching declared timestamp type |
+| intervalInfinity | kind `intervalInfinity`; sign is Int8, exactly -1 or 1 |
+
+Negative and positive signs map respectively to QueryTemporalInfinity.negative
+and .positive. Standalone Wire and CLI values retain timestamp's zone flag
+explicitly; the declared storage adapter reconstructs it from its authority.
+An undeclared object stays an ordinary object and is never inspected for one
+of these kinds. Encoding a timestamp infinity against the opposite declared
+zone flag fails before publishing an envelope. The same declaration validates
+finite range, component restriction and precision alignment on encode/decode,
+without rounding or repairing persisted data.
+
+Dynamic declared arrays may contain temporal infinities. Reconstruction into
+finite CivilDate, CivilDateTime or Timestamp elements rejects an unrepresentable
+infinity explicitly. A SQL TIME value at 24:00 cannot become CivilTime midnight,
+and TIMETZ cannot lose its offset when adapting to a zone-free model. Any
+explicit finite projection must check representability; malformed envelopes
+and incompatible declarations retain their typed query adaptation cause.
+
+Pure declared-value admission consumes Query's finite range and precision
+checks. Framework first performs requested SQL rounding and carries any day
+transition through its temporal kernel. Model neither rounds persisted data
+nor repairs a value that violates its declaration. Generic primitive model
+validation continues to enforce only intrinsic primitive invariants.
+
+The stable-default capture path recognizes the two new value-stable temporal
+constructors through statically generated conversion, preserving nested typed
+failures. This does not admit arbitrary factories or infer a schema from an
+instance. Optional wrappers still use outer primitive NULL; typed SQL arrays
+retain their explicit element descriptor.
+
 ### Stable query defaults
 
 Model owns `PersistableDefaultConstructionError`, a closed typed construction
@@ -135,6 +199,15 @@ progress record owns execution evidence for these implemented contracts.
 [RichQueryStableDefaultTests](../../../Tests/DatabaseKitTests/Model/RichQueryStableDefaultTests.swift)
 owns stable interval/typed-array schema defaults, missing-field reconstruction,
 exact nested TimeSpan and query failure causes, and nonstable factory rejection.
+
+S06 adds model-owned behavioral cases for the two SQL time wrappers, selected
+field/default reconstruction, optional values and typed arrays; checks TIME
+24:00 and full-width TIMETZ offsets; and rejects infinity or offset loss in
+explicit finite-model conversion. Query adapter tests prove that both primitive
+TIME and SQL TIME preserve structural identity through declared persistence.
+Macro tests verify static metadata and exact constructor-failure capture.
+Native and ordinary/Embedded runtime lanes execute the same carrier and
+persistence cases; these design obligations are not passing test evidence.
 
 Changing model query metadata propagates to Schema admission, macro generation,
 Query adapters, Wire SchemaManifest and Framework catalog/model conversion.

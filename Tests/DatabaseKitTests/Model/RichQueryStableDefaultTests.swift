@@ -115,7 +115,7 @@ struct RichQueryStableDefaultTests {
             period: CalendarPeriod(months: -2, days: 3),
             time: TimeSpan(seconds: -1, nanoseconds: 500_000_000)
         )
-        #expect(field.queryType == .sql(.interval))
+        #expect(field.queryType == .sql(.interval()))
         #expect(field.defaultValue == (try expected.encodeFieldValue()))
         let id = try PersistableField(number: 1, name: "id", value: .string("old"))
         let decoded = try StableIntervalDefaultModel.decodePersistedFields([id])

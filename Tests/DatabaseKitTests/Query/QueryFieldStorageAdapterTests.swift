@@ -52,7 +52,7 @@ struct QueryFieldStorageAdapterTests {
         let interval = try QueryIntervalValue(period: CalendarPeriod(months: 5, days: -7),
                                               time: TimeSpan(seconds: -1, nanoseconds: 999_999_000))
         #expect(interval.microseconds == -1)
-        try roundTrip(.interval(interval), type: .sql(.interval))
+        try roundTrip(.interval(interval), type: .sql(.interval()))
     }
 
     @Test("ordinary objects and bytes retain primitive meaning")

@@ -1054,3 +1054,47 @@ to turn arbitrary CAST expressions into those literals.
 | S05-C08 | Representation Eq/Hash/walk/parameters/source occurrences/SQL serialization/Wire/goldens and existing Graph LIKE/raw mutation adapters preserve their declared semantics. |
 | S05-C09 | Pre-admission before growth, exact/one-past/cancel/deadline failures, same-meter validation, last-owner release, retained capture/result lifetimes and successful subsequent operation. |
 | S05-C10 | Focused native and separately identified ordinary/Embedded executable proofs, affected Graph and SQLite/PostgreSQL/public SQL/MultiBase regressions; previously deferred full FDB/Graph Database portable and final URL lanes remain S18. |
+
+
+### S06 frozen temporal contract
+
+The user explicitly included DATE, TIMESTAMP, TIMESTAMPTZ and INTERVAL infinity
+on 2026-10-16. Existing numeric/float nonfinite exclusions continue to apply to
+function results. This is the semantic authority; execution algorithms are
+owned by [SQLTemporal](../../../../../database-framework/Sources/DatabaseEngine/QueryExecution/SQLTemporal/DESIGN.md).
+
+| ID | Required semantic contract |
+|---|---|
+| S06-C01 | Keep finite CivilDate/CivilDateTime/Timestamp primitives. Add QueryTimeValue with microsecondsSinceMidnight in 0...86400000000, QueryTimeWithTimeZoneValue retaining that time and east-positive Int32 utcOffsetSeconds, and QueryTemporalInfinity. QueryValue adds time, timeWithTimeZone, dateInfinity, timestampInfinity(withTimeZone), intervalInfinity. Structural QueryValue identity stays lossless; Framework owns typed SQL equality. |
+| S06-C02 | SQL DATE uses PG2000 day range [-2451545,2145031949); TIMESTAMP/TIMESTAMPTZ use PG2000 microseconds [-211813488000000000,9223371331200000000). Gregorian astronomical year -4713 is printed as4714BC; SQL input year0 is invalid. TIME includes distinct24:00. Zone-aware timestamp validates its UTC instant. Intrinsic primitive ranges remain unchanged. |
+| S06-C03 | Precision nil or0...6 is retained by type metadata. Lexical fractional input rounds microseconds ties-even; timestamp typmod rounds ties-away from PG2000, including carry and overflow. Interval time typmod rounds signed microseconds ties-away. Injected clock nanoseconds are floored to microseconds before selected typmod; they are not lexical input. Admission validates alignment without performing rounding. |
+| S06-C04 | Extend DataType.interval(fields:SQLIntervalFields?,precision:Int?) rather than create another type. nil fields is full; the13 PostgreSQL field ranges are admitted. A specified field range with precision must end in SECOND. Components remain Int32 months/days and Int64 microseconds. Modifiers truncate only less significant fields and retain higher components. Infinity bypasses finite adjustment. |
+| S06-C05 | Temporal infinity retains family/sign and timestamp zone flag in standalone carriage. Matching comparison/hash/group/order use negativeInfinity<finite<positiveInfinity. Defined casts/arithmetic retain infinity; indeterminate operations fail. TO_CHAR infinity returns SQL NULL. EXTRACT/date_part return NULL only for PostgreSQL's NULL fields; an otherwise nonfinite numeric/float result is an explicit profile failure. |
+| S06-C06 | Calendar arithmetic applies months with month-end adjustment, then calendar days, then elapsed time. Interval comparison uses30-day months/24-hour days in checked Int128, separately from symbolic AGE, calendar addition and EXTRACT epoch. TIMETZ compares UTC-equivalent wall time then west-positive offset tie; it is not collapsed to a UTC time alone. |
+| S06-C07 | UTC/fixed offsets are common; IANA rules must be explicitly supplied and immutable. Unknown/unavailable data fails. Literal offsets are ISO east-positive; textual fixed zones in TIMEZONE/AT TIME ZONE use POSIX signs, while interval zone arguments use east-positive signs. Literal ±15:59:59 bounds do not limit all runtime Int32 offset carriers. IANA gaps use pre-transition and folds post-transition offset. |
+| S06-C08 | CURRENT_* / LOCAL* have a dedicated currentValue expression and optional constant precision, preserving distinction from quoted ordinary function calls. EXTRACT and TIMEZONE use real ordinary built-in identities. MAKE_INTERVAL named arguments normalize to its seven ordered slots with typed defaults and original source occurrences. Exact names, syntax and bounded codecs remain their owners' contracts. |
+| S06-C09 | Logical transaction time is stable across retry; statement time is captured at public operation entry; CLOCK_TIMESTAMP reads the injected live clock per evaluated occurrence. Implicit transaction time equals statement time. Nested read, subquery, attenuation and Composition scopes inherit the same immutable environment without widening authority. |
+| S06-C10 | TO_CHAR/TO_DATE/TO_TIMESTAMP use the full accepted temporal template grammar under C/POSIX, including PostgreSQL literal/FM/FX/exhaustion behavior. Undefined signed-Int32 synthetic-calendar arithmetic for extreme interval J/ISO/DDD/WW formats produces a typed range failure. Formatting/input/zone scans and outputs are admitted before growth and release claims on failure/cancel. |
+| S06-C11 | Preserve all existing finite primitive storage payloads. New SQL time values always use their own strict envelope, preserving primitive-time versus SQL-time structural roundtrip. Temporal extension envelopes require declared SQL metadata; raw objects are never guessed. Model/Schema own adaptation and exact shapes; Framework Directory/index codecs preserve existing finite capability and correctly handle extension values. |
+
+Temporal lexical input uses deterministic ISO/YMD ordering, not an ISO-only
+parser. The common profile accepts documented delimited and compact ISO forms,
+month names, ordinal/year-day and Julian forms, BC, AM/PM, explicit offsets,
+supplied named zones and fixed abbreviations. Type-appropriate special inputs
+include epoch, now, today, yesterday, tomorrow, allballs and infinity. Relative
+inputs use the transaction snapshot and configured session zone. Alternative
+DateStyle selection and arbitrary heuristic noise outside those common forms
+are outside this profile; unsupported input fails explicitly.
+
+The accepted input abbreviation authority is UTC/GMT/Z plus explicitly supplied
+fixed bindings. Named IANA rules and output designations do not imply a reverse
+abbreviation registry. Dynamic abbreviation bindings and ambient host lookup
+are not admitted by this common profile.
+
+[S06 source-backed oracle](../../../../../.codex-tools/sql-s06-evidence/postgresql-oracle/temporal-oracle-proof.json)
+records126 observations on PostgreSQL18.6. These reference observations are not
+Framework implementation evidence. Exact constructors/persistence:
+[Model](../../Model/DESIGN.md), [Schema](../../Schema/DESIGN.md);
+carriage: [DatabaseWire](../../../DatabaseWire/DESIGN.md),
+[SchemaJSON](../../../DatabaseSchemaJSON/DESIGN.md);
+text: [QueryAST](../../../../../database-framework/Sources/QueryAST/DESIGN.md).

@@ -72,6 +72,22 @@ internal struct QueryFieldStorageMeter {
                     try envelope("interval", keys: ("months", "days", "microseconds"), depth: depth)
                     let childDepth = try Self.sum(depth, 1)
                     try node(childDepth); try node(childDepth); try node(childDepth)
+                case (.time, .sql(.time(false, _))):
+                    try envelope("time", keys: ("microseconds", nil, nil), depth: depth)
+                    try node(try Self.sum(depth, 1))
+                case (.timeWithTimeZone, .sql(.time(true, _))):
+                    try envelope("timeWithTimeZone", keys: ("microseconds", "utcOffsetSeconds", nil), depth: depth)
+                    let childDepth = try Self.sum(depth, 1)
+                    try node(childDepth); try node(childDepth)
+                case (.dateInfinity, .sql(.date)):
+                    try envelope("dateInfinity", keys: ("sign", nil, nil), depth: depth)
+                    try node(try Self.sum(depth, 1))
+                case (.timestampInfinity, .sql(.timestamp)):
+                    try envelope("timestampInfinity", keys: ("sign", nil, nil), depth: depth)
+                    try node(try Self.sum(depth, 1))
+                case (.intervalInfinity, .sql(.interval)):
+                    try envelope("intervalInfinity", keys: ("sign", nil, nil), depth: depth)
+                    try node(try Self.sum(depth, 1))
                 case (.array(let array), .sql(.array(let elementType))):
                     guard array.elementType == elementType else { throw .incompatibleType }
                     try envelope("array", keys: ("dimensions", "elements", nil), depth: depth)

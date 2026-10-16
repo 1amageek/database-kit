@@ -2,11 +2,11 @@ import DatabaseTypes
 
 extension QueryIntervalValue: FieldValueEncodable, FieldValueDecodable, QueryLiteralConvertible {
     public static var fieldSchemaType: FieldSchemaType { .object }
-    public static var queryType: QueryColumnType? { .sql(.interval) }
+    public static var queryType: QueryColumnType? { .sql(.interval()) }
 
     public func encodeFieldValue() throws(PersistableEncodingError) -> FieldValue {
         let value = QueryValue.interval(self)
-        let type = QueryColumnType.sql(.interval)
+        let type = QueryColumnType.sql(.interval())
         do throws(QueryValueError) {
             return try QueryFieldStorageAdapter.encode(
                 value,
@@ -22,7 +22,7 @@ extension QueryIntervalValue: FieldValueEncodable, FieldValueDecodable, QueryLit
         _ value: FieldValue,
         field: String
     ) throws(PersistableDecodingError) -> Self {
-        let type = QueryColumnType.sql(.interval)
+        let type = QueryColumnType.sql(.interval())
         do throws(QueryValueError) {
             let decoded = try QueryFieldStorageAdapter.decode(
                 value,
@@ -39,6 +39,6 @@ extension QueryIntervalValue: FieldValueEncodable, FieldValueDecodable, QueryLit
     }
 
     public var queryLiteral: Literal {
-        .queryValue(.interval(self), type: .sql(.interval))
+        .queryValue(.interval(self), type: .sql(.interval()))
     }
 }

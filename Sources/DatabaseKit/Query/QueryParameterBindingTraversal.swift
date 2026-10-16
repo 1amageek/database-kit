@@ -382,7 +382,7 @@ private extension QueryParameterBindingTraversal {
         _ expression: Expression
     ) throws(QueryParameterBindingError) {
         switch expression {
-        case .literal, .column, .variable, .bound:
+        case .literal, .currentValue, .column, .variable, .bound:
             results.append(.expression(Bound(value: expression, changed: false)))
         case .parameter(let reference):
             results.append(
@@ -1325,7 +1325,7 @@ private extension QueryParameterBindingTraversal {
                 value: query.changed ? .exists(query.value) : expression,
                 changed: query.changed
             )
-        case .literal, .column, .variable, .parameter, .bound:
+        case .literal, .currentValue, .column, .variable, .parameter, .bound:
             throw .invalidTraversalState
         }
         results.append(.expression(bound))

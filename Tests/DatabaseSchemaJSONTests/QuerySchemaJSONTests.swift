@@ -18,7 +18,7 @@ struct QuerySchemaJSONTests {
             (.sql(.decimal(precision: 18, scale: 2)), .numeric(try QueryNumericValue(
                 value: ExactDecimal(coefficient: 12345, scale: 2), displayScale: 2
             ))),
-            (.sql(.interval), .interval(try QueryIntervalValue(
+            (.sql(.interval()), .interval(try QueryIntervalValue(
                 period: CalendarPeriod(months: -1, days: 3), time: TimeSpan(seconds: -2, nanoseconds: 123_000)
             ))),
             (.sql(.array(.integer)), .array(try QueryArrayValue(

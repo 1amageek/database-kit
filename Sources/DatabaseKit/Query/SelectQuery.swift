@@ -580,7 +580,7 @@ extension SelectQuery {
             collectColumns(from: object, into: &cols)
         case .subquery(let query), .exists(let query):
             cols.formUnion(query.referencedColumns)
-        case .literal, .variable, .parameter, .bound:
+        case .literal, .currentValue, .variable, .parameter, .bound:
             break
         }
     }

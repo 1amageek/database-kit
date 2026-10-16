@@ -17,6 +17,7 @@ public enum QueryValueError: Error, Sendable, Equatable {
     case invalidPersistenceDescriptor
     case invalidPersistencePayload(reason: String)
     case intervalOutOfRange
+    case timeOutOfRange
     case unknownRetainedByteCount
     case resourceLimit(resource: String, actual: UInt64, maximum: UInt64)
     case arithmeticOverflow

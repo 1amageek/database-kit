@@ -315,6 +315,7 @@ public final class Schema: Sendable {
                 }
                 try Self.validateQueryField(field)
                 if let defaultValue = field.defaultValue,
+                   field.queryType == nil,
                    !Self.accepts(defaultValue, for: field) {
                     throw .invalidFieldDefault(fieldName: field.name)
                 }
@@ -557,6 +558,8 @@ public final class Schema: Sendable {
             guard case .sql(let type) = field.queryType else { return false }
             switch type {
             case .decimal, .json, .jsonb, .interval, .array:
+                return true
+            case .time(true, _):
                 return true
             default:
                 return false

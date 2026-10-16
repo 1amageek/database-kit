@@ -63,10 +63,29 @@ extension QueryJSONBValue: QueryArrayElement {
 }
 
 extension QueryIntervalValue: QueryArrayElement {
-    public static var queryDataType: DataType { .interval }
+    public static var queryDataType: DataType { .interval() }
     public var queryValue: QueryValue { .interval(self) }
     public static func decodeQueryValue(_ value: QueryValue) throws(QueryValueError) -> Self {
         guard case .interval(let value) = value else { throw .incompatibleType }
+        return value
+    }
+}
+
+
+extension QueryTimeValue: QueryArrayElement {
+    public static var queryDataType: DataType { .time(withTimeZone: false) }
+    public var queryValue: QueryValue { .time(self) }
+    public static func decodeQueryValue(_ value: QueryValue) throws(QueryValueError) -> Self {
+        guard case .time(let value) = value else { throw .incompatibleType }
+        return value
+    }
+}
+
+extension QueryTimeWithTimeZoneValue: QueryArrayElement {
+    public static var queryDataType: DataType { .time(withTimeZone: true) }
+    public var queryValue: QueryValue { .timeWithTimeZone(self) }
+    public static func decodeQueryValue(_ value: QueryValue) throws(QueryValueError) -> Self {
+        guard case .timeWithTimeZone(let value) = value else { throw .incompatibleType }
         return value
     }
 }

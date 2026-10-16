@@ -450,3 +450,55 @@ rejected; no compatibility decoder reconstructs a superseded declaration.
 Existing iterative expression owners enforce depth, bytes and node budgets.
 Golden, truncation, invalid discriminator/Boolean, nested parameter and
 standard/MultiBase request tests prove carriage without executing predicates.
+
+
+### S06 temporal value and interval descriptor carriage
+
+Consume the temporal declarations and intrinsic admission owned by
+[Query](../DatabaseKit/Query/DESIGN.md) and its
+[SQL profile](../DatabaseKit/Query/SQL/DESIGN.md). Wire transports those values;
+it does not interpret lexical input, apply interval qualifiers, round precision,
+resolve zones, or read clocks. Primitive FieldValue productions remain unchanged.
+
+| Production | Exact payload after its UInt8 tag |
+|---|---|
+| QueryValue 6: time | Int64 microseconds since midnight |
+| QueryValue 7: time with time zone | Int64 microseconds since midnight, Int32 UTC offset seconds |
+| QueryValue 8: date infinity | UInt8 direction |
+| QueryValue 9: timestamp infinity | UInt8 direction, Bool withTimeZone |
+| QueryValue 10: interval infinity | UInt8 direction |
+| DataType 13: unconstrained interval | No payload; fields and precision are both absent |
+| DataType 25: modified interval | Bool hasFields, optional UInt8 fields, Bool hasPrecision, optional UInt8 precision |
+
+Infinity direction bytes are 0 negative and 1 positive. Interval field bytes
+0...12 are year, month, day, hour, minute, second, yearToMonth, dayToHour,
+dayToMinute, dayToSecond, hourToMinute, hourToSecond, minuteToSecond respectively.
+Absent fields mean the full range. Modified interval tag 25 requires at least
+one modifier; the no-modifier value has only tag 13. Scalar temporal values use
+the existing nested-value accounting around their fixed-size payloads.
+
+Both materializing decode and lazy cell validation consume the same intrinsic
+Kit admission. Invalid time bounds, descriptor precision/field combinations,
+infinity direction, Boolean, type/zone mismatch, truncated payloads and unknown
+tags fail with typed DatabaseWireError; SQL NULL remains the existing primitive
+NULL production. No infinity payload is decoded into a finite primitive.
+Arrays retain their exact declared element type and validate every temporal
+cell against it. Schema fields, defaults, parameters, operation frames and
+lazy result pages use these same productions in standard v3 and MultiBase v5.
+
+S06-W01 verifies deterministic temporal/infinity and interval descriptor goldens;
+S06-W02 verifies eager/lazy typed NULL, array and schema carriage;
+S06-W03 verifies malformed discriminators, incompatible declarations and every
+truncated prefix; S06-W04 verifies exact/one-past byte, node and nesting limits
+on native, WASM and Embedded. These are required behavioral obligations, not a
+claim that S06 implementation or verification has run.
+
+
+Expression tag 52 carries currentValue: UInt8 kind, Bool hasPrecision, optional
+UInt8 precision. Kind bytes 0...4 are date, time, timestamp, localTime,
+localTimestamp. There are no child expressions. Intrinsic Kit admission rejects
+precision for date and precision outside 0...6 for the remaining kinds. Unknown
+kind, invalid Boolean, forbidden precision and truncation fail typed. Generic
+FunctionCall tags 28/43 remain distinct and never reconstruct this expression.
+S06-W01/W03 additionally require exact current-value goldens, quoted generic
+identity separation, malformed precision and truncation coverage.

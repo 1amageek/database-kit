@@ -1702,6 +1702,16 @@ private extension QueryIRExpressionWireDecoder {
                     )
                 )
                 try reader.endNestedValue()
+            case 52:
+                let kind = try SQLTemporalWireCodec.currentKind(reader.readUInt8())
+                let precision: Int?
+                if try reader.readBool() { precision = Int(try reader.readUInt8()) }
+                else { precision = nil }
+                guard precision == nil || kind != .date && (0...6).contains(precision!) else {
+                    throw .invalidQueryIRWireState
+                }
+                expressions.append(.currentValue(kind: kind, precision: precision))
+                try reader.endNestedValue()
             case 50:
                 let kind: PatternMatchKind
                 switch try reader.readUInt8() {

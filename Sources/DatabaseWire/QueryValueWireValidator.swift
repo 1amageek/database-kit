@@ -35,6 +35,13 @@ enum QueryValueWireValidator {
         case 3:
             if let type, type != .sql(.jsonb) { throw .invalidQueryValue(.incompatibleType) }
             try QueryJSONBWireCodec.validate(from: &reader)
+        case 6...10:
+            try reader.withNestedValue { reader throws(DatabaseWireError) in
+                let value = try QueryValueWireCodec.decodeTemporalPayload(tag: tag, from: &reader)
+                if let type, !QueryValueValidator.accepts(value, type: type) {
+                    throw .invalidQueryValue(.incompatibleType)
+                }
+            }
         case 1, 2, 5:
             try reader.withNestedValue { reader throws(DatabaseWireError) in
                 switch tag {
@@ -48,8 +55,10 @@ enum QueryValueWireValidator {
                     let json = try QueryValueWireCodec.decodeJSON(from: &reader)
                     try reader.registerQueryJSONFootprint(try QueryValueWireCodec.jsonFootprint(json))
                 case 5:
-                    if let type, type != .sql(.interval) { throw .invalidQueryValue(.incompatibleType) }
-                    _ = try QueryValueWireCodec.decodeInterval(from: &reader)
+                    let value = try QueryValueWireCodec.decodeInterval(from: &reader)
+                    if let type, !QueryValueValidator.accepts(.interval(value), type: type) {
+                        throw .invalidQueryValue(.incompatibleType)
+                    }
                 default: throw .invalidQueryIRWireState
                 }
             }

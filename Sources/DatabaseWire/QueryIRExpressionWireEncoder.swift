@@ -442,6 +442,14 @@ private extension QueryIRExpressionWireEncoder {
         case .row(let values):
             writer.writeUInt8(42)
             encodingSteps.append(.expressionArray(values))
+        case .currentValue(let kind, let precision):
+            guard precision == nil || kind != .date && (0...6).contains(precision!) else {
+                throw .invalidQueryIRWireState
+            }
+            writer.writeUInt8(52)
+            writer.writeUInt8(SQLTemporalWireCodec.encode(kind))
+            writer.writeBool(precision != nil)
+            if let precision { writer.writeUInt8(UInt8(precision)) }
         case .literal(let value):
             writer.writeUInt8(0)
             encodingSteps.append(.literal(value))
