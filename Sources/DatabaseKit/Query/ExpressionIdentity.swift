@@ -28,6 +28,7 @@ enum ExpressionIdentity {
         case query(SelectQuery)
         case direction(SortDirection)
         case nulls(NullOrdering?)
+        case pattern(PatternMatchKind)
         case truth(TruthValue)
         case comparison(ComparisonOperator)
         case quantifier(ComparisonQuantifier)
@@ -129,9 +130,13 @@ enum ExpressionIdentity {
             case .isNotNull(let value): return unary(value, kind: 19)
             case .bound(let value):
                 steps.append(.token(.variable(value))); return .kind(20)
-            case .like(let value, let pattern):
-                steps.append(.token(.string(pattern)))
-                return unary(value, kind: 21)
+            case .patternMatch(let subject, let pattern, let escape, let kind):
+                steps.append(.optionalExpression(escape))
+                steps.append(.expression(pattern))
+                steps.append(.expression(subject))
+                steps.append(.token(.pattern(kind)))
+                return .kind(50)
+            case .concatenate(let lhs, let rhs): return binary(lhs, rhs, kind: 51)
             case .regex(let value, let pattern, let flags):
                 steps.append(.token(.optionalString(flags)))
                 steps.append(.token(.string(pattern)))

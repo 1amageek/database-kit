@@ -55,7 +55,7 @@ struct SQLConditionalWireTests {
             ([49, 0, 0, 6, 0, 0, 0, 0], .invalidValueTag(6)),
             ([49, 0, 0, 0, 2, 0, 0, 0], .invalidValueTag(2)),
             ([49, 0, 0, 0, 0, 2, 0, 0], .invalidValueTag(2)),
-            ([50], .invalidValueTag(50)),
+            ([52], .invalidValueTag(52)),
         ]
         for (bytes, expected) in cases { #expect(throws: expected) { try decode(bytes) } }
     }

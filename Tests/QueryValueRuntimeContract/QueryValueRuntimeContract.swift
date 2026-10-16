@@ -31,7 +31,7 @@ struct QueryValueRuntimeContract {
         print("QUERY_VALUE_RUNTIME_BEGIN")
         do {
             try run()
-            print("QUERY_VALUE_RUNTIME_PASS cases=9")
+            print("QUERY_VALUE_RUNTIME_PASS cases=11")
         } catch {
             switch error {
             case .assertion(let code): print("QUERY_VALUE_RUNTIME_FAIL assertion=\(code)")
@@ -118,6 +118,159 @@ struct QueryValueRuntimeContract {
         pass("sql-constructors-temporal-descriptors")
         try sqlConditionalCarriage()
         pass("sql-conditional-carriage")
+        try sqlLexicalValueConstruction()
+        pass("sql-lexical-value-construction")
+        try sqlPatternConcatenationCarriage()
+        pass("sql-pattern-concatenation-carriage")
+    }
+
+    private static func sqlLexicalValueConstruction() throws(Failure) {
+        let numeric = try query { () throws(QueryValueError) in
+            try QueryNumericValue(sqlLexicalForm: " 1.2300e2 ", maximumUTF8Count: 10)
+        }
+        try require(numeric.value == ExactDecimal(coefficient: 123, scale: 0) && numeric.displayScale == 2, code: 58)
+        let zero = try query { () throws(QueryValueError) in
+            try QueryNumericValue(sqlLexicalForm: "-0.000", maximumUTF8Count: 6)
+        }
+        try require(zero.value.coefficient == 0 && zero.displayScale == 3, code: 59)
+        let deepScale = try query { () throws(QueryValueError) in
+            try QueryNumericValue(sqlLexicalForm: "1e-16383", maximumUTF8Count: 8)
+        }
+        try require(deepScale.displayScale == 16383, code: 60)
+        let uuid = try query { () throws(QueryValueError) in
+            try QueryValue.uuid(sqlLexicalForm: "{a0eebc999c0b4ef8bb6d6bb9bd380a11}", maximumUTF8Count: 34)
+        }
+        let equivalentUUID = try query { () throws(QueryValueError) in
+            try QueryValue.uuid(sqlLexicalForm: "A0EE-BC99-9C0B-4EF8-BB6D-6BB9-BD38-0A11", maximumUTF8Count: 39)
+        }
+        try require(uuid == equivalentUUID, code: 61)
+        let binary = try query { () throws(QueryValueError) in
+            try QueryValue.binary(sqlLexicalForm: #"\001\377\\A"#, maximumUTF8Count: 11)
+        }
+        try require(binary == .primitive(.bytes([1, 255, 92, 65])), code: 62)
+        let hexadecimal = try query { () throws(QueryValueError) in
+            try QueryValue.binary(sqlLexicalForm: "\\x 00\tFF\n80\r", maximumUTF8Count: 12)
+        }
+        try require(hexadecimal == .primitive(.bytes([0, 255, 128])), code: 63)
+        let values: [QueryValue] = [.numeric(numeric), uuid, binary]
+        let types: [QueryColumnType] = [.sql(.decimal(precision: nil, scale: nil)), .sql(.uuid), .sql(.blob)]
+        var columns: [QueryColumn] = []
+        for (index, type) in types.enumerated() {
+            columns.append(try query { () throws(QueryValueError) in
+                try QueryColumn(number: UInt32(index + 1), name: "lexical", type: type, isNullable: false)
+            })
+        }
+        let page = try retainedPage(columns: columns, rows: [QueryRow(values: values)])
+        var rows = page.makeRowIterator()
+        try require(try wire { () throws(DatabaseWireError) in try rows.next() } == QueryRow(values: values), code: 64)
+        try rejectQuery(.resourceLimit(resource: "numeric input bytes", actual: 6, maximum: 5), code: 65) {
+            () throws(QueryValueError) in _ = try QueryNumericValue(sqlLexicalForm: " 1.20 ", maximumUTF8Count: 5)
+        }
+        try rejectQuery(.resourceLimit(resource: "UUID input bytes", actual: 32, maximum: 31), code: 66) {
+            () throws(QueryValueError) in _ = try QueryValue.uuid(sqlLexicalForm: "a0eebc999c0b4ef8bb6d6bb9bd380a11", maximumUTF8Count: 31)
+        }
+        try rejectQuery(.resourceLimit(resource: "binary input bytes", actual: 2, maximum: 1), code: 67) {
+            () throws(QueryValueError) in _ = try QueryValue.binary(sqlLexicalForm: "é", maximumUTF8Count: 1)
+        }
+        try rejectQuery(.numericOutOfRange, code: 68) {
+            () throws(QueryValueError) in _ = try QueryNumericValue(sqlLexicalForm: "1e-16384", maximumUTF8Count: 8)
+        }
+        try rejectQuery(.invalidNumeric(offset: 3, reason: "Repeated numeric decimal point"), code: 69) {
+            () throws(QueryValueError) in _ = try QueryNumericValue(sqlLexicalForm: "1.2.3", maximumUTF8Count: 5)
+        }
+        try rejectQuery(.invalidUUID(offset: 0, reason: "Invalid UUID hexadecimal digit"), code: 70) {
+            () throws(QueryValueError) in _ = try QueryValue.uuid(sqlLexicalForm: "x", maximumUTF8Count: 1)
+        }
+        try rejectQuery(.invalidBinary(offset: 3, reason: "Incomplete BYTEA hexadecimal byte"), code: 71) {
+            () throws(QueryValueError) in _ = try QueryValue.binary(sqlLexicalForm: #"\x0"#, maximumUTF8Count: 3)
+        }
+        for text in ["\\x00\u{b}ff", "\\x00\u{c}ff"] {
+            try rejectQuery(.invalidBinary(offset: 4, reason: "Invalid BYTEA hexadecimal digit"), code: 71) {
+                () throws(QueryValueError) in _ = try QueryValue.binary(sqlLexicalForm: text[...], maximumUTF8Count: 7)
+            }
+        }
+        try require(QueryValueValidator.accepts(.primitive(.null), type: .sql(.char(length: 10_485_760)))
+            && !QueryValueValidator.accepts(.primitive(.null), type: .sql(.varchar(length: 10_485_761))), code: 72)
+    }
+
+    private static func sqlPatternConcatenationCarriage() throws(Failure) {
+        let subject = Expression.parameter(.position(1))
+        let pattern = Expression.parameter(.position(2))
+        let escape = Expression.parameter(.position(3))
+        let textType = QueryColumnType.sql(.text)
+        let parameters = [QueryParameter(position: 1, value: .primitive(.string("é😀")), type: textType),
+                          QueryParameter(position: 2, value: .primitive(.string("é_")), type: textType),
+                          QueryParameter(position: 3, value: .primitive(.null), type: textType)]
+        let boundSubject = Expression.literal(.queryValue(parameters[0].value, type: textType))
+        let boundPattern = Expression.literal(.queryValue(parameters[1].value, type: textType))
+        let boundEscape = Expression.literal(.queryValue(.primitive(.null), type: textType))
+        let kinds: [PatternMatchKind] = [.like, .caseInsensitiveLike, .similarTo, .regularExpression, .caseInsensitiveRegularExpression]
+        for kind in kinds {
+            let input = select(.patternMatch(subject: subject, pattern: pattern, escape: kind.permitsEscape ? escape : nil, kind: kind))
+            let bound: QueryStatement
+            do { bound = try QueryParameterBinder(parameters: parameters).bind(input) }
+            catch { throw .binding(error) }
+            let expected = select(.patternMatch(subject: boundSubject, pattern: boundPattern,
+                escape: kind.permitsEscape ? boundEscape : nil, kind: kind))
+            try require(bound == expected && bound.hashValue == expected.hashValue, code: 73)
+            try patternRequestRoundTrip(bound)
+        }
+        let disabled = Expression.patternMatch(subject: boundSubject, pattern: boundPattern, escape: nil, kind: .like)
+        let null = Expression.patternMatch(subject: boundSubject, pattern: boundPattern, escape: boundEscape, kind: .like)
+        let empty = Expression.patternMatch(subject: boundSubject, pattern: boundPattern, escape: .string(""), kind: .like)
+        try require(Set([disabled, null, empty]).count == 3, code: 74)
+        let concatenation = Expression.concatenate(boundSubject, boundPattern)
+        let boundConcatenation: QueryStatement
+        do { boundConcatenation = try QueryParameterBinder(parameters: parameters).bind(select(.concatenate(subject, pattern))) }
+        catch { throw .binding(error) }
+        try require(boundConcatenation == select(concatenation), code: 75)
+        try require(concatenation != .concatenate(boundPattern, boundSubject), code: 75)
+        try patternRequestRoundTrip(select(.row([disabled, null, empty, concatenation, .not(disabled)])))
+        let counted = Expression.patternMatch(subject: subject, pattern: pattern, escape: escape, kind: .similarTo)
+        do { try QueryStructuralValidator.validate(counted, limits: QueryStructuralLimits(maximumTotalNodes: 4)) }
+        catch { throw .structure(error) }
+        var rejected = false
+        do { try QueryStructuralValidator.validate(counted, limits: QueryStructuralLimits(maximumTotalNodes: 3)) }
+        catch {
+            guard error == .resourceLimitExceeded(resource: .totalNodes, actual: 4, maximum: 3) else { throw .structure(error) }
+            rejected = true
+        }
+        try require(rejected, code: 76)
+        rejected = false
+        do { try QueryStructuralValidator.validate(.patternMatch(subject: subject, pattern: pattern, escape: escape, kind: .regularExpression)) }
+        catch {
+            guard error == .invalidPatternEscape else { throw .structure(error) }
+            rejected = true
+        }
+        try require(rejected, code: 77)
+        let retainedPattern = Expression.patternMatch(subject: .null, pattern: .string(String(repeating: "x", count: 1000)),
+            escape: nil, kind: .like)
+        do { try QueryStructuralValidator.validate(retainedPattern, limits: QueryStructuralLimits(maximumRetainedBytes: 1000)) }
+        catch { throw .structure(error) }
+        for maximum: UInt64 in [999, 100] {
+            rejected = false
+            do { try QueryStructuralValidator.validate(retainedPattern, limits: QueryStructuralLimits(maximumRetainedBytes: maximum)) }
+            catch {
+                guard error == .resourceLimitExceeded(resource: .retainedBytes, actual: 1000, maximum: maximum) else { throw .structure(error) }
+                rejected = true
+            }
+            try require(rejected, code: 80)
+        }
+    }
+
+    private static func patternRequestRoundTrip(_ statement: QueryStatement) throws(Failure) {
+        let bytes = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(statement) }
+        try require(try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(bytes) } == statement, code: 78)
+        let request = QueryExecuteOperation.Request(input: .ir(statement))
+        let frame = try wire { () throws(DatabaseWireError) in
+            #if DATABASE_KIT_MULTI_BASE
+            try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 52, target: .database, request: request)
+            #else
+            try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 52, request: request)
+            #endif
+        }
+        let decoded = try wire { () throws(DatabaseWireError) in try DatabaseWireDecoder().decodeRequest(DatabaseOperationCatalog.queryExecute, from: frame) }
+        try require(decoded.request == request, code: 79)
     }
 
     private static func sqlConditionalCarriage() throws(Failure) {
@@ -472,6 +625,17 @@ struct QueryValueRuntimeContract {
         do { try body() }
         catch {
             guard error == expected else { throw .wire(error) }
+            rejected = true
+        }
+        try require(rejected, code: code)
+    }
+
+    private static func rejectQuery(_ expected: QueryValueError, code: UInt8,
+                                    _ body: () throws(QueryValueError) -> Void) throws(Failure) {
+        var rejected = false
+        do { try body() }
+        catch {
+            guard error == expected else { throw .query(error) }
             rejected = true
         }
         try require(rejected, code: code)

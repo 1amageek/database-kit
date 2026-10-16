@@ -725,7 +725,7 @@ private extension QueryStructuralValidator {
 
                 case .expression(let expression, _):
                     switch expression {
-                    case .add(let lhs, let rhs),
+                    case .add(let lhs, let rhs), .concatenate(let lhs, let rhs),
                          .subtract(let lhs, let rhs),
                          .multiply(let lhs, let rhs),
                          .divide(let lhs, let rhs),
@@ -751,9 +751,13 @@ private extension QueryStructuralValidator {
                          .subject(let value),
                          .predicate(let value),
                          .object(let value),
-                         .like(let value, _),
                          .regex(let value, _, _):
                         validationSteps.append(.expression(value, depth: childDepth))
+                    case .patternMatch(let subject, let pattern, let escape, let kind):
+                        guard kind.permitsEscape || escape == nil else { throw .invalidPatternEscape }
+                        if let escape { validationSteps.append(.expression(escape, depth: childDepth)) }
+                        validationSteps.append(.expression(pattern, depth: childDepth))
+                        validationSteps.append(.expression(subject, depth: childDepth))
                     case .cast(let value, let targetType):
                         validationSteps.append(.dataType(targetType, depth: childDepth))
                         validationSteps.append(.expression(value, depth: childDepth))
@@ -931,7 +935,7 @@ private extension QueryStructuralValidator {
 
                 case .literal(let literal, _):
                     switch literal {
-                    case .sqlUnknownString(let value):
+                    case .string(let value), .sqlUnknownString(let value):
                         try ledger.consume(.retainedBytes, amount: UInt64(value.utf8.count))
                     case .queryValue(let value, let type):
                         validationSteps.append(.queryValue(value, type, depth: childDepth))
@@ -942,7 +946,7 @@ private extension QueryStructuralValidator {
                         }
                     case .rdfTerm(let term):
                         validationSteps.append(.rdfTerm(term, depth: childDepth))
-                    case .null, .bool, .int, .uint, .decimal, .double, .string,
+                    case .null, .bool, .int, .uint, .decimal, .double,
                          .date, .timestamp, .binary, .uuid, .iri, .blankNode,
                          .typedLiteral, .langLiteral, .dirLangLiteral:
                         break

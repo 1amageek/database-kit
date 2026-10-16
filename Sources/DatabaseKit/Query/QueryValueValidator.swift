@@ -62,7 +62,9 @@ public enum QueryValueValidator {
             if let precision, !(1...38).contains(precision) { return false }
             if let scale, precision == nil || !(-1000...1000).contains(scale) { return false }
             return true
-        case .char(let length), .varchar(let length), .binary(let length), .varbinary(let length):
+        case .char(let length), .varchar(let length):
+            return length == nil || (1...10_485_760).contains(length!)
+        case .binary(let length), .varbinary(let length):
             return length == nil || length! > 0
         case .time(_, let precision), .timestamp(_, let precision):
             return precision == nil || (0...6).contains(precision!)

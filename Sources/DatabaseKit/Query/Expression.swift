@@ -283,6 +283,9 @@ public indirect enum Expression: Sendable, Hashable {
     /// Modulo: a % b
     case modulo(Expression, Expression)
 
+    /// Strict SQL concatenation: text or binary left || right.
+    case concatenate(Expression, Expression)
+
     /// Unary negation: -a
     case negate(Expression)
 
@@ -330,8 +333,8 @@ public indirect enum Expression: Sendable, Hashable {
 
     // MARK: - Pattern Matching
 
-    /// SQL LIKE: expr LIKE pattern
-    case like(Expression, pattern: String)
+    /// SQL pattern predicate. An absent escape disables escaping.
+    case patternMatch(subject: Expression, pattern: Expression, escape: Expression?, kind: PatternMatchKind)
 
     /// Regex match: REGEX(expr, pattern, flags)
     case regex(Expression, pattern: String, flags: String?)

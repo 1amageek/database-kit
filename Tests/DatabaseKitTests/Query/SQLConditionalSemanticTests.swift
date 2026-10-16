@@ -35,7 +35,7 @@ struct SQLConditionalSemanticTests {
              .equal(child, .int(3)), .notEqual(child, .int(3)), .lessThan(child, .int(3)),
              .lessThanOrEqual(child, .int(3)), .greaterThan(child, .int(3)), .greaterThanOrEqual(child, .int(3)),
              .and(child, .bool(true)), .or(child, .bool(false)), .not(child), .isNull(child), .isNotNull(child),
-             .like(child, pattern: "exact"), .regex(child, pattern: "exact", flags: "i"),
+             .patternMatch(subject: child, pattern: .string("exact"), escape: nil, kind: .like), .concatenate(child, .string("exact")), .regex(child, pattern: "exact", flags: "i"),
              .between(child, low: .int(0), high: .int(3)), .inList(child, values: [.int(3)]),
              .notInList(.int(3), values: [child]), .inSubquery(child, subquery: query(.int(3))),
              .function(FunctionCall(name: "Exact.F", arguments: [child], distinct: true, schema: "Exact.S")),

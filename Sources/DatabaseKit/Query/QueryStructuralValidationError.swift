@@ -22,6 +22,7 @@ public enum QueryStructuralValidationError: Error, Sendable, Equatable {
         maximum: UInt64
     )
     case invalidResourceClaim(Resource)
+    case invalidPatternEscape
     case unbalancedNesting
     case invalidQueryValue(QueryValueError)
     case invalidReferenceIdentifier(ReferenceIdentifierValidationError)
@@ -34,6 +35,8 @@ extension QueryStructuralValidationError: CustomStringConvertible {
             return "Query \(resource.rawValue) limit exceeded: \(actual) > \(maximum)"
         case .invalidResourceClaim(let resource):
             return "Query \(resource.rawValue) must use its dedicated admission operation"
+        case .invalidPatternEscape:
+            return "ERE pattern predicates do not accept an escape expression"
         case .unbalancedNesting:
             return "Query nesting admission is unbalanced"
         case .invalidQueryValue:

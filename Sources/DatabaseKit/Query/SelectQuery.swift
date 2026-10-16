@@ -420,7 +420,7 @@ extension SelectQuery {
         switch expr {
         case .variable(let v):
             vars.insert(v.name)
-        case .add(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
+        case .add(let l, let r), .concatenate(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
              .divide(let l, let r), .modulo(let l, let r), .equal(let l, let r),
              .notEqual(let l, let r), .lessThan(let l, let r), .lessThanOrEqual(let l, let r),
              .greaterThan(let l, let r), .greaterThanOrEqual(let l, let r),
@@ -430,6 +430,10 @@ extension SelectQuery {
         case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e), .truthTest(let e, _, _),
              .isTriple(let e), .subject(let e), .predicate(let e), .object(let e):
             collectVariables(from: e, into: &vars)
+        case .patternMatch(let subject, let pattern, let escape, _):
+            collectVariables(from: subject, into: &vars)
+            collectVariables(from: pattern, into: &vars)
+            if let escape { collectVariables(from: escape, into: &vars) }
         case .array(let expressions), .row(let expressions), .greatest(let expressions), .least(let expressions):
             for expression in expressions { collectVariables(from: expression, into: &vars) }
         case .caseWhen(let operand, let cases, let fallback):
@@ -514,7 +518,7 @@ extension SelectQuery {
         switch expr {
         case .column(let col):
             cols.insert(col)
-        case .add(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
+        case .add(let l, let r), .concatenate(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
              .divide(let l, let r), .modulo(let l, let r), .equal(let l, let r),
              .notEqual(let l, let r), .lessThan(let l, let r), .lessThanOrEqual(let l, let r),
              .greaterThan(let l, let r), .greaterThanOrEqual(let l, let r),
@@ -523,7 +527,11 @@ extension SelectQuery {
             collectColumns(from: r, into: &cols)
         case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e), .truthTest(let e, _, _):
             collectColumns(from: e, into: &cols)
-        case .like(let expression, _), .regex(let expression, _, _),
+        case .patternMatch(let subject, let pattern, let escape, _):
+            collectColumns(from: subject, into: &cols)
+            collectColumns(from: pattern, into: &cols)
+            if let escape { collectColumns(from: escape, into: &cols) }
+        case .regex(let expression, _, _),
              .cast(let expression, _), .isTriple(let expression),
              .subject(let expression), .predicate(let expression),
              .object(let expression):

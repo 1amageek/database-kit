@@ -438,3 +438,15 @@ contracts; this change adds no Expression or QueryStatement JSON boundary.
 Occurrence/source sidecars and selected runtime signatures remain local.
 S04-C11/C12 require canonical goldens and actual native/WASM/Embedded decode,
 not only generated declarations.
+
+### S05 pattern grammar
+
+Expression tag 50 carries the closed pattern kind, escape-presence Boolean,
+subject expression, pattern expression and optional escape expression in that
+order. Kind bytes 0...4 mean LIKE, case-insensitive LIKE, SIMILAR TO, ERE and
+case-insensitive ERE. ERE with a present escape is rejected. Tag 51 carries
+the concatenation operator and its two expressions. Retired LIKE tag 21 is
+rejected; no compatibility decoder reconstructs a superseded declaration.
+Existing iterative expression owners enforce depth, bytes and node budgets.
+Golden, truncation, invalid discriminator/Boolean, nested parameter and
+standard/MultiBase request tests prove carriage without executing predicates.

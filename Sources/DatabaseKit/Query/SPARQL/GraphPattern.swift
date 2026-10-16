@@ -246,7 +246,7 @@ extension Expression {
     /// Independent implementation for proper SPARQL semantics
     public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
         switch self {
-        case .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
+        case .concatenate, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
             throw .unsupportedSPARQLLiteral
         // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
         // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.
@@ -330,10 +330,14 @@ extension Expression {
             return "BOUND(?\(v.name))"
 
         // Pattern matching
-        case .like(let e, let pattern):
-            // Convert SQL LIKE to REGEX
-            let regexPattern = Self.regexPattern(fromSQLLike: pattern)
-            return "REGEX(\(try e.toSPARQL(prefixes: prefixes)), \"^\(regexPattern)$\", \"i\")"
+        case .patternMatch(let subject, let pattern, let escape, let kind):
+            guard kind == .like, escape == nil,
+                  case .literal(.string(let literalPattern)) = pattern else {
+                throw .unsupportedSPARQLLiteral
+            }
+            let regexPattern = Self.regexPattern(fromSQLLike: literalPattern)
+            let regexLiteral = try Literal.string("^\(regexPattern)$").toSPARQL()
+            return "REGEX(\(try subject.toSPARQL(prefixes: prefixes)), \(regexLiteral))"
 
         case .regex(let text, let pattern, let flags):
             if let f = flags {
@@ -420,11 +424,15 @@ extension Expression {
     private static func regexPattern(fromSQLLike pattern: String) -> String {
         var result = ""
         result.reserveCapacity(pattern.count)
-        for character in pattern {
-            switch character {
-            case "%": result += ".*"
-            case "_": result += "."
-            default: result.append(character)
+        for scalar in pattern.unicodeScalars {
+            switch scalar.value {
+            case 0x25: result += ".*"
+            case 0x5F: result += "."
+            case 0x2E, 0x5C, 0x5B, 0x5D, 0x28, 0x29, 0x7B, 0x7D,
+                 0x5E, 0x24, 0x2B, 0x3F, 0x7C, 0x2A:
+                result.append("\\")
+                result.unicodeScalars.append(scalar)
+            default: result.unicodeScalars.append(scalar)
             }
         }
         return result

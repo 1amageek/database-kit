@@ -46,6 +46,7 @@ private extension QueryIRExpressionWireDecoder {
 
     enum BinaryKind {
         case add
+        case concatenate
         case subtract
         case multiply
         case divide
@@ -161,7 +162,7 @@ private extension QueryIRExpressionWireDecoder {
         case assembleBinary(BinaryKind)
         case assembleBetween
         case assembleTriple
-        case likeTail
+        case assemblePatternMatch(PatternMatchKind, hasEscape: Bool)
         case regexTail
         case listTail(ListKind)
         case expressionCursor(CollectionCursor<Expression>)
@@ -411,11 +412,11 @@ private extension QueryIRExpressionWireDecoder {
                     )
                 )
 
-            case .likeTail:
-                let value = try popExpression()
-                expressions.append(
-                    .like(value, pattern: try reader.readString())
-                )
+            case .assemblePatternMatch(let kind, let hasEscape):
+                let escape = try hasEscape ? popExpression() : nil
+                let pattern = try popExpression()
+                let subject = try popExpression()
+                expressions.append(.patternMatch(subject: subject, pattern: pattern, escape: escape, kind: kind))
 
             case .regexTail:
                 let value = try popExpression()
@@ -1701,10 +1702,24 @@ private extension QueryIRExpressionWireDecoder {
                     )
                 )
                 try reader.endNestedValue()
-            case 21:
+            case 50:
+                let kind: PatternMatchKind
+                switch try reader.readUInt8() {
+                case 0: kind = .like
+                case 1: kind = .caseInsensitiveLike
+                case 2: kind = .similarTo
+                case 3: kind = .regularExpression
+                case 4: kind = .caseInsensitiveRegularExpression
+                case let tag: throw .invalidValueTag(tag)
+                }
+                let hasEscape = try reader.readBool()
+                guard kind.permitsEscape || !hasEscape else { throw .invalidQueryIRWireState }
                 decodingSteps.append(.endNestedValue)
-                decodingSteps.append(.likeTail)
+                decodingSteps.append(.assemblePatternMatch(kind, hasEscape: hasEscape))
+                if hasEscape { decodingSteps.append(.expression) }
                 decodingSteps.append(.expression)
+                decodingSteps.append(.expression)
+            case 51: enqueueBinaryExpressionDecodingSteps(.concatenate, decodingSteps: &decodingSteps)
             case 22:
                 decodingSteps.append(.endNestedValue)
                 decodingSteps.append(.regexTail)
@@ -2169,6 +2184,7 @@ private extension QueryIRExpressionWireDecoder {
     ) -> Expression {
         switch kind {
         case .add: .add(lhs, rhs)
+        case .concatenate: .concatenate(lhs, rhs)
         case .subtract: .subtract(lhs, rhs)
         case .multiply: .multiply(lhs, rhs)
         case .divide: .divide(lhs, rhs)

@@ -1138,7 +1138,14 @@ private struct QueryScopeState {
              .predicate(let value),
              .object(let value):
             try validate(value, context: context)
-        case .like(let value, _), .regex(let value, _, _):
+        case .patternMatch(let subject, let pattern, let escape, let kind):
+            guard kind == .like, escape == nil, case .literal(.string) = pattern else {
+                throw .unsupportedSQLExpression
+            }
+            try validate(subject, context: context)
+        case .concatenate:
+            throw .unsupportedSQLExpression
+        case .regex(let value, _, _):
             try validate(value, context: context)
         case .between(let value, let low, let high):
             try validate(value, context: context)
@@ -1315,9 +1322,12 @@ private struct QueryScopeState {
         case .negate(let value), .not(let value), .isNull(let value), .truthTest(let value, _, _),
              .isNotNull(let value), .cast(let value, _),
              .isTriple(let value), .subject(let value),
-             .predicate(let value), .object(let value), .like(let value, _),
+             .predicate(let value), .object(let value),
              .regex(let value, _, _):
             return [value]
+        case .patternMatch(let subject, let pattern, let escape, _):
+            return [subject, pattern] + (escape.map { [$0] } ?? [])
+        case .concatenate(let lhs, let rhs): return [lhs, rhs]
         case .between(let value, let low, let high):
             return [value, low, high]
         case .inList(let value, let values),

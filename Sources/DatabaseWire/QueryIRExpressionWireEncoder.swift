@@ -511,10 +511,26 @@ private extension QueryIRExpressionWireEncoder {
             writer.writeUInt8(20)
             try QueryIRWireFormat.writeSPARQLVariableName(variable.name, into: &writer)
 
-        case .like(let value, let pattern):
-            writer.writeUInt8(21)
-            encodingSteps.append(.string(pattern))
-            encodingSteps.append(.expression(value))
+        case .patternMatch(let subject, let pattern, let escape, let kind):
+            guard kind.permitsEscape || escape == nil else { throw .invalidQueryIRWireState }
+            writer.writeUInt8(50)
+            let tag: UInt8
+            switch kind {
+            case .like: tag = 0
+            case .caseInsensitiveLike: tag = 1
+            case .similarTo: tag = 2
+            case .regularExpression: tag = 3
+            case .caseInsensitiveRegularExpression: tag = 4
+            }
+            writer.writeUInt8(tag)
+            writer.writeBool(escape != nil)
+            if let escape { encodingSteps.append(.expression(escape)) }
+            encodingSteps.append(.expression(pattern))
+            encodingSteps.append(.expression(subject))
+        case .concatenate(let lhs, let rhs):
+            writer.writeUInt8(51)
+            encodingSteps.append(.expression(rhs))
+            encodingSteps.append(.expression(lhs))
 
         case .regex(let value, let pattern, let flags):
             writer.writeUInt8(22)

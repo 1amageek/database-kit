@@ -998,3 +998,59 @@ from the Linux reference. One comprehensive final review and one concrete
 finding-limited recheck are sufficient for an unchanged contract. Full
 FoundationDB, final URL dependency graph and graph-enabled Database portable
 verification remain S18 as previously deferred by the user.
+
+### S05 frozen string, pattern, binary and lexical conversion semantics
+
+S05 owns T05–T06 and F04–F06 scalar behavior, plus lossless lexical NUMERIC
+construction at the S04 typed-text boundary. This section is the semantic
+authority; executable algorithm, allocation and lifetime contracts belong to
+[QueryExecution](../../../../../database-framework/Sources/DatabaseEngine/QueryExecution/DESIGN.md#s05-selected-string-pattern-binary-and-cast-execution)
+and its [SQLPatternMatching child](../../../../../database-framework/Sources/DatabaseEngine/QueryExecution/SQLPatternMatching/DESIGN.md).
+The reference inputs are the retained [166 PostgreSQL 18.6 observations and
+86 catalog signatures](../../../../../.codex-tools/sql-s05-evidence/postgresql-oracle/oracle-summary.json).
+They establish reference behavior, not implementation success.
+
+| Contract | Accepted behavior |
+|---|---|
+| Text | UTF-8 without normalization; character positions, lengths, truncation and reversal count Unicode scalar values. C/POSIX case conversion and character classes are ASCII. Text/varchar identity and order use exact UTF-8 bytes. |
+| CHAR/VARCHAR | Explicit declared lengths are 1…10,485,760, the intrinsic PostgreSQL descriptor bound, independent of execution quotas. CHAR pads with U+0020. Explicit casts truncate codepoints; assignment rejects excess non-space characters and discards an excess consisting only of U+0020. VARCHAR does not pad. |
+| CHAR coercion/identity | SQL CHAR equality, order, grouping, DISTINCT and join keys ignore trailing U+0020. Ordinary text coercion trims it; CHAR polymorphic type output and OCTET_LENGTH retain its padding. Primitive String/RDF identity does not change. |
+| F04 | Every name in the F04 inventory binds a selected overload before reads. SUBSTRING/POSITION/TRIM special syntax normalizes to the same function contract. Substring intervals are 1-based and clipped; negative length fails. SPLIT_PART allows negative fields, rejects zero. LEFT/RIGHT negative lengths exclude from the opposite end; nonpositive repeat/pad targets yield empty text. Default trim removes only U+0020. |
+| Polymorphic text output | CONCAT skips NULL, returns empty text for all NULL; CONCAT_WS returns NULL for a NULL separator and skips other NULLs. Core finite integer, floating, NUMERIC, Boolean, text/CHAR/VARCHAR, UUID and BYTEA output is admitted. Boolean output is t/f, while an explicit Boolean-to-text cast is true/false. Numeric output preserves displayScale; floating output uses the PostgreSQL shortest roundtrip style. Temporal/interval and general array/JSON output remain explicitly unsupported until S06/S07 supplies their contracts. |
+| Pattern expression | One closed `patternMatch(subject:pattern:escape:kind:)` owns LIKE, ILIKE, SIMILAR and case-sensitive/insensitive ERE. Pattern and escape are expressions. A nil escape means disabled; SQL omitted ESCAPE explicitly supplies a backslash literal. An ESCAPE NULL expression remains distinct and propagates NULL. ERE kinds reject an escape operand. Negation uses the existing NOT expression. SPARQL regex is a separate language. |
+| Concatenation expression | `concatenate(Expression, Expression)` carries strict SQL `||`; binding selects text or BYTEA. It is distinct from numeric addition and the non-strict CONCAT function. Regex SUBSTRING(text,text[,escape]) belongs F04; unrelated additional REGEXP function names do not enter S05 by convenience. |
+| Pattern semantics | LIKE/SIMILAR match the whole input; ERE searches earliest start then longest match, retaining POSIX capture distinctions. LIKE wildcards consume codepoints. ERE flags and supported syntax follow the child contract; pattern backreferences/lookaround and BRE are outside this profile and fail explicitly. Replacement capture references remain supported output syntax. |
+| CHAR pattern overload | Pattern operators retain a CHAR subject's padding; pattern/escape operands use ordinary text coercion. Functions declared with text inputs, including REGEXP_LIKE/MATCH/REPLACE/SPLIT and regex SUBSTRING, use ordinary CHAR-to-text trimming. This distinction follows [character types](https://www.postgresql.org/docs/18/datatype-character.html) and the pinned [bpchar operator catalog](https://raw.githubusercontent.com/postgres/postgres/REL_18_6/src/include/catalog/pg_operator.dat) / [function catalog](https://raw.githubusercontent.com/postgres/postgres/REL_18_6/src/include/catalog/pg_proc.dat), whose bpchar operator signatures reuse text kernels without a trimming cast. |
+| Explicit e decision | On 2026-10-16 the user selected official PostgreSQL 18 documentation: e selects ERE. The pinned 18.6 server/source instead select BRE after clearing overlapping flag bits. This is an accepted, tested product difference, not an oracle pass or an unresolved conflict. [Official flags](https://www.postgresql.org/docs/18/functions-matching.html#POSIX-EMBEDDED-OPTIONS-TABLE), [pinned implementation](https://raw.githubusercontent.com/postgres/postgres/REL_18_6/src/backend/utils/adt/regexp.c). |
+| Pattern results | REGEXP_MATCH is nullable text[]; an unmatched group is NULL and a participating empty group is empty text. SPLIT_TO_ARRAY uses the existing QueryArrayValue directly. MATCHES and SPLIT_TO_TABLE have S05 bounded iterator algorithms, but their generic public relation composition is an explicit S10/F05 completion gate; scalar/relation invocation fails before source reads until that composition exists. S07 is not a prerequisite for these existing array carriers. |
+| BYTEA | Hex/escape lexical input, lower-case hex output, hex/base64/escape ENCODE/DECODE, length/subsequence/concat and byte/bit access use immutable bytes. Bit zero is the least significant bit of byte zero. Bit offsets are bigint, byte offsets integer. SET_BYTE reduces modulo 256; SET_BIT accepts only zero/one. Invalid encoding/offsets fail. |
+| UUID | SQL lexical construction accepts braces, omitted hyphens and the admitted four-hex grouping; output is canonical lower-case UUID. Ordering is bytewise. The primitive UUID parser stays strict. |
+| Lexical NUMERIC | A single QueryNumericValue lexical constructor owns decimal/exponent/radix/underscore syntax, exterior ASCII whitespace, finite-only SQL38 admission and dscale 0…16383. Typed constants, unknown strings and runtime casts consume it. Precision/scale typmod rounding stays in Framework, including typed NULL signature validation; representation never reconstructs dscale from normalized decimal scale. |
+
+Kit's context-free NUMERIC/UUID/BYTEA constructors validate original borrowed
+lexical input under a caller-provided UTF-8 bound. They own no work meter,
+runtime registry, cast context or typmod policy. QueryAST retains early malformed
+constant rejection and source positions by adapting their typed errors;
+Framework precharges the original scan and owns conversion/output admission.
+The selected/common `char(nil)` declaration is typmod-free BPCHAR. An implicit
+conversion to it preserves existing physical padding, while explicit/assignment
+SQL bare CHAR applies the default length one. Removing a common typmod must not
+retarget or relabel an original explicit CAST and change its operation.
+SQL surface VALUES and general VALUES expression evaluation remain S08. S05
+CHAR relational evidence uses supported derived SELECTs or existing typed
+QueryValue literals in the canonical IR. The current canonical VALUES carrier
+contains literals; QueryAST does not duplicate runtime padding/truncation policy
+to turn arbitrary CAST expressions into those literals.
+
+| Case ID | Falsifiable completion evidence |
+|---|---|
+| S05-C01 / T05 | Combining sequences and emoji distinguish codepoints from graphemes/bytes; C/POSIX ASCII case/classes and exact Unicode byte identity. |
+| S05-C02 / T05 | Explicit versus actual INSERT/UPDATE assignment truncation/failure, padding/trailing-space comparison, grouping/DISTINCT/join/order consistency and rejected non-equivalent index lookup. |
+| S05-C03 / F04 | Every named scalar signature with NULL/empty/negative/boundary inputs, special syntax, selected result type and output-byte admission. |
+| S05-C04 / F05 | Dynamic LIKE/ILIKE/SIMILAR/ERE, ESCAPE disabled/NULL/default/invalid, flags including accepted e=ERE, earliest-longest captures, unmatched versus empty groups and excluded syntax failures. |
+| S05-C05 / F05 | Scalar text[] and bounded match/split iterators, zero-width progress, replacement references/occurrence/global controls, split edge suppression and explicit S10 public row-result failure gate. |
+| S05-C06 / T06,F06 | UUID/BYTEA lexical/runtime equivalence and malformed failures; encoding roundtrips, bytewise comparison, byte/bit boundaries, modulo setters and immutable input. |
+| S05-C07 / T02,T05 | Lexical NUMERIC dscale, exponent/radix/underscore/whitespace/negative zero, typmod rounding then overflow, typed NULL, canonical persistence and Wire roundtrip. |
+| S05-C08 | Representation Eq/Hash/walk/parameters/source occurrences/SQL serialization/Wire/goldens and existing Graph LIKE/raw mutation adapters preserve their declared semantics. |
+| S05-C09 | Pre-admission before growth, exact/one-past/cancel/deadline failures, same-meter validation, last-owner release, retained capture/result lifetimes and successful subsequent operation. |
+| S05-C10 | Focused native and separately identified ordinary/Embedded executable proofs, affected Graph and SQLite/PostgreSQL/public SQL/MultiBase regressions; previously deferred full FDB/Graph Database portable and final URL lanes remain S18. |

@@ -393,7 +393,7 @@ private extension QueryParameterBindingTraversal {
                     )
                 )
             )
-        case .add(let lhs, let rhs),
+        case .add(let lhs, let rhs), .concatenate(let lhs, let rhs),
              .subtract(let lhs, let rhs),
              .multiply(let lhs, let rhs),
              .divide(let lhs, let rhs),
@@ -416,7 +416,6 @@ private extension QueryParameterBindingTraversal {
              .truthTest(let value, _, _),
              .isNull(let value),
              .isNotNull(let value),
-             .like(let value, _),
              .regex(let value, _, _),
              .cast(let value, _),
              .isTriple(let value),
@@ -425,6 +424,11 @@ private extension QueryParameterBindingTraversal {
              .object(let value):
             bindingSteps.append(.assembleExpression(expression))
             bindingSteps.append(.expression(value))
+        case .patternMatch(let subject, let pattern, let escape, _):
+            bindingSteps.append(.assembleExpression(expression))
+            if let escape { bindingSteps.append(.expression(escape)) }
+            bindingSteps.append(.expression(pattern))
+            bindingSteps.append(.expression(subject))
         case .between(let value, let low, let high):
             bindingSteps.append(.assembleExpression(expression))
             bindingSteps.append(.expression(high))
@@ -1118,6 +1122,8 @@ private extension QueryParameterBindingTraversal {
         switch expression {
         case .add:
             bound = try popBinaryExpression(original: expression) { .add($0, $1) }
+        case .concatenate:
+            bound = try popBinaryExpression(original: expression) { .concatenate($0, $1) }
         case .subtract:
             bound = try popBinaryExpression(original: expression) { .subtract($0, $1) }
         case .multiply:
@@ -1152,10 +1158,13 @@ private extension QueryParameterBindingTraversal {
             bound = try popUnaryExpression(original: expression) { .isNull($0) }
         case .isNotNull:
             bound = try popUnaryExpression(original: expression) { .isNotNull($0) }
-        case .like(_, let pattern):
-            bound = try popUnaryExpression(original: expression) {
-                .like($0, pattern: pattern)
-            }
+        case .patternMatch(_, _, let escape, let kind):
+            let boundEscape = try popOptionalExpression(escape)
+            let pattern = try popExpression()
+            let subject = try popExpression()
+            let changed = subject.changed || pattern.changed || boundEscape.changed
+            bound = Bound(value: changed ? .patternMatch(subject: subject.value, pattern: pattern.value,
+                escape: boundEscape.value, kind: kind) : expression, changed: changed)
         case .regex(_, let pattern, let flags):
             bound = try popUnaryExpression(original: expression) {
                 .regex($0, pattern: pattern, flags: flags)

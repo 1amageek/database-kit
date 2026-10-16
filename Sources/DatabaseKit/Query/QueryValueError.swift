@@ -1,4 +1,7 @@
 public enum QueryValueError: Error, Sendable, Equatable {
+    case invalidNumeric(offset: UInt64, reason: String)
+    case invalidUUID(offset: UInt64, reason: String)
+    case invalidBinary(offset: UInt64, reason: String)
     case invalidNumericDisplayScale(Int32)
     case numericOutOfRange
     case invalidJSON(offset: UInt64, reason: String)

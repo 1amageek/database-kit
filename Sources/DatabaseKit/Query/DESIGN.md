@@ -52,6 +52,39 @@ flowchart LR
 
 ## Contracts and Invariants
 
+### SQL lexical value construction
+
+Query-owned context-free constructors form existing query values from bounded
+SQL lexical input. They do not own runtime casts, typmod rounding, collation,
+work metering, reservations or source positions. The synchronous borrowed
+Substring is not retained by the result. Callers admit and charge the original
+input before invoking a constructor, and retain any runtime result claim until
+their true output owner ends. Kit enforces maximumUTF8Count before parsing;
+malformed input is a typed failure rather than an untyped-string fallback.
+
+| API | Result and intrinsic guarantees |
+|---|---|
+| `QueryNumericValue.init(sqlLexicalForm:maximumUTF8Count:)` | Exact finite decimal value and lexical displayScale. Decimal/exponent and SQL radix integer forms retain legal digit separators; ASCII exterior whitespace is accepted. At most 38 canonical coefficient digits, displayScale 0...16383 and the existing SQL input integral-digit bound apply before runtime typmod conversion. Parsing does not round a 39-digit value into the admitted profile. |
+| `QueryValue.uuid(sqlLexicalForm:maximumUTF8Count:)` | Existing primitive UUID, accepting hexadecimal case, optional braces, omitted hyphens and hyphens after groups of four hexadecimal digits. Exactly 16 bytes result; canonical output and ordering remain the primitive owner's contract. |
+| `QueryValue.binary(sqlLexicalForm:maximumUTF8Count:)` | Existing primitive ByteString, accepting BYTEA hex and traditional octal/backslash input. Space, tab, LF and CR are accepted between complete hex byte pairs; VT and FF are rejected. Output byte count never exceeds original input UTF-8 count. |
+
+Each API takes `borrowing Substring` and an explicit UInt64 maximumUTF8Count,
+and throws QueryValueError. Invalid numeric/UUID/binary lexical input carries
+a byte offset and reason; resource and numeric range failures retain their
+existing categories. Parsing scans borrowed UTF-8 without copying the input
+into an array. Numeric and UUID formation use fixed scalar state. Binary
+formation validates and measures first, then initializes one final immutable
+byte owner; no decoded intermediate byte array is retained. Runtime callers
+account for both scans before invocation. These APIs add no primitive value
+wrapper, generic scalar-input service, lower-layer SQL parser or global state.
+
+SQL CHAR/VARCHAR descriptors admit absent length or a length in
+1...10_485_760, including typed NULL admission. This is descriptor validation,
+not string truncation, padding or assignment conversion. Binary descriptor
+length policy is unchanged. The Kit lexical tests and QueryAST constant tests
+own exact/one-past input limits, malformed forms, dscale and typed-constant
+agreement; Native and ordinary/Embedded WASM evidence remains target-specific.
+
 - QueryStatement, SelectQuery, Expression, Literal, and DataSource currently
   share representation across SQL and SPARQL. Representation sharing is not
   semantic equivalence: RDF term identity, unbound variables, SPARQL error
@@ -300,3 +333,27 @@ indexed `.argument`. Truth test uses `.operand`; DISTINCT uses indexed
 for array expression or `.subquery` for the query. Every walker uses the same
 edges and charges each child once. No source text or mutable runtime state
 enters these values. RDF/SPARQL consumers explicitly gate SQL-only forms.
+
+### S05 pattern and concatenation declarations
+
+`Expression.patternMatch(subject:pattern:escape:kind:)` owns one SQL pattern
+predicate with expression children. `PatternMatchKind` is closed over LIKE,
+case-insensitive LIKE, SIMILAR TO, ERE and case-insensitive ERE. An absent escape
+disables escaping; SQL parser/builder default backslash is an explicit child.
+ERE forms reject an escape child. SPARQL `regex` remains distinct.
+`Expression.concatenate` owns the strict overloaded SQL concatenation operator;
+it is distinct from non-strict CONCAT calls. These declarations replace the old
+constant-pattern LIKE case without aliases. Every identity, traversal, parameter
+and structural validation path retains subject, pattern and optional escape.
+Structural admission charges every raw string literal's UTF-8 byte count through
+the shared retained-byte ledger, including each pattern child and concatenation
+operand; the expression shape does not bypass or duplicate that literal charge.
+The SQL profile owns execution meaning; Graph adapters preserve their existing
+case-sensitive/no-escape LIKE capability and typed language failures.
+Graph export admits only that static literal LIKE shape and emits escaped,
+case-sensitive REGEX; dynamic patterns, new operator kinds and explicit escapes
+are typed unsupported there. SPARQL regex keeps its separate contract.
+
+Verification covers expression identity/hash/deep traversal, dynamic parameter
+children, malformed escape structure and bounded values; Wire and QueryAST
+round trips consume the same declarations.
