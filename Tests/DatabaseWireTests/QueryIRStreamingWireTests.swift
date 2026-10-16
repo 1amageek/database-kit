@@ -99,7 +99,7 @@ struct QueryIRStreamingWireTests {
             expression = .not(expression)
         }
         let statement = QueryStatement.select(SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .table(TableRef(table: "events")),
             filter: expression
         ))
@@ -126,9 +126,9 @@ struct QueryIRStreamingWireTests {
 
     private func canonicalStatement() -> QueryStatement {
         .select(SelectQuery(
-            projection: .items([
+            projection: [
                 ProjectionItem(.variable(Variable("event"))),
-            ]),
+            ],
             source: .graphPattern(.basic([
                 TriplePattern(
                     subject: .variable("event"),
@@ -137,7 +137,7 @@ struct QueryIRStreamingWireTests {
                 ),
             ])),
             orderBy: [SortKey(.variable(Variable("event")))],
-            limit: 20
+            pagination: QueryPagination(limit: .count(.fixed(20), withTies: false))
         ))
     }
 }

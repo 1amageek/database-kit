@@ -1,3 +1,5 @@
+import DatabaseTypes
+
 /// Exact declaration identity over direct Expression edges, without recursive witnesses.
 enum ExpressionIdentity {
     static func areEqual(_ lhs: Expression, _ rhs: Expression) -> Bool {
@@ -14,18 +16,90 @@ enum ExpressionIdentity {
         while let token = cursor.next() { hasher.combine(token) }
     }
 
+    static func areEqual(_ lhs: SelectQuery, _ rhs: SelectQuery) -> Bool {
+        equal(Cursor(.select(lhs)), Cursor(.select(rhs)))
+    }
+
+    static func areEqual(_ lhs: DataSource, _ rhs: DataSource) -> Bool {
+        equal(Cursor(.source(lhs)), Cursor(.source(rhs)))
+    }
+
+    static func hash(_ query: SelectQuery, into hasher: inout Hasher) { hash(Cursor(.select(query)), into: &hasher) }
+    static func hash(_ source: DataSource, into hasher: inout Hasher) { hash(Cursor(.source(source)), into: &hasher) }
+
+    private static func equal(_ lhs: Cursor, _ rhs: Cursor) -> Bool {
+        var left = lhs
+        var right = rhs
+        while let token = left.next() {
+            guard let other = right.next(), token == other else { return false }
+        }
+        return right.next() == nil
+    }
+
+    private static func hash(_ input: Cursor, into hasher: inout Hasher) {
+        var cursor = input
+        while let token = cursor.next() { hasher.combine(token) }
+    }
+
+    private struct ExactName: Equatable, Hashable {
+        let value: String
+        static func == (lhs: Self, rhs: Self) -> Bool { lhs.value.utf8.elementsEqual(rhs.value.utf8) }
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(value.utf8.count)
+            for byte in value.utf8 { hasher.combine(byte) }
+        }
+    }
+
+    private struct ExactNames: Equatable, Hashable {
+        let values: [String]?
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            switch (lhs.values, rhs.values) {
+            case (nil, nil): return true
+            case (.some(let l), .some(let r)):
+                guard l.count == r.count else { return false }
+                for index in l.indices where !l[index].utf8.elementsEqual(r[index].utf8) { return false }
+                return true
+            default: return false
+            }
+        }
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(values != nil)
+            guard let values else { return }
+            hasher.combine(values.count)
+            for value in values { ExactName(value: value).hash(into: &hasher) }
+        }
+    }
+
     private enum Token: Equatable, Hashable {
         case kind(Int)
         case count(Int)
         case bool(Bool)
-        case string(String)
-        case optionalString(String?)
+        case string(ExactName)
+        case optionalString(ExactName?)
         case literal(Literal)
-        case column(ColumnRef)
-        case variable(Variable)
         case parameter(QueryParameterReference)
         case dataType(DataType)
-        case query(SelectQuery)
+        case fieldObject(FieldObject)
+        case strings(ExactNames)
+        case uint64(UInt64)
+        case joinType(JoinType)
+        case materialization(Materialization?)
+        case dataset(SPARQLDataset)
+        case collation(SQLCollation)
+        case setOperator(SetOperator)
+        case setQuantifier(SetQuantifier)
+        case basicElements([BasicGraphPatternElement])
+        case literalRows([[Literal?]])
+        case pathMode(PathMode?)
+        case pathQuantifier(PathQuantifier)
+        case edgeDirection(EdgeDirection)
+        case term(SPARQLTerm)
+        case index(IndexScanSource)
+        case fusionStrategy(FusionStrategy)
+        case fusionScoring(FusionScoring?)
+        case fusionRequirement(FusionInputRequirement)
+        case fusionIndex(FusionIndexSource)
+        case fusionConnected(FusionConnectedSource)
         case direction(SortDirection)
         case nulls(NullOrdering?)
         case current(SQLCurrentValueKind)
@@ -36,7 +110,19 @@ enum ExpressionIdentity {
         case quantifier(ComparisonQuantifier)
     }
 
+    private static func nameToken(_ value: String) -> Token { .string(ExactName(value: value)) }
+    private static func optionalName(_ value: String?) -> Token { .optionalString(value.map { ExactName(value: $0) }) }
+    private static func names(_ value: [String]?) -> Token { .strings(ExactNames(values: value)) }
+
     private enum Step {
+        case select(SelectQuery), source(DataSource), pattern(GraphPattern)
+        case projection([ProjectionItem], Int), rows([[Expression]], Int), ctes([NamedSubquery], Int)
+        case optionalExpressions([Expression]?), optionalSorts([SortKey]?)
+        case count(QueryCount?), limit(QueryLimit?), quantifier(SelectQuantifier), access(AccessPath?)
+        case match(MatchPattern), paths([PathPattern], Int), path(PathPattern), elements([PathElement], Int)
+        case properties([PropertyBinding]?, Int), graphColumns([GraphTableColumn]?, Int)
+        case aggregateBindings([AggregateBinding], Int)
+        case fusionStages([FusionStageSource], Int), fusionInputs([FusionInput], Int)
         case expression(Expression)
         case optionalExpression(Expression?)
         case expressions([Expression], index: Int)
@@ -52,6 +138,8 @@ enum ExpressionIdentity {
         // avoids an intermediate flattened tree or workspace proportional to width.
         private var steps: [Step]
 
+        init(_ step: Step) { steps = [step] }
+
         init(_ expression: Expression) {
             steps = [.expression(expression)]
         }
@@ -59,6 +147,129 @@ enum ExpressionIdentity {
         mutating func next() -> Token? {
             while let step = steps.popLast() {
                 switch step {
+                case .select(let query):
+                    steps.append(.token(.dataset(query.dataset)))
+                    steps.append(.token(.bool(query.reduced)))
+                    steps.append(.limit(query.pagination.limit))
+                    steps.append(.count(query.pagination.offset))
+                    steps.append(.optionalSorts(query.orderBy))
+                    steps.append(.quantifier(query.quantifier))
+                    steps.append(.optionalExpression(query.having))
+                    steps.append(.optionalExpressions(query.groupBy))
+                    steps.append(.optionalExpression(query.filter))
+                    steps.append(.access(query.accessPath))
+                    steps.append(.source(query.source))
+                    steps.append(.projection(query.projection, 0))
+                    if let ctes = query.subqueries { steps.append(.ctes(ctes, 0)); steps.append(.token(.count(ctes.count))) }
+                    steps.append(.token(.bool(query.subqueries != nil)))
+                    return .kind(200)
+                case .source(let source): return enqueue(source)
+                case .pattern(let pattern): return enqueue(pattern)
+                case .projection(let values, let index):
+                    if index == 0 { steps.append(.token(.count(values.count))) }
+                    guard index < values.count else { continue }
+                    steps.append(.projection(values, index + 1))
+                    switch values[index] {
+                    case .expression(let expression, let alias):
+                        steps.append(.token(optionalName(alias))); steps.append(.expression(expression)); return .kind(0)
+                    case .wildcard(let qualifier): steps.append(.token(optionalName(qualifier))); return .kind(1)
+                    }
+                case .rows(let rows, let index):
+                    guard index < rows.count else { continue }
+                    steps.append(.rows(rows, index + 1)); list(rows[index])
+                case .ctes(let ctes, let index):
+                    guard index < ctes.count else { continue }
+                    let cte = ctes[index]
+                    steps.append(.ctes(ctes, index + 1)); steps.append(.select(cte.query))
+                    steps.append(.token(.materialization(cte.materialized))); steps.append(.token(names(cte.columns)))
+                    return nameToken(cte.name)
+                case .optionalExpressions(let values):
+                    if let values { list(values) }; return .bool(values != nil)
+                case .optionalSorts(let values):
+                    if let values { steps.append(.sortKeys(values, index: 0)); steps.append(.token(.count(values.count))) }
+                    return .bool(values != nil)
+                case .quantifier(let quantifier):
+                    switch quantifier {
+                    case .all: return .kind(0)
+                    case .distinct: return .kind(1)
+                    case .distinctOn(let keys): list(keys); return .kind(2)
+                    }
+                case .count(let count):
+                    guard let count else { return .kind(0) }
+                    switch count {
+                    case .fixed(let value): steps.append(.token(.uint64(value))); return .kind(1)
+                    case .expression(let value): steps.append(.expression(value)); return .kind(2)
+                    }
+                case .limit(let limit):
+                    guard let limit else { return .kind(0) }
+                    switch limit {
+                    case .all: return .kind(1)
+                    case .count(let count, let ties): steps.append(.count(count)); steps.append(.token(.bool(ties))); return .kind(2)
+                    }
+                case .access(let access):
+                    guard let access else { return .kind(0) }
+                    switch access {
+                    case .index(let index): steps.append(.token(.index(index))); return .kind(1)
+                    case .fusion(let fusion):
+                        steps.append(.fusionStages(fusion.stages, 0)); steps.append(.token(.count(fusion.stages.count)))
+                        steps.append(.token(.fusionStrategy(fusion.strategy))); return .kind(2)
+                    }
+                case .match(let match):
+                    steps.append(.optionalExpression(match.where)); steps.append(.paths(match.paths, 0)); return .count(match.paths.count)
+                case .paths(let paths, let index):
+                    guard index < paths.count else { continue }
+                    steps.append(.paths(paths, index + 1)); steps.append(.path(paths[index]))
+                case .path(let path):
+                    steps.append(.elements(path.elements, 0)); steps.append(.token(.count(path.elements.count)))
+                    steps.append(.token(.pathMode(path.mode))); return optionalName(path.pathVariable)
+                case .elements(let elements, let index):
+                    guard index < elements.count else { continue }
+                    steps.append(.elements(elements, index + 1))
+                    switch elements[index] {
+                    case .node(let node):
+                        steps.append(.properties(node.properties, 0)); steps.append(.token(names(node.labels)))
+                        steps.append(.token(optionalName(node.variable))); return .kind(0)
+                    case .edge(let edge):
+                        steps.append(.properties(edge.properties, 0)); steps.append(.token(.edgeDirection(edge.direction)))
+                        steps.append(.token(names(edge.labels))); steps.append(.token(optionalName(edge.variable))); return .kind(1)
+                    case .quantified(let path, let quantifier):
+                        steps.append(.path(path)); steps.append(.token(.pathQuantifier(quantifier))); return .kind(2)
+                    case .alternation(let paths): steps.append(.paths(paths, 0)); steps.append(.token(.count(paths.count))); return .kind(3)
+                    }
+                case .properties(let properties, let index):
+                    if index == 0 {
+                        steps.append(.token(.count(properties?.count ?? 0)))
+                        steps.append(.token(.bool(properties != nil)))
+                    }
+                    guard let properties, index < properties.count else { continue }
+                    steps.append(.properties(properties, index + 1)); steps.append(.expression(properties[index].value))
+                    return nameToken(properties[index].key)
+                case .graphColumns(let columns, let index):
+                    if index == 0 {
+                        steps.append(.token(.count(columns?.count ?? 0))); steps.append(.token(.bool(columns != nil)))
+                    }
+                    guard let columns, index < columns.count else { continue }
+                    steps.append(.graphColumns(columns, index + 1)); steps.append(.expression(columns[index].expression))
+                    return nameToken(columns[index].alias)
+                case .aggregateBindings(let values, let index):
+                    guard index < values.count else { continue }
+                    steps.append(.aggregateBindings(values, index + 1)); steps.append(.aggregate(values[index].aggregate))
+                    return nameToken(values[index].variable)
+                case .fusionStages(let values, let index):
+                    guard index < values.count else { continue }
+                    steps.append(.fusionStages(values, index + 1)); steps.append(.fusionInputs(values[index].inputs, 0))
+                    return .count(values[index].inputs.count)
+                case .fusionInputs(let values, let index):
+                    guard index < values.count else { continue }
+                    let input = values[index]
+                    steps.append(.fusionInputs(values, index + 1)); steps.append(.count(input.limit.map(QueryCount.fixed)))
+                    steps.append(.token(.fusionRequirement(input.requirement))); steps.append(.token(.fusionScoring(input.scoring)))
+                    switch input.operation {
+                    case .index(let source): steps.append(.token(.fusionIndex(source))); return .kind(0)
+                    case .connected(let source): steps.append(.token(.fusionConnected(source))); return .kind(1)
+                    case .filter(let expression): steps.append(.expression(expression)); return .kind(2)
+                    case .order(let keys): steps.append(.sortKeys(keys, index: 0)); steps.append(.token(.count(keys.count))); return .kind(3)
+                    }
                 case .token(let token): return token
                 case .optionalExpression(let value):
                     if let value { steps.append(.expression(value)) }
@@ -116,6 +327,13 @@ enum ExpressionIdentity {
 
         private mutating func enqueue(_ expression: Expression) -> Token {
             switch expression {
+            case .collate(let expression, let collation):
+                steps.append(.token(.collation(collation))); return unary(expression, kind: 56)
+            case .arraySubquery(let query): steps.append(.select(query)); return .kind(57)
+            case .wholeRow(let name): steps.append(.token(nameToken(name))); return .kind(58)
+            case .field(let expression, let name):
+                steps.append(.token(nameToken(name))); return unary(expression, kind: 59)
+            case .fieldExpansion(let expression): return unary(expression, kind: 60)
             case .arrayAccess(let base, let subscripts):
                 steps.append(.subscripts(subscripts, index: 0))
                 steps.append(.expression(base))
@@ -134,9 +352,9 @@ enum ExpressionIdentity {
             case .array(let values): list(values); return .kind(41)
             case .row(let values): list(values); return .kind(42)
             case .column(let value):
-                steps.append(.token(.column(value))); return .kind(1)
+                steps.append(.token(nameToken(value.column))); steps.append(.token(optionalName(value.table))); return .kind(1)
             case .variable(let value):
-                steps.append(.token(.variable(value))); return .kind(2)
+                steps.append(.token(nameToken(value.name))); return .kind(2)
             case .parameter(let value):
                 steps.append(.token(.parameter(value))); return .kind(40)
             case .add(let l, let r): return binary(l, r, kind: 3)
@@ -157,7 +375,7 @@ enum ExpressionIdentity {
             case .isNull(let value): return unary(value, kind: 18)
             case .isNotNull(let value): return unary(value, kind: 19)
             case .bound(let value):
-                steps.append(.token(.variable(value))); return .kind(20)
+                steps.append(.token(nameToken(value.name))); return .kind(20)
             case .patternMatch(let subject, let pattern, let escape, let kind):
                 steps.append(.optionalExpression(escape))
                 steps.append(.expression(pattern))
@@ -166,8 +384,8 @@ enum ExpressionIdentity {
                 return .kind(50)
             case .concatenate(let lhs, let rhs): return binary(lhs, rhs, kind: 51)
             case .regex(let value, let pattern, let flags):
-                steps.append(.token(.optionalString(flags)))
-                steps.append(.token(.string(pattern)))
+                steps.append(.token(optionalName(flags)))
+                steps.append(.token(nameToken(pattern)))
                 return unary(value, kind: 22)
             case .between(let value, let low, let high):
                 steps.append(.expression(high))
@@ -177,15 +395,15 @@ enum ExpressionIdentity {
             case .notInList(let value, let values):
                 list(values); return unary(value, kind: 39)
             case .inSubquery(let value, let query):
-                steps.append(.token(.query(query))); return unary(value, kind: 25)
+                steps.append(.select(query)); return unary(value, kind: 25)
             case .aggregate(let value):
                 steps.append(.aggregate(value)); return .kind(26)
             case .function(let value):
                 list(value.arguments)
                 steps.append(.token(.bool(value.finalArrayIsVariadic)))
                 steps.append(.token(.bool(value.distinct)))
-                steps.append(.token(.string(value.name)))
-                steps.append(.token(.optionalString(value.schema)))
+                steps.append(.token(nameToken(value.name)))
+                steps.append(.token(optionalName(value.schema)))
                 return .kind(27)
             case .caseWhen(let operand, let pairs, let fallback):
                 steps.append(.optionalExpression(fallback))
@@ -204,9 +422,9 @@ enum ExpressionIdentity {
             case .predicate(let value): return unary(value, kind: 35)
             case .object(let value): return unary(value, kind: 36)
             case .subquery(let value):
-                steps.append(.token(.query(value))); return .kind(37)
+                steps.append(.select(value)); return .kind(37)
             case .exists(let value):
-                steps.append(.token(.query(value))); return .kind(38)
+                steps.append(.select(value)); return .kind(38)
             case .greatest(let values): list(values); return .kind(45)
             case .least(let values): list(values); return .kind(46)
             case .truthTest(let value, let truth, let negated):
@@ -220,11 +438,80 @@ enum ExpressionIdentity {
                 case .array(let value):
                     steps.append(.expression(value)); steps.append(.token(.kind(0)))
                 case .subquery(let value):
-                    steps.append(.token(.query(value))); steps.append(.token(.kind(1)))
+                    steps.append(.select(value)); steps.append(.token(.kind(1)))
                 }
                 steps.append(.token(.quantifier(quantifier)))
                 steps.append(.token(.comparison(comparison)))
                 return unary(value, kind: 49)
+            }
+        }
+
+        private mutating func enqueue(_ source: DataSource) -> Token {
+            switch source {
+            case .table(let table):
+                steps.append(.token(.fieldObject(table.partitions)))
+                steps.append(.token(optionalName(table.alias))); steps.append(.token(optionalName(table.schema)))
+                steps.append(.token(nameToken(table.table))); return .kind(100)
+            case .logical(let logical):
+                steps.append(.token(nameToken(logical.identifier))); steps.append(.token(nameToken(logical.kindIdentifier))); return .kind(101)
+            case .subquery(let query): steps.append(.select(query)); return .kind(102)
+            case .join(let join):
+                if let condition = join.condition {
+                    switch condition {
+                    case .on(let expression): steps.append(.expression(expression)); steps.append(.token(.kind(1)))
+                    case .using(let columns): steps.append(.token(names(columns))); steps.append(.token(.kind(2)))
+                    }
+                } else { steps.append(.token(.kind(0))) }
+                steps.append(.source(join.right)); steps.append(.source(join.left)); steps.append(.token(.joinType(join.type)))
+                return .kind(103)
+            case .values(let rows): steps.append(.rows(rows, 0)); steps.append(.token(.count(rows.count))); return .kind(104)
+            case .aliased(let source, let name, let columns):
+                steps.append(.source(source)); steps.append(.token(names(columns))); steps.append(.token(nameToken(name))); return .kind(114)
+            case .setOperation(let operation, let quantifier, let left, let right):
+                steps.append(.select(right)); steps.append(.select(left)); steps.append(.token(.setQuantifier(quantifier)))
+                steps.append(.token(.setOperator(operation))); return .kind(115)
+            case .graphTable(let table):
+                steps.append(.graphColumns(table.columns, 0)); steps.append(.match(table.matchPattern))
+                steps.append(.token(nameToken(table.graphName))); return .kind(105)
+            case .graphPattern(let pattern): steps.append(.pattern(pattern)); return .kind(106)
+            case .namedGraph(let name, let pattern): steps.append(.pattern(pattern)); steps.append(.token(nameToken(name))); return .kind(107)
+            case .service(let endpoint, let pattern, let silent):
+                steps.append(.pattern(pattern)); steps.append(.token(.bool(silent))); steps.append(.token(nameToken(endpoint))); return .kind(108)
+            #if DATABASE_KIT_MULTI_BASE
+            case .base(let id, let source):
+                steps.append(.source(source)); steps.append(.token(nameToken(id.value))); return .kind(113)
+            #endif
+            }
+        }
+
+        private mutating func enqueue(_ pattern: GraphPattern) -> Token {
+            switch pattern {
+            case .basic(let basic):
+                steps.append(.token(.basicElements(basic.elements)))
+                return .kind(300)
+            case .join(let l, let r), .optional(let l, let r), .union(let l, let r), .minus(let l, let r), .lateral(let l, let r):
+                steps.append(.pattern(r)); steps.append(.pattern(l))
+                switch pattern {
+                case .join: return .kind(301)
+                case .optional: return .kind(302)
+                case .union: return .kind(303)
+                case .minus: return .kind(304)
+                default: return .kind(305)
+                }
+            case .filter(let pattern, let expression): steps.append(.expression(expression)); steps.append(.pattern(pattern)); return .kind(306)
+            case .graph(let name, let pattern): steps.append(.pattern(pattern)); steps.append(.token(.term(name))); return .kind(307)
+            case .service(let endpoint, let pattern, let silent):
+                steps.append(.pattern(pattern)); steps.append(.token(.bool(silent))); steps.append(.token(nameToken(endpoint))); return .kind(308)
+            case .bind(let pattern, let variable, let expression):
+                steps.append(.expression(expression)); steps.append(.pattern(pattern)); steps.append(.token(nameToken(variable))); return .kind(309)
+            case .values(let variables, let bindings):
+                steps.append(.token(names(variables)))
+                steps.append(.token(.literalRows(bindings)))
+                steps.append(.token(.count(bindings.count))); return .kind(310)
+            case .subquery(let query): steps.append(.select(query)); return .kind(311)
+            case .groupBy(let pattern, let expressions, let aggregates):
+                steps.append(.aggregateBindings(aggregates, 0)); steps.append(.token(.count(aggregates.count)))
+                list(expressions); steps.append(.pattern(pattern)); return .kind(312)
             }
         }
 
@@ -242,7 +529,7 @@ enum ExpressionIdentity {
             case .max(let value): return unary(value, kind: 4)
             case .groupConcat(let value, let separator, let distinct):
                 steps.append(.token(.bool(distinct)))
-                steps.append(.token(.optionalString(separator)))
+                steps.append(.token(optionalName(separator)))
                 return unary(value, kind: 5)
             case .sample(let value): return unary(value, kind: 6)
             case .arrayAgg(let value, let orderBy, let distinct):

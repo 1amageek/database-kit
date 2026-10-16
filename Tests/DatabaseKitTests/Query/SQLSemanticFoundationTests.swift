@@ -20,12 +20,11 @@ struct SQLSemanticFoundationTests {
     @Test("Parameter validation admits occurrences without substituting and binding preserves schemas")
     func parameterValidationAndQualifiedFunction() throws {
         let expression = Expression.function(FunctionCall(name: "Exact.F", arguments: [.parameter(.position(1))], schema: "Exact.Schema"))
-        let statement = QueryStatement.select(SelectQuery(projection: .items([ProjectionItem(expression)]), source: .values([], columnNames: nil)))
+        let statement = QueryStatement.select(SelectQuery(projection: [ProjectionItem(expression)], source: .values([])))
         let binder = try QueryParameterBinder(parameters: [QueryParameter(position: 1, value: .primitive(.int64(7)))])
         try binder.validate(statement)
         guard case .select(let query) = try binder.bind(statement),
-              case .items(let items) = query.projection,
-              case .function(let function) = items[0].expression else {
+              case .expression(.function(let function), _) = query.projection[0] else {
             Issue.record("Binding lost the function expression")
             return
         }
@@ -117,7 +116,7 @@ struct SQLSemanticFoundationTests {
         #expect(shallow.count == 1)
     }
     private func sparqlQuery(_ expression: Expression) -> SelectQuery {
-        SelectQuery(projection: .items([ProjectionItem(expression, alias: "value")]), source: .values([], columnNames: nil))
+        SelectQuery(projection: [ProjectionItem(expression, alias: "value")], source: .graphPattern(.basic([])))
     }
 
 }

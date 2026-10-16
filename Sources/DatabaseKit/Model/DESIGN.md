@@ -163,6 +163,21 @@ cannot make schema capture trap or silently omit a default.
 
 ## Runtime Flows
 
+S08 [result-only composites](../Query/SQL/DESIGN.md#s08-frozen-composite-values-and-ownership)
+gain no Persistable or QueryArrayElement model conformance. Model field
+adaptation and default capture reject a direct composite descriptor or one
+nested through arrays/composite fields with invalidPersistenceDescriptor.
+Existing primitive and rich persistence envelopes remain unchanged. Model
+behavioral tests must exercise encode, decode and default admission rather
+than infer this boundary from the absence of a conformance.
+
+Persisted scalar-element SQL arrays still reconstruct through the flat value
+owner. Payload-derived intrinsic limits include that destination's value
+records, child indices, dimensions and independent scalar type record, alongside
+the existing JSONB layout allowance. Query's prospective decoded footprint
+reports those counts before construction; actual-capacity admission remains
+mandatory before publication.
+
 Model conversion is pure. In a Framework path the caller first measures the
 SQL-owned adapter representation and admits its destination footprint, then
 invokes the existing generic conversion. User-owned model encoding performs

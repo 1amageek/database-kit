@@ -21,6 +21,10 @@ public enum QueryStructuralValidationError: Error, Sendable, Equatable {
         actual: UInt64,
         maximum: UInt64
     )
+    case invalidValuesRowArity(row: Int, expected: Int, actual: Int)
+    case emptyDistinctOn
+    case invalidSetQueryEnvelope
+    case sourceAliasInTableReference
     case invalidResourceClaim(Resource)
     case invalidArrayAccessSubscriptCount(Int)
     case emptyVariadicFunctionArguments
@@ -35,6 +39,14 @@ extension QueryStructuralValidationError: CustomStringConvertible {
         switch self {
         case .resourceLimitExceeded(let resource, let actual, let maximum):
             return "Query \(resource.rawValue) limit exceeded: \(actual) > \(maximum)"
+        case .invalidValuesRowArity(let row, let expected, let actual):
+            return "VALUES row \(row) has \(actual) cells; expected \(expected)"
+        case .emptyDistinctOn:
+            return "DISTINCT ON requires at least one expression"
+        case .invalidSetQueryEnvelope:
+            return "Set operations require a query-expression envelope"
+        case .sourceAliasInTableReference:
+            return "A table source alias requires the source alias wrapper"
         case .invalidResourceClaim(let resource):
             return "Query \(resource.rawValue) must use its dedicated admission operation"
         case .invalidArrayAccessSubscriptCount(let count):

@@ -80,6 +80,7 @@ public enum QueryValueValidator {
                 guard let numeric = tryNumeric(decimal) else { return false }
                 return accepts(.numeric(numeric), type: .sql(.decimal(precision: precision, scale: scale)))
             case (.array(let elementType), .array(let array)): return elementType == array.elementType
+            case (.composite(let type), .composite(let value)): return type == value.type
             default: return false
             }
         }
@@ -88,6 +89,7 @@ public enum QueryValueValidator {
     private static func isResolved(_ type: DataType) -> Bool {
         switch type {
         case .custom: return false
+        case .composite: return true
         case .decimal(let precision, let scale):
             if let precision, !(1...38).contains(precision) { return false }
             if let scale, precision == nil || !(-1000...1000).contains(scale) { return false }
@@ -171,81 +173,24 @@ public enum QueryValueValidator {
         try measure(value, limits: nil)
     }
 
-    private enum Visit {
-        case query(QueryValue, UInt64)
-        case primitive(FieldValue, UInt64)
-        case arrayElements([QueryValue], index: Int, depth: UInt64)
-    }
-
     private static func measure(_ value: QueryValue,
                                 limits: QueryValueLimits?) throws(QueryValueError) -> QueryValueFootprint {
-        var stack: [Visit] = [.query(value, 1)]
-        var nodes: UInt64 = 0
-        var elements: UInt64 = 0
-        var bytes: UInt64 = 0
-        var depth: UInt64 = 0
-        func added(_ lhs: UInt64, _ rhs: UInt64) throws(QueryValueError) -> UInt64 {
-            let result = lhs.addingReportingOverflow(rhs)
-            guard !result.overflow else { throw .arithmeticOverflow }
-            return result.partialValue
+        let result: QueryValueFootprint
+        switch value {
+        case .array(let value): result = try value.storage.measure(value.index)
+        case .composite(let value): result = try value.storage.measure(value.index)
+        case .primitive(let value):
+            var meter = QueryFieldStorageMeter(limits: limits)
+            try meter.field(value, depth: 1)
+            result = QueryValueFootprint(nodeCount: meter.footprint.valueNodes,
+                collectionElementCount: try QueryValueAccounting.add(meter.footprint.objectEntries, meter.footprint.arrayElements),
+                retainedByteCount: meter.retainedByteCount, maximumNestingDepth: meter.footprint.maximumDepth)
+        case .json(let value): result = try value.measure()
+        case .jsonb(let value): result = try value.measure()
+        case .numeric, .interval, .time, .timeWithTimeZone, .dateInfinity, .timestampInfinity, .intervalInfinity:
+            result = QueryValueFootprint(nodeCount: 1, collectionElementCount: 0, retainedByteCount: 0, maximumNestingDepth: 1)
         }
-        while let visit = stack.popLast() {
-            let nodeDepth: UInt64
-            var arrayChildren: (values: [QueryValue], depth: UInt64)?
-            switch visit {
-            case .query(let value, let current):
-                nodeDepth = current
-                switch value {
-                case .primitive(let value): stack.append(.primitive(value, current)); continue
-                case .numeric, .interval, .time, .timeWithTimeZone,
-                     .dateInfinity, .timestampInfinity, .intervalInfinity:
-                    nodes = try added(nodes, 1)
-                case .json(let value):
-                    let footprint = try value.measure()
-                    nodes = try added(nodes, footprint.nodeCount)
-                    elements = try added(elements, footprint.collectionElementCount)
-                    bytes = try added(bytes, footprint.retainedByteCount)
-                    depth = max(depth, try added(current - 1, footprint.maximumNestingDepth))
-                case .jsonb(let value):
-                    let footprint = try value.measure()
-                    nodes = try added(nodes, footprint.nodeCount)
-                    elements = try added(elements, footprint.collectionElementCount)
-                    bytes = try added(bytes, footprint.retainedByteCount)
-                    depth = max(depth, try added(current - 1, footprint.maximumNestingDepth))
-                case .array(let array):
-                    nodes = try added(nodes, 1)
-                    elements = try added(elements, UInt64(array.elements.count))
-                    if !array.elements.isEmpty {
-                        arrayChildren = (array.elements, try added(current, 1))
-                    }
-                }
-            case .primitive(let value, let current):
-                nodeDepth = current
-                var meter = QueryFieldStorageMeter(limits: limits)
-                try meter.field(value, depth: current)
-                nodes = try added(nodes, meter.footprint.valueNodes)
-                elements = try added(elements, try added(meter.footprint.objectEntries, meter.footprint.arrayElements))
-                bytes = try added(bytes, meter.retainedByteCount)
-                depth = max(depth, meter.footprint.maximumDepth)
-            case .arrayElements(let values, let index, let childDepth):
-                if index + 1 < values.count {
-                    stack.append(.arrayElements(values, index: index + 1, depth: childDepth))
-                }
-                stack.append(.query(values[index], childDepth))
-                continue
-            }
-            depth = max(depth, nodeDepth)
-            if let limits {
-                try QueryValueFootprint(nodeCount: nodes, collectionElementCount: elements,
-                                        retainedByteCount: bytes, maximumNestingDepth: depth)
-                    .validate(limits: limits)
-            }
-            if let arrayChildren {
-                // Admit collection counts before retaining one cursor, never one visit per child.
-                stack.append(.arrayElements(arrayChildren.values, index: 0, depth: arrayChildren.depth))
-            }
-        }
-        return QueryValueFootprint(nodeCount: nodes, collectionElementCount: elements,
-                                   retainedByteCount: bytes, maximumNestingDepth: depth)
+        if let limits { try result.validate(limits: limits) }
+        return result
     }
 }

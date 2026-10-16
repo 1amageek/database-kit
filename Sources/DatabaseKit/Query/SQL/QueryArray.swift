@@ -30,7 +30,7 @@ public struct QueryArray<Element: QueryArrayElement>: Sendable {
         for value in arrayValue.elements {
             elements.append(value.isNull ? nil : try Element.decodeQueryValue(value))
         }
-        self.dimensions = arrayValue.dimensions
+        self.dimensions = Array(arrayValue.dimensions)
         self.elements = elements
         self.arrayValue = arrayValue
     }

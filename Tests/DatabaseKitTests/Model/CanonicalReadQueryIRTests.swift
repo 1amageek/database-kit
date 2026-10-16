@@ -235,7 +235,7 @@ struct CanonicalReadQueryIRTests {
     @Test("SelectQuery replacement operations preserve unrelated fields")
     func selectQueryReplacementMethodsPreserveFields() {
         let original = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .table(TableRef(table: "Document")),
             accessPath: .index(
                 IndexScanSource(
@@ -245,10 +245,9 @@ struct CanonicalReadQueryIRTests {
             ),
             filter: .equal(.column(ColumnRef("status")), .literal(.string("active"))),
             orderBy: [SortKey(.column(ColumnRef("createdAt")))],
-            limit: 20,
-            offset: 10,
-            distinct: true,
-            subqueries: [NamedSubquery(name: "docs", query: SelectQuery(projection: .all, source: .table(TableRef(table: "Document"))))],
+            quantifier: .distinct,
+            pagination: QueryPagination(limit: .count(.fixed(20), withTies: false), offset: .fixed(10)),
+            subqueries: [NamedSubquery(name: "docs", query: SelectQuery(projection: [.wildcard()], source: .table(TableRef(table: "Document"))))],
             reduced: true,
             dataset: .explicit(
                 defaultGraphs: ["graph-a"],
@@ -259,18 +258,17 @@ struct CanonicalReadQueryIRTests {
         let updated = original
             .replacing(filter: .equal(.column(ColumnRef("status")), .literal(.string("archived"))))
             .replacing(orderBy: nil)
-            .replacing(limit: 1)
-            .replacing(offset: nil)
+            .replacing(pagination: QueryPagination(limit: .count(.fixed(1), withTies: false)))
 
         #expect(updated.source == original.source)
         #expect(updated.accessPath == original.accessPath)
         #expect(updated.subqueries == original.subqueries)
         #expect(updated.dataset == original.dataset)
-        #expect(updated.distinct == original.distinct)
+        #expect(updated.quantifier == original.quantifier)
         #expect(updated.reduced == original.reduced)
         #expect(updated.orderBy == nil)
-        #expect(updated.limit == 1)
-        #expect(updated.offset == nil)
+        #expect(updated.pagination.limit == .count(.fixed(1), withTies: false))
+        #expect(updated.pagination.offset == nil)
 
         guard case .equal(_, let rhs) = updated.filter else {
             Issue.record("Expected updated filter")
@@ -279,38 +277,21 @@ struct CanonicalReadQueryIRTests {
         #expect(rhs == .literal(.string("archived")))
     }
 
-    @Test("SelectQuery nil replacement contract distinguishes typed clear from combined preserve")
+    @Test("SelectQuery optional replacements explicitly clear their owning fields")
     func selectQueryNilReplacementContract() {
         let original = SelectQuery(
-            projection: .all,
-            source: .table(TableRef(table: "Document")),
-            filter: .equal(.column(ColumnRef("status")), .literal(.string("active"))),
-            orderBy: [SortKey(.column(ColumnRef("createdAt")))],
-            limit: 20,
-            offset: 10
+            projection: [.wildcard()], source: .table(TableRef("Document")),
+            filter: .bool(true), orderBy: [SortKey(.col("createdAt"))],
+            pagination: QueryPagination(limit: .count(.fixed(20), withTies: false), offset: .fixed(10))
         )
-
-        let preserved = original.replacing(
-            filter: nil,
-            orderBy: nil,
-            limit: nil,
-            offset: nil
-        )
-
+        let preserved = original.replacing(projection: [])
         #expect(preserved.filter == original.filter)
         #expect(preserved.orderBy == original.orderBy)
-        #expect(preserved.limit == original.limit)
-        #expect(preserved.offset == original.offset)
-
-        let cleared = original
-            .replacing(filter: nil)
-            .replacing(orderBy: nil)
-            .replacing(limit: nil)
-            .replacing(offset: nil)
-
+        #expect(preserved.pagination == original.pagination)
+        let cleared = original.replacing(filter: nil).replacing(orderBy: nil)
+            .replacing(pagination: QueryPagination())
         #expect(cleared.filter == nil)
         #expect(cleared.orderBy == nil)
-        #expect(cleared.limit == nil)
-        #expect(cleared.offset == nil)
+        #expect(cleared.pagination == QueryPagination())
     }
 }

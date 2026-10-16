@@ -152,42 +152,6 @@ public enum Materialization: String, Sendable, Equatable, Hashable {
     case notMaterialized
 }
 
-/// Projection item (SELECT clause item)
-public struct ProjectionItem: Sendable, Equatable, Hashable {
-    public let expression: Expression
-    public let alias: String?
-
-    public init(_ expression: Expression, alias: String? = nil) {
-        self.expression = expression
-        self.alias = alias
-    }
-
-    /// Create a simple column projection
-    public static func column(_ name: String) -> ProjectionItem {
-        ProjectionItem(.column(ColumnRef(column: name)))
-    }
-
-    /// Create an aliased projection
-    public static func column(_ name: String, as alias: String) -> ProjectionItem {
-        ProjectionItem(.column(ColumnRef(column: name)), alias: alias)
-    }
-}
-
-/// Projection (SELECT clause)
-public enum Projection: Sendable, Equatable, Hashable {
-    /// SELECT *
-    case all
-
-    /// SELECT table.*
-    case allFrom(String)
-
-    /// SELECT expr1, expr2, ...
-    case items([ProjectionItem])
-
-    /// SELECT DISTINCT expr1, expr2, ...
-    case distinctItems([ProjectionItem])
-}
-
 /// Generic logical source reference.
 ///
 /// Allows `QueryIR` to address extensible logical sources without enumerating
@@ -195,20 +159,17 @@ public enum Projection: Sendable, Equatable, Hashable {
 public struct LogicalSourceRef: Sendable, Equatable, Hashable {
     public let kindIdentifier: String
     public let identifier: String
-    public let alias: String?
 
     public init(
         kindIdentifier: String,
-        identifier: String,
-        alias: String? = nil
+        identifier: String
     ) {
         self.kindIdentifier = kindIdentifier
         self.identifier = identifier
-        self.alias = alias
     }
 
     public var effectiveName: String {
-        alias ?? identifier
+        identifier
     }
 }
 
@@ -233,7 +194,7 @@ public indirect enum DataSource: Sendable, Equatable, Hashable {
     case logical(LogicalSourceRef)
 
     /// Subquery as data source
-    case subquery(SelectQuery, alias: String)
+    case subquery(SelectQuery)
 
     /// JOIN operation
     case join(JoinClause)
@@ -245,7 +206,10 @@ public indirect enum DataSource: Sendable, Equatable, Hashable {
     #endif
 
     /// Values clause (inline data)
-    case values([[Literal]], columnNames: [String]?)
+    case values([[Expression]])
+
+    /// A relation alias and leading positional column-name overrides.
+    case aliased(DataSource, name: String, columns: [String]? = nil)
 
     // MARK: - Core Graph Sources (SQL/PGQ)
 
@@ -263,19 +227,11 @@ public indirect enum DataSource: Sendable, Equatable, Hashable {
     /// SERVICE clause (federation)
     case service(endpoint: String, pattern: GraphPattern, silent: Bool)
 
-    // MARK: - Set Operations
-
-    /// UNION of multiple sources
-    case union([DataSource])
-
-    /// UNION ALL (SQL)
-    case unionAll([DataSource])
-
-    /// INTERSECT
-    case intersect([DataSource])
-
-    /// EXCEPT / MINUS
-    case except(DataSource, DataSource)
+    /// One binary SQL query operation over complete query operands.
+    case setOperation(
+        operator: SetOperator, quantifier: SetQuantifier,
+        left: SelectQuery, right: SelectQuery
+    )
 
     /// Whether a SELECT rooted at this source uses SPARQL semantic validation.
     ///
@@ -287,7 +243,7 @@ public indirect enum DataSource: Sendable, Equatable, Hashable {
         case .graphPattern, .namedGraph, .service:
             return true
         case .table, .logical, .subquery, .join, .values, .graphTable,
-             .union, .unionAll, .intersect, .except:
+             .aliased, .setOperation:
             return false
         #if DATABASE_KIT_MULTI_BASE
         case .base:
@@ -304,18 +260,15 @@ public struct GraphTableSource: Sendable, Equatable, Hashable {
     public let graphName: String
     public let matchPattern: MatchPattern
     public let columns: [GraphTableColumn]?
-    public let alias: String?
 
     public init(
         graphName: String,
         matchPattern: MatchPattern,
-        columns: [GraphTableColumn]? = nil,
-        alias: String? = nil
+        columns: [GraphTableColumn]? = nil
     ) {
         self.graphName = graphName
         self.matchPattern = matchPattern
         self.columns = columns
-        self.alias = alias
     }
 }
 
@@ -503,4 +456,9 @@ public indirect enum SPARQLTerm: Sendable, Equatable, Hashable {
     case tripleTerm(subject: SPARQLTerm, predicate: SPARQLTerm, object: SPARQLTerm)
     /// Reified triple (SPARQL 1.2) — << subject predicate object ~reifier >>
     case reifiedTriple(subject: SPARQLTerm, predicate: SPARQLTerm, object: SPARQLTerm, reifier: SPARQLTerm)
+}
+
+public extension DataSource {
+    static func == (lhs: DataSource, rhs: DataSource) -> Bool { ExpressionIdentity.areEqual(lhs, rhs) }
+    func hash(into hasher: inout Hasher) { ExpressionIdentity.hash(self, into: &hasher) }
 }

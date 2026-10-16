@@ -25,7 +25,7 @@ struct QueryIRWireFormatTests {
         var nested: Expression = .int(1)
         for _ in 0..<24 { nested = .array([.row([nested])]) }
         let statement = QueryStatement.select(SelectQuery(
-            projection: .items([ProjectionItem(nested)]), source: .values([], columnNames: nil)))
+            projection: [ProjectionItem(nested)], source: .values([])))
         let restored = try QueryIRWireFormat.decode(QueryIRWireFormat.encode(statement))
         #expect(restored == statement)
         #expect(restored.hashValue == statement.hashValue)
@@ -116,7 +116,7 @@ struct QueryIRWireFormatTests {
         )
         let original = QueryStatement.select(
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .table(TableRef("Person")),
                 accessPath: .fusion(
                     FusionSource(
@@ -211,10 +211,10 @@ struct QueryIRWireFormatTests {
         )
         let original = QueryStatement.select(
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .table(TableRef("documents")),
                 accessPath: .fusion(source),
-                limit: 10
+                pagination: QueryPagination(limit: .count(.fixed(10), withTies: false))
             )
         )
 
@@ -247,7 +247,7 @@ struct QueryIRWireFormatTests {
         )
         let original = QueryStatement.select(
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .graphPattern(.basic(basicGraphPattern))
             )
         )
@@ -276,14 +276,14 @@ struct QueryIRWireFormatTests {
         )
         let graphPattern = GraphPattern.basic([triple])
         let select = SelectQuery(
-            projection: .items([
+            projection: [
                 ProjectionItem(.variable(Variable("event")), alias: "identifier"),
                 ProjectionItem(.literal(.uint(UInt64.max)), alias: "unsigned"),
                 ProjectionItem(
                     .literal(.decimal(coefficient: 12_345, scale: 2)),
                     alias: "decimal"
                 ),
-            ]),
+            ],
             source: .graphPattern(graphPattern),
             accessPath: .index(
                 IndexScanSource(
@@ -294,7 +294,7 @@ struct QueryIRWireFormatTests {
             ),
             filter: .greaterThan(.variable(Variable("date")), .string("2026-07-16")),
             orderBy: [SortKey(.variable(Variable("date")))],
-            limit: 50
+            pagination: QueryPagination(limit: .count(.fixed(50), withTies: false))
         )
         let table = TableRef(
             schema: "calendar",
@@ -480,10 +480,9 @@ struct QueryIRWireFormatTests {
     func paginationPreservesUnsignedWireDomain() throws {
         let select = QueryStatement.select(
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .table(TableRef("Event")),
-                limit: UInt64.max,
-                offset: UInt64.max - 1
+                pagination: QueryPagination(limit: .count(.fixed(UInt64.max), withTies: false), offset: .fixed(UInt64.max - 1))
             )
         )
         let ask = QueryStatement.ask(
@@ -664,10 +663,10 @@ struct QueryIRWireFormatTests {
     func parameterReferencesRoundTrip() throws {
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .items([
+                projection: [
                     ProjectionItem(.parameter(.position(1))),
                     ProjectionItem(.parameter(.name("title"))),
-                ]),
+                ],
                 source: .table(TableRef("Event"))
             )
         )
@@ -680,8 +679,8 @@ struct QueryIRWireFormatTests {
     func graphTableAliasRoundTrips() throws {
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .all,
-                source: .graphTable(
+                projection: [.wildcard()],
+                source: .aliased(.graphTable(
                     GraphTableSource(
                         graphName: "social",
                         matchPattern: MatchPattern(
@@ -692,10 +691,9 @@ struct QueryIRWireFormatTests {
                                     ]
                                 ),
                             ]
-                        ),
-                        alias: "people"
+                        )
                     )
-                )
+                ), name: "people")
             )
         )
 
@@ -708,13 +706,13 @@ struct QueryIRWireFormatTests {
     func invalidParameterReferencesAreRejected() {
         let invalidPosition = QueryStatement.select(
             SelectQuery(
-                projection: .items([ProjectionItem(.parameter(.position(0)))]),
+                projection: [ProjectionItem(.parameter(.position(0)))],
                 source: .table(TableRef("Event"))
             )
         )
         let emptyName = QueryStatement.select(
             SelectQuery(
-                projection: .items([ProjectionItem(.parameter(.name("")))]),
+                projection: [ProjectionItem(.parameter(.name("")))],
                 source: .table(TableRef("Event"))
             )
         )
@@ -731,7 +729,7 @@ struct QueryIRWireFormatTests {
     func invalidSPARQLVariableNamesAreRejected() throws {
         let invalid = QueryStatement.select(
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .graphPattern(
                     .basic([
                         TriplePattern(
@@ -751,7 +749,7 @@ struct QueryIRWireFormatTests {
 
         let valid = QueryStatement.select(
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .graphPattern(
                     .basic([
                         TriplePattern(
@@ -784,7 +782,7 @@ struct QueryIRWireFormatTests {
         let invalidStatements: [QueryStatement] = [
             .select(
                 SelectQuery(
-                    projection: .all,
+                    projection: [.wildcard()],
                     source: .graphPattern(.basic([])),
                     dataset: .explicit(
                         defaultGraphs: ["relative"],
@@ -794,7 +792,7 @@ struct QueryIRWireFormatTests {
             ),
             .select(
                 SelectQuery(
-                    projection: .all,
+                    projection: [.wildcard()],
                     source: .service(
                         endpoint: "relative",
                         pattern: .basic([]),
@@ -855,7 +853,7 @@ struct QueryIRWireFormatTests {
 
         let valid = QueryStatement.select(
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .graphPattern(.basic([])),
                 dataset: .explicit(
                     defaultGraphs: ["urn:valid"],
@@ -999,7 +997,7 @@ struct QueryIRWireFormatTests {
         )
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .graphPattern(
                     .propertyPath(
                         subject: .variable("source"),
@@ -1032,9 +1030,9 @@ struct QueryIRWireFormatTests {
         }
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .items([
+                projection: [
                     ProjectionItem(expression, alias: "value"),
-                ]),
+                ],
                 source: .graphPattern(.basic([]))
             )
         )
@@ -1141,7 +1139,7 @@ struct QueryIRWireFormatTests {
     private func statement(path: PropertyPath) -> QueryStatement {
         .select(
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .graphPattern(
                     .propertyPath(
                         subject: .variable("source"),
@@ -1156,9 +1154,9 @@ struct QueryIRWireFormatTests {
     private func statement(projecting literal: Literal) -> QueryStatement {
         .select(
             SelectQuery(
-                projection: .items([
+                projection: [
                     ProjectionItem(.literal(literal), alias: "value"),
-                ]),
+                ],
                 source: .graphPattern(.basic([]))
             )
         )

@@ -31,7 +31,7 @@ struct QueryValueRuntimeContract {
         print("QUERY_VALUE_RUNTIME_BEGIN")
         do {
             try run()
-            print("QUERY_VALUE_RUNTIME_PASS cases=12")
+            print("QUERY_VALUE_RUNTIME_PASS cases=14")
         } catch {
             switch error {
             case .assertion(let code): print("QUERY_VALUE_RUNTIME_FAIL assertion=\(code)")
@@ -124,6 +124,187 @@ struct QueryValueRuntimeContract {
         pass("sql-pattern-concatenation-carriage")
         try sqlTemporalValueCarriage()
         pass("sql-temporal-value-carriage")
+        try sqlCompositeValueCarriage()
+        pass("sql-composite-value-carriage")
+        try sqlRelationalQueryCarriage()
+        pass("sql-relational-query-carriage")
+    }
+
+    private static func sqlCompositeValueCarriage() throws(Failure) {
+        // Escaped child views must retain their complete immutable value owner.
+        let fields = try query { () throws(QueryValueError) -> QueryValueElements in
+            let scalar = try QueryColumn(number: 1, name: "value", type: .sql(.integer), isNullable: false)
+            let type = try QueryCompositeType(columns: [scalar], limits: limits)
+            let row = try QueryCompositeValue(type: type, fields: [.primitive(.int32(7))], limits: limits)
+            let dimension = try QueryArrayDimension(lowerBound: -4, length: 2)
+            let array = try QueryArrayValue(elementType: .composite(type), dimensions: [dimension],
+                elements: [.composite(row), .primitive(.null)], limits: limits)
+            let columns = [
+                try QueryColumn(number: 1, name: "same", type: .sql(.array(.composite(type))), isNullable: false),
+                try QueryColumn(number: 2, name: "same", type: .sql(.composite(type)), isNullable: true),
+            ]
+            let outer = try QueryCompositeType(columns: columns, limits: limits)
+            return try QueryCompositeValue(type: outer, fields: [.array(array), .composite(row)], limits: limits).fields
+        }
+        guard case .array(let array) = fields[0], case .composite(let row) = fields[1] else {
+            throw .assertion(210)
+        }
+        try require(array.dimensions[0].lowerBound == -4 && array.elements[1].isNull, code: 211)
+        try require(row.fields[0] == .primitive(.int32(7)) && array.elements[0] == .composite(row), code: 212)
+        let column = try query { () throws(QueryValueError) in
+            try QueryColumn(number: 1, name: "row", type: .sql(.composite(row.type)), isNullable: true)
+        }
+        let expected = [QueryRow(values: [.primitive(.null)]), QueryRow(values: [.composite(row)])]
+        let page = try retainedPage(columns: [column], rows: expected)
+        try require(page.columns == [column], code: 213)
+        try require(try wire { () throws(DatabaseWireError) in try page.materializedRows(maximumCount: 2) } == expected, code: 214)
+        let empty = try retainedPage(columns: [column], rows: [])
+        try require(empty.rowCount == 0 && empty.columns == [column], code: 215)
+        let null = QueryParameter(position: 1, value: .primitive(.null), type: column.type)
+        let request = QueryExecuteOperation.Request(input: .text(language: .sql, statement: "SELECT $1"), parameters: [null])
+        let frame = try wire { () throws(DatabaseWireError) in
+            #if DATABASE_KIT_MULTI_BASE
+            try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 21,
+                target: .database, request: request)
+            #else
+            try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 21, request: request)
+            #endif
+        }
+        let decoded = try wire { () throws(DatabaseWireError) in
+            try DatabaseWireDecoder().decodeRequest(DatabaseOperationCatalog.queryExecute, from: frame)
+        }
+        try require(decoded.request.parameters == [null], code: 216)
+        let footprint = try query { () throws(QueryValueError) in try QueryValueValidator.measure(.composite(row)) }
+        let exact = QueryValueLimits(maximumRetainedBytes: footprint.retainedByteCount,
+            maximumTotalNodes: footprint.nodeCount, maximumNestingDepth: footprint.maximumNestingDepth,
+            maximumCollectionElements: footprint.collectionElementCount)
+        try query { () throws(QueryValueError) in try QueryValueValidator.validate(.composite(row), limits: exact) }
+        let short = QueryValueLimits(maximumRetainedBytes: footprint.retainedByteCount,
+            maximumTotalNodes: footprint.nodeCount - 1, maximumNestingDepth: footprint.maximumNestingDepth,
+            maximumCollectionElements: footprint.collectionElementCount)
+        try rejectQuery(.resourceLimit(resource: "nodes", actual: footprint.nodeCount, maximum: footprint.nodeCount - 1), code: 217) {
+            () throws(QueryValueError) in try QueryValueValidator.validate(.composite(row), limits: short)
+        }
+        for type: QueryColumnType in [.sql(.composite(row.type)), .sql(.array(.composite(row.type)))] {
+            try rejectQuery(.invalidPersistenceDescriptor, code: 218) { () throws(QueryValueError) in
+                try QueryFieldStorageAdapter.validateDescriptor(type, fieldType: .object, isArray: false)
+            }
+        }
+        let deep = try query { () throws(QueryValueError) -> QueryValue in
+            var builder = QueryValueBuilder(limits: limits)
+            var child = try builder.append(.primitive(.int32(7)))
+            var type: DataType = .integer
+            for _ in 0..<32 {
+                let column = try QueryColumn(number: 1, name: "nested", type: .sql(type), isNullable: false)
+                let composite = try QueryCompositeType(columns: [column], limits: limits)
+                child = try builder.appendComposite(type: composite, fields: [child])
+                type = .composite(composite)
+            }
+            return try builder.finish(root: child)
+        }
+        let copy = try query { () throws(QueryValueError) in
+            var builder = QueryValueBuilder(limits: limits)
+            let root = try builder.append(deep)
+            return try builder.finish(root: root)
+        }
+        try require(deep == copy && deep.hashValue == copy.hashValue, code: 219)
+    }
+
+    private static func sqlRelationalQueryCarriage() throws(Failure) {
+        let parameter = Expression.parameter(.position(1))
+        let inner = SelectQuery(projection: [ProjectionItem(parameter, alias: "value")], source: .values([[]]))
+        let query = SelectQuery(
+            projection: [.wildcard(qualifier: "input"), ProjectionItem(.fieldExpansion(.wholeRow("input"))),
+                ProjectionItem(.field(.wholeRow("input"), name: "value")),
+                ProjectionItem(.collate(parameter, collation: .posix)), ProjectionItem(.arraySubquery(inner))],
+            source: .aliased(.values([[parameter]]), name: "input", columns: ["value"]),
+            orderBy: [SortKey(.collate(.col("value"), collation: .c), nulls: .last)],
+            quantifier: .distinctOn([parameter]),
+            pagination: QueryPagination(limit: .count(.expression(parameter), withTies: true), offset: .expression(parameter)),
+            subqueries: [NamedSubquery(name: "declared", columns: ["value"], query: inner, materialized: .materialized)])
+        let set = SelectQuery(projection: [.wildcard()], source: .setOperation(
+            operator: .except, quantifier: .all, left: query, right: query),
+            orderBy: [SortKey(.int(1))], pagination: QueryPagination(limit: .all))
+        let joined = SelectQuery(projection: [.wildcard(qualifier: "joined")], source: .aliased(.join(
+            JoinClause(type: .cross, left: .values([[parameter]]), right: .subquery(inner))),
+            name: "joined", columns: ["left", "right"]))
+        let derived = SelectQuery(projection: [.wildcard()], source: .subquery(inner))
+        let unsigned = SelectQuery(projection: [.wildcard()], source: .graphPattern(.basic([])),
+            quantifier: .distinct, pagination: QueryPagination(limit: .count(.fixed(.max), withTies: false), offset: .fixed(.max)))
+        for value in [query, set, joined, derived, unsigned] {
+            let bytes = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(.select(value)) }
+            try require(try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(bytes) } == .select(value), code: 130)
+        }
+        let expansion = Expression.fieldExpansion(.row([.int(1), .int(2)]))
+        for rows: [[Expression]] in [
+            [[expansion], [.int(3), .int(4)]],
+            [[.int(3)], [.int(4), .int(5)], [expansion]],
+            // Equal raw widths defer the final expanded mismatch to runtime binding.
+            [[expansion], [.int(3)]],
+        ] {
+            let value = SelectQuery(projection: [.wildcard()], source: .values(rows))
+            do { try QueryStructuralValidator.validate(value) } catch { throw .structure(error) }
+            let bytes = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(.select(value)) }
+            try require(try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(bytes) } == .select(value), code: 140)
+        }
+        let nestedExpansion = SelectQuery(projection: [.wildcard()],
+            source: .values([[.row([expansion])], [.int(3), .int(4)]]))
+        var rejectedNestedExpansion = false
+        do { try QueryStructuralValidator.validate(nestedExpansion) }
+        catch {
+            guard error == .invalidValuesRowArity(row: 1, expected: 1, actual: 2) else { throw .structure(error) }
+            rejectedNestedExpansion = true
+        }
+        try require(rejectedNestedExpansion, code: 141)
+        let text: String
+        do { text = try unsigned.toSPARQL() } catch { throw .assertion(131) }
+        try require(text == "SELECT DISTINCT *\nWHERE {\n\n}\nLIMIT 18446744073709551615\nOFFSET 18446744073709551615\n", code: 132)
+        let binder: QueryParameterBinder
+        let bound: QueryStatement
+        do {
+            binder = try QueryParameterBinder(parameters: [QueryParameter(position: 1, value: .primitive(.int64(9)))])
+            bound = try binder.bind(.select(query))
+        } catch { throw .binding(error) }
+        guard case .select(let selected) = bound,
+              case .aliased(.values(let rows), let name, let columns) = selected.source,
+              case .expression(.arraySubquery(let nested), _) = selected.projection[4] else { throw .assertion(133) }
+        try require(rows == [[.int(9)]] && name == "input" && columns == ["value"], code: 134)
+        try require(nested.projection == [ProjectionItem(.int(9), alias: "value")]
+            && selected.quantifier == .distinctOn([.int(9)])
+            && selected.pagination == QueryPagination(limit: .count(.expression(.int(9)), withTies: true), offset: .expression(.int(9))), code: 135)
+        var deep = parameter
+        var expected = Expression.int(9)
+        for _ in 0..<12 {
+            deep = .subquery(SelectQuery(projection: [ProjectionItem(deep)], source: .values([[]])))
+            expected = .subquery(SelectQuery(projection: [ProjectionItem(expected)], source: .values([[]])))
+        }
+        let deepStatement = select(.arraySubquery(SelectQuery(projection: [ProjectionItem(deep)], source: .values([[]]))))
+        let expectedStatement = select(.arraySubquery(SelectQuery(projection: [ProjectionItem(expected)], source: .values([[]]))))
+        let encoded = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(deepStatement) }
+        let decoded = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(encoded) }
+        let substituted: QueryStatement
+        do { substituted = try binder.bind(decoded) } catch { throw .binding(error) }
+        try require(substituted == expectedStatement, code: 136)
+        try require(Set([expected, expected]).count == 1, code: 137)
+        var arena = QueryOccurrenceArena()
+        let first: QueryOccurrenceID
+        let second: QueryOccurrenceID
+        let firstRow: QueryOccurrenceID
+        do {
+            let root = try arena.append()
+            firstRow = try arena.append(parent: root, field: .valuesRow, index: 0)
+            let secondRow = try arena.append(parent: root, field: .valuesRow, index: 1)
+            first = try arena.append(parent: firstRow, field: .valuesCell, index: 0)
+            second = try arena.append(parent: secondRow, field: .valuesCell, index: 0)
+        } catch { throw .assertion(138) }
+        try require(first != second && arena.child(of: firstRow, field: .valuesCell, index: 0) == first, code: 138)
+        var rejected = false
+        do { try QueryStructuralValidator.validate(set.replacing(filter: .bool(true))) }
+        catch {
+            guard error == .invalidSetQueryEnvelope else { throw .structure(error) }
+            rejected = true
+        }
+        try require(rejected, code: 139)
     }
 
     private static func sqlLexicalValueConstruction() throws(Failure) {
@@ -299,7 +480,7 @@ struct QueryValueRuntimeContract {
                 .isDistinctFrom(child, .null, negated: false),
                 .quantifiedComparison(child, comparison: .lessThanOrEqual, quantifier: .any, source: .array(child)),
                 .quantifiedComparison(child, comparison: .greaterThan, quantifier: .all, source: .subquery(
-                    SelectQuery(projection: .items([ProjectionItem(child)]), source: .values([], columnNames: nil)))),
+                    SelectQuery(projection: [ProjectionItem(child)], source: .values([])))),
             ])
         }
         let statement = select(conditional(parameter))
@@ -755,7 +936,7 @@ struct QueryValueRuntimeContract {
     }
 
     private static func select(_ expression: Expression) -> QueryStatement {
-        .select(SelectQuery(projection: .items([ProjectionItem(expression)]), source: .values([], columnNames: nil)))
+        .select(SelectQuery(projection: [ProjectionItem(expression)], source: .values([])))
     }
 
     private static func rejectWire(_ expected: DatabaseWireError, code: UInt8,

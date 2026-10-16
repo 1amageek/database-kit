@@ -463,3 +463,354 @@ ordinary false calls byte-for-byte on tags28/43 and uses tag55 only for true.
 Required evidence distinguishes flagged/unflagged array arguments, NULL/empty
 variadic arrays, qualified identity, nested parameters and empty-argument
 structural rejection across parser, identity, rebuild and codecs.
+
+### S08 frozen relational query carriage
+
+**PLANNED; not implementation or execution evidence.** This section owns the
+canonical S08 query declarations and supersedes the affected source,
+projection, DISTINCT and pagination shapes above when S08 is implemented.
+The [SQL feature inventory](SQL/DESIGN.md#verification-and-change-impact) owns
+Q01–Q10/Q12 meaning. The result-only composite value/type, flat owner, bounds,
+and JSON conversion contract has one authority in
+[SQL S08](SQL/DESIGN.md#s08-frozen-composite-values-and-ownership); this section
+consumes `DataType.composite(QueryCompositeType)` and
+`QueryValue.composite(QueryCompositeValue)` without defining another row value.
+DatabaseTypes and persisted application-model adaptation do not gain query
+structure or a composite result representation.
+
+#### Confirmed implementation gap and ownership
+
+The current [SelectQuery](SelectQuery.swift) stores a separate DISTINCT Boolean,
+fixed unsigned limits and a whole-projection enum. Its combined copy method
+uses nil coalescing, which cannot explicitly clear an optional field.
+[DataSource](DataSource.swift) stores aliases in individual source families,
+literal-only VALUES and source-valued set operands. The current iterative
+[Wire encoder](../../DatabaseWire/QueryIRExpressionWireEncoder.swift) and
+[decoder](../../DatabaseWire/QueryIRExpressionWireDecoder.swift) preserve those
+shapes. `QueryParameterBindingTraversal` currently treats relational VALUES as
+a leaf. These are migration inputs, not evidence of the profile's behavior.
+
+| Concept | Semantic owner | Change boundary |
+|---|---|---|
+| Ordered projection, aliases, query operands, quantifiers, pagination expressions and collation declarations | Query | Immutable Foundation-independent values, intrinsic structure and declaration identity. |
+| Accepted syntax, precedence, source locations and executable SQL text | Framework QueryAST | Construct and serialize the canonical values without a second semantic AST. |
+| Namespace/whole-row resolution, expanded descriptors, comparison, cardinality, CTE demand and result presence | Framework DatabaseEngine | Bind the complete tree before reads; retain typed runtime owners and errors. |
+| Deterministic bounded query/value bytes | DatabaseWire | The [S08 Wire contract](../../DatabaseWire/DESIGN.md#s08-relational-query-carriage) owns exact layouts and reserved tags. |
+
+```mermaid
+flowchart LR
+    Text[SQL parser or typed builder] --> Query[SelectQuery envelope]
+    Query --> Source[Relational source or binary set of complete queries]
+    Query --> Projection[Ordered expression and wildcard items]
+    Query --> Tail[Quantifier, ordering and pagination]
+    Query --> Wire[One canonical iterative Wire traversal]
+    Query --> Binding[Binding and occurrence addresses]
+    Binding --> Runtime[Typed runtime plan and retained results]
+```
+
+#### Canonical public declarations
+
+The following is the minimum public shape; declaration names are semantic and
+all new values are Sendable, Equatable and Hashable. Enum cases below belong to
+their existing enum unless a new owning declaration is shown.
+
+```swift
+public enum ProjectionItem: Sendable, Hashable {
+    case expression(Expression, alias: String? = nil)
+    case wildcard(qualifier: String? = nil)
+}
+
+public enum SelectQuantifier: Sendable, Hashable {
+    case all
+    case distinct
+    case distinctOn([Expression])
+}
+
+public enum SetOperator: Sendable, Hashable {
+    case union, intersect, except
+}
+
+public enum SetQuantifier: Sendable, Hashable {
+    case all, distinct
+}
+
+public enum QueryCount: Sendable, Hashable {
+    case fixed(UInt64)
+    case expression(Expression)
+}
+
+public enum QueryLimit: Sendable, Hashable {
+    case all
+    case count(QueryCount, withTies: Bool)
+}
+
+public struct QueryPagination: Sendable, Hashable {
+    public let limit: QueryLimit?
+    public let offset: QueryCount?
+    public init(limit: QueryLimit? = nil, offset: QueryCount? = nil)
+}
+
+public enum SQLCollation: Sendable, Hashable {
+    case c, posix
+}
+
+// DataSource cases replacing the affected old cases.
+case values([[Expression]])
+case subquery(SelectQuery)
+case aliased(DataSource, name: String, columns: [String]? = nil)
+case setOperation(
+    operator: SetOperator, quantifier: SetQuantifier,
+    left: SelectQuery, right: SelectQuery
+)
+
+// New Expression cases.
+case collate(Expression, collation: SQLCollation)
+case arraySubquery(SelectQuery)
+case wholeRow(String)
+case field(Expression, name: String)
+case fieldExpansion(Expression)
+```
+
+`SelectQuery` retains its existing envelope and other stored fields. Its
+`projection` becomes `[ProjectionItem]`, `quantifier: SelectQuantifier = .all`
+replaces `distinct`, and `pagination: QueryPagination = QueryPagination()`
+replaces the stored `limit`/`offset`. The initializer accepts these fields
+instead of the superseded ones. There is no parallel SQL query, alternate set
+tree, versioned alias or fallback initializer. `Projection` and its
+all/allFrom/items/distinctItems cases are removed after callers migrate.
+`ProjectionItem.init(_:alias:)` and column convenience construction may remain
+as constructors of the single `.expression` representation; they store no
+second discriminator or DISTINCT state. SELECT ALL and an omitted quantifier
+both construct `.all`; spelling, optional AS/OUTER and parentheses are parser
+syntax rather than semantic metadata.
+
+Every immutable copy helper preserves the entire envelope, including
+accessPath, subqueries, reduced and dataset. Keep one-field helpers for
+projection, source, accessPath, filter, groupBy, having, orderBy, quantifier,
+pagination, subqueries, reduced and dataset. An optional argument means replacement with that optional
+value, so `replacing(filter: nil)` clears WHERE. Delete the combined nil-coalescing
+helper and old limit/offset/distinct helpers; callers construct one canonical
+pagination value or chain the owning replacements. No copied query silently
+restores an initializer default.
+
+#### Sources, projection and query operands
+
+`aliased` owns source relation aliases and their ordered column-name override.
+Its name is required; a derived source without an alias is a bare `subquery`.
+The same wrapper covers a table, VALUES, a derived query or a parenthesized
+joined group. Binding applies the supplied column names to the leading output
+positions, retains the remaining names and rejects an excess. Duplicate names
+remain positional metadata and can make a later reference ambiguous. An outer
+joined-group alias hides the constituent relation names; aliases do not create
+a new data or storage owner. Remove `LogicalSourceRef.alias`,
+`GraphTableSource.alias` and VALUES columnNames after migrating their callers.
+`NamedSubquery.columns` remains the CTE's own output declaration, not a source
+alias. `TableRef.alias` remains only for existing mutation-target contracts
+that consume TableRef directly; `DataSource.table` requires it to be
+nil and rejects a nonnil value before reads. FROM construction uses `aliased`.
+This preserves existing mutation-target aliases without creating two admitted
+source-alias paths or redesigning S14 mutation targets in S08.
+
+VALUES traverses general expressions in row-major order, including parameters
+and subqueries, and requires equal expanded row arity. Context-free validation
+checks raw row widths only when no row has a direct `fieldExpansion` cell.
+If any direct cell expands, binding validates every final expanded width; an
+expansion nested inside another expression does not defer the raw-width check.
+Carriage retains the original rows and cells without expansion or normalization.
+`values([])` retains the existing
+programmatic empty zero-column relation; `values([[]])` retains the no-FROM
+one-row zero-column identity. SQL VALUES syntax requires nonempty rows with at
+least one expression; the parser rejects empty SQL rows, and the serializer
+omits FROM for the internal identity. No fabricated output row is substituted
+for an empty source. SPARQL VALUES continues to use GraphPattern.values with
+its existing literal/UNDEF and variable contracts.
+
+A projection is one ordered sequence: wildcard expansion inserts the selected
+source slots at that position; expression items contribute their expression
+and optional output alias. A relation wildcard and a scalar whole-row value
+have distinct meaning. `wholeRow(name)` explicitly refers to a visible source's
+complete composite value. An ordinary unqualified column syntax retains SQL's
+column-name priority before whole-row fallback at binding. `field` selects one
+named composite field; `fieldExpansion` expands a composite at an admitted
+list position. Only a direct SELECT/RETURNING target, top-level VALUES item or
+ROW constructor item expands into fields. In every other expression position,
+including a function argument, ORDER key or expression nested inside one of
+those lists, the same node yields its single whole composite operand. Thus
+`row_to_json(t.*)` receives one composite argument. This rule applies equally
+to parsed SQL and directly constructed QueryIR; scalar position alone is not
+an error. Star syntax over a simple name constructs `wholeRow(name)` before
+the wrapper, so column-name priority cannot change its relation reference.
+Alias-bearing expansion is rejected
+when it would assign one alias to multiple output fields. Runtime binding owns
+field arity, output names/types and whole-row outer-join presence; all-null
+present rows and absent rows remain distinct under the SQL composite contract.
+Expansion preserves PostgreSQL's per-field expression semantics rather than
+implicitly sharing one evaluation of a composite-producing expression. The
+parent-context and evaluation rules follow
+[PostgreSQL 18 composite queries](https://www.postgresql.org/docs/18/rowtypes.html#ROWTYPES-USAGE).
+
+Executable SQL serialization of composite literals succeeds only when the
+admitted SQL syntax can preserve the exact descriptor and value, including
+field names/types/nullability, nested array element descriptors and dimensions.
+A result-only named descriptor or an empty array of composite values need not
+have such a spelling. Use the existing typed
+`SQLSerializationError.unsupportedLiteral` or `unsupportedType` in those cases;
+do not invent aliases, substitute a primitive object or publish partial SQL.
+Completion requires a successful semantic round trip for representable
+composite literals and exact typed rejection for the unrepresentable named,
+nested and empty-array cases, while typed Wire parameters/results retain their
+complete metadata in every case. This is a serializer limitation, not an
+unsupported composite value, parameter, result or expression execution path.
+
+The single binary set tree carries complete query operands, including operand
+projection, predicates, CTEs and local ORDER/pagination. INTERSECT binds more
+tightly than UNION/EXCEPT; UNION/EXCEPT are left associative. The parser encodes
+that tree and serialization inserts parentheses where required to preserve it.
+Each node independently carries ALL or DISTINCT. Remove DataSource.union,
+unionAll, intersect and except after moving every caller to this tree; SPARQL
+GraphPattern.union and minus retain their separate algebra.
+
+A SelectQuery whose direct source is setOperation is a query-expression
+envelope: its projection is exactly one unqualified wildcard, quantifier is
+all, and filter/groupBy/having/accessPath/reduced are absent or false and its
+dataset is implicit. Outer CTEs, ORDER and pagination belong to that envelope.
+setOperation is admitted only as that direct query source; using it as an
+ordinary aliased/joined/Base-wrapped relation requires DataSource.subquery over
+the complete envelope.
+Extra relational clauses are expressed by wrapping the complete set query in
+DataSource.subquery under an ordinary SELECT, preserving scope rather than
+discarding clauses. Intrinsic validation rejects an invalid set envelope before
+any read. Set type/arity, multiplicity, NULL equality and outer output-name
+resolution remain the SQL/runtime owners' contracts.
+
+#### Quantifiers, pagination and collation
+
+DISTINCT exists only in SelectQuantifier; distinctOn requires at least one
+expression and preserves its ordered keys. Binding checks its ORDER prefix and
+SQL comparison capabilities before reads; declaration equality does not select
+the retained row. SetQuantifier belongs to its own set node and cannot carry
+DISTINCT ON.
+
+QueryCount.fixed preserves every UInt64 value for existing non-SQL callers.
+For SQL, a fixed value and a pagination expression must satisfy the SQL signed
+bigint coercion/range contract; values above Int64.max fail rather than wrap.
+An expression may be a parameter or SQL NULL. Limit nil, explicit ALL and a
+NULL-valued limit retain their declaration identities while runtime applies
+the SQL meaning. FETCH FIRST/NEXT without a count constructs fixed(1); ONLY
+constructs withTies false. FETCH/LIMIT spelling and legal OFFSET clause order
+normalize to this single pagination owner. withTies true requires ordering and
+preserves the complete final peer group under all sort keys. Binding forbids
+source-row references, aggregates and windows in pagination, resolves types
+before reads, and execution evaluates admitted expressions once per query
+invocation with the correct correlation scope. NULL, negatives and overflow
+use the [SQL profile](SQL/DESIGN.md) rules, not UInt64 parsing defaults.
+
+COLLATE is an expression over the closed C/POSIX common profile. Sort keys
+continue to own only expression, direction and optional NULL order; wrapping
+their expression carries collation without a second SortKey collation field.
+Name resolution and unsupported-collation diagnostics remain SQL-owned.
+
+#### Occurrence, traversal and bounded identity obligations
+
+Add the following QueryOccurrenceField roles. Every entry denotes one unique
+parent/role/index address, with nil for singular edges. Equal payloads at
+different positions retain distinct identities; absent children have no edge.
+
+| Semantic child | Role and zero-based index | Ordered children |
+|---|---|---|
+| Projection item, including a wildcard leaf | projection(index) | Projection order; an expression item's ID is its expression root. |
+| DISTINCT ON expression | distinctOn(index) | Key order. |
+| Alias input | source(nil) | One nested source; names are metadata, not expressions. |
+| Set operands | setLeft(nil), setRight(nil) | Left query, then right query, each with its own scope. |
+| VALUES row and expression cell | valuesRow(row), then valuesCell(column) under that row | Row-major; row nodes distinguish repeated cell indices. |
+| Pagination expression | offset(nil), limit(nil) | Offset before limit; fixed/ALL alternatives create no expression edge. |
+| ARRAY subquery | subquery(nil) | Complete nested query under the existing subquery role. |
+| COLLATE, field selection and field expansion | operand(0) | One expression child; collation/name stay exact metadata. |
+| Explicit whole row | No child | Exact source name is identity metadata. |
+
+Canonical query child order is CTEs, projection, source, filter, groupBy, having,
+DISTINCT ON, orderBy, offset and limit. Existing child roles for joins,
+subqueries, aggregates, CASE, types and other expressions remain unchanged.
+This fixes structural enumeration, not SQL parameter-inference or evaluation
+order: those follow the SQL semantic authority, while lookup uses the same
+arena provenance and named edges regardless of visitation order. The parser's
+construction collector must record wildcard/row group nodes and recover these
+edges from construction provenance, never match equal expression values.
+
+Every semantic walker, referenced-columns/variables analysis, parameter
+collection/admission/substitution, scope analyzer, SQL/SPARQL validator,
+occurrence builder, deep equality/hash, serializer and codec handles each new
+child once. Rebuilds retain all metadata, including CTE materialization,
+quantifiers, column aliases, withTies, collation and optional children. SQL
+parameter admission keeps references for selected runtime inference;
+context-free bind still substitutes all admitted expression children, including
+VALUES and pagination, without changing interpreter selection. Binding rejects
+malformed shape instead of treating an unvisited child as unused.
+
+Extend the existing explicit traversal stacks and collection cursors; a new
+generic visitor framework is unnecessary. Across nested
+expression/query/source/set/VALUES edges, equality/hash, validation,
+substitution and Wire encoding/decoding use constant process-stack depth.
+Cursors retain immutable input owners and advance one child at a time; scratch
+is O(active depth), not one stack entry or subtree copy per sibling. Identity
+tokens include exact discriminator, ordered children, count, optional presence
+and metadata. Query continuation fingerprints consume the canonical Wire
+encoding, so these fields cannot be omitted or separately approximated.
+
+The existing QueryStructuralResourceLedger admits node/depth/count growth,
+VALUES rows/cells, alias/column collections, DISTINCT keys, and retained UTF-8
+names/qualifiers before allocation. VALUES variable counts remain charged where
+their non-SQL contract applies; source column alias count is an ordinary
+collection charge. Bound values consume the SQL composite owner's measured
+footprint once, including nested metadata and retained leaf bytes. Overflow,
+duplicate occurrence addresses, invalid shape and resource exhaustion remain
+typed failures with unchanged residual budgets. Runtime actual capacities,
+sort/set/CTE work and retained output reservations remain Framework-owned.
+
+Intrinsic shape failures extend QueryStructuralValidationError with
+`invalidValuesRowArity(row: Int, expected: Int, actual: Int)`,
+`emptyDistinctOn`, `invalidSetQueryEnvelope` and `sourceAliasInTableReference`.
+Alias arity/name resolution, a non-composite expansion operand, SQL pagination coercion
+and language failures remain the existing typed runtime/language owners'
+categories; intrinsic validation does not need a catalog or infer SQL types.
+
+#### Language isolation and falsifiable completion cases
+
+Default/MultiBase target boundaries remain unchanged. The new relational
+aliased/setOperation forms classify as non-SPARQL in
+DataSource.usesSPARQLSemantics; top-level graphPattern/namedGraph/service retain
+their existing classification. Explicit SPARQL validation remains explicit.
+SPARQL SELECT retains ordinary ALL/DISTINCT, REDUCED, datasets, variable
+projection, term identity and unbound semantics. Its pagination accepts only
+fixed unsigned counts, including UInt64.max; SQL-only expression/ALL/WITH TIES,
+DISTINCT ON, composite expansion and collation fail with typed language errors.
+SPARQLSolutionModifiers retains its existing unsigned fields and maps losslessly
+when composing a shared SELECT. SQL NULL never becomes RDF UNDEF by codec or
+copy-helper defaulting.
+
+| Case | Required distinguishing evidence | Local owner / runtime consumer |
+|---|---|---|
+| S08-QC01 / Q01 | Mixed bare/qualified wildcards and aliased expressions preserve position, duplicate names and zero-row descriptors; implicit/explicit AS construct equal values. | SelectQuery metadata tests; QueryAST parser/serializer and bound output tests. |
+| S08-QC02 / Q02–Q03 | Expression VALUES parameters are visited; ragged rows/alias excess fail; omitted derived alias and aliased joined group retain lexical visibility; no-FROM is exactly one zero-column row. | Structural/parameter tests; source scope and join runtime tests. |
+| S08-QC03 / Q04–Q06/F09 | Whole-row value, present all-NULL and absent outer-join row differ; field selection and list/ROW expansion retain arity while nested star and ROW_TO_JSON/TO_JSON receive one composite; ARRAY(subquery) retains one-column query scope and inner array bounds, adding only outer lower bound 1. | Query identity/Wire tests; SQL composite, JSON and ARRAY runtime tests. |
+| S08-QC04 / Q07–Q09 | DISTINCT ON differs from DISTINCT; binary set precedence and each ALL/DISTINCT node survive copies/round trips; local and outer ORDER/pagination remain distinct; C and POSIX are explicit identity metadata. | Identity/recursive codec tests; selected set/order execution tests. |
+| S08-QC05 / Q10 | Parameter/NULL/ALL/FETCH/WITH TIES carriage, explicit clearing, missing-parameter and negative/overflow failures; full UInt64 non-SQL fixed domain remains valid. | Parameter/metadata/structural tests; SQL pagination and SPARQL behavioral tests. |
+| S08-QC06 / Q12 | CTE name/columns/query/materialization survive enclosing copies and set/subquery round trips without duplicated declaration ownership. | Metadata/recursive codec tests; demand-driven nonrecursive CTE runtime tests. |
+| S08-QC07 | Distinct repeated occurrences, wildcard/VALUES row addresses and every new child at exact/one-past node/depth/byte/collection limits; mixed deep expression/source/query traversal does not grow the process stack. | Occurrence/structural/parameter and recursive Wire tests, separately executed Native/ordinary WASM/Embedded witnesses. |
+| S08-QC08 | Malformed or reserved old query layouts, tags, counts, enum alternatives, duplicate states, missing/trailing bytes and inadmissible set envelopes fail explicitly; representable composite literals round trip and unrepresentable descriptors fail SQL serialization while Wire remains lossless; no compatibility fallback or synthetic success. | Wire negative/golden tests, QueryAST serializer tests and runtime pre-read admission tests. |
+
+These cases close declaration/carriage gaps only. S08 source binding does not
+claim complete Q02: schema-qualified table execution remains S11 and public
+table functions/SRF relation composition remain S10. New grouping/windows and
+recursive CTE algorithms remain S09/S10. The S08 ARRAY lower-bound decision is
+the user's 2026-10-16 choice of observed PostgreSQL 18.6 behavior; the SQL child
+owns its detailed value semantics.
+
+Migration includes every direct consumer of the removed fields/cases: Kit
+builders and SPARQL metadata/scope/serialization paths; Wire's iterative and
+standalone codecs, validators and deterministic fixtures; Framework QueryAST,
+query binding/planning/execution, continuation fingerprints and MultiBase
+Composition; Server admission/dispatch; Client/CLI/Cloudflare or other package
+callers present in the dependency graph. Migrate source before deleting old
+cases, and verify the replacement path before removing its obsolete tests.
+Affected upper designs must consume this contract before implementation.

@@ -104,6 +104,26 @@ The descriptor boundary admits resolved SQL types only. The closed grammar
 describes `custom` and nested arrays so malformed and unresolved descriptors
 receive explicit typed admission failures rather than an unknown-key fallback.
 
+S08 adds the result-only `composite` type with exactly `kind` and `columns`.
+Each ordered column object has exactly `number`, `name`, `type` and
+`isNullable`; `type` is the existing QueryColumnType production. Column
+numbers use the Kit one-based ordinal contract. The reusable descriptor codec
+preserves nested descriptors for result/CLI metadata under the existing
+strict JSON limits. `maximumFrameBytes` bounds encoded UTF-8 JSON. Descriptor
+construction uses a separate finite retained-byte ceiling equal to
+`QueryCompositeType.constructionByteCount(typeNodeCapacity: maximumObjectCount,
+columnCapacity: maximumObjectCount) + maximumFrameBytes`, with checked arithmetic.
+The same derived policy applies to encoding and decoding; logical node, edge and
+depth limits remain the configured object/depth limits. Admission measures the
+complete QueryColumnType descriptor, including an outer SQL ARRAY node and its
+element edge, before encoding and after decoding. Nested composite storage
+retention remains subject to the separate finite byte policy. Manifest field admission independently rejects direct or
+nested composite persistence through the [SQL value authority](../DatabaseKit/Query/SQL/DESIGN.md#s08-frozen-composite-values-and-ownership).
+Descriptor JSON support does not grant schema or default-value admission.
+Round-trip/unknown-member/arity/ordinal/type/nullability and cumulative-depth
+cases belong to DatabaseSchemaJSONTests; result-only descriptors must not be
+silently converted into primitive objects.
+
 SchemaJSONCodec+Encoding.swift and SchemaJSONCodec+Decoding.swift migrate their
 field grammar together; a native QueryColumnTypeJSONCodec owns reusable strict
 descriptor encode/decode for schema and CLI column metadata. It returns or

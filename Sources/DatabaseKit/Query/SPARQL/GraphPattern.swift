@@ -246,7 +246,7 @@ extension Expression {
     /// Independent implementation for proper SPARQL semantics
     public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
         switch self {
-        case .arrayAccess, .collectionOperation, .currentValue, .concatenate, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
+        case .collate, .arraySubquery, .wholeRow, .field, .fieldExpansion, .arrayAccess, .collectionOperation, .currentValue, .concatenate, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
             throw .unsupportedSPARQLLiteral
         // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
         // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.
@@ -489,7 +489,7 @@ extension DataType {
             var scalarType = self
             while case .array(let element) = scalarType { scalarType = element }
             switch scalarType {
-            case .time(_, .some), .timestamp(_, .some), .custom(_, .some),
+            case .composite, .time(_, .some), .timestamp(_, .some), .custom(_, .some),
                  .interval(.some, _), .interval(_, .some):
                 throw .unsupportedSPARQLLiteral
             default: break
@@ -521,6 +521,7 @@ extension DataType {
                 return "xsd:duration"
             case .array:
                 return "xsd:string"
+            case .composite: throw .unsupportedSPARQLLiteral
             case .custom(let name, _):
                 return name
             }
@@ -544,32 +545,38 @@ extension SelectQuery {
 
         // SELECT clause
         result += "SELECT "
-        if distinct { result += "DISTINCT " }
+        switch quantifier {
+        case .all: break
+        case .distinct: result += "DISTINCT "
+        case .distinctOn: throw .unsupportedSPARQLLiteral
+        }
         if reduced { result += "REDUCED " }
 
-        switch projection {
-        case .all:
-            result += "*"
-        case .allFrom(let table):
-            result += "\(table).*"
-        case .items(let items), .distinctItems(let items):
-            result += try items.map { (item) throws(QueryLiteralConversionError) -> String in
-                var s = try item.expression.toSPARQL()
-                if let alias = item.alias {
-                    s = "(\(s) AS ?\(alias))"
-                }
-                return s
-            }.joined(separator: " ")
-        }
+        result += try projection.map { (item) throws(QueryLiteralConversionError) -> String in
+            switch item {
+            case .wildcard(let qualifier):
+                guard qualifier == nil, projection.count == 1 else { throw .unsupportedSPARQLLiteral }
+                return "*"
+            case .expression(let expression, let alias):
+                let text = try expression.toSPARQL(prefixes: prefixes)
+                if let alias { return "(\(text) AS ?\(alias))" }
+                return text
+            }
+        }.joined(separator: " ")
 
         result += "\n"
 
-        // WHERE clause
-        if case .graphPattern(let pattern) = source {
-            result += "WHERE {\n"
-            result += try pattern.toSPARQL(prefixes: prefixes, indent: "  ")
-            result += "\n}\n"
+        let pattern: GraphPattern
+        switch source {
+        case .graphPattern(let value): pattern = value
+        case .namedGraph(let name, let value): pattern = .graph(name: .iri(name), pattern: value)
+        case .service(let endpoint, let value, let silent): pattern = .service(endpoint: endpoint, pattern: value, silent: silent)
+        case .subquery(let query): pattern = .subquery(query)
+        default: throw .unsupportedSPARQLLiteral
         }
+        result += "WHERE {\n"
+        result += try pattern.toSPARQL(prefixes: prefixes, indent: "  ")
+        result += "\n}\n"
 
         // GROUP BY
         if let groupBy = groupBy, !groupBy.isEmpty {
@@ -590,13 +597,15 @@ extension SelectQuery {
         }
 
         // LIMIT
-        if let limit = limit {
-            result += "LIMIT \(limit)\n"
+        if let limit = pagination.limit {
+            guard case .count(.fixed(let count), withTies: false) = limit else { throw .unsupportedSPARQLLiteral }
+            result += "LIMIT \(count)\n"
         }
 
         // OFFSET
-        if let offset = offset {
-            result += "OFFSET \(offset)\n"
+        if let offset = pagination.offset {
+            guard case .fixed(let count) = offset else { throw .unsupportedSPARQLLiteral }
+            result += "OFFSET \(count)\n"
         }
 
         return result

@@ -3,25 +3,114 @@ import DatabaseTypes
 
 /// Validates lazy cells in place without building primitive or JSONB trees.
 enum QueryValueWireValidator {
+    private enum Mismatch {
+        case array(Int)
+        case composite(Int)
+    }
+    private enum Step {
+        case value(QueryWireExpectedType?, Bool, Mismatch?, depth: Int)
+        case array(remaining: Int, index: Int, type: QueryWireTypeView, depth: Int)
+        case composite(QueryWireColumnCursor, depth: Int)
+        case end
+    }
+
     static func validate(from reader: inout DatabaseWireReader, type: QueryColumnType? = nil,
                          isNullable: Bool = true) throws(DatabaseWireError) {
         try reader.beginQueryPayload()
         defer { reader.endQueryPayload() }
-        let tag = try reader.readUInt8()
-        if tag == 4 {
-            try reader.withNestedValue { reader throws(DatabaseWireError) in
-                let shape = try QueryValueWireCodec.decodeArrayShape(from: &reader)
-                if let type, type != .sql(.array(shape.type)) { throw .invalidQueryValue(.incompatibleType) }
-                for index in 0..<shape.count {
-                    do throws(DatabaseWireError) {
-                        let elementTag = try reader.readUInt8()
-                        try validateScalar(tag: elementTag, from: &reader, type: .sql(shape.type), isNullable: true)
-                    } catch .invalidQueryValue(.incompatibleType) {
+        var steps: [Step] = [.value(type.map { .declared($0) }, isNullable, nil, depth: reader.currentNestingDepth + 1)]
+        var open = 0
+        defer { reader.abandonNestedValues(open) }
+        while let step = steps.popLast() {
+            switch step {
+            case .end:
+                try reader.endNestedValue()
+                open -= 1
+            case .array(let remaining, let index, let type, let depth):
+                guard remaining > 0 else { continue }
+                steps.append(.array(remaining: remaining - 1, index: index + 1, type: type, depth: depth))
+                steps.append(.value(.encoded(type), true, .array(index), depth: depth + 1))
+            case .composite(var cursor, let depth):
+                guard cursor.index < cursor.count else { continue }
+                let index = cursor.index
+                let column = try cursor.next()
+                steps.append(.composite(cursor, depth: depth))
+                steps.append(.value(.encoded(column.type), column.isNullable, .composite(index), depth: depth + 1))
+            case .value(let type, let nullable, let mismatch, let depth):
+                do throws(DatabaseWireError) {
+                    let tag = try reader.readUInt8()
+                    if tag == 4 || tag == 11 {
+                        try reader.beginNestedValue()
+                        open += 1
+                        steps.append(.end)
+                        let descriptor = try QueryTypeWireValidator.validate(from: &reader)
+                        let actualDepth = UInt64(depth).addingReportingOverflow(descriptor.maximumNestingDepth)
+                        guard !actualDepth.overflow else { throw .byteCountOverflow }
+                        guard actualDepth.partialValue <= UInt64(reader.limits.maximumNestingDepth) else {
+                            throw .invalidQueryValue(.resourceLimit(resource: "depth", actual: actualDepth.partialValue,
+                                maximum: UInt64(reader.limits.maximumNestingDepth)))
+                        }
+                        if tag == 4 {
+                            if case .array = descriptor.shape { throw .invalidQueryValue(.incompatibleType) }
+                            if let type {
+                                guard try QueryTypeWireValidator.matches(descriptor, expected: type.arrayElement()) else {
+                                    throw .invalidQueryValue(.incompatibleType)
+                                }
+                            }
+                            let dimensions = try reader.readCount()
+                            guard dimensions <= 6 else { throw .invalidQueryValue(.invalidDimensionCount(dimensions)) }
+                            var product: UInt64 = dimensions == 0 ? 0 : 1
+                            for _ in 0..<dimensions {
+                                let lower = try reader.readInt32()
+                                let length = try reader.readInt32()
+                                do throws(QueryValueError) { _ = try QueryArrayDimension(lowerBound: lower, length: length) }
+                                catch let error { throw .invalidQueryValue(error) }
+                                let next = product.multipliedReportingOverflow(by: UInt64(length))
+                                guard !next.overflow else { throw .invalidQueryValue(.dimensionProductOverflow) }
+                                product = next.partialValue
+                            }
+                            let count = try reader.readCount()
+                            guard product == UInt64(count) else {
+                                throw .invalidQueryValue(.elementCountMismatch(expected: product, actual: UInt64(count)))
+                            }
+                            steps.append(.array(remaining: count, index: 0, type: descriptor, depth: depth))
+                        } else {
+                            guard case .composite(let columns) = descriptor.shape else { throw .invalidQueryValue(.incompatibleType) }
+                            if let type {
+                                guard try QueryTypeWireValidator.matches(descriptor, expected: type) else {
+                                    throw .invalidQueryValue(.incompatibleType)
+                                }
+                            }
+                            let count = try reader.readCount()
+                            guard count == columns else {
+                                throw .invalidQueryValue(.compositeFieldCountMismatch(expected: UInt64(columns), actual: UInt64(count)))
+                            }
+                            steps.append(.composite(try descriptor.columns(), depth: depth))
+                        }
+                    } else {
+                        if tag == 0 {
+                            var probe = reader
+                            let primitiveTag = try probe.readUInt8()
+                            if primitiveTag == 0, !nullable, case .some(.composite(let index)) = mismatch {
+                                throw .invalidQueryValue(.nullCompositeField(index: UInt64(index)))
+                            }
+                            if let type, type.scalar == nil, primitiveTag != 0 {
+                                try rejectIncompatiblePrimitive(from: reader)
+                            }
+                        } else if let type, type.scalar == nil {
+                            throw .invalidQueryValue(.incompatibleType)
+                        }
+                        try validateScalar(tag: tag, from: &reader, type: type?.scalar, isNullable: nullable)
+                    }
+                } catch .invalidQueryValue(.incompatibleType) {
+                    switch mismatch {
+                    case .some(.array(let index)), .some(.composite(let index)):
                         throw .invalidQueryValue(.elementTypeMismatch(index: UInt64(index)))
-                    } catch let error { throw error }
-                }
+                    case nil: throw .invalidQueryValue(.incompatibleType)
+                    }
+                } catch let error { throw error }
             }
-        } else { try validateScalar(tag: tag, from: &reader, type: type, isNullable: isNullable) }
+        }
     }
 
     private static func validateScalar(tag: UInt8, from reader: inout DatabaseWireReader, type: QueryColumnType?,

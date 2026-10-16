@@ -83,13 +83,19 @@ struct QuerySchemaJSONTests {
     func invalidFieldAdmissionIsTyped() throws {
         let codec = SchemaJSONCodec()
         let plain = try manifest(fields: [.init(name: "value", fieldNumber: 1, type: .string)])
-        let text = try codec.encode(plain).replacingOccurrences(
-            of: #""queryType":null"#,
-            with: #""queryType":{"kind":"sql","type":{"kind":"json"}}"#
-        )
-        #expect(throws: SchemaJSONError.invalidQueryValue(
-            path: "entities[0].fields[0].queryType", cause: .invalidPersistenceDescriptor
-        )) { try codec.decode(text) }
+        for descriptor in [
+            #"{"kind":"json"}"#,
+            #"{"kind":"composite","columns":[]}"#,
+            #"{"kind":"array","element":{"kind":"composite","columns":[]}}"#,
+        ] {
+            let text = try codec.encode(plain).replacingOccurrences(
+                of: #""queryType":null"#,
+                with: #""queryType":{"kind":"sql","type":\#(descriptor)}"#
+            )
+            #expect(throws: SchemaJSONError.invalidQueryValue(
+                path: "entities[0].fields[0].queryType", cause: .invalidPersistenceDescriptor
+            )) { try codec.decode(text) }
+        }
     }
 
     private func manifest(fields: [FieldSchema]) throws -> SchemaManifest {

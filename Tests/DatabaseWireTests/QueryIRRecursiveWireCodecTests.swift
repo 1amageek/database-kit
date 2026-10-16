@@ -237,7 +237,7 @@ struct QueryIRRecursiveWireCodecTests {
         for _ in 0..<128 {
             expression = .subquery(
                 SelectQuery(
-                    projection: .all,
+                    projection: [.wildcard()],
                     source: .graphPattern(
                         .filter(.basic([]), expression)
                     )
@@ -246,9 +246,9 @@ struct QueryIRRecursiveWireCodecTests {
         }
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .items([
+                projection: [
                     ProjectionItem(expression, alias: "value"),
-                ]),
+                ],
                 source: .graphPattern(.basic([]))
             )
         )
@@ -342,7 +342,7 @@ struct QueryIRRecursiveWireCodecTests {
                 name: "subquery_\($0)",
                 columns: ["column_\($0)"],
                 query: SelectQuery(
-                    projection: .all,
+                    projection: [.wildcard()],
                     source: .table(TableRef("subquery_table_\($0)"))
                 ),
                 materialized: $0.isMultiple(of: 2)
@@ -358,11 +358,13 @@ struct QueryIRRecursiveWireCodecTests {
         }
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .items(projectionItems),
-                source: .intersect([
-                    .union(unionSources),
-                    .unionAll(unionAllSources),
-                ]),
+                projection: projectionItems,
+                source: .subquery(SelectQuery(
+                    projection: [.wildcard()],
+                    source: .setOperation(operator: .intersect, quantifier: .distinct,
+                        left: setQuery(unionSources, quantifier: .distinct),
+                        right: setQuery(unionAllSources, quantifier: .all))
+                )),
                 filter: .caseWhen(cases: [], elseResult: nil),
                 groupBy: arguments,
                 having: .coalesce(arguments),
@@ -449,18 +451,17 @@ struct QueryIRRecursiveWireCodecTests {
         }
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .all,
-                source: .graphTable(
+                projection: [.wildcard()],
+                source: .aliased(.graphTable(
                     GraphTableSource(
                         graphName: "wide_graph",
                         matchPattern: MatchPattern(
                             paths: paths,
                             where: .literal(.bool(true))
                         ),
-                        columns: columns,
-                        alias: "wide_match"
+                        columns: columns
                     )
-                )
+                ), name: "wide_match")
             )
         )
 
@@ -485,7 +486,7 @@ struct QueryIRRecursiveWireCodecTests {
         }
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .graphPattern(
                     .groupBy(
                         .basic([]),
@@ -497,6 +498,24 @@ struct QueryIRRecursiveWireCodecTests {
         )
 
         try expectCanonicalRoundTrip(statement, limits: limits)
+    }
+
+    private func setQuery(_ sources: [DataSource], quantifier: SetQuantifier) -> SelectQuery {
+        var queries = sources.map { SelectQuery(projection: [.wildcard()], source: $0) }
+        while queries.count > 1 {
+            var parents: [SelectQuery] = []
+            var index = 0
+            while index < queries.count {
+                if index + 1 == queries.count { parents.append(queries[index]) }
+                else {
+                    parents.append(SelectQuery(projection: [.wildcard()], source: .setOperation(
+                        operator: .union, quantifier: quantifier, left: queries[index], right: queries[index + 1])))
+                }
+                index += 2
+            }
+            queries = parents
+        }
+        return queries[0]
     }
 
     private func encodeLiteral(

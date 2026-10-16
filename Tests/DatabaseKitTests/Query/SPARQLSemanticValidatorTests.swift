@@ -12,7 +12,7 @@ struct SPARQLSemanticValidatorTests {
             .cast(.string("12:00"), targetType: .array(.time(withTimeZone: false, precision: 3))),
             .cast(.string("12:00"), targetType: .array(.array(.timestamp(withTimeZone: true, precision: 0))))]
         for expression in expressions {
-            let query = SelectQuery(projection: .items([ProjectionItem(expression, alias: "value")]),
+            let query = SelectQuery(projection: [ProjectionItem(expression, alias: "value")],
                                     source: .graphPattern(.basic([])))
             #expect(throws: SPARQLSemanticValidationError.unsupportedSQLExpression) {
                 try SPARQLSemanticValidator.validate(query)
@@ -22,7 +22,7 @@ struct SPARQLSemanticValidatorTests {
             }
         }
         let plainArrayCast = Expression.cast(.string("12:00"), targetType: .array(.time(withTimeZone: false)))
-        let plainQuery = SelectQuery(projection: .items([ProjectionItem(plainArrayCast, alias: "value")]),
+        let plainQuery = SelectQuery(projection: [ProjectionItem(plainArrayCast, alias: "value")],
                                      source: .graphPattern(.basic([])))
         try SPARQLSemanticValidator.validate(plainQuery)
         #expect(try plainArrayCast.toSPARQL() == "xsd:string(\"12:00\")")
@@ -31,7 +31,7 @@ struct SPARQLSemanticValidatorTests {
     @Test("One blank node label can be reused inside one basic graph pattern")
     func labelWithinOneBasicGraphPatternIsValid() throws {
         let query = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .graphPattern(
                 .basic([
                     TriplePattern(
@@ -49,19 +49,19 @@ struct SPARQLSemanticValidatorTests {
         for source in [DataSource.namedGraph(name: "urn:graph", pattern: pattern),
                        .service(endpoint: "urn:endpoint", pattern: pattern, silent: false)] {
             #expect(source.usesSPARQLSemantics)
-            try SPARQLSemanticValidator.validate(SelectQuery(projection: .all, source: source))
+            try SPARQLSemanticValidator.validate(SelectQuery(projection: [.wildcard()], source: source))
         }
-        let nested = DataSource.subquery(query, alias: "nested")
+        let nested = DataSource.subquery(query)
         let joined = DataSource.join(JoinClause(type: .inner, left: query.source, right: nested))
         #expect(!nested.usesSPARQLSemantics)
         #expect(!joined.usesSPARQLSemantics)
-        try QueryStructuralValidator.validate(SelectQuery(projection: .all, source: joined))
+        try QueryStructuralValidator.validate(SelectQuery(projection: [.wildcard()], source: joined))
     }
 
     @Test("One blank node label cannot cross basic graph patterns")
     func labelAcrossBasicGraphPatternsIsInvalid() {
         let query = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .graphPattern(
                 .join(
                     .basic([triple(subject: .blankNode("shared"))]),
@@ -86,7 +86,7 @@ struct SPARQLSemanticValidatorTests {
             object: .literal(.string("value"))
         )
         let query = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .graphPattern(
                 .join(
                     .basic([triple(subject: nested)]),
@@ -180,13 +180,13 @@ struct SPARQLSemanticValidatorTests {
     @Test("Nested EXISTS queries share the request-level query scope")
     func nestedExistsSharesQueryScope() {
         let existsQuery = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .graphPattern(
                 .basic([triple(subject: .blankNode("shared"))])
             )
         )
         let query = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .graphPattern(
                 .filter(
                     .basic([triple(subject: .blankNode("shared"))]),
@@ -245,7 +245,7 @@ struct SPARQLSemanticValidatorTests {
     )
     func blankNodeExpressionIsInvalid(_ literal: Literal) {
         let query = SelectQuery(
-            projection: .items([ProjectionItem(.literal(literal))]),
+            projection: [ProjectionItem(.literal(literal))],
             source: .graphPattern(.basic([]))
         )
 
@@ -270,7 +270,7 @@ struct SPARQLSemanticValidatorTests {
     )
     func blankNodeValueIsInvalid(_ literal: Literal) {
         let query = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .graphPattern(
                 .values(variables: ["value"], bindings: [[literal]])
             )
@@ -290,7 +290,7 @@ struct SPARQLSemanticValidatorTests {
     func reservedVariableNameIsInvalid() {
         let reserved = "visible\u{0}database-framework:blank:0:forged"
         let query = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .graphPattern(
                 .basic([triple(subject: .variable(reserved))])
             )
@@ -310,9 +310,9 @@ struct SPARQLSemanticValidatorTests {
     func reservedProjectionAliasIsInvalid() {
         let reserved = "alias\u{0}database-framework:forged"
         let query = SelectQuery(
-            projection: .items([
+            projection: [
                 ProjectionItem(.variable(Variable("value")), alias: reserved)
-            ]),
+            ],
             source: .graphPattern(.basic([]))
         )
 
@@ -330,7 +330,7 @@ struct SPARQLSemanticValidatorTests {
     func reservedBindTargetIsInvalid() {
         let reserved = "bind\u{0}database-framework:forged"
         let query = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .graphPattern(
                 .bind(
                     .basic([]),
@@ -392,7 +392,7 @@ struct SPARQLSemanticValidatorTests {
     )
     func invalidPredicateTermIsRejected(_ predicate: SPARQLTerm) {
         let query = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .graphPattern(
                 .basic([
                     TriplePattern(
@@ -528,9 +528,9 @@ struct SPARQLSemanticValidatorTests {
     @Test("Unbound expression variables remain runtime semantics")
     func unboundExpressionVariablesAreValid() throws {
         let query = SelectQuery(
-            projection: .items([
+            projection: [
                 ProjectionItem(.variable(Variable("missing")))
-            ]),
+            ],
             source: .graphPattern(
                 .filter(
                     .basic([]),
@@ -578,9 +578,9 @@ struct SPARQLSemanticValidatorTests {
             return
         }
         let query = SelectQuery(
-            projection: .items([
+            projection: [
                 ProjectionItem(.literal(.int(1)), alias: "result")
-            ]),
+            ],
             source: source,
             groupBy: groupBy
         )
@@ -600,7 +600,7 @@ struct SPARQLSemanticValidatorTests {
         )
         let outer = Expression.aggregate(.sum(inner, distinct: false))
         let query = SelectQuery(
-            projection: .items([ProjectionItem(outer, alias: "sum")]),
+            projection: [ProjectionItem(outer, alias: "sum")],
             source: .graphPattern(.basic([]))
         )
 
@@ -613,17 +613,17 @@ struct SPARQLSemanticValidatorTests {
     func groupedWildcardIsValid() throws {
         let queries = [
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .graphPattern(.basic([])),
                 groupBy: [.variable(Variable("key"))]
             ),
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .graphPattern(.basic([])),
                 having: .aggregate(.count(nil, distinct: false))
             ),
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .graphPattern(.basic([])),
                 orderBy: [
                     SortKey(
@@ -646,7 +646,7 @@ struct SPARQLSemanticValidatorTests {
         ])
         let queries = [
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .graphPattern(
                     .bind(
                         pattern,
@@ -656,9 +656,9 @@ struct SPARQLSemanticValidatorTests {
                 )
             ),
             SelectQuery(
-                projection: .items([
+                projection: [
                     ProjectionItem(.literal(.int(1)), alias: "value")
-                ]),
+                ],
                 source: .graphPattern(pattern)
             ),
         ]
@@ -671,23 +671,23 @@ struct SPARQLSemanticValidatorTests {
                 try SPARQLSemanticValidator.validate(query)
             }
         }
-        let relational = SelectQuery(projection: .items([
+        let relational = SelectQuery(projection: [
             ProjectionItem(.literal(.int(1)), alias: "same"),
             ProjectionItem(.literal(.int(2)), alias: "same"),
-        ]), source: .values([], columnNames: nil))
+        ], source: .values([]))
         #expect(!relational.source.usesSPARQLSemantics)
         try QueryStructuralValidator.validate(relational)
         #expect(throws: SPARQLSemanticValidationError.duplicateProjectionTarget("same")) {
-            try SPARQLSemanticValidator.validate(relational)
+            try SPARQLSemanticValidator.validate(relational.replacing(source: .graphPattern(.basic([]))))
         }
     }
 
     @Test("Grouped projection exposes only group variables and aggregates")
     func groupedProjectionScopeIsValidated() {
         let query = SelectQuery(
-            projection: .items([
+            projection: [
                 ProjectionItem(.variable(Variable("notGrouped")))
-            ]),
+            ],
             source: .graphPattern(.basic([])),
             groupBy: [.variable(Variable("grouped"))]
         )
@@ -703,7 +703,7 @@ struct SPARQLSemanticValidatorTests {
     @Test("Every raw SPARQL IRI boundary validates before execution")
     func rawIRIBoundariesAreValidated() {
         let select = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .service(
                 endpoint: "relative/service",
                 pattern: .basic([]),
@@ -741,7 +741,7 @@ struct SPARQLSemanticValidatorTests {
     @Test("RDF literal annotations validate at the canonical gate")
     func literalAnnotationsAreValidated() {
         let typed = SelectQuery(
-            projection: .items([
+            projection: [
                 ProjectionItem(
                     .literal(
                         .typedLiteral(
@@ -751,7 +751,7 @@ struct SPARQLSemanticValidatorTests {
                     ),
                     alias: "value"
                 )
-            ]),
+            ],
             source: .graphPattern(.basic([]))
         )
         #expect(throws: SPARQLSemanticValidationError.self) {
@@ -759,12 +759,12 @@ struct SPARQLSemanticValidatorTests {
         }
 
         let language = SelectQuery(
-            projection: .items([
+            projection: [
                 ProjectionItem(
                     .literal(.langLiteral(value: "value", language: "_")),
                     alias: "value"
                 )
-            ]),
+            ],
             source: .graphPattern(.basic([]))
         )
         #expect(
@@ -797,9 +797,9 @@ struct SPARQLSemanticValidatorTests {
 
         let subquery = GraphPattern.subquery(
             SelectQuery(
-                projection: .items([
+                projection: [
                     ProjectionItem(.literal(.int(1)), alias: "alias")
-                ]),
+                ],
                 source: .graphPattern(.basic([]))
             )
         )
@@ -808,14 +808,8 @@ struct SPARQLSemanticValidatorTests {
 
     @Test("Natural joins preserve their outer-join binding guarantees")
     func naturalJoinVariableScopeMatchesOuterJoinSemantics() {
-        let left = DataSource.values(
-            [[.int(1)]],
-            columnNames: ["left"]
-        )
-        let right = DataSource.values(
-            [[.int(2)]],
-            columnNames: ["right"]
-        )
+        let left = DataSource.graphPattern(.values(variables: ["left"], bindings: [[.int(1)]]))
+        let right = DataSource.graphPattern(.values(variables: ["right"], bindings: [[.int(2)]]))
 
         let cases: [(JoinType, Set<String>)] = [
             (.natural, ["left", "right"]),
@@ -1025,7 +1019,7 @@ struct SPARQLSemanticValidatorTests {
 
     private func query(object: SPARQLTerm) -> SelectQuery {
         SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .graphPattern(
                 .basic([triple(subject: .variable("subject"), object: object)])
             )

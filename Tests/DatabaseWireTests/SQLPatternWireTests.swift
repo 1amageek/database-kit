@@ -25,7 +25,7 @@ struct SQLPatternWireTests {
                 pattern: .concatenate(.parameter(.position(2)), .literal(.sqlUnknownString("%"))),
                 escape: kind.permitsEscape ? .parameter(.position(3)) : nil, kind: kind)
             #expect(try decode(encode(value)) == value)
-            let query = SelectQuery(projection: .items([ProjectionItem(value)]), source: .values([], columnNames: nil))
+            let query = SelectQuery(projection: [ProjectionItem(value)], source: .values([]))
             let statement = QueryStatement.select(query)
             let bytes = try QueryIRWireFormat.encode(statement)
             #expect(try QueryIRWireFormat.decode(bytes) == statement)

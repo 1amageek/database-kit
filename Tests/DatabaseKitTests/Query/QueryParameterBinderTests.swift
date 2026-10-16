@@ -9,9 +9,9 @@ struct QueryParameterBinderTests {
     func sqlConstructorParametersBind() throws {
         let type = QueryColumnType.sql(.timestamp(withTimeZone: true, precision: 3))
         let statement = QueryStatement.select(SelectQuery(
-            projection: .items([ProjectionItem(.array([
+            projection: [ProjectionItem(.array([
                 .row([.parameter(.position(1)), .null]), .parameter(.name("clock"))
-            ]))]), source: .values([], columnNames: nil)))
+            ]))], source: .values([])))
         let binder = try QueryParameterBinder(parameters: [
             QueryParameter(position: 1, value: .primitive(.int64(7))),
             QueryParameter(position: 2, name: "clock", value: .primitive(.null), type: type),
@@ -19,9 +19,9 @@ struct QueryParameterBinderTests {
         guard case .select(let query) = try binder.bind(statement) else {
             Issue.record("Expected a bound SELECT"); return
         }
-        #expect(query.projection == .items([ProjectionItem(.array([
+        #expect(query.projection == [ProjectionItem(.array([
             .row([.int(7), .null]), .literal(.queryValue(.primitive(.null), type: type))
-        ]))]))
+        ]))])
         #expect(throws: QueryParameterBindingError.missingName("clock")) {
             try QueryParameterBinder(parameters: [QueryParameter(position: 1, value: .primitive(.int64(7)))])
                 .bind(statement)
@@ -49,7 +49,7 @@ struct QueryParameterBinderTests {
         )
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .all,
+                projection: [.wildcard()],
                 source: .table(TableRef("documents")),
                 accessPath: .fusion(fusion)
             )
@@ -77,9 +77,9 @@ struct QueryParameterBinderTests {
     func namedAndPositionalParametersBind() throws {
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .items([
+                projection: [
                     ProjectionItem(.parameter(.name("projection")), alias: "value"),
-                ]),
+                ],
                 source: .table(TableRef("Event")),
                 filter: .and(
                     .equal(.col("id"), .parameter(.position(1))),
@@ -100,9 +100,9 @@ struct QueryParameterBinderTests {
             return
         }
 
-        #expect(query.projection == .items([
+        #expect(query.projection == [
             ProjectionItem(.literal(.int(42)), alias: "value"),
-        ]))
+        ])
         #expect(query.filter == .and(
             .equal(.col("id"), .literal(.string("event-1"))),
             .equal(.col("title"), .literal(.string("Festival")))
@@ -114,7 +114,7 @@ struct QueryParameterBinderTests {
     func invalidBindingsFail() throws {
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .items([ProjectionItem(.parameter(.position(2)))]),
+                projection: [ProjectionItem(.parameter(.position(2)))],
                 source: .table(TableRef("Event"))
             )
         )
@@ -143,10 +143,10 @@ struct QueryParameterBinderTests {
     func exactNumericValuesRetainTypes() throws {
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .items([
+                projection: [
                     ProjectionItem(.parameter(.name("count"))),
                     ProjectionItem(.parameter(.name("amount"))),
-                ]),
+                ],
                 source: .table(TableRef("Event"))
             )
         )
@@ -169,17 +169,17 @@ struct QueryParameterBinderTests {
             Issue.record("Expected a SELECT statement")
             return
         }
-        #expect(query.projection == .items([
+        #expect(query.projection == [
             ProjectionItem(.literal(.uint(UInt64.max))),
             ProjectionItem(.literal(.decimal(coefficient: 1234, scale: 2))),
-        ]))
+        ])
     }
 
     @Test("values without a query literal representation are rejected")
     func unsupportedValuesAreRejected() throws {
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .items([ProjectionItem(.parameter(.name("reference")))]),
+                projection: [ProjectionItem(.parameter(.name("reference")))],
                 source: .table(TableRef("Event"))
             )
         )
@@ -205,10 +205,10 @@ struct QueryParameterBinderTests {
     func repeatedParameterExpansionIsBounded() throws {
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .items([
+                projection: [
                     ProjectionItem(.parameter(.position(1)), alias: "first"),
                     ProjectionItem(.parameter(.position(1)), alias: "second"),
-                ]),
+                ],
                 source: .table(TableRef("Event"))
             )
         )
@@ -250,7 +250,7 @@ struct QueryParameterBinderTests {
 
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .items([ProjectionItem(expression)]),
+                projection: [ProjectionItem(expression)],
                 source: .table(TableRef("Event"))
             )
         )
@@ -269,13 +269,13 @@ struct QueryParameterBinderTests {
         )
 
         guard case .select(let query) = try binder.bind(statement),
-              case .items(let items) = query.projection,
-              let projectionItem = items.first else {
+              let projectionItem = query.projection.first,
+              case .expression(let projectionExpression, _) = projectionItem else {
             Issue.record("Expected a bound SELECT projection")
             return
         }
 
-        var boundExpression = projectionItem.expression
+        var boundExpression = projectionExpression
         for _ in 0..<nestingCount {
             guard case .not(let nested) = boundExpression else {
                 Issue.record("Expected the admitted expression nesting to be preserved")
@@ -351,7 +351,7 @@ struct QueryParameterBinderTests {
         )
         let statement = QueryStatement.select(
             SelectQuery(
-                projection: .items([ProjectionItem(.parameter(.position(1)))]),
+                projection: [ProjectionItem(.parameter(.position(1)))],
                 source: .table(TableRef("Event"))
             )
         )
@@ -363,7 +363,7 @@ struct QueryParameterBinderTests {
             Issue.record("Expected a SELECT statement")
             return
         }
-        #expect(query.projection == .items([ProjectionItem(.literal(.uuid(uuid)))]))
+        #expect(query.projection == [ProjectionItem(.literal(.uuid(uuid)))])
     }
 
     @Test("SPARQL query forms bind solution modifier expressions")

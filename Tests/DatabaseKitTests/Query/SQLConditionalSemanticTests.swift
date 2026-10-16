@@ -137,7 +137,7 @@ struct SQLConditionalSemanticTests {
         let names: Set<String> = ["operand", "match", "result", "fallback", "greatest", "least", "truth", "left", "right", "lhs", "array", "outer", "inner"]
         #expect(query(expression({ .col($0) }, subquery: query)).referencedColumns == Set(names.map { ColumnRef($0) }))
         func filtered(_ value: Expression) -> SelectQuery {
-            SelectQuery(projection: .all, source: .values([], columnNames: nil), filter: value)
+            SelectQuery(projection: [.wildcard()], source: .values([]), filter: value)
         }
         #expect(filtered(expression({ .variable(Variable($0)) }, subquery: filtered)).referencedVariables == names)
     }
@@ -156,11 +156,11 @@ struct SQLConditionalSemanticTests {
             #expect(throws: QueryLiteralConversionError.unsupportedSPARQLLiteral) { try expression.toSPARQL() }
         }
         let searched = Expression.caseWhen(cases: [CaseWhenPair(condition: .literal(.bool(true)), result: .int(1))], elseResult: .int(0))
-        try SPARQLSemanticValidator.validate(query(searched))
+        try SPARQLSemanticValidator.validate(query(searched).replacing(source: .graphPattern(.basic([]))))
         #expect(try searched.toSPARQL().contains("IF("))
     }
 
     private func query(_ expression: Expression) -> SelectQuery {
-        SelectQuery(projection: .items([ProjectionItem(expression, alias: "value")]), source: .values([], columnNames: nil))
+        SelectQuery(projection: [ProjectionItem(expression, alias: "value")], source: .values([]))
     }
 }

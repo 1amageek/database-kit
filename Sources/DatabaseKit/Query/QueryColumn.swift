@@ -24,6 +24,13 @@ public struct QueryColumn: Sendable, Hashable {
         }
     }
 
+    init(validatedNumber: UInt32, name: String, type: QueryColumnType, isNullable: Bool) {
+        self.number = validatedNumber
+        self.name = name
+        self.type = type
+        self.isNullable = isNullable
+    }
+
     public static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.number == rhs.number && lhs.name.utf8.elementsEqual(rhs.name.utf8)
             && lhs.type == rhs.type && lhs.isNullable == rhs.isNullable

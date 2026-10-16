@@ -31,10 +31,10 @@ public struct FusionQuery<Item: Persistable>: Sendable {
 
     public var selectQuery: SelectQuery {
         SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .table(TableRef(table: Item.persistableType)),
             accessPath: .fusion(source),
-            limit: resultLimit
+            pagination: QueryPagination(limit: resultLimit.map { .count(.fixed($0), withTies: false) })
         )
     }
 }

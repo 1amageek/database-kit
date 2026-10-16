@@ -43,19 +43,23 @@ public struct QueryColumnTypeJSONCodec: Sendable {
                    maximumCollectionCount: limits.maximumCollectionCount)
     }
 
-    func encode(_ type: QueryColumnType, path: String) throws -> JSONValue {
+    func encode(_ type: QueryColumnType, path: String, depth: Int = 0) throws -> JSONValue {
+        try requireDepth(depth)
         try validate(type, path: path)
+        _ = try descriptorLimits(path: path)
         switch type {
         case .primitive(let type, let isArray):
             return .object([("kind", .string("primitive")),
                             ("type", .string(type.rawValue)), ("isArray", .bool(isArray))])
         case .sql(let type):
             return .object([("kind", .string("sql")),
-                            ("type", try encodeDataType(type, depth: 1))])
+                            ("type", try encodeDataType(type, depth: depth + 1))])
         }
     }
 
-    func decode(_ node: JSONValue, path: String) throws -> QueryColumnType {
+    func decode(_ node: JSONValue, path: String, depth: Int = 0) throws -> QueryColumnType {
+        try requireDepth(depth)
+        _ = try descriptorLimits(path: path)
         let object = try JSONObject(node, path: path)
         let kind = try object.required("kind").string(path: object.child("kind"))
         let type: QueryColumnType
@@ -69,7 +73,7 @@ public struct QueryColumnTypeJSONCodec: Sendable {
             type = .primitive(primitive, isArray: try object.required("isArray").bool(path: object.child("isArray")))
         case "sql":
             try object.validateKeys(["kind", "type"])
-            type = .sql(try decodeDataType(object.required("type"), path: object.child("type"), depth: 1))
+            type = .sql(try decodeDataType(object.required("type"), path: object.child("type"), depth: depth + 1))
         default:
             throw SchemaJSONError.invalidValue(path: object.child("kind"), reason: "Unknown query type kind")
         }
@@ -81,6 +85,29 @@ public struct QueryColumnTypeJSONCodec: Sendable {
         guard QueryValueValidator.accepts(.primitive(.null), type: type) else {
             throw .invalidQueryValue(path: path, cause: .incompatibleType)
         }
+        do throws(QueryValueError) {
+            try descriptorFootprint(type).validate(limits: descriptorValueLimits())
+        } catch {
+            throw .invalidQueryValue(path: path, cause: error)
+        }
+    }
+
+    private func descriptorFootprint(_ type: QueryColumnType) throws(QueryValueError) -> QueryValueFootprint {
+        if case .sql(.composite(let descriptor)) = type { return try descriptor.measure() }
+        if case .sql(.array(let element)) = type {
+            let child = try descriptorFootprint(.sql(element))
+            func increment(_ value: UInt64) throws(QueryValueError) -> UInt64 {
+                let result = value.addingReportingOverflow(1)
+                guard !result.overflow else { throw .arithmeticOverflow }
+                return result.partialValue
+            }
+            return QueryValueFootprint(nodeCount: try increment(child.nodeCount),
+                collectionElementCount: try increment(child.collectionElementCount),
+                retainedByteCount: child.retainedByteCount,
+                maximumNestingDepth: try increment(child.maximumNestingDepth))
+        }
+        return QueryValueFootprint(nodeCount: 1, collectionElementCount: 0,
+            retainedByteCount: 0, maximumNestingDepth: 1)
     }
 
     private func encodeDataType(_ type: DataType, depth: Int) throws -> JSONValue {
@@ -119,6 +146,20 @@ public struct QueryColumnTypeJSONCodec: Sendable {
         case .array(let element):
             kind = "array"
             members = [("element", try encodeDataType(element, depth: depth + 1))]
+        case .composite(let descriptor):
+            kind = "composite"
+            do throws(QueryValueError) {
+                try descriptor.measure().validate(limits: try descriptorValueLimits())
+            } catch {
+                throw SchemaJSONError.invalidQueryValue(path: "queryType", cause: error)
+            }
+            try SchemaJSONCodec(limits: limits).requireCollection(descriptor.columns.count, path: "columns")
+            members = [("columns", .array(try descriptor.columns.enumerated().map { index, column in
+                .object([("number", .number(String(column.number))),
+                         ("name", .string(column.name)),
+                         ("type", try encode(column.type, path: "columns[\(index)].type", depth: depth + 3)),
+                         ("isNullable", .bool(column.isNullable))])
+            }))]
         case .custom(let name, let schema):
             kind = "custom"
             members = [("name", .string(name)), ("schema", schema.map { .string($0) } ?? .null)]
@@ -178,6 +219,29 @@ public struct QueryColumnTypeJSONCodec: Sendable {
         case "array":
             try object.validateKeys(["kind", "element"])
             return .array(try decodeDataType(object.required("element"), path: object.child("element"), depth: depth + 1))
+        case "composite":
+            try object.validateKeys(["kind", "columns"])
+            let columnsPath = object.child("columns")
+            let nodes = try object.required("columns").array(path: columnsPath)
+            try SchemaJSONCodec(limits: limits).requireCollection(nodes.count, path: columnsPath)
+            let columns = try nodes.enumerated().map { index, node in
+                let column = try JSONObject(node, path: "\(columnsPath)[\(index)]")
+                try column.validateKeys(["number", "name", "type", "isNullable"])
+                let number: UInt32 = try SchemaJSONCodec(limits: limits).integer(column, "number")
+                do {
+                    return try QueryColumn(number: number,
+                        name: column.required("name").string(path: column.child("name")),
+                        type: decode(column.required("type"), path: column.child("type"), depth: depth + 3),
+                        isNullable: column.required("isNullable").bool(path: column.child("isNullable")))
+                } catch let cause as QueryValueError {
+                    throw SchemaJSONError.invalidQueryValue(path: "\(columnsPath)[\(index)]", cause: cause)
+                }
+            }
+            do throws(QueryValueError) {
+                return .composite(try QueryCompositeType(columns: columns, limits: descriptorValueLimits()))
+            } catch {
+                throw SchemaJSONError.invalidQueryValue(path: path, cause: error)
+            }
         case "custom":
             try object.validateKeys(["kind", "name", "schema"])
             let schemaNode = try object.required("schema")
@@ -190,6 +254,23 @@ public struct QueryColumnTypeJSONCodec: Sendable {
         }
         try object.validateKeys(["kind"])
         return type
+    }
+
+    private func descriptorValueLimits() throws(QueryValueError) -> QueryValueLimits {
+        let storage = try QueryCompositeType.constructionByteCount(
+            typeNodeCapacity: limits.maximumObjectCount,
+            columnCapacity: limits.maximumObjectCount)
+        let retained = storage.addingReportingOverflow(UInt64(limits.maximumFrameBytes))
+        guard !retained.overflow else { throw .arithmeticOverflow }
+        return QueryValueLimits(maximumRetainedBytes: retained.partialValue,
+            maximumTotalNodes: UInt64(limits.maximumObjectCount),
+            maximumNestingDepth: UInt64(limits.maximumNestingDepth),
+            maximumCollectionElements: UInt64(limits.maximumObjectCount))
+    }
+
+    private func descriptorLimits(path: String) throws(SchemaJSONError) -> QueryValueLimits {
+        do throws(QueryValueError) { return try descriptorValueLimits() }
+        catch { throw .invalidQueryValue(path: path, cause: error) }
     }
 
     private func requireDepth(_ depth: Int) throws(SchemaJSONError) {

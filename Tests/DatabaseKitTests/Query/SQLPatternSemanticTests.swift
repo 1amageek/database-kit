@@ -30,7 +30,7 @@ struct SQLPatternSemanticTests {
         let expression = Expression.patternMatch(subject: .parameter(.position(1)),
             pattern: .concatenate(.parameter(.position(2)), .string("%")),
             escape: .parameter(.position(3)), kind: .like)
-        let query = SelectQuery(projection: .items([ProjectionItem(expression)]), source: .values([], columnNames: nil))
+        let query = SelectQuery(projection: [ProjectionItem(expression)], source: .values([]))
         let binder = try QueryParameterBinder(parameters: [
             QueryParameter(position: 1, value: .primitive(.string("value")), type: .sql(.text)),
             QueryParameter(position: 2, value: .primitive(.string("v")), type: .sql(.text)),
@@ -38,8 +38,7 @@ struct SQLPatternSemanticTests {
         ])
         try binder.validate(.select(query))
         let bound = try binder.bind(.select(query))
-        guard case .select(let selected) = bound, case .items(let items) = selected.projection,
-              case .patternMatch(let subject, let pattern, let escape, let kind) = items[0].expression else {
+        guard case .select(let selected) = bound, case .expression(.patternMatch(let subject, let pattern, let escape, let kind), _) = selected.projection[0] else {
             Issue.record("Pattern binding changed its semantic form"); return
         }
         #expect(subject == .literal(.queryValue(.primitive(.string("value")), type: .sql(.text))))
@@ -58,7 +57,7 @@ struct SQLPatternSemanticTests {
         let expression = Expression.patternMatch(subject: .concatenate(.col("subject"), .variable(Variable("s"))),
             pattern: .concatenate(.col("pattern"), .variable(Variable("p"))),
             escape: .concatenate(.col("escape"), .variable(Variable("e"))), kind: .like)
-        let query = SelectQuery(projection: .items([]), source: .values([], columnNames: nil), filter: expression)
+        let query = SelectQuery(projection: [], source: .values([]), filter: expression)
         #expect(query.referencedColumns == Set([ColumnRef("subject"), ColumnRef("pattern"), ColumnRef("escape")]))
         #expect(query.referencedVariables == Set(["s", "p", "e"]))
     }

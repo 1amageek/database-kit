@@ -16,7 +16,7 @@ internal struct QueryFieldStorageMeter {
         case term(DatabaseTypes.RDFTerm, UInt64)
         case fieldArray([FieldValue], Int, UInt64)
         case fields(FieldObject, Int, UInt64)
-        case queryArray([QueryValue], DataType, Int, UInt64)
+        case queryArray(QueryValueElements, DataType, Int, UInt64)
         case jsonArray(QueryJSONBElements, Int, UInt64)
         case jsonMembers(QueryJSONBMembers, Int, UInt64)
         case identifiers([ReferenceIdentifier], Int, UInt64)

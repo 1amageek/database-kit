@@ -1,7 +1,7 @@
 import DatabaseTypes
 import DatabaseKit
 
-/// Encodes and decodes recursive array data types without process-stack recursion.
+/// Traverses arrays and composite descriptors with one cursor per open type.
 enum QueryIRDataTypeWireCodec {
     static func encode(
         _ type: DataType,
@@ -14,6 +14,17 @@ enum QueryIRDataTypeWireCodec {
         while let encodingStep = encodingSteps.popLast() {
             switch consume encodingStep {
             case .dataType(let value):
+                if case .composite(let descriptor) = value {
+                    let footprint: QueryValueFootprint
+                    do throws(QueryValueError) { footprint = try descriptor.measure() }
+                    catch let error { throw .invalidQueryValue(error) }
+                    let actual = UInt64(writer.currentNestingDepth).addingReportingOverflow(footprint.maximumNestingDepth)
+                    guard !actual.overflow else { throw .byteCountOverflow }
+                    guard actual.partialValue <= UInt64(writer.limits.maximumNestingDepth) else {
+                        throw .invalidQueryValue(.resourceLimit(resource: "depth", actual: actual.partialValue,
+                            maximum: UInt64(writer.limits.maximumNestingDepth)))
+                    }
+                }
                 try writer.beginNestedValue()
                 openNestedValueCount += 1
                 encodingSteps.append(.endNestedValue)
@@ -25,6 +36,27 @@ enum QueryIRDataTypeWireCodec {
                 }
                 try writer.endNestedValue()
                 openNestedValueCount -= 1
+
+            case .columns(let columns, let index):
+                guard index < columns.count else { continue }
+                let column = columns[index]
+                encodingSteps.append(.columns(columns, index + 1))
+                writer.writeUInt32(column.number)
+                try writer.writeString(column.name)
+                switch column.type {
+                case .primitive(let kind, let isArray):
+                    writer.writeUInt8(0)
+                    try writer.writeString(kind.rawValue)
+                    writer.writeBool(isArray)
+                    writer.writeBool(column.isNullable)
+                case .sql(let type):
+                    writer.writeUInt8(1)
+                    encodingSteps.append(.nullability(column.isNullable))
+                    encodingSteps.append(.dataType(type))
+                }
+
+            case .nullability(let value):
+                writer.writeBool(value)
             }
         }
 
@@ -36,6 +68,8 @@ enum QueryIRDataTypeWireCodec {
     static func decode(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) -> DataType {
+        try reader.beginQueryPayload()
+        defer { reader.endQueryPayload() }
         var frames: [AssemblyFrame] = []
         var openNestedValueCount = 0
         defer { reader.abandonNestedValues(openNestedValueCount) }
@@ -49,7 +83,12 @@ enum QueryIRDataTypeWireCodec {
                 continue
             }
 
-            var completed = try decodeScalar(tag: tag, from: &reader)
+            var completed: DataType
+            if tag == 26 {
+                completed = try decodeComposite(from: &reader)
+            } else {
+                completed = try decodeScalar(tag: tag, from: &reader)
+            }
             try reader.endNestedValue()
             openNestedValueCount -= 1
 
@@ -66,10 +105,12 @@ enum QueryIRDataTypeWireCodec {
     }
 }
 
-private extension QueryIRDataTypeWireCodec {
+extension QueryIRDataTypeWireCodec {
     enum EncodingStep {
         case dataType(DataType)
         case endNestedValue
+        case columns(QueryCompositeColumns, Int)
+        case nullability(Bool)
     }
 
     enum AssemblyFrame {
@@ -153,6 +194,119 @@ private extension QueryIRDataTypeWireCodec {
             writer.writeUInt8(schema == nil ? 21 : 24)
             if let schema { try writer.writeString(schema) }
             try writer.writeString(name)
+        case .composite(let descriptor):
+            writer.writeUInt8(26)
+            try writer.writeCount(descriptor.columns.count)
+            encodingSteps.append(.columns(descriptor.columns, 0))
+        }
+    }
+
+    struct CompositeFrame {
+        let count: Int
+        var columns: [QueryTypeColumn] = []
+        var number: UInt32?
+        var name: String?
+    }
+
+    enum TypeFrame {
+        case array
+        case composite(CompositeFrame)
+    }
+
+    /// The caller has opened the root tag26 scope. All child descriptors are
+    /// appended to the same flat builder, never rebuilt as intermediate owners.
+    static func decodeComposite(from reader: inout DatabaseWireReader) throws(DatabaseWireError) -> DataType {
+        var builder = QueryTypeBuilder(limits: reader.queryTypeConstructionLimits)
+        var frames: [TypeFrame] = [.composite(CompositeFrame(count: try reader.readCount()))]
+        var open = 0
+        defer { reader.abandonNestedValues(open) }
+        var completed: Int?
+
+        while true {
+            if let child = completed {
+                completed = nil
+                guard let frame = frames.popLast() else {
+                    let type: DataType
+                    do throws(QueryValueError) { type = try builder.finish(root: child) }
+                    catch let error { throw .invalidQueryValue(error) }
+                    if case .composite(let descriptor) = type {
+                        try reader.registerQueryTypeStorage(descriptor.storageFootprint)
+                    }
+                    return type
+                }
+                switch frame {
+                case .array:
+                    do throws(QueryValueError) { completed = try builder.appendArray(element: child) }
+                    catch let error { throw .invalidQueryValue(error) }
+                    try reader.endNestedValue()
+                    open -= 1
+                case .composite(var state):
+                    guard let number = state.number, let name = state.name else {
+                        throw .invalidQueryIRWireState
+                    }
+                    let nullable = try reader.readBool()
+                    state.columns.append(QueryTypeColumn(number: number, name: name, type: child, isNullable: nullable))
+                    state.number = nil
+                    state.name = nil
+                    frames.append(.composite(state))
+                }
+                continue
+            }
+
+            guard let frame = frames.popLast() else { throw .invalidQueryIRWireState }
+            switch frame {
+            case .array:
+                throw .invalidQueryIRWireState
+            case .composite(var state):
+                if state.columns.count == state.count {
+                    do throws(QueryValueError) { completed = try builder.appendComposite(columns: state.columns) }
+                    catch let error { throw .invalidQueryValue(error) }
+                    if !frames.isEmpty {
+                        try reader.endNestedValue()
+                        open -= 1
+                    }
+                    continue
+                }
+                let number = try reader.readUInt32()
+                guard UInt64(number) == UInt64(state.columns.count) + 1 else {
+                    throw .invalidQueryValue(.invalidColumnNumber(number))
+                }
+                state.number = number
+                state.name = try reader.readString()
+                let columnTag = try reader.readUInt8()
+                if columnTag == 0 {
+                    let raw = try reader.readString()
+                    guard let kind = FieldSchemaType(rawValue: raw) else { throw .invalidQueryValue(.incompatibleType) }
+                    let isArray = try reader.readBool()
+                    do throws(QueryValueError) { completed = try builder.append(.primitive(kind, isArray: isArray)) }
+                    catch let error { throw .invalidQueryValue(error) }
+                    frames.append(.composite(state))
+                    continue
+                }
+                guard columnTag == 1 else { throw .invalidValueTag(columnTag) }
+                frames.append(.composite(state))
+            }
+
+            // Follow the selected SQL field type without another decoder call.
+            while true {
+                try reader.beginNestedValue()
+                open += 1
+                let tag = try reader.readUInt8()
+                if tag == 20 {
+                    frames.append(.array)
+                    continue
+                }
+                if tag == 26 {
+                    frames.append(.composite(CompositeFrame(count: try reader.readCount())))
+                    break
+                }
+                let scalar = try decodeScalar(tag: tag, from: &reader)
+                do throws(QueryValueError) { completed = try builder.append(.sql(scalar)) }
+                catch let error { throw .invalidQueryValue(error) }
+                try reader.endNestedValue()
+                open -= 1
+                break
+            }
         }
     }
 

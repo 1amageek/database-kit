@@ -19,7 +19,13 @@ struct QueryWireRetentionLedgerTests {
         var calibration = DatabaseWireReader(encoded)
         let decoded = try QueryValueWireCodec.decode(from: &calibration)
         try calibration.ensureFullyRead()
-        let retainedBytes = try QueryValueValidator.measure(decoded).retainedByteCount
+        guard case .array(let decodedArray) = decoded else {
+            Issue.record("Expected the decoded JSONB array"); return
+        }
+        // The JSONB ledger owns leaf storage; the flat value/type backing has a separate ledger.
+        let retainedBytes = try decodedArray.elements.reduce(UInt64(0)) {
+            try $0 + QueryValueValidator.measure($1).retainedByteCount
+        }
         let retained = try #require(Int(exactly: retainedBytes))
         let exactLimits = try jsonbLimits(retained: retained)
         let onePastLimits = try jsonbLimits(retained: retained - 1)
@@ -115,8 +121,13 @@ struct QueryWireRetentionLedgerTests {
         }
         #expect(first.bytes.retainedByteCount == backing.retainedByteCount)
         #expect(second.bytes.retainedByteCount == backing.retainedByteCount)
+        let footprint = array.storageFootprint
+        #expect(footprint.leafRetainedByteCount == UInt64(retained) * 2)
+        #expect(footprint.retainedStorageByteCount > 0 && footprint.typeStorageFootprint.retainedStorageByteCount > 0)
         #expect(try QueryValueValidator.measure(value).retainedByteCount
-                == UInt64(retained) * 2)
+            == UInt64(retained) * 2 + footprint.retainedStorageByteCount
+                + footprint.typeStorageFootprint.retainedStorageByteCount
+                + footprint.typeStorageFootprint.utf8ByteCount)
         var validator = DatabaseWireReader(frame, limits: exactLimits)
         try QueryValueWireCodec.validate(from: &validator, type: .sql(.array(.json)))
         try validator.ensureFullyRead()

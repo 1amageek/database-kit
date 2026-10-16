@@ -105,7 +105,7 @@ struct SQLConditionalWireTests {
     }
 
     private func query(_ expression: Expression) -> SelectQuery {
-        SelectQuery(projection: .items([ProjectionItem(expression)]), source: .values([], columnNames: nil))
+        SelectQuery(projection: [ProjectionItem(expression)], source: .values([]))
     }
 
     private func collectionLimits(_ count: Int) throws(DatabaseWireLimitsError) -> DatabaseWireLimits {

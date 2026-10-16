@@ -137,27 +137,18 @@ public enum SPARQLVariableScopeAnalyzer {
         of query: SelectQuery
     ) -> SPARQLVariableScope {
         let sourceScope = scope(of: query.source)
-        switch query.projection {
-        case .all:
-            return sourceScope
-        case .allFrom:
-            return .empty
-        case .items(let items), .distinctItems(let items):
-            var visible = Set<String>()
-            var definitelyBound = Set<String>()
-            for item in items {
-                guard let target = projectionTarget(item) else { continue }
-                visible.insert(target)
-                if let source = directVariable(in: item.expression),
-                   sourceScope.definitelyBoundVariables.contains(source) {
-                    definitelyBound.insert(target)
-                }
+        if query.projection == [.wildcard()] { return sourceScope }
+        var visible = Set<String>()
+        var definitelyBound = Set<String>()
+        for item in query.projection {
+            guard case .expression(let expression, let alias) = item,
+                  let target = alias ?? directVariable(in: expression) else { continue }
+            visible.insert(target)
+            if let source = directVariable(in: expression), sourceScope.definitelyBoundVariables.contains(source) {
+                definitelyBound.insert(target)
             }
-            return SPARQLVariableScope(
-                visibleVariables: consume visible,
-                definitelyBoundVariables: consume definitelyBound
-            )
         }
+        return SPARQLVariableScope(visibleVariables: consume visible, definitelyBoundVariables: consume definitelyBound)
     }
 
     public static func scope(
@@ -173,7 +164,7 @@ public enum SPARQLVariableScopeAnalyzer {
                 visibleVariables: patternScope.visibleVariables,
                 definitelyBoundVariables: []
             )
-        case .subquery(let query, _):
+        case .subquery(let query):
             return scope(of: query)
         case .join(let join):
             let left = scope(of: join.left)
@@ -203,24 +194,8 @@ public enum SPARQLVariableScopeAnalyzer {
             case .inner, .cross, .natural, .lateral:
                 return joining(left, right)
             }
-        case .values(let rows, let columnNames):
-            guard let columnNames else { return .empty }
-            var definitelyBound = Set(columnNames)
-            for row in rows where row.count < columnNames.count {
-                for index in row.count..<columnNames.count {
-                    definitelyBound.remove(columnNames[index])
-                }
-            }
-            return SPARQLVariableScope(
-                visibleVariables: Set(columnNames),
-                definitelyBoundVariables: consume definitelyBound
-            )
-        case .union(let sources), .unionAll(let sources):
-            return unionScope(sources)
-        case .intersect(let sources):
-            return sources.reduce(.empty) { joining($0, scope(of: $1)) }
-        case .except(let left, _):
-            return scope(of: left)
+        case .values, .aliased, .setOperation:
+            return .empty
         #if DATABASE_KIT_MULTI_BASE
         case .base(_, let source):
             return scope(of: source)
@@ -242,30 +217,6 @@ public enum SPARQLVariableScopeAnalyzer {
                 right.definitelyBoundVariables
             )
         )
-    }
-
-    private static func unionScope(
-        _ sources: [DataSource]
-    ) -> SPARQLVariableScope {
-        guard let first = sources.first else { return .empty }
-        var result = scope(of: first)
-        for source in sources.dropFirst() {
-            let next = scope(of: source)
-            result = SPARQLVariableScope(
-                visibleVariables: result.visibleVariables.union(
-                    next.visibleVariables
-                ),
-                definitelyBoundVariables: result.definitelyBoundVariables
-                    .intersection(next.definitelyBoundVariables)
-            )
-        }
-        return result
-    }
-
-    private static func projectionTarget(
-        _ item: ProjectionItem
-    ) -> String? {
-        item.alias ?? directVariable(in: item.expression)
     }
 
     private static func directVariable(

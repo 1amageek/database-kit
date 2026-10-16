@@ -44,8 +44,7 @@ extension GraphTableSource {
         GraphTableSource(
             graphName: graphName,
             matchPattern: matchPattern,
-            columns: columns.map { GraphTableColumn(expression: $0.0, alias: $0.1) },
-            alias: alias
+            columns: columns.map { GraphTableColumn(expression: $0.0, alias: $0.1) }
         )
     }
 }
@@ -101,44 +100,11 @@ extension GraphTableSource {
         return errors
     }
 
-    private func collectVariables(from expr: Expression) -> Set<String> {
-        var vars = Set<String>()
-        collectVariablesRecursive(from: expr, into: &vars)
-        return vars
-    }
-
-    private func collectVariablesRecursive(from expr: Expression, into vars: inout Set<String>) {
-        switch expr {
-        case .variable(let v):
-            vars.insert(v.name)
-        case .column(let col):
-            // In GRAPH_TABLE context, columns might reference pattern variables
-            vars.insert(col.column)
-        case .collectionOperation(_, let l, let r), .add(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
-             .divide(let l, let r), .equal(let l, let r), .and(let l, let r), .or(let l, let r):
-            collectVariablesRecursive(from: l, into: &vars)
-            collectVariablesRecursive(from: r, into: &vars)
-        case .not(let e), .negate(let e), .isNull(let e), .isNotNull(let e):
-            collectVariablesRecursive(from: e, into: &vars)
-        case .arrayAccess(let base, let subscripts):
-            collectVariablesRecursive(from: base, into: &vars)
-            for subscriptValue in subscripts {
-                switch subscriptValue {
-                case .index(let value): collectVariablesRecursive(from: value, into: &vars)
-                case .slice(let lower, let upper):
-                    if let lower { collectVariablesRecursive(from: lower, into: &vars) }
-                    if let upper { collectVariablesRecursive(from: upper, into: &vars) }
-                }
-            }
-        case .array(let expressions), .row(let expressions):
-            for expression in expressions { collectVariablesRecursive(from: expression, into: &vars) }
-        case .function(let call):
-            for arg in call.arguments {
-                collectVariablesRecursive(from: arg, into: &vars)
-            }
-        default:
-            break
-        }
+    private func collectVariables(from expression: Expression) -> Set<String> {
+        let references = QueryReferenceCollector.collect(expression)
+        var variables = references.variables
+        for column in references.columns { variables.insert(column.column) }
+        return variables
     }
 }
 

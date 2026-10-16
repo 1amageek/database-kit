@@ -36,7 +36,7 @@ struct SQLCollectionWireTests {
                 .collectionOperation(operation, left: grouped, right: .null),
             ], distinct: true, schema: "qualified", finalArrayIsVariadic: true))
             #expect(try decode(encode(value)) == value)
-            let statement = QueryStatement.select(SelectQuery(projection: .items([ProjectionItem(value)]), source: .values([], columnNames: nil)))
+            let statement = QueryStatement.select(SelectQuery(projection: [ProjectionItem(value)], source: .values([])))
             #expect(try QueryIRWireFormat.decode(QueryIRWireFormat.encode(statement)) == statement)
             let request = QueryExecuteOperation.Request(input: .ir(statement))
             #if DATABASE_KIT_MULTI_BASE

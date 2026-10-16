@@ -1,4 +1,8 @@
 public enum QueryValueError: Error, Sendable, Equatable {
+    case invalidBuilderReference(index: Int)
+    case invalidValueConstruction
+    case compositeFieldCountMismatch(expected: UInt64, actual: UInt64)
+    case nullCompositeField(index: UInt64)
     case invalidNumeric(offset: UInt64, reason: String)
     case invalidUUID(offset: UInt64, reason: String)
     case invalidBinary(offset: UInt64, reason: String)

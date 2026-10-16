@@ -32,7 +32,7 @@ struct QueryValueIntegrationTests {
 
     private func select(_ expression: Expression) -> QueryStatement {
         .select(SelectQuery(
-            projection: .items([ProjectionItem(expression)]),
+            projection: [ProjectionItem(expression)],
             source: .table(TableRef("values"))
         ))
     }

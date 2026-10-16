@@ -113,6 +113,30 @@ struct QueryFieldStorageAdapterTests {
         let payload = try QueryFieldStorageAdapter.encode(value, type: .sql(.json), limits: bounds)
         let decodedBounds = try QueryFieldStorageAdapter.inferredLimits(for: payload, type: .sql(.json))
         #expect(try QueryFieldStorageAdapter.decode(payload, type: .sql(.json), limits: decodedBounds) == value)
+
+        for count in [0, 1, 4, 17] {
+            let array = try QueryArrayValue(elementType: .integer,
+                dimensions: count == 0 ? [] : [QueryArrayDimension(lowerBound: -2, length: Int32(count))],
+                elements: Array(repeating: .primitive(.int32(7)), count: count), limits: limits)
+            let type = QueryColumnType.sql(.array(.integer))
+            let payload = try QueryFieldStorageAdapter.encode(.array(array), type: type, limits: limits)
+            let destination = try QueryFieldStorageAdapter.measureDecoded(payload, type: type)
+            #expect(destination.queryValueNodeCount == UInt64(count + 1))
+            #expect(destination.queryValueChildIndexCount == UInt64(count))
+            #expect(destination.queryValueDimensionCount == (count == 0 ? 0 : 1))
+            #expect(destination.queryTypeNodeCount == 1)
+            #expect(try destination.minimumQueryValueStorageByteCount > 0)
+            let bounds = try QueryFieldStorageAdapter.inferredLimits(for: payload, type: type)
+            let restored = try QueryFieldStorageAdapter.decode(payload, type: type, limits: bounds)
+            #expect(restored == .array(array))
+            #expect(try QueryValueValidator.measure(restored).retainedByteCount <= bounds.maximumRetainedBytes)
+            let insufficient = QueryValueLimits(maximumRetainedBytes: 0,
+                maximumTotalNodes: bounds.maximumTotalNodes, maximumNestingDepth: bounds.maximumNestingDepth,
+                maximumCollectionElements: bounds.maximumCollectionElements)
+            #expect(throws: QueryValueError.self) {
+                try QueryFieldStorageAdapter.decode(payload, type: type, limits: insufficient)
+            }
+        }
     }
 
     @Test("flat JSONB prefix payloads reject invalid tree grammar and layouts")

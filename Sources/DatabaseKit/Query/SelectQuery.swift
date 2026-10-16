@@ -1,64 +1,28 @@
-/// SelectQuery.swift
-/// Unified SELECT query representation for SQL and SPARQL
-///
-/// Reference:
-/// - ISO/IEC 9075:2023 (SELECT statement)
-/// - W3C SPARQL 1.1/1.2 (SELECT query)
-
-
-/// Unified SELECT query representation
-/// This structure can represent both SQL SELECT and SPARQL SELECT queries
-public struct SelectQuery: Sendable, Equatable, Hashable {
-    /// Projection (SELECT clause)
-    public let projection: Projection
-
-    /// Data source (FROM clause / WHERE { } / GRAPH_TABLE)
+/// Immutable query envelope shared by SQL and SPARQL.
+public struct SelectQuery: Sendable, Hashable {
+    public let projection: [ProjectionItem]
     public let source: DataSource
-
-    /// Optional feature-specific access path layered on top of the logical source
     public let accessPath: AccessPath?
-
-    /// Filter condition (WHERE clause / FILTER)
     public let filter: Expression?
-
-    /// Group by expressions (GROUP BY)
     public let groupBy: [Expression]?
-
-    /// Having condition (HAVING)
     public let having: Expression?
-
-    /// Order by keys (ORDER BY)
     public let orderBy: [SortKey]?
-
-    /// Result limit (LIMIT)
-    public let limit: UInt64?
-
-    /// Result offset (OFFSET)
-    public let offset: UInt64?
-
-    /// DISTINCT flag
-    public let distinct: Bool
-
-    /// Common table expressions (WITH clause / SPARQL subquery)
+    public let quantifier: SelectQuantifier
+    public let pagination: QueryPagination
     public let subqueries: [NamedSubquery]?
-
-    /// REDUCED flag (SPARQL)
     public let reduced: Bool
-
-    /// SPARQL dataset selection. SQL queries use `.implicit`.
     public let dataset: SPARQLDataset
 
     public init(
-        projection: Projection,
+        projection: [ProjectionItem],
         source: DataSource,
         accessPath: AccessPath? = nil,
         filter: Expression? = nil,
         groupBy: [Expression]? = nil,
         having: Expression? = nil,
         orderBy: [SortKey]? = nil,
-        limit: UInt64? = nil,
-        offset: UInt64? = nil,
-        distinct: Bool = false,
+        quantifier: SelectQuantifier = .all,
+        pagination: QueryPagination = QueryPagination(),
         subqueries: [NamedSubquery]? = nil,
         reduced: Bool = false,
         dataset: SPARQLDataset = .implicit
@@ -70,19 +34,24 @@ public struct SelectQuery: Sendable, Equatable, Hashable {
         self.groupBy = groupBy
         self.having = having
         self.orderBy = orderBy
-        self.limit = limit
-        self.offset = offset
-        self.distinct = distinct
+        self.quantifier = quantifier
+        self.pagination = pagination
         self.subqueries = subqueries
         self.reduced = reduced
         self.dataset = dataset
     }
+
+    public static func == (lhs: SelectQuery, rhs: SelectQuery) -> Bool {
+        ExpressionIdentity.areEqual(lhs, rhs)
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        ExpressionIdentity.hash(self, into: &hasher)
+    }
 }
 
-// MARK: - Immutable Copy Helpers
-
 extension SelectQuery {
-    public func replacing(projection: Projection) -> SelectQuery {
+    public func replacing(projection: [ProjectionItem]) -> SelectQuery {
         SelectQuery(
             projection: projection,
             source: source,
@@ -91,9 +60,42 @@ extension SelectQuery {
             groupBy: groupBy,
             having: having,
             orderBy: orderBy,
-            limit: limit,
-            offset: offset,
-            distinct: distinct,
+            quantifier: quantifier,
+            pagination: pagination,
+            subqueries: subqueries,
+            reduced: reduced,
+            dataset: dataset
+        )
+    }
+
+    public func replacing(source: DataSource) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            quantifier: quantifier,
+            pagination: pagination,
+            subqueries: subqueries,
+            reduced: reduced,
+            dataset: dataset
+        )
+    }
+
+    public func replacing(accessPath: AccessPath?) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            quantifier: quantifier,
+            pagination: pagination,
             subqueries: subqueries,
             reduced: reduced,
             dataset: dataset
@@ -109,27 +111,8 @@ extension SelectQuery {
             groupBy: groupBy,
             having: having,
             orderBy: orderBy,
-            limit: limit,
-            offset: offset,
-            distinct: distinct,
-            subqueries: subqueries,
-            reduced: reduced,
-            dataset: dataset
-        )
-    }
-
-    public func replacing(orderBy: [SortKey]?) -> SelectQuery {
-        SelectQuery(
-            projection: projection,
-            source: source,
-            accessPath: accessPath,
-            filter: filter,
-            groupBy: groupBy,
-            having: having,
-            orderBy: orderBy,
-            limit: limit,
-            offset: offset,
-            distinct: distinct,
+            quantifier: quantifier,
+            pagination: pagination,
             subqueries: subqueries,
             reduced: reduced,
             dataset: dataset
@@ -145,9 +128,8 @@ extension SelectQuery {
             groupBy: groupBy,
             having: having,
             orderBy: orderBy,
-            limit: limit,
-            offset: offset,
-            distinct: distinct,
+            quantifier: quantifier,
+            pagination: pagination,
             subqueries: subqueries,
             reduced: reduced,
             dataset: dataset
@@ -163,16 +145,15 @@ extension SelectQuery {
             groupBy: groupBy,
             having: having,
             orderBy: orderBy,
-            limit: limit,
-            offset: offset,
-            distinct: distinct,
+            quantifier: quantifier,
+            pagination: pagination,
             subqueries: subqueries,
             reduced: reduced,
             dataset: dataset
         )
     }
 
-    public func replacing(limit: UInt64?) -> SelectQuery {
+    public func replacing(orderBy: [SortKey]?) -> SelectQuery {
         SelectQuery(
             projection: projection,
             source: source,
@@ -181,16 +162,15 @@ extension SelectQuery {
             groupBy: groupBy,
             having: having,
             orderBy: orderBy,
-            limit: limit,
-            offset: offset,
-            distinct: distinct,
+            quantifier: quantifier,
+            pagination: pagination,
             subqueries: subqueries,
             reduced: reduced,
             dataset: dataset
         )
     }
 
-    public func replacing(offset: UInt64?) -> SelectQuery {
+    public func replacing(quantifier: SelectQuantifier) -> SelectQuery {
         SelectQuery(
             projection: projection,
             source: source,
@@ -199,16 +179,15 @@ extension SelectQuery {
             groupBy: groupBy,
             having: having,
             orderBy: orderBy,
-            limit: limit,
-            offset: offset,
-            distinct: distinct,
+            quantifier: quantifier,
+            pagination: pagination,
             subqueries: subqueries,
             reduced: reduced,
             dataset: dataset
         )
     }
 
-    public func replacing(distinct: Bool) -> SelectQuery {
+    public func replacing(pagination: QueryPagination) -> SelectQuery {
         SelectQuery(
             projection: projection,
             source: source,
@@ -217,9 +196,25 @@ extension SelectQuery {
             groupBy: groupBy,
             having: having,
             orderBy: orderBy,
-            limit: limit,
-            offset: offset,
-            distinct: distinct,
+            quantifier: quantifier,
+            pagination: pagination,
+            subqueries: subqueries,
+            reduced: reduced,
+            dataset: dataset
+        )
+    }
+
+    public func replacing(subqueries: [NamedSubquery]?) -> SelectQuery {
+        SelectQuery(
+            projection: projection,
+            source: source,
+            accessPath: accessPath,
+            filter: filter,
+            groupBy: groupBy,
+            having: having,
+            orderBy: orderBy,
+            quantifier: quantifier,
+            pagination: pagination,
             subqueries: subqueries,
             reduced: reduced,
             dataset: dataset
@@ -235,418 +230,35 @@ extension SelectQuery {
             groupBy: groupBy,
             having: having,
             orderBy: orderBy,
-            limit: limit,
-            offset: offset,
-            distinct: distinct,
+            quantifier: quantifier,
+            pagination: pagination,
             subqueries: subqueries,
             reduced: reduced,
             dataset: dataset
         )
     }
 
-    public func replacing(
-        projection: Projection? = nil,
-        filter: Expression? = nil,
-        orderBy: [SortKey]? = nil,
-        limit: UInt64? = nil,
-        offset: UInt64? = nil,
-        distinct: Bool? = nil,
-        reduced: Bool? = nil
-    ) -> SelectQuery {
+    public func replacing(dataset: SPARQLDataset) -> SelectQuery {
         SelectQuery(
-            projection: projection ?? self.projection,
+            projection: projection,
             source: source,
             accessPath: accessPath,
-            filter: filter ?? self.filter,
+            filter: filter,
             groupBy: groupBy,
             having: having,
-            orderBy: orderBy ?? self.orderBy,
-            limit: limit ?? self.limit,
-            offset: offset ?? self.offset,
-            distinct: distinct ?? self.distinct,
+            orderBy: orderBy,
+            quantifier: quantifier,
+            pagination: pagination,
             subqueries: subqueries,
-            reduced: reduced ?? self.reduced,
+            reduced: reduced,
             dataset: dataset
         )
     }
+
 }
 
-// MARK: - Query Analysis
-
 extension SelectQuery {
-    /// Returns all variables referenced in the query (SPARQL)
-    public var referencedVariables: Set<String> {
-        var vars = Set<String>()
-        collectVariables(from: source, into: &vars)
-        if let filter = filter {
-            collectVariables(from: filter, into: &vars)
-        }
-        if let groupBy = groupBy {
-            for expr in groupBy {
-                collectVariables(from: expr, into: &vars)
-            }
-        }
-        if let having = having {
-            collectVariables(from: having, into: &vars)
-        }
-        if let orderBy = orderBy {
-            for key in orderBy {
-                collectVariables(from: key.expression, into: &vars)
-            }
-        }
-        if let accessPath {
-            collectVariables(from: accessPath, into: &vars)
-        }
-        return vars
-    }
-
-    /// Returns all columns referenced in the query (SQL)
-    public var referencedColumns: Set<ColumnRef> {
-        var cols = Set<ColumnRef>()
-        // Collect from projection
-        switch projection {
-        case .all, .allFrom:
-            break
-        case .items(let items), .distinctItems(let items):
-            for item in items {
-                collectColumns(from: item.expression, into: &cols)
-            }
-        }
-        collectColumns(from: source, into: &cols)
-        if let filter = filter {
-            collectColumns(from: filter, into: &cols)
-        }
-        if let groupBy = groupBy {
-            for expr in groupBy {
-                collectColumns(from: expr, into: &cols)
-            }
-        }
-        if let having = having {
-            collectColumns(from: having, into: &cols)
-        }
-        if let orderBy = orderBy {
-            for key in orderBy {
-                collectColumns(from: key.expression, into: &cols)
-            }
-        }
-        if let accessPath {
-            collectColumns(from: accessPath, into: &cols)
-        }
-        return cols
-    }
-
-    /// Returns true if this query contains aggregation
-    public var hasAggregation: Bool {
-        groupBy?.isEmpty == false
-    }
-
-    private func collectVariables(from source: DataSource, into vars: inout Set<String>) {
-        switch source {
-        case .graphPattern(let pattern):
-            collectVariables(from: pattern, into: &vars)
-        case .namedGraph(_, let pattern):
-            collectVariables(from: pattern, into: &vars)
-        case .service(_, let pattern, _):
-            collectVariables(from: pattern, into: &vars)
-        case .subquery(let query, _):
-            vars.formUnion(query.referencedVariables)
-        case .join(let clause):
-            collectVariables(from: clause.left, into: &vars)
-            collectVariables(from: clause.right, into: &vars)
-        case .union(let sources), .unionAll(let sources), .intersect(let sources):
-            for s in sources {
-                collectVariables(from: s, into: &vars)
-            }
-        case .except(let left, let right):
-            collectVariables(from: left, into: &vars)
-            collectVariables(from: right, into: &vars)
-        #if DATABASE_KIT_MULTI_BASE
-        case .base(_, let source):
-            collectVariables(from: source, into: &vars)
-        #endif
-        case .table, .values, .graphTable, .logical:
-            break
-        }
-    }
-
-    private func collectVariables(from pattern: GraphPattern, into vars: inout Set<String>) {
-        switch pattern {
-        case .basic(let basicGraphPattern):
-            for element in basicGraphPattern.elements {
-                switch element {
-                case .triple(let triple):
-                    collectVariables(from: triple, into: &vars)
-                case .propertyPath(let pathPattern):
-                    if case .variable(let variable) = pathPattern.subject {
-                        vars.insert(variable)
-                    }
-                    if case .variable(let variable) = pathPattern.object {
-                        vars.insert(variable)
-                    }
-                }
-            }
-        case .join(let left, let right), .optional(let left, let right),
-             .union(let left, let right), .minus(let left, let right),
-             .lateral(let left, let right):
-            collectVariables(from: left, into: &vars)
-            collectVariables(from: right, into: &vars)
-        case .filter(let pattern, let expr):
-            collectVariables(from: pattern, into: &vars)
-            collectVariables(from: expr, into: &vars)
-        case .graph(_, let pattern):
-            collectVariables(from: pattern, into: &vars)
-        case .service(_, let pattern, _):
-            collectVariables(from: pattern, into: &vars)
-        case .bind(let pattern, let variable, let expr):
-            collectVariables(from: pattern, into: &vars)
-            vars.insert(variable)
-            collectVariables(from: expr, into: &vars)
-        case .values(let variables, _):
-            vars.formUnion(variables)
-        case .subquery(let query):
-            vars.formUnion(query.referencedVariables)
-        case .groupBy(let pattern, _, _):
-            collectVariables(from: pattern, into: &vars)
-        }
-    }
-
-    private func collectVariables(from triple: TriplePattern, into vars: inout Set<String>) {
-        if case .variable(let v) = triple.subject { vars.insert(v) }
-        if case .variable(let v) = triple.predicate { vars.insert(v) }
-        if case .variable(let v) = triple.object { vars.insert(v) }
-    }
-
-    private func collectVariables(from expr: Expression, into vars: inout Set<String>) {
-        switch expr {
-        case .variable(let v):
-            vars.insert(v.name)
-        case .collectionOperation(_, let l, let r), .add(let l, let r), .concatenate(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
-             .divide(let l, let r), .modulo(let l, let r), .equal(let l, let r),
-             .notEqual(let l, let r), .lessThan(let l, let r), .lessThanOrEqual(let l, let r),
-             .greaterThan(let l, let r), .greaterThanOrEqual(let l, let r),
-             .and(let l, let r), .or(let l, let r), .isDistinctFrom(let l, let r, _):
-            collectVariables(from: l, into: &vars)
-            collectVariables(from: r, into: &vars)
-        case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e), .truthTest(let e, _, _),
-             .isTriple(let e), .subject(let e), .predicate(let e), .object(let e):
-            collectVariables(from: e, into: &vars)
-        case .arrayAccess(let base, let subscripts):
-            collectVariables(from: base, into: &vars)
-            for subscriptValue in subscripts {
-                switch subscriptValue {
-                case .index(let value): collectVariables(from: value, into: &vars)
-                case .slice(let lower, let upper):
-                    if let lower { collectVariables(from: lower, into: &vars) }
-                    if let upper { collectVariables(from: upper, into: &vars) }
-                }
-            }
-        case .patternMatch(let subject, let pattern, let escape, _):
-            collectVariables(from: subject, into: &vars)
-            collectVariables(from: pattern, into: &vars)
-            if let escape { collectVariables(from: escape, into: &vars) }
-        case .array(let expressions), .row(let expressions), .greatest(let expressions), .least(let expressions):
-            for expression in expressions { collectVariables(from: expression, into: &vars) }
-        case .caseWhen(let operand, let cases, let fallback):
-            if let operand { collectVariables(from: operand, into: &vars) }
-            for pair in cases {
-                collectVariables(from: pair.condition, into: &vars)
-                collectVariables(from: pair.result, into: &vars)
-            }
-            if let fallback { collectVariables(from: fallback, into: &vars) }
-        case .quantifiedComparison(let lhs, _, _, let source):
-            collectVariables(from: lhs, into: &vars)
-            switch source {
-            case .array(let value): collectVariables(from: value, into: &vars)
-            case .subquery(let query): vars.formUnion(query.referencedVariables)
-            }
-        case .bound(let v):
-            vars.insert(v.name)
-        case .function(let call):
-            for arg in call.arguments {
-                collectVariables(from: arg, into: &vars)
-            }
-        case .subquery(let query), .exists(let query), .inSubquery(_, let query):
-            vars.formUnion(query.referencedVariables)
-        case .triple(let s, let p, let o):
-            collectVariables(from: s, into: &vars)
-            collectVariables(from: p, into: &vars)
-            collectVariables(from: o, into: &vars)
-        default:
-            break
-        }
-    }
-
-    private func collectVariables(from path: AccessPath, into vars: inout Set<String>) {
-        guard case .fusion(let source) = path else { return }
-        for stage in source.stages {
-            for input in stage.inputs {
-                switch input.operation {
-                case .filter(let expression):
-                    collectVariables(from: expression, into: &vars)
-                case .order(let keys):
-                    for key in keys {
-                        collectVariables(from: key.expression, into: &vars)
-                    }
-                case .index:
-                    break
-                case .connected:
-                    break
-                }
-            }
-        }
-    }
-
-    private func collectColumns(from source: DataSource, into cols: inout Set<ColumnRef>) {
-        switch source {
-        case .table:
-            break  // Table scan doesn't reference specific columns
-        case .subquery(let query, _):
-            cols.formUnion(query.referencedColumns)
-        case .join(let clause):
-            collectColumns(from: clause.left, into: &cols)
-            collectColumns(from: clause.right, into: &cols)
-            if case .on(let expr) = clause.condition {
-                collectColumns(from: expr, into: &cols)
-            }
-        case .union(let sources), .unionAll(let sources), .intersect(let sources):
-            for s in sources {
-                collectColumns(from: s, into: &cols)
-            }
-        case .except(let left, let right):
-            collectColumns(from: left, into: &cols)
-            collectColumns(from: right, into: &cols)
-        #if DATABASE_KIT_MULTI_BASE
-        case .base(_, let source):
-            collectColumns(from: source, into: &cols)
-        #endif
-        default:
-            break
-        }
-    }
-
-    private func collectColumns(from expr: Expression, into cols: inout Set<ColumnRef>) {
-        switch expr {
-        case .column(let col):
-            cols.insert(col)
-        case .collectionOperation(_, let l, let r), .add(let l, let r), .concatenate(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
-             .divide(let l, let r), .modulo(let l, let r), .equal(let l, let r),
-             .notEqual(let l, let r), .lessThan(let l, let r), .lessThanOrEqual(let l, let r),
-             .greaterThan(let l, let r), .greaterThanOrEqual(let l, let r),
-             .and(let l, let r), .or(let l, let r), .nullIf(let l, let r), .isDistinctFrom(let l, let r, _):
-            collectColumns(from: l, into: &cols)
-            collectColumns(from: r, into: &cols)
-        case .negate(let e), .not(let e), .isNull(let e), .isNotNull(let e), .truthTest(let e, _, _):
-            collectColumns(from: e, into: &cols)
-        case .arrayAccess(let base, let subscripts):
-            collectColumns(from: base, into: &cols)
-            for subscriptValue in subscripts {
-                switch subscriptValue {
-                case .index(let value): collectColumns(from: value, into: &cols)
-                case .slice(let lower, let upper):
-                    if let lower { collectColumns(from: lower, into: &cols) }
-                    if let upper { collectColumns(from: upper, into: &cols) }
-                }
-            }
-        case .patternMatch(let subject, let pattern, let escape, _):
-            collectColumns(from: subject, into: &cols)
-            collectColumns(from: pattern, into: &cols)
-            if let escape { collectColumns(from: escape, into: &cols) }
-        case .regex(let expression, _, _),
-             .cast(let expression, _), .isTriple(let expression),
-             .subject(let expression), .predicate(let expression),
-             .object(let expression):
-            collectColumns(from: expression, into: &cols)
-        case .between(let expression, let low, let high):
-            collectColumns(from: expression, into: &cols)
-            collectColumns(from: low, into: &cols)
-            collectColumns(from: high, into: &cols)
-        case .inList(let expression, let values),
-             .notInList(let expression, let values):
-            collectColumns(from: expression, into: &cols)
-            for value in values {
-                collectColumns(from: value, into: &cols)
-            }
-        case .inSubquery(let expression, let query):
-            collectColumns(from: expression, into: &cols)
-            cols.formUnion(query.referencedColumns)
-        case .quantifiedComparison(let lhs, _, _, let source):
-            collectColumns(from: lhs, into: &cols)
-            switch source {
-            case .array(let value): collectColumns(from: value, into: &cols)
-            case .subquery(let query): cols.formUnion(query.referencedColumns)
-            }
-        case .aggregate(let aggregate):
-            collectColumns(from: aggregate, into: &cols)
-        case .function(let call):
-            for arg in call.arguments {
-                collectColumns(from: arg, into: &cols)
-            }
-        case .caseWhen(let operand, let cases, let elseResult):
-            if let operand { collectColumns(from: operand, into: &cols) }
-            for pair in cases {
-                collectColumns(from: pair.condition, into: &cols)
-                collectColumns(from: pair.result, into: &cols)
-            }
-            if let elseResult {
-                collectColumns(from: elseResult, into: &cols)
-            }
-        case .coalesce(let expressions), .array(let expressions), .row(let expressions), .greatest(let expressions), .least(let expressions):
-            for expression in expressions {
-                collectColumns(from: expression, into: &cols)
-            }
-        case .triple(let subject, let predicate, let object):
-            collectColumns(from: subject, into: &cols)
-            collectColumns(from: predicate, into: &cols)
-            collectColumns(from: object, into: &cols)
-        case .subquery(let query), .exists(let query):
-            cols.formUnion(query.referencedColumns)
-        case .literal, .currentValue, .variable, .parameter, .bound:
-            break
-        }
-    }
-
-    private func collectColumns(from path: AccessPath, into cols: inout Set<ColumnRef>) {
-        guard case .fusion(let source) = path else { return }
-        for stage in source.stages {
-            for input in stage.inputs {
-                switch input.operation {
-                case .index(let indexSource):
-                    if case .matching(_, let fields, _) = indexSource.selection {
-                        for field in fields {
-                            cols.insert(ColumnRef(field.name))
-                        }
-                    }
-                case .connected(let connectedSource):
-                    cols.insert(ColumnRef(connectedSource.resultField.name))
-                case .filter(let expression):
-                    collectColumns(from: expression, into: &cols)
-                case .order(let keys):
-                    for key in keys {
-                        collectColumns(from: key.expression, into: &cols)
-                    }
-                }
-            }
-        }
-    }
-
-    private func collectColumns(
-        from aggregate: AggregateFunction,
-        into cols: inout Set<ColumnRef>
-    ) {
-        switch aggregate {
-        case .count(let expression, _):
-            if let expression {
-                collectColumns(from: expression, into: &cols)
-            }
-        case .sum(let expression, _), .avg(let expression, _),
-             .min(let expression), .max(let expression),
-             .groupConcat(let expression, _, _), .sample(let expression):
-            collectColumns(from: expression, into: &cols)
-        case .arrayAgg(let expression, let orderBy, _):
-            collectColumns(from: expression, into: &cols)
-            for key in orderBy ?? [] {
-                collectColumns(from: key.expression, into: &cols)
-            }
-        }
-    }
+    public var referencedVariables: Set<String> { QueryReferenceCollector.collect(self).variables }
+    public var referencedColumns: Set<ColumnRef> { QueryReferenceCollector.collect(self).columns }
+    public var hasAggregation: Bool { groupBy?.isEmpty == false }
 }

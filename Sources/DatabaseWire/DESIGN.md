@@ -584,3 +584,240 @@ responsibility. Required goldens prove false calls unchanged and tag55 true
 calls with/without schema; roundtrips preserve distinct, nested arguments,
 parameters and identity. Malformed-count/Boolean/truncation and exact/one-past
 budget tests apply in standard/MultiBase and portable codec lanes.
+
+### S08 composite value and descriptor carriage
+
+This is the planned codec contract, not evidence of implemented support.
+Consume the sole [SQL composite/value and ownership contract](../DatabaseKit/Query/SQL/DESIGN.md#s08-frozen-composite-values-and-ownership)
+and the [QueryIR owner](../DatabaseKit/Query/DESIGN.md) for relational query
+carriage. This section owns only the binary grammar and codec admission. The
+standard target-free v3 and optional target-bound MultiBase v5 remain unchanged;
+there is no version negotiation or new envelope.
+
+| Production | Exact payload after UInt8 tag |
+|---|---|
+| DataType tag26 | Bounded column count, then each existing QueryColumn production in ordinal order: UInt32 number, bounded UTF-8 name, QueryColumnType, strict Bool isNullable. |
+| QueryValue tag11 | Composite DataType production (tag26), bounded field count, then positional QueryValue fields in order. |
+
+QueryColumnType retains tags0/1 for primitive/SQL; its SQL branch uses the
+extended DataType grammar rather than adding another descriptor. A tag11 value
+must contain a composite descriptor, and its field count must equal that
+descriptor's column count. Fields satisfy selected type and nullability. Zero
+columns/fields are valid. With an external declared result/parameter type, the
+carried composite descriptor must match that declaration completely, including
+ordinals, names, types and nullability. It cannot replace a mismatched external
+descriptor. Typed NULL retains existing QueryValue tag0/FieldValue NULL and its
+external composite declaration; all-NULL tag11 is a non-NULL composite value.
+
+Existing QueryValue tags0...10, DataType tags0...25 and their payload bytes are
+unchanged. QueryValue tag4 retains its exact array element-type/dimensions/cell
+production; an element type may now use composite tag26 and a cell may use
+tag11. Nested DataType.array elements remain invalid, independently of a
+composite field that contains an array. Preserve each Int32 lower bound/length,
+flat row-major cells, six-rank limit and canonical empty shape. DataSource tag13
+remains reserved for MultiBase; S08 value additions never reuse it. QueryIR
+expression/source/query changes are defined by their Query contract and must
+join the existing shared iterative codec rather than a recursive side codec.
+
+DataType encoding/decoding and QueryValue encoding/decoding/validation extend
+the existing iterative owners with descriptor/field/array cursors. A value
+cannot call a recursive descriptor codec that calls itself through QueryColumn,
+nor recursively invoke scalar decoding for nested composite fields. Bounded
+metadata/counts and checked prospective cursor/record capacity are admitted
+before scheduling or allocating children. Production decoders append flat
+builder records and indices directly and publish only a validated final root;
+they do not repeatedly invoke public collection factories on partial subtrees.
+
+The lazy QueryValue validator scans every encoded composite field and nested
+array/descriptor in place, using the declared metadata and one iterative
+traversal. It does not build QueryCompositeValue, QueryArrayValue, JSONB or
+primitive collection trees to validate a cell. It validates carried versus
+external descriptors before exposing that cell. QueryRowPage retains the
+response frame and validates rows before publication; QueryRowIterator
+materializes only a requested row/cell through the ordinary decoder. Byte
+leaves retain bounded frame slices. Newly materialized flat type/value storage
+capacities are charged separately, just as materialized UTF-8/JSONB storage is
+charged today. Neither a nested reader nor a cell boundary resets enclosing
+object/count/depth/retention ledgers or recharges an already admitted root frame
+as a new independent owner. Public arbitrary-value measurement retains its
+conservative owner accounting; the codec's proved one-frame alias accounting
+does not become a public validation bypass.
+
+Unknown tags, invalid Booleans, invalid UTF-8/ordinals, unresolved or malformed
+descriptors, wrong carried descriptor, field count/type/nullability mismatch,
+invalid array shape, overflow, every truncated prefix, trailing input and any
+exceeded limit fail through typed DatabaseWireError. Intrinsic failures remain
+invalidQueryValue with their QueryValueError cause; malformed protocol tags and
+structural limits retain their existing Wire error cases. No decoder repairs
+metadata, drops fields, substitutes NULL, infers a primitive object descriptor
+or returns an empty result. Failure unwinds open scopes and partial builder
+storage before propagation, without publishing a partially validated value.
+
+| ID | Required falsifiable evidence |
+|---|---|
+| S08-W01 | Deterministic standard/MultiBase tag26/tag11 goldens, zero-field and nested descriptors/values, typed NULL and non-NULL all-NULL composite, array-of-composite bounds and row order. Existing tag0...10/type0...25 and primitive-array bytes remain unchanged. |
+| S08-W02 | Decoder and in-place validator reject non-composite tag11 descriptors, wrong external descriptor, invalid ordinal/name UTF-8/type/Boolean/count/shape/nullability, unknown tags, every truncated prefix and trailing bytes with typed causes; malformed metadata never becomes a default. |
+| S08-W03 | Exact/one-past byte/object/collection/depth and flat-construction capacity limits apply cumulatively across SELECT/expression/descriptor/value/array/ROW nesting and cells. Deep alternating type/value graphs use bounded iterative cursors; a child never gains a fresh quota. |
+| S08-W04 | Retained encoded page validates without eager value trees; only requested cells materialize flat owners. Fields/columns remain valid after page/root release, full-owner and materialized-capacity accounting is preserved, and final release/error/truncation leaves no owner cycle or partial publication. |
+| S08-W05 | Typed parameters, Literal.queryValue, duplicate-name/zero-row result columns, strict QueryColumnType JSON adaptation and server/CLI consumers carry or explicitly reject the selected descriptor/value under their own contracts. Native behavior plus exact ordinary-WASM/Embedded runtime lanes execute nested/NULL/limit/owner cases; compile-only success does not satisfy this contract. |
+
+Result-only composite persistence rejection is owned by the SQL value contract,
+not by a new Wire persistence envelope. SQL coercion, composite equality and
+comparison, JSON conversion, query execution budgets and lease attachment remain
+Framework responsibilities; deterministic codec identity is not their proof.
+
+### S08 relational query carriage
+
+This planned grammar consumes the canonical declarations in
+[Query S08](../DatabaseKit/Query/DESIGN.md#s08-frozen-relational-query-carriage).
+That design owns shape, occurrence identity and language semantics; this
+section owns exact bytes. S08 replaces the affected single SELECT/projection
+layout in place. There is no old-layout decoder, compatibility alias, second
+SELECT discriminator or new protocol version. All callers and deterministic
+fixtures migrate together. An old byte sequence is interpreted only by this
+grammar and rejected when it does not satisfy it; the codec does not identify
+the historical origin of bytes that also form a valid current production.
+
+All discriminators below are UInt8. Count, String, strict Bool and optional
+productions are the existing bounded Wire productions. An optional is Bool
+presence followed only when true by its payload; an optional array is Bool
+presence followed by count and ordered elements. Nil and a present empty array
+remain distinguishable. Recursive productions enter the existing shared
+iterative expression/query/source codec and its enclosing reader/writer ledger.
+
+#### SELECT, projection and pagination
+
+One SELECT payload has the following exact field order within its existing
+nested-value scope; no stored field is omitted from canonical encoding:
+
+| Position | Payload |
+|---|---|
+| 1 | Optional NamedSubquery array. Each element retains name String, optional column-name String array, complete SELECT query, optional Materialization (0 materialized, 1 notMaterialized). |
+| 2 | Projection item count, then ordered ProjectionItem productions. |
+| 3 | DataSource. |
+| 4 | Optional AccessPath using its existing production. |
+| 5 | Optional filter Expression. |
+| 6 | Optional groupBy Expression array. |
+| 7 | Optional having Expression. |
+| 8 | SelectQuantifier. |
+| 9 | Optional SortKey array, each retaining Expression, direction byte (0 ascending, 1 descending), optional NULL order byte (0 first, 1 last). |
+| 10 | QueryPagination. |
+| 11 | Bool reduced. |
+| 12 | Existing SPARQLDataset production. |
+
+| Production | Discriminator and exact remaining payload |
+|---|---|
+| ProjectionItem.expression | 0; Expression; optional alias String. |
+| ProjectionItem.wildcard | 1; optional qualifier String. |
+| SelectQuantifier.all | 0; no payload. |
+| SelectQuantifier.distinct | 1; no payload. |
+| SelectQuantifier.distinctOn | 2; nonzero bounded expression count; ordered Expressions. |
+| QueryPagination | Optional offset QueryCount; optional limit QueryLimit. |
+| QueryCount.fixed | 0; UInt64 count. |
+| QueryCount.expression | 1; Expression. |
+| QueryLimit.all | 0; no payload. |
+| QueryLimit.count | 1; Bool withTies; QueryCount. |
+
+Projection is an ordered item array, with no outer Projection discriminator,
+distinctItems production or duplicate DISTINCT flag. Pagination has no second
+fixed limit/offset fields. WITH TIES metadata precedes its count child, so it
+is validated before scheduling that expression. The byte order is not SQL
+parameter-inference or evaluation order; consumers use Query's named semantic
+edges. UInt64 fixed counts, including UInt64.max, round-trip unchanged for
+non-SQL consumers. SQL signed-bigint admission, NULL coercion, ties ordering,
+source-reference restrictions and SPARQL language rejection belong to their
+semantic owners and are not imposed by a context-free Wire decoder.
+
+#### Sources and expressions
+
+| DataSource tag | Exact payload after tag |
+|---|---|
+| 14 values | Bounded row count; for each row, bounded expression count and ordered Expressions. Raw row widths must match unless any direct cell is fieldExpansion; expanded arity is validated by binding under the [Query contract](../DatabaseKit/Query/DESIGN.md#s08-frozen-relational-query-carriage). |
+| 15 subquery | Complete SELECT query; no source alias payload. |
+| 16 aliased | Source alias name String; optional column-name String array; nested DataSource. |
+| 17 setOperation | SetOperator byte (0 union, 1 intersect, 2 except); SetQuantifier byte (0 all, 1 distinct); complete left SELECT; complete right SELECT. |
+
+Tags2/4/9/10/11/12 are reserved and rejected with invalidValueTag, rather than
+decoded as their superseded subquery/VALUES/set layouts. Tag13 retains its
+existing MultiBase-only Base/source payload and remains invalid in standard
+frames. Tags0/1/3/5/6/7/8 retain their source meanings; migration removes
+source aliases from their former per-family payloads as follows:
+
+- Tag0 table retains the existing TableRef production, including its optional
+  alias slot and partition bindings. Within DataSource.table, alias must be
+  absent. Direct mutation-target TableRef carriage still permits the alias.
+- Tag1 logical carries kindIdentifier String and identifier String, with no
+  former optional alias. A source alias uses tag16.
+- Tag5 graphTable carries graphName String, existing MatchPattern, and optional
+  columns. Each column retains Expression followed by its alias String. Remove
+  only the former final optional relation alias; a relation alias uses tag16.
+- Tag3 join and graph source tags6/7/8 retain their existing metadata and
+  payload order. Their nested sources/expressions use this grammar.
+
+Programmatic zero-row VALUES and the one-zero-column-row identity are admitted
+without synthetic rows or inferred column names. The decoder validates raw
+VALUES widths after all rows are decoded, because a later row can contain the
+direct expansion that defers arity to binding. Nested expansions do not defer
+raw-width validation; carriage never normalizes the source cells.
+A set source is admitted only
+in the canonical direct SELECT envelope defined by Query; an ordinary relation
+uses a complete subquery wrapper. Metadata for tags16/17 is validated before
+scheduling children. Operator precedence is already represented by binary
+query operands, not reconstructed from a flat list by the decoder.
+
+| Expression tag | Exact payload after tag |
+|---|---|
+| 56 collate | SQLCollation byte (0 c, 1 posix); operand Expression. |
+| 57 arraySubquery | Complete SELECT query. |
+| 58 wholeRow | Source name String. |
+| 59 field | Field name String; operand Expression. |
+| 60 fieldExpansion | Operand Expression. |
+
+Expression tags0...55 and their payloads retain their existing meanings;
+nested SELECT/source children use the new canonical query productions. Field
+expansion context, whole-row lookup, collation capabilities and array-subquery
+column/type/cardinality rules are semantic decisions, not decoder guesses.
+QueryValue11/DataType26 remain the separate composite productions above;
+expression tags do not introduce a second value algebra or persisted format.
+
+#### Admission, failure and migration evidence
+
+The existing iterative SCC handles every new edge, including CTEs, projection,
+VALUES cells, binary query operands, DISTINCT keys, offset/limit expressions
+and composite descriptors/values. A cursor holds one active collection frame,
+not one scheduled entry per sibling. Checked counts, node/depth claims,
+metadata strings and prospective assembly capacity are admitted before growth.
+Malformed nested input cannot reset the enclosing ledger or gain a new quota.
+Both materialized and measuring/streaming writers traverse the same grammar;
+invalid shape fails before any sink emission. Encoding and decoding validate
+the same intrinsic structures before returning a query.
+
+Add the typed boundary
+`DatabaseWireError.invalidQueryStructure(QueryStructuralValidationError)` to
+preserve Query's intrinsic shape cause, including invalidValuesRowArity,
+emptyDistinctOn, invalidSetQueryEnvelope and sourceAliasInTableReference.
+DataSource.table with an alias fails through that boundary before reads; the
+TableRef codec itself does not erase a legitimate mutation-target alias.
+Unknown/reserved discriminators, invalid Booleans, truncated/trailing input,
+invalid UTF-8, overflow and structural limits retain their existing typed Wire
+failures. There is no fallback to an old layout, omitted expression, empty
+source, false DISTINCT state or repaired envelope.
+
+| ID | Required falsifiable evidence |
+|---|---|
+| S08-W06 | Standard/MultiBase exact SELECT/projection/quantifier/pagination goldens cover every discriminator, optional presence, mixed wildcard position, CTE hint, fixed UInt64 boundary and expression child. Canonical emit/owned encoding agree and preserving copies retain all fields. |
+| S08-W07 | Source14...17 and expression56...60 goldens and roundtrips preserve row-major expressions, alias metadata, binary operands/local versus outer modifiers, COLLATE and whole-row/field/expansion identity. All reserved old source tags and unknown enum bytes fail explicitly. |
+| S08-W08 | Ragged VALUES, empty DISTINCT ON, invalid set envelope, nonnil table-source alias, malformed Bool/count, every truncated prefix and trailing input fail with the selected typed cause before publication/emission. Direct mutation-target aliases continue to round-trip. |
+| S08-W09 | Exact/one-past shared count/node/depth/string/frame and assembly budgets across mixed SELECT/source/expression/value/type nesting reject without quota reset. Deep and wide traversals preserve occurrence/parameter children with constant process-stack depth; error cleanup leaves no partial result or retained scratch. |
+| S08-W10 | Native standard/MultiBase and exact ordinary-WASM/Embedded runtime witnesses execute the new query/value graph. Every active Kit, Framework, Server, Client, CLI, Cloudflare and MultiBase caller/golden migrates to the canonical grammar. SQL runtime failures and retained results are verified by their owning integration tests; compile/discovery alone is insufficient. |
+
+No compatibility decoder is retained after callers and golden vectors migrate.
+Canonical bytes encode logical positional values and descriptor metadata,
+never arena indices, owner identity or allocated capacity. Equal represented
+values in independent owners produce equal bytes; primitive and scalar-array
+representation meaning is preserved. Array/composite mutual traversal uses the
+same iterative SCC rather than recursive equality/hash or codec calls.
+Canonical continuation fingerprints change with the complete new encoding;
+their consumers cannot omit a quantifier, alias, nested modifier or pagination
+expression to preserve a historical fingerprint. Semantic compatibility or
+language admission is never inferred from a successful representation roundtrip.

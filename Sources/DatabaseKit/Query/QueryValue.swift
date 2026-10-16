@@ -6,6 +6,7 @@ public enum QueryValue: Sendable, Hashable {
     case json(QueryJSONValue)
     case jsonb(QueryJSONBValue)
     case array(QueryArrayValue)
+    case composite(QueryCompositeValue)
     case interval(QueryIntervalValue)
     case time(QueryTimeValue)
     case timeWithTimeZone(QueryTimeWithTimeZoneValue)
@@ -17,4 +18,8 @@ public enum QueryValue: Sendable, Hashable {
         if case .primitive(.null) = self { return true }
         return false
     }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool { QueryValueIdentity.areEqual(lhs, rhs) }
+
+    public func hash(into hasher: inout Hasher) { QueryValueIdentity.hash(self, into: &hasher) }
 }

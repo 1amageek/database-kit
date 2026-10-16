@@ -40,11 +40,10 @@ struct SQLCollectionSemanticTests {
         let function = Expression.function(FunctionCall(name: "f", arguments: [access], distinct: true,
             schema: "qualified", finalArrayIsVariadic: true))
         let expression = Expression.collectionOperation(.contains, left: function, right: .parameter(.position(5)))
-        let query = SelectQuery(projection: .items([ProjectionItem(expression)]), source: .values([], columnNames: nil))
+        let query = SelectQuery(projection: [ProjectionItem(expression)], source: .values([]))
         let parameters = (1...5).map { QueryParameter(position: UInt32($0), value: .primitive(.int64(Int64($0)))) }
         let binder = try QueryParameterBinder(parameters: parameters)
-        guard case .select(let bound) = try binder.bind(.select(query)), case .items(let items) = bound.projection,
-              case .collectionOperation(.contains, let left, let right) = items[0].expression,
+        guard case .select(let bound) = try binder.bind(.select(query)), case .expression(.collectionOperation(.contains, let left, let right), _) = bound.projection[0],
               case .function(let rebuilt) = left,
               case .arrayAccess(let base, let subscripts) = rebuilt.arguments[0] else {
             Issue.record("Lost collection expression during parameter replacement"); return
@@ -64,7 +63,7 @@ struct SQLCollectionSemanticTests {
         let expression = Expression.collectionOperation(.jsonPath, left: .arrayAccess(.col("base"), subscripts: [
             .index(.col("index")), .slice(lower: .col("lower"), upper: .col("upper")),
         ]), right: .col("path"))
-        let query = SelectQuery(projection: .items([ProjectionItem(expression)]), source: .values([], columnNames: nil))
+        let query = SelectQuery(projection: [ProjectionItem(expression)], source: .values([]))
         #expect(query.referencedColumns == Set(["base", "index", "lower", "upper", "path"].map(ColumnRef.init)))
         let value = Expression.arrayAccess(.parameter(.position(1)), subscripts: [.slice(lower: .parameter(.position(2)), upper: .parameter(.position(3)))])
         try QueryStructuralValidator.validate(value, limits: QueryStructuralLimits(maximumTotalNodes: 4, maximumCollectionElements: 1))
@@ -93,7 +92,7 @@ struct SQLCollectionSemanticTests {
         ]
         for value in values {
             #expect(throws: QueryLiteralConversionError.unsupportedSPARQLLiteral) { try value.toSPARQL() }
-            let query = SelectQuery(projection: .items([ProjectionItem(value)]), source: .values([], columnNames: nil))
+            let query = SelectQuery(projection: [ProjectionItem(value)], source: .values([]))
             #expect(throws: SPARQLSemanticValidationError.unsupportedSQLExpression) { try SPARQLSemanticValidator.validate(query) }
         }
     }

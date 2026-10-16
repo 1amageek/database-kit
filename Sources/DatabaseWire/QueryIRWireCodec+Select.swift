@@ -48,53 +48,38 @@ extension QueryIRWireFormat {
         }
     }
 
-    static func encodeProjection(
-        _ projection: Projection,
-        into writer: inout DatabaseWireWriter
-    ) throws(DatabaseWireError) {
-        switch projection {
-        case .all:
-            writer.writeUInt8(0)
-        case .allFrom(let source):
-            writer.writeUInt8(1)
-            try writer.writeString(source)
-        case .items(let items):
-            writer.writeUInt8(2)
-            try writeArray(items, into: &writer, encode: encodeProjectionItem)
-        case .distinctItems(let items):
-            writer.writeUInt8(3)
-            try writeArray(items, into: &writer, encode: encodeProjectionItem)
-        }
-    }
-
-    static func decodeProjection(
-        from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> Projection {
-        switch try reader.readUInt8() {
-        case 0: return .all
-        case 1: return .allFrom(try reader.readString())
-        case 2: return .items(try readArray(from: &reader, decode: decodeProjectionItem))
-        case 3:
-            return .distinctItems(try readArray(from: &reader, decode: decodeProjectionItem))
-        case let tag: throw .invalidValueTag(tag)
+    static func validateSetEnvelope(_ query: SelectQuery) throws(DatabaseWireError) {
+        guard case .setOperation = query.source else { return }
+        guard query.projection == [.wildcard()], query.quantifier == .all,
+              query.filter == nil, query.groupBy == nil, query.having == nil,
+              query.accessPath == nil, !query.reduced, query.dataset == .implicit else {
+            throw .invalidQueryStructure(.invalidSetQueryEnvelope)
         }
     }
 
     static func encodeProjectionItem(
-        _ projectionItem: ProjectionItem,
+        _ item: ProjectionItem,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
-        try encodeExpression(projectionItem.expression, into: &writer)
-        try writeOptionalString(projectionItem.alias, into: &writer)
+        switch item {
+        case .expression(let expression, let alias):
+            writer.writeUInt8(0)
+            try encodeExpression(expression, into: &writer)
+            try writeOptionalString(alias, into: &writer)
+        case .wildcard(let qualifier):
+            writer.writeUInt8(1)
+            try writeOptionalString(qualifier, into: &writer)
+        }
     }
 
     static func decodeProjectionItem(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) -> ProjectionItem {
-        ProjectionItem(
-            try decodeExpression(from: &reader),
-            alias: try readOptionalString(from: &reader)
-        )
+        switch try reader.readUInt8() {
+        case 0: return .expression(try decodeExpression(from: &reader), alias: try readOptionalString(from: &reader))
+        case 1: return .wildcard(qualifier: try readOptionalString(from: &reader))
+        case let tag: throw .invalidValueTag(tag)
+        }
     }
 
     static func encodeNamedSubquery(

@@ -6,12 +6,12 @@ struct SelectQueryMetadataTests {
     @Test("Aggregation requires at least one grouping expression")
     func aggregationRequiresGroupingExpression() {
         let base = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .table(TableRef("Event"))
         )
 
         #expect(!base.source.usesSPARQLSemantics)
-        let graphTable = SelectQuery(projection: .all, source: .graphTable(
+        let graphTable = SelectQuery(projection: [.wildcard()], source: .graphTable(
             GraphTableSource(graphName: "relationships", matchPattern: MatchPattern(paths: []))))
         #expect(!graphTable.source.usesSPARQLSemantics)
         #expect(base.hasAggregation == false)

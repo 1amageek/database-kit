@@ -57,7 +57,7 @@ public enum QueryFieldStorageAdapter {
         try meter.field(payload, depth: 1)
         let envelope = try meter.inferredLimits()
         let decoded = try measureDecoded(payload, type: type)
-        let minimum = try decoded.minimumJSONBStorageByteCount
+        let minimum = try added(decoded.minimumJSONBStorageByteCount, decoded.minimumQueryValueStorageByteCount)
         let allowance = try added(minimum, minimum)
         let bytes = try added(try added(envelope.maximumRetainedBytes, decoded.utf8ByteCount), allowance)
         return QueryValueLimits(maximumRetainedBytes: bytes,
@@ -101,6 +101,10 @@ public enum QueryFieldStorageAdapter {
                       case .array(let elementType) = sqlType else { throw malformed() }
                 try validateShape(shape, cellCount: cells.count)
                 counts.collectionElementCount = UInt64(cells.count)
+                counts.queryValueNodeCount = try added(UInt64(cells.count), 1)
+                counts.queryValueChildIndexCount = UInt64(cells.count)
+                counts.queryValueDimensionCount = UInt64(shape.count)
+                counts.queryTypeNodeCount = 1
                 for cell in cells {
                     let child = try decodedFootprint(cell, type: .sql(elementType), limits: limits)
                     counts.nodeCount = try added(counts.nodeCount, child.nodeCount)
@@ -184,7 +188,7 @@ public enum QueryFieldStorageAdapter {
             case .time(true, _): expected = .object
             case .timestamp(let withTimeZone, _): expected = withTimeZone ? .timestamp : .dateTime
             case .uuid: expected = .uuid
-            case .custom: throw .invalidPersistenceDescriptor
+            case .custom, .composite: throw .invalidPersistenceDescriptor
             }
             guard fieldType == expected else { throw .invalidPersistenceDescriptor }
         }
@@ -210,7 +214,7 @@ public enum QueryFieldStorageAdapter {
         case .array(let element):
             guard allowsArray else { throw .invalidPersistenceDescriptor }
             try validateSQLType(element, allowsArray: false)
-        case .custom: throw .invalidPersistenceDescriptor
+        case .custom, .composite: throw .invalidPersistenceDescriptor
         default: break
         }
     }

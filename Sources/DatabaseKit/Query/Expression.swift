@@ -220,32 +220,6 @@ public struct AggregateBinding: Sendable, Equatable, Hashable {
     }
 }
 
-/// SQL data types for CAST
-public indirect enum DataType: Sendable, Equatable, Hashable {
-    case boolean
-    case smallint
-    case integer
-    case bigint
-    case real
-    case doublePrecision
-    case decimal(precision: Int?, scale: Int?)
-    case char(length: Int?)
-    case varchar(length: Int?)
-    case text
-    case date
-    case time(withTimeZone: Bool, precision: Int? = nil)
-    case timestamp(withTimeZone: Bool, precision: Int? = nil)
-    case interval(fields: SQLIntervalFields? = nil, precision: Int? = nil)
-    case binary(length: Int?)
-    case varbinary(length: Int?)
-    case blob
-    case json
-    case jsonb
-    case uuid
-    case array(DataType)
-    case custom(String, schema: String? = nil)  // For database-specific types
-}
-
 /// Unified expression representation
 /// Combines SQL expressions and SPARQL filter expressions
 public indirect enum Expression: Sendable, Hashable {
@@ -268,6 +242,12 @@ public indirect enum Expression: Sendable, Hashable {
 
     /// A selected array or JSON collection operator.
     case collectionOperation(CollectionOperator, left: Expression, right: Expression)
+
+    case collate(Expression, collation: SQLCollation)
+    case arraySubquery(SelectQuery)
+    case wholeRow(String)
+    case field(Expression, name: String)
+    case fieldExpansion(Expression)
 
     // MARK: - Identifiers
 

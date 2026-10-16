@@ -34,6 +34,13 @@ are compile-time graph choices, not runtime protocol negotiation.
 
 ## Responsibilities and Boundaries
 
+S08 composes the [DatabaseKit Query contract](Sources/DatabaseKit/Query/DESIGN.md#s08-frozen-relational-query-carriage)
+and its [SQL value child](Sources/DatabaseKit/Query/SQL/DESIGN.md#s08-frozen-composite-values-and-ownership)
+with [DatabaseWire's deterministic carriage](Sources/DatabaseWire/DESIGN.md#s08-relational-query-carriage).
+Those child guarantees, not a second package-level query/value model, are the
+interfaces consumed by Framework and remote adapters. The existing standard
+v3 and non-default MultiBase v5 graphs remain the package boundary.
+
 | Responsibility | Owner in this package | Boundary |
 |---|---|---|
 | Primitive bytes and field values | `database-types` | `database-kit` consumes the value algebra and does not redeclare it. |

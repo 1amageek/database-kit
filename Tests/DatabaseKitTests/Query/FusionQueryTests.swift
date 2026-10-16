@@ -97,7 +97,7 @@ struct FusionQueryTests {
         #expect(query.source.stages[1].inputs.count == 1)
         #expect(query.selectQuery.source == .table(TableRef("FusionPlanDocument")))
         #expect(query.selectQuery.accessPath == .fusion(query.source))
-        #expect(query.selectQuery.limit == 20)
+        #expect(query.selectQuery.pagination.limit == .count(.fixed(20), withTies: false))
     }
 
     @Test("plan validation rejects impossible candidate and weight contracts")
@@ -332,7 +332,7 @@ struct FusionQueryTests {
             ]
         )
         let query = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .table(TableRef("documents")),
             accessPath: .fusion(source)
         )

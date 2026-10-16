@@ -90,6 +90,13 @@ flowchart TB
 
 ## Contracts and Invariants
 
+- S08 consumes [Query's canonical relational declarations](Query/DESIGN.md#s08-frozen-relational-query-carriage)
+  and [SQL's result-only composite value owner](Query/SQL/DESIGN.md#s08-frozen-composite-values-and-ownership).
+  Model and schema admission retain their persistence authority: result-only
+  composite descriptors, including those nested in arrays, fail explicitly
+  rather than entering persisted model adaptation. DatabaseWire consumes the
+  public values; runtime allocation authority remains in Framework.
+
 - `DatabaseTypes` is the only owner of `FieldValue`, `ByteString`, and
   primitive alternatives. This module does not alias or duplicate that
   primitive algebra. Query-domain values may retain primitive storage while

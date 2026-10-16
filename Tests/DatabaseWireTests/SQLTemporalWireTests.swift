@@ -96,7 +96,7 @@ struct SQLTemporalWireTests {
     }
 
     @Test func temporalBudgetsAndOperationCarriage() throws {
-        let query = QueryStatement.select(SelectQuery(projection: .items([ProjectionItem(.currentValue(kind: .timestamp, precision: 3))]), source: .values([], columnNames: nil)))
+        let query = QueryStatement.select(SelectQuery(projection: [ProjectionItem(.currentValue(kind: .timestamp, precision: 3))], source: .values([])))
         #expect(try QueryIRWireFormat.decode(QueryIRWireFormat.encode(query)) == query)
         let value = QueryValue.time(try QueryTimeValue(microsecondsSinceMidnight: 1))
         let exact = try DatabaseWireLimits(maximumFrameBytes: 9, maximumStringBytes: 9, maximumByteStringBytes: 9, maximumCollectionCount: 8, maximumNestingDepth: 8, maximumObjectCount: 8)

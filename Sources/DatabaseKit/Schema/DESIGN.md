@@ -131,6 +131,14 @@ those runtime services during declaration validation.
 
 ## Runtime Flows
 
+S08 consumes the [SQL result-only composite contract](../Query/SQL/DESIGN.md#s08-frozen-composite-values-and-ownership).
+Schema field/default admission rejects direct or nested composite descriptors
+before schema publication, preserving invalidPersistenceDescriptor through
+the existing typed field error. Descriptive result metadata and Wire/JSON
+carriage are not permission to persist the type. The schema validation tests
+own explicit direct/array/nested rejection and unchanged finite scalar/rich
+field admission.
+
 Manual and macro-generated declarations use the same intrinsic admission.
 Framework validates the stored manifest and compiled field declaration before
 choosing query adaptation. DDL, schema generation publication and backfill are

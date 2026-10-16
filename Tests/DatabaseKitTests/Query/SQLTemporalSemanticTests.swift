@@ -9,7 +9,7 @@ struct SQLTemporalSemanticTests {
         let precise = Expression.currentValue(kind: .time, precision: 0)
         #expect(precise != .currentValue(kind: .time, precision: nil))
         #expect(precise != .function(FunctionCall(name: "current_time", arguments: [.int(0)])))
-        let query = SelectQuery(projection: .items([ProjectionItem(precise)]), source: .values([], columnNames: nil), filter: precise)
+        let query = SelectQuery(projection: [ProjectionItem(precise)], source: .values([]), filter: precise)
         let binder = try QueryParameterBinder(parameters: [])
         try binder.validate(.select(query))
         #expect(try binder.bind(.select(query)) == .select(query))
@@ -56,7 +56,7 @@ struct SQLTemporalSemanticTests {
         for kind in SQLCurrentValueKind.allCases {
             let expression = Expression.currentValue(kind: kind, precision: nil)
             #expect(throws: QueryLiteralConversionError.unsupportedSPARQLLiteral) { try expression.toSPARQL() }
-            let query = SelectQuery(projection: .items([ProjectionItem(expression)]), source: .values([], columnNames: nil))
+            let query = SelectQuery(projection: [ProjectionItem(expression)], source: .values([]))
             #expect(throws: SPARQLSemanticValidationError.unsupportedSQLExpression) { try SPARQLSemanticValidator.validate(query) }
         }
     }

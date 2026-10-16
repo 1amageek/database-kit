@@ -7,6 +7,13 @@ public enum QueryOccurrenceField: Sendable, Equatable, Hashable {
     case filter
     case groupBy
     case having
+    case distinctOn
+    case offset
+    case limit
+    case setLeft
+    case setRight
+    case valuesRow
+    case valuesCell
     case orderBy
     case joinLeft
     case joinRight

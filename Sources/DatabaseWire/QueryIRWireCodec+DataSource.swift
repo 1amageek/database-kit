@@ -164,10 +164,7 @@ extension QueryIRWireFormat {
                 try writer.writeString(column.alias)
             }
         }
-        try writeOptional(source.alias, into: &writer) {
-            (alias: String, writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
-            try writer.writeString(alias)
-        }
+
     }
 
     private static func decodeGraphTableSource(
@@ -185,10 +182,6 @@ extension QueryIRWireFormat {
                         alias: try reader.readString()
                     )
                 }
-            },
-            alias: try readOptional(from: &reader) {
-                (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> String in
-                try reader.readString()
             }
         )
     }

@@ -75,9 +75,9 @@ struct QueryStructuralValidatorTests {
             try QueryStructuralValidator.validate(.array([.literal(.queryValue(.primitive(.string("abcd")), type: .sql(.text)))]),
                 limits: QueryStructuralLimits(maximumRetainedBytes: 3))
         }
-        let query = SelectQuery(projection: .items([ProjectionItem(.row([
+        let query = SelectQuery(projection: [ProjectionItem(.row([
             .col("visible"), .array([.col("nested")])
-        ]))]), source: .values([], columnNames: nil))
+        ]))], source: .values([]))
         #expect(query.referencedColumns == [ColumnRef("visible"), ColumnRef("nested")])
         #expect(Expression.row([.int(1), .null]) != Expression.array([.int(1), .null]))
         #expect(Set([Expression.row([.int(1)]), .row([.int(1)]), .array([.int(1)])]).count == 2)
@@ -103,7 +103,7 @@ struct QueryStructuralValidatorTests {
     @Test("Fusion stages, inputs, and schema fields consume structural limits")
     func fusionCollectionsConsumeStructuralLimits() {
         let query = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .table(TableRef("documents")),
             accessPath: .fusion(
                 FusionSource(
@@ -287,7 +287,7 @@ struct QueryStructuralValidatorTests {
     @Test("SPARQL dataset graphs share the global collection ledger")
     func sparqlDatasetCollectionOverflow() {
         let query = SelectQuery(
-            projection: .all,
+            projection: [.wildcard()],
             source: .graphPattern(.basic([])),
             dataset: .explicit(
                 defaultGraphs: ["urn:default:1", "urn:default:2"],
@@ -312,11 +312,8 @@ struct QueryStructuralValidatorTests {
     @Test("VALUES cell limits apply to canonical QueryIR")
     func valuesCellOverflow() {
         let query = SelectQuery(
-            projection: .all,
-            source: .values(
-                [[.int(1), .int(2)]],
-                columnNames: ["first", "second"]
-            )
+            projection: [.wildcard()],
+            source: .aliased(.values([[.int(1), .int(2)]]), name: "input", columns: ["first", "second"])
         )
 
         #expect(

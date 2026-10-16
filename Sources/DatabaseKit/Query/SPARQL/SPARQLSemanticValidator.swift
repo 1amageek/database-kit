@@ -681,6 +681,16 @@ private struct QueryScopeState {
         _ query: SelectQuery,
         inputVisibleVariables: Set<String> = []
     ) throws(SPARQLSemanticValidationError) {
+        switch query.quantifier {
+        case .all, .distinct: break
+        case .distinctOn: throw .unsupportedSQLExpression
+        }
+        if let limit = query.pagination.limit {
+            guard case .count(.fixed, withTies: false) = limit else { throw .unsupportedSQLExpression }
+        }
+        if let offset = query.pagination.offset {
+            guard case .fixed = offset else { throw .unsupportedSQLExpression }
+        }
         try SPARQLSemanticValidator.validateDataset(query.dataset)
         try validate(
             query.source,
@@ -749,7 +759,7 @@ private struct QueryScopeState {
         inputVisibleVariables: Set<String> = []
     ) throws(SPARQLSemanticValidationError) {
         switch source {
-        case .subquery(let query, _):
+        case .subquery(let query):
             try validate(query)
         case .join(let join):
             try validate(
@@ -798,29 +808,8 @@ private struct QueryScopeState {
                 pattern,
                 inputVisibleVariables: inputVisibleVariables
             )
-        case .union(let sources), .unionAll(let sources),
-             .intersect(let sources):
-            for source in sources {
-                try validate(
-                    source,
-                    inputVisibleVariables: inputVisibleVariables
-                )
-            }
-        case .except(let lhs, let rhs):
-            try validate(
-                lhs,
-                inputVisibleVariables: inputVisibleVariables
-            )
-            try validate(
-                rhs,
-                inputVisibleVariables: inputVisibleVariables
-            )
-        case .values(let rows, _):
-            for row in rows {
-                for literal in row {
-                    try validateValuesLiteral(literal)
-                }
-            }
+        case .aliased, .setOperation, .values:
+            throw .unsupportedSQLExpression
         #if DATABASE_KIT_MULTI_BASE
         case .base(_, let source):
             try validate(
@@ -1143,7 +1132,8 @@ private struct QueryScopeState {
                 throw .unsupportedSQLExpression
             }
             try validate(subject, context: context)
-        case .arrayAccess, .collectionOperation, .concatenate, .currentValue:
+        case .arrayAccess, .collectionOperation, .concatenate, .currentValue,
+             .collate, .arraySubquery, .wholeRow, .field, .fieldExpansion:
             throw .unsupportedSQLExpression
         case .regex(let value, _, _):
             try validate(value, context: context)
@@ -1210,47 +1200,32 @@ private struct QueryScopeState {
     }
 
     private mutating func validate(
-        _ projection: Projection,
+        _ projection: [ProjectionItem],
         sourceVisibleVariables: Set<String>,
         groupVisibleVariables: Set<String>,
         hasGrouping: Bool
     ) throws(SPARQLSemanticValidationError) {
-        switch projection {
-        case .all:
-            break
-        case .allFrom:
-            break
-        case .items(let items), .distinctItems(let items):
-            var targets = Set<String>()
-            for item in items {
-                try validate(item.expression, context: .projection)
-                let target: String
-                if let alias = item.alias {
-                    try SPARQLSemanticValidator.validateVariable(alias)
-                    guard !sourceVisibleVariables.contains(alias) else {
-                        throw .variableAlreadyInScope(alias)
-                    }
-                    target = alias
-                } else if let variable = directVariable(item.expression) {
-                    target = variable
-                } else {
-                    throw .projectionExpressionRequiresAlias
+        if projection == [.wildcard()] { return }
+        var targets = Set<String>()
+        for item in projection {
+            guard case .expression(let expression, let alias) = item else { throw .unsupportedSQLExpression }
+            try validate(expression, context: .projection)
+            let target: String
+            if let alias {
+                try SPARQLSemanticValidator.validateVariable(alias)
+                guard !sourceVisibleVariables.contains(alias) else { throw .variableAlreadyInScope(alias) }
+                target = alias
+            } else if let variable = directVariable(expression) {
+                target = variable
+            } else { throw .projectionExpressionRequiresAlias }
+            guard !targets.contains(target) else { throw .duplicateProjectionTarget(target) }
+            if hasGrouping {
+                let allowed = groupVisibleVariables.union(targets)
+                if let invalid = variablesOutsideAggregates(in: expression).subtracting(allowed).sorted().first {
+                    throw .projectionVariableNotGrouped(invalid)
                 }
-
-                guard !targets.contains(target) else {
-                    throw .duplicateProjectionTarget(target)
-                }
-
-                if hasGrouping {
-                    let allowed = groupVisibleVariables.union(targets)
-                    if let invalid = variablesOutsideAggregates(
-                        in: item.expression
-                    ).subtracting(allowed).sorted().first {
-                        throw .projectionVariableNotGrouped(invalid)
-                    }
-                }
-                targets.insert(target)
             }
+            targets.insert(target)
         }
     }
 
@@ -1267,13 +1242,9 @@ private struct QueryScopeState {
         try SPARQLSemanticValidator.validateExpressionLiteral(literal)
     }
 
-    private func projectionContainsAggregate(
-        _ projection: Projection
-    ) -> Bool {
-        switch projection {
-        case .items(let items), .distinctItems(let items):
-            return items.contains { containsAggregate($0.expression) }
-        case .all, .allFrom:
+    private func projectionContainsAggregate(_ projection: [ProjectionItem]) -> Bool {
+        projection.contains { item in
+            if case .expression(let expression, _) = item { return containsAggregate(expression) }
             return false
         }
     }
@@ -1310,6 +1281,7 @@ private struct QueryScopeState {
         _ expression: Expression
     ) -> [Expression] {
         switch expression {
+        case .collate(let value, _), .field(let value, _), .fieldExpansion(let value): return [value]
         case .add(let lhs, let rhs), .subtract(let lhs, let rhs),
              .multiply(let lhs, let rhs), .divide(let lhs, let rhs),
              .modulo(let lhs, let rhs), .equal(let lhs, let rhs),
@@ -1367,7 +1339,7 @@ private struct QueryScopeState {
             return expressions
         case .triple(let subject, let predicate, let object):
             return [subject, predicate, object]
-        case .aggregate, .subquery, .exists, .literal, .currentValue, .column, .variable,
+        case .aggregate, .subquery, .exists, .arraySubquery, .wholeRow, .literal, .currentValue, .column, .variable,
              .bound, .parameter:
             return []
         }

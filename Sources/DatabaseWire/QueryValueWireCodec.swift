@@ -2,23 +2,64 @@ import DatabaseKit
 import DatabaseTypes
 
 enum QueryValueWireCodec {
+    private enum EncodingStep {
+        case value(QueryValue)
+        case children(QueryValueElements, Int)
+        case end
+    }
+
     static func encode(_ value: QueryValue, into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
-        if case .array(let array) = value {
-            try writer.beginNestedValue()
-            var open = true
-            defer { if open { writer.abandonNestedValues(1) } }
-            writer.writeUInt8(4)
-            try QueryIRDataTypeWireCodec.encode(array.elementType, into: &writer)
-            try writer.writeCount(array.dimensions.count)
-            for dimension in array.dimensions {
-                writer.writeInt32(dimension.lowerBound)
-                writer.writeInt32(dimension.length)
+        if case .array = value { try admitCollectionDepth(value, writer: &writer) }
+        else if case .composite = value { try admitCollectionDepth(value, writer: &writer) }
+        var steps: [EncodingStep] = [.value(value)]
+        var open = 0
+        defer { writer.abandonNestedValues(open) }
+        while let step = steps.popLast() {
+            switch step {
+            case .value(.array(let array)):
+                try writer.beginNestedValue()
+                open += 1
+                writer.writeUInt8(4)
+                try QueryIRDataTypeWireCodec.encode(array.elementType, into: &writer)
+                try writer.writeCount(array.dimensions.count)
+                for dimension in array.dimensions {
+                    writer.writeInt32(dimension.lowerBound)
+                    writer.writeInt32(dimension.length)
+                }
+                try writer.writeCount(array.elements.count)
+                steps.append(.end)
+                steps.append(.children(array.elements, 0))
+            case .value(.composite(let composite)):
+                try writer.beginNestedValue()
+                open += 1
+                writer.writeUInt8(11)
+                try QueryIRDataTypeWireCodec.encode(.composite(composite.type), into: &writer)
+                try writer.writeCount(composite.fields.count)
+                steps.append(.end)
+                steps.append(.children(composite.fields, 0))
+            case .value(let scalar):
+                try encodeScalar(scalar, into: &writer)
+            case .children(let values, let index):
+                guard index < values.count else { continue }
+                steps.append(.children(values, index + 1))
+                steps.append(.value(values[index]))
+            case .end:
+                try writer.endNestedValue()
+                open -= 1
             }
-            try writer.writeCount(array.elements.count)
-            for element in array.elements { try encodeScalar(element, into: &writer) }
-            try writer.endNestedValue()
-            open = false
-        } else { try encodeScalar(value, into: &writer) }
+        }
+    }
+
+    private static func admitCollectionDepth(_ value: QueryValue, writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+        let footprint: QueryValueFootprint
+        do throws(QueryValueError) { footprint = try QueryValueValidator.measure(value) }
+        catch let error { throw .invalidQueryValue(error) }
+        let actual = UInt64(writer.currentNestingDepth).addingReportingOverflow(footprint.maximumNestingDepth)
+        guard !actual.overflow else { throw .byteCountOverflow }
+        guard actual.partialValue <= UInt64(writer.limits.maximumNestingDepth) else {
+            throw .invalidQueryValue(.resourceLimit(resource: "depth", actual: actual.partialValue,
+                maximum: UInt64(writer.limits.maximumNestingDepth)))
+        }
     }
 
     private static func encodeScalar(_ value: QueryValue, into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
@@ -66,41 +107,89 @@ enum QueryValueWireCodec {
                 default: throw .invalidQueryIRWireState
                 }
             }
-        case .array: throw .invalidQueryValue(.incompatibleType)
+        case .array, .composite: throw .invalidQueryValue(.incompatibleType)
         }
+    }
+
+    private enum CollectionDescriptor {
+        case array(DataType, [QueryArrayDimension])
+        case composite(QueryCompositeType)
+    }
+
+    private struct CollectionFrame {
+        let descriptor: CollectionDescriptor
+        let count: Int
+        var children: [Int] = []
     }
 
     static func decode(from reader: inout DatabaseWireReader) throws(DatabaseWireError) -> QueryValue {
         try reader.beginQueryPayload()
         defer { reader.endQueryPayload() }
-        let tag = try reader.readUInt8()
-        guard tag == 4 else { return try decodeScalar(tag: tag, from: &reader) }
-        try reader.beginNestedValue()
-        var open = true
-        defer { if open { reader.abandonNestedValues(1) } }
-        let shape = try decodeArrayShape(from: &reader)
-        var elements: [QueryValue] = []
-        elements.reserveCapacity(shape.count)
-        for index in 0..<shape.count {
-            let value: QueryValue
-            do throws(DatabaseWireError) {
-                let elementTag = try reader.readUInt8()
-                value = try decodeScalar(tag: elementTag, from: &reader)
-            } catch .invalidQueryValue(.incompatibleType) {
-                throw .invalidQueryValue(.elementTypeMismatch(index: UInt64(index)))
-            } catch let error { throw error }
-            guard QueryValueValidator.accepts(value, type: .sql(shape.type)) else {
-                throw .invalidQueryValue(.elementTypeMismatch(index: UInt64(index)))
+        var builder = QueryValueBuilder(admittedLimits: reader.queryValueConstructionLimits)
+        var frames: [CollectionFrame] = []
+        var completed: Int?
+        var open = 0
+        defer { reader.abandonNestedValues(open) }
+        while true {
+            if let child = completed {
+                completed = nil
+                guard var frame = frames.popLast() else {
+                    let value: QueryValue
+                    do throws(QueryValueError) { value = try builder.finish(root: child) }
+                    catch let error { throw .invalidQueryValue(error) }
+                    switch value {
+                    case .array(let array): try reader.registerQueryValueStorage(array.storageFootprint)
+                    case .composite(let composite): try reader.registerQueryValueStorage(composite.storageFootprint)
+                    default: break
+                    }
+                    return value
+                }
+                frame.children.append(child)
+                frames.append(frame)
             }
-            elements.append(value)
+            if let frame = frames.last, frame.children.count == frame.count {
+                _ = frames.popLast()
+                do throws(QueryValueError) {
+                    switch frame.descriptor {
+                    case .array(let type, let dimensions):
+                        completed = try builder.appendArray(elementType: type, dimensions: dimensions, elements: frame.children)
+                    case .composite(let type):
+                        completed = try builder.appendComposite(type: type, fields: frame.children)
+                    }
+                } catch let error { throw .invalidQueryValue(error) }
+                try reader.endNestedValue()
+                open -= 1
+                continue
+            }
+            let tag = try reader.readUInt8()
+            if tag == 4 || tag == 11 {
+                try reader.beginNestedValue()
+                open += 1
+                let descriptor: CollectionDescriptor
+                let count: Int
+                if tag == 4 {
+                    let shape = try decodeArrayShape(from: &reader)
+                    descriptor = .array(shape.type, shape.dimensions)
+                    count = shape.count
+                } else {
+                    guard case .composite(let type) = try QueryIRDataTypeWireCodec.decode(from: &reader) else {
+                        throw .invalidQueryValue(.incompatibleType)
+                    }
+                    count = try reader.readCount()
+                    guard count == type.columns.count else {
+                        throw .invalidQueryValue(.compositeFieldCountMismatch(expected: UInt64(type.columns.count), actual: UInt64(count)))
+                    }
+                    descriptor = .composite(type)
+                }
+                var frame = CollectionFrame(descriptor: descriptor, count: count)
+                frame.children.reserveCapacity(count)
+                frames.append(frame)
+            } else {
+                let scalar = try decodeScalar(tag: tag, from: &reader)
+                do throws(QueryValueError) { completed = try builder.append(scalar) }
+                catch let error { throw .invalidQueryValue(error) }
+            }
         }
-        let array: QueryArrayValue
-        do throws(QueryValueError) {
-            array = try QueryArrayValue(admittedElementType: shape.type, dimensions: shape.dimensions, elements: elements)
-        } catch let error { throw .invalidQueryValue(error) }
-        try reader.endNestedValue()
-        open = false
-        return .array(array)
     }
 
     static func validate(from reader: inout DatabaseWireReader, type: QueryColumnType? = nil,

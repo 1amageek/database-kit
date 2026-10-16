@@ -39,6 +39,8 @@ enum QueryIRExpressionWireEncoder {
         startingWith initialStep: EncodingStep,
         writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
+        let initialDepth = writer.currentNestingDepth
+        defer { writer.abandonNestedValues(writer.currentNestingDepth - initialDepth) }
         var encodingSteps: [EncodingStep] = [initialStep]
         while let encodingStep = encodingSteps.popLast() {
             try encode(encodingStep, writer: &writer, encodingSteps: &encodingSteps)
@@ -52,7 +54,7 @@ private extension QueryIRExpressionWireEncoder {
         case endNestedValue
         case literal(Literal)
         case select(SelectQuery)
-        case dataSource(DataSource)
+        case dataSource(DataSource, allowSet: Bool = false)
         case graphPattern(GraphPattern)
         case dataType(DataType)
         case string(String)
@@ -63,9 +65,15 @@ private extension QueryIRExpressionWireEncoder {
         case optionalInt(Int?)
         case optionalUInt64(UInt64?)
         case optionalAccessPath(AccessPath?)
-        case projection(Projection)
+        case projection([ProjectionItem])
         case projectionItemCursor([ProjectionItem], index: Int)
         case projectionItemTail(String?)
+        case quantifier(SelectQuantifier)
+        case pagination(QueryPagination)
+        case optionalCount(QueryCount?)
+        case count(QueryCount)
+        case optionalLimit(QueryLimit?)
+        case valuesCursor([[Expression]], index: Int)
         case optionalExpressionArray([Expression]?)
         case optionalSortKeyArray([SortKey]?)
         case optionalNamedSubqueryArray([NamedSubquery]?)
@@ -73,11 +81,10 @@ private extension QueryIRExpressionWireEncoder {
         case namedSubquery(NamedSubquery)
         case namedSubqueryTail(Materialization?)
         case sparqlDataset(SPARQLDataset)
-        case dataSourceArrayCursor([DataSource], index: Int)
         case join(JoinClause)
         case joinCondition(JoinCondition?)
         case graphTable(GraphTableSource)
-        case graphTableTail([GraphTableColumn]?, alias: String?)
+        case graphTableTail([GraphTableColumn]?)
         case optionalGraphTableColumns([GraphTableColumn]?)
         case graphTableColumnCursor([GraphTableColumn], index: Int)
         case graphTableColumnTail(String)
@@ -130,8 +137,8 @@ private extension QueryIRExpressionWireEncoder {
         case .select(let query):
             try beginSelect(query, writer: &writer, encodingSteps: &encodingSteps)
 
-        case .dataSource(let source):
-            try beginDataSource(source, writer: &writer, encodingSteps: &encodingSteps)
+        case .dataSource(let source, let allowSet):
+            try beginDataSource(source, allowSet: allowSet, writer: &writer, encodingSteps: &encodingSteps)
 
         case .graphPattern(let pattern):
             try beginGraphPattern(pattern, writer: &writer, encodingSteps: &encodingSteps)
@@ -175,11 +182,56 @@ private extension QueryIRExpressionWireEncoder {
             guard index < items.count else { return }
             let projectionItem = items[index]
             encodingSteps.append(.projectionItemCursor(items, index: index + 1))
-            encodingSteps.append(.projectionItemTail(projectionItem.alias))
-            encodingSteps.append(.expression(projectionItem.expression))
+            switch projectionItem {
+            case .expression(let expression, let alias):
+                writer.writeUInt8(0)
+                encodingSteps.append(.projectionItemTail(alias))
+                encodingSteps.append(.expression(expression))
+            case .wildcard(let qualifier):
+                writer.writeUInt8(1)
+                try QueryIRWireFormat.writeOptionalString(qualifier, into: &writer)
+            }
 
         case .projectionItemTail(let alias):
             try QueryIRWireFormat.writeOptionalString(alias, into: &writer)
+
+        case .quantifier(let value):
+            switch value {
+            case .all: writer.writeUInt8(0)
+            case .distinct: writer.writeUInt8(1)
+            case .distinctOn(let expressions):
+                guard !expressions.isEmpty else { throw .invalidQueryStructure(.emptyDistinctOn) }
+                writer.writeUInt8(2)
+                encodingSteps.append(.expressionArray(expressions))
+            }
+        case .pagination(let value):
+            encodingSteps.append(.optionalLimit(value.limit))
+            encodingSteps.append(.optionalCount(value.offset))
+        case .optionalCount(let value):
+            writer.writeBool(value != nil)
+            if let value { encodingSteps.append(.count(value)) }
+        case .count(let value):
+            switch value {
+            case .fixed(let count): writer.writeUInt8(0); writer.writeUInt64(count)
+            case .expression(let expression):
+                writer.writeUInt8(1)
+                encodingSteps.append(.expression(expression))
+            }
+        case .optionalLimit(let value):
+            writer.writeBool(value != nil)
+            if let value {
+                switch value {
+                case .all: writer.writeUInt8(0)
+                case .count(let count, let withTies):
+                    writer.writeUInt8(1)
+                    writer.writeBool(withTies)
+                    encodingSteps.append(.count(count))
+                }
+            }
+        case .valuesCursor(let rows, let index):
+            guard index < rows.count else { return }
+            encodingSteps.append(.valuesCursor(rows, index: index + 1))
+            encodingSteps.append(.expressionArray(rows[index]))
 
         case .optionalExpressionArray(let values):
             guard let values else {
@@ -232,11 +284,6 @@ private extension QueryIRExpressionWireEncoder {
         case .sparqlDataset(let dataset):
             try QueryIRWireFormat.encodeSPARQLDataset(dataset, into: &writer)
 
-        case .dataSourceArrayCursor(let sources, let index):
-            guard index < sources.count else { return }
-            encodingSteps.append(.dataSourceArrayCursor(sources, index: index + 1))
-            encodingSteps.append(.dataSource(sources[index]))
-
         case .join(let join):
             writer.writeUInt8(joinTypeTag(join.type))
             encodingSteps.append(.joinCondition(join.condition))
@@ -260,11 +307,10 @@ private extension QueryIRExpressionWireEncoder {
 
         case .graphTable(let source):
             try writer.writeString(source.graphName)
-            encodingSteps.append(.graphTableTail(source.columns, alias: source.alias))
+            encodingSteps.append(.graphTableTail(source.columns))
             encodingSteps.append(.matchPattern(source.matchPattern))
 
-        case .graphTableTail(let columns, let alias):
-            encodingSteps.append(.optionalString(alias))
+        case .graphTableTail(let columns):
             encodingSteps.append(.optionalGraphTableColumns(columns))
 
         case .optionalGraphTableColumns(let columns):
@@ -436,6 +482,23 @@ private extension QueryIRExpressionWireEncoder {
         encodingSteps.append(.endNestedValue)
 
         switch expression {
+        case .collate(let value, let collation):
+            writer.writeUInt8(56)
+            writer.writeUInt8(collation == .c ? 0 : 1)
+            encodingSteps.append(.expression(value))
+        case .arraySubquery(let query):
+            writer.writeUInt8(57)
+            encodingSteps.append(.select(query))
+        case .wholeRow(let source):
+            writer.writeUInt8(58)
+            try writer.writeString(source)
+        case .field(let value, let name):
+            writer.writeUInt8(59)
+            try writer.writeString(name)
+            encodingSteps.append(.expression(value))
+        case .fieldExpansion(let value):
+            writer.writeUInt8(60)
+            encodingSteps.append(.expression(value))
         case .array(let values):
             writer.writeUInt8(41)
             encodingSteps.append(.expressionArray(values))
@@ -754,47 +817,35 @@ private extension QueryIRExpressionWireEncoder {
         writer: inout DatabaseWireWriter,
         encodingSteps: inout [EncodingStep]
     ) throws(DatabaseWireError) {
+        try QueryIRWireFormat.validateSetEnvelope(query)
         try writer.beginNestedValue()
         encodingSteps.append(.endNestedValue)
         encodingSteps.append(.sparqlDataset(query.dataset))
         encodingSteps.append(.bool(query.reduced))
-        encodingSteps.append(.optionalNamedSubqueryArray(query.subqueries))
-        encodingSteps.append(.bool(query.distinct))
-        encodingSteps.append(.optionalUInt64(query.offset))
-        encodingSteps.append(.optionalUInt64(query.limit))
+        encodingSteps.append(.pagination(query.pagination))
         encodingSteps.append(.optionalSortKeyArray(query.orderBy))
+        encodingSteps.append(.quantifier(query.quantifier))
         encodingSteps.append(.optionalExpression(query.having))
         encodingSteps.append(.optionalExpressionArray(query.groupBy))
         encodingSteps.append(.optionalExpression(query.filter))
         encodingSteps.append(.optionalAccessPath(query.accessPath))
-        encodingSteps.append(.dataSource(query.source))
+        encodingSteps.append(.dataSource(query.source, allowSet: true))
         encodingSteps.append(.projection(query.projection))
+        encodingSteps.append(.optionalNamedSubqueryArray(query.subqueries))
     }
 
     static func beginProjection(
-        _ projection: Projection,
+        _ projection: [ProjectionItem],
         writer: inout DatabaseWireWriter,
         encodingSteps: inout [EncodingStep]
     ) throws(DatabaseWireError) {
-        switch projection {
-        case .all:
-            writer.writeUInt8(0)
-        case .allFrom(let source):
-            writer.writeUInt8(1)
-            try writer.writeString(source)
-        case .items(let items):
-            writer.writeUInt8(2)
-            try writer.writeCount(items.count)
-            encodingSteps.append(.projectionItemCursor(items, index: 0))
-        case .distinctItems(let items):
-            writer.writeUInt8(3)
-            try writer.writeCount(items.count)
-            encodingSteps.append(.projectionItemCursor(items, index: 0))
-        }
+        try writer.writeCount(projection.count)
+        encodingSteps.append(.projectionItemCursor(projection, index: 0))
     }
 
     static func beginDataSource(
         _ source: DataSource,
+        allowSet: Bool,
         writer: inout DatabaseWireWriter,
         encodingSteps: inout [EncodingStep]
     ) throws(DatabaseWireError) {
@@ -802,31 +853,36 @@ private extension QueryIRExpressionWireEncoder {
         encodingSteps.append(.endNestedValue)
         switch source {
         case .table(let table):
+            guard table.alias == nil else { throw .invalidQueryStructure(.sourceAliasInTableReference) }
             writer.writeUInt8(0)
             try QueryIRWireFormat.encodeTableRef(table, into: &writer)
         case .logical(let source):
             writer.writeUInt8(1)
             try writer.writeString(source.kindIdentifier)
             try writer.writeString(source.identifier)
-            try QueryIRWireFormat.writeOptionalString(source.alias, into: &writer)
-        case .subquery(let query, let alias):
-            writer.writeUInt8(2)
-            encodingSteps.append(.string(alias))
+        case .subquery(let query):
+            writer.writeUInt8(15)
             encodingSteps.append(.select(query))
         case .join(let join):
             writer.writeUInt8(3)
             encodingSteps.append(.join(join))
-        case .values(let rows, let columnNames):
-            writer.writeUInt8(4)
-            try QueryIRWireFormat.writeArray(rows, into: &writer) {
-                (row: [Literal], writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
-                try QueryIRWireFormat.writeArray(
-                    row,
-                    into: &writer,
-                    encode: QueryIRWireFormat.encodeLiteral
-                )
+        case .values(let rows):
+            writer.writeUInt8(14)
+            try writer.writeCount(rows.count)
+            let hasDirectExpansion = rows.contains { row in
+                row.contains { if case .fieldExpansion = $0 { return true }; return false }
             }
-            try QueryIRWireFormat.writeOptionalStrings(columnNames, into: &writer)
+            if !hasDirectExpansion, let first = rows.first {
+                for (index, row) in rows.enumerated() where row.count != first.count {
+                    throw .invalidQueryStructure(.invalidValuesRowArity(row: index, expected: first.count, actual: row.count))
+                }
+            }
+            encodingSteps.append(.valuesCursor(rows, index: 0))
+        case .aliased(let source, let name, let columns):
+            writer.writeUInt8(16)
+            try writer.writeString(name)
+            try QueryIRWireFormat.writeOptionalStrings(columns, into: &writer)
+            encodingSteps.append(.dataSource(source))
         case .graphTable(let source):
             writer.writeUInt8(5)
             encodingSteps.append(.graphTable(source))
@@ -842,16 +898,13 @@ private extension QueryIRExpressionWireEncoder {
             try QueryIRWireFormat.writeSPARQLIRI(endpoint, into: &writer)
             encodingSteps.append(.bool(silent))
             encodingSteps.append(.graphPattern(pattern))
-        case .union(let sources):
-            try enqueueDataSourceEncodingSteps(tag: 9, sources: sources, writer: &writer, encodingSteps: &encodingSteps)
-        case .unionAll(let sources):
-            try enqueueDataSourceEncodingSteps(tag: 10, sources: sources, writer: &writer, encodingSteps: &encodingSteps)
-        case .intersect(let sources):
-            try enqueueDataSourceEncodingSteps(tag: 11, sources: sources, writer: &writer, encodingSteps: &encodingSteps)
-        case .except(let lhs, let rhs):
-            writer.writeUInt8(12)
-            encodingSteps.append(.dataSource(rhs))
-            encodingSteps.append(.dataSource(lhs))
+        case .setOperation(let operation, let quantifier, let left, let right):
+            guard allowSet else { throw .invalidQueryStructure(.invalidSetQueryEnvelope) }
+            writer.writeUInt8(17)
+            writer.writeUInt8(operation == .union ? 0 : operation == .intersect ? 1 : 2)
+            writer.writeUInt8(quantifier == .all ? 0 : 1)
+            encodingSteps.append(.select(right))
+            encodingSteps.append(.select(left))
         #if DATABASE_KIT_MULTI_BASE
         case .base(let baseID, let source):
             writer.writeUInt8(13)
@@ -859,17 +912,6 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.dataSource(source))
         #endif
         }
-    }
-
-    static func enqueueDataSourceEncodingSteps(
-        tag: UInt8,
-        sources: [DataSource],
-        writer: inout DatabaseWireWriter,
-        encodingSteps: inout [EncodingStep]
-    ) throws(DatabaseWireError) {
-        writer.writeUInt8(tag)
-        try writer.writeCount(sources.count)
-        encodingSteps.append(.dataSourceArrayCursor(sources, index: 0))
     }
 
     static func beginPathElement(

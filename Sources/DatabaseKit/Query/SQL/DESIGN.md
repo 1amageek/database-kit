@@ -395,7 +395,13 @@ internal overhead and exact physical peak are not claimed by these counts. Pure
 payload-derived limits provide a checked allowance of twice the logical JSONB
 storage layout plus the retained envelope and UTF-8 content. This is a finite
 policy allowance, not a prediction of Swift Array capacity; builder finish rejects
-an actual retained owner exceeding that allowance before returning it. Pure no-budget model measurement derives its finite
+an actual retained owner exceeding that allowance before returning it. S08 applies
+the same checked twice-layout allowance to persisted scalar-element SQL arrays:
+the prospective decoded footprint reports value records, child indices,
+dimensions and the independent scalar type record without constructing the
+destination. Its minimumQueryValueStorageByteCount includes the corresponding
+flat value/type buffer containers. This preserves existing array persistence
+under the new structural owner; composite descriptors remain rejected. Pure no-budget model measurement derives its finite
 workspace from the already-owned structure; runtime admission remains the caller's
 responsibility. Primitive byte payloads and lexical JSON retain the same ByteString
 owner; measure records that retention separately from new destination allocations. Framework combines
@@ -1320,3 +1326,196 @@ similarly remain required S08 integration, not a fabricated QueryValue case.
 | Framework | C01–C11 exact reference outcomes, SQL NULL versus JSON null, lexical versus JSONB duplicate/numeric/Unicode distinctions, lower bounds, dimensional slices, mutation unchanged/error exits and SRF exact metadata; semantic equality/hash/group/order consistency. C12 exact/one-past input/output/scratch admission, cancellation/deadline, cleanup, retained views/rows and successful later operation. |
 | Model / FieldStorage / Wire consumers | Existing rich envelopes, declared element types, lower bounds, primitive distinctions, eager/lazy values and last-owner retention remain unchanged. Public result paths attach output leases before publication; standalone Kit validation is not proof of Framework admission. |
 | Stage gates | S07 direct scalar/cursor and supported public SQL paths; REQUIRED S08 ROW/composite invocation; REQUIRED S10 general SRF/FROM/LATERAL/ordinality composition; S18 final integrated/URL matrix. Deferred composition never removes F08–F10 from the fixed inventory. |
+
+### S08 frozen composite values and ownership
+
+This section is the planned intrinsic contract for S08 composite descriptors,
+values and their construction. It is not implementation or verification
+evidence. [Query](../DESIGN.md) owns relational QueryIR carriage; Framework's
+[QueryExecution](../../../../../database-framework/Sources/DatabaseEngine/QueryExecution/DESIGN.md)
+owns binding, SQL comparison, evaluation, work admission and result publication.
+[DatabaseWire](../../../DatabaseWire/DESIGN.md#s08-composite-value-and-descriptor-carriage)
+owns the bounded binary productions. These owners consume this value contract
+without copying its definition.
+
+#### Public value and descriptor contract
+
+| API | Frozen responsibility |
+|---|---|
+| `DataType.composite(QueryCompositeType)` | The sole composite descriptor. `QueryColumnType.sql(DataType)` remains the SQL declaration; no parallel composite case or descriptor is added to QueryColumnType. |
+| `QueryCompositeType.init(columns: [QueryColumn], limits: QueryValueLimits) throws(QueryValueError)` | Validate and flatten an ordered descriptor, including nested composite and array types. Columns retain consecutive one-based numbers, exact UTF-8 names, duplicate/empty names, selected types and nullability. Zero fields is valid. |
+| `QueryCompositeType.init(columns:limits:typeNodeCapacity:columnCapacity:) throws(QueryValueError)` | The same descriptor construction with two selected nonnegative logical ceilings, for runtime callers that must reserve type construction before invocation. |
+| `QueryCompositeType.constructionByteCount(typeNodeCapacity:columnCapacity:) throws(QueryValueError) -> UInt64` | Pure checked canonical type buffers, containers and bounded descriptor-import scratch for the selected ceilings. Shared type buffers have the same accounting when constructed by QueryValueBuilder. |
+| `QueryCompositeType.columns: QueryCompositeColumns` | Immutable, zero-based `RandomAccessCollection` of QueryColumn. A view retains the complete independent type owner. Subscript returns a column whose nested descriptor retains that owner. |
+| `QueryCompositeType.measure() throws(QueryValueError) -> QueryValueFootprint` | Descriptor logical node/edge/depth and complete retained type-owner footprint. This is descriptor accounting, not a value subtree measurement. |
+| `QueryValue.composite(QueryCompositeValue)` | A composite query value, distinct from primitive objects, primitive NULL and JSON objects. |
+| `QueryCompositeValue.init(type: QueryCompositeType, fields: [QueryValue], limits: QueryValueLimits) throws(QueryValueError)` | Validate exact arity, each field's selected type and field nullability, then import nested SQL collections into one flat value owner. |
+| `QueryCompositeValue.type: QueryCompositeType` / `fields: QueryValueElements` | Return descriptor and positional field views. Neither getter materializes an Array or serializes a value. |
+| `QueryArrayValue.elements: QueryValueElements` | Replace stored recursive QueryValue children with the same immutable, zero-based RandomAccessCollection used for composite fields. Existing array constructor arguments remain elementType, dimensions, elements and limits. |
+| `QueryArrayValue.dimensions: QueryArrayDimensions` | Immutable, zero-based RandomAccessCollection of QueryArrayDimension over the owner's dimension range. Repeated shape inspection and nested field access do not allocate a dimensions Array. Construction continues to accept an owned dimensions Array. |
+
+The public wrappers and views are Sendable values. Their initializers enforce
+intrinsic invariants; they acquire no runtime service, meter, lease or SQL
+context. Anonymous field naming belongs to binding, not these constructors.
+An explicit typed NULL parameter or result uses the existing primitive NULL
+with `.sql(.composite(type))`; no second NULL discriminator is introduced.
+A non-NULL composite containing only NULL fields remains a non-NULL value.
+SQL ROW null predicates and SQL equality/order remain Framework operations.
+
+Array element types may be composite. The existing prohibition on nested
+DataType.array elements, flat row-major cell order, canonical dimensionless
+empty array, six-dimension maximum, Int32 dimension validation and arbitrary
+valid lower bounds remain intact. A composite field may itself be an array or
+composite. Primitive values and JSON/JSONB remain their existing scalar leaves;
+this contract neither converts them into composite fields nor changes their
+intrinsic representation, lexical spelling or equality.
+
+#### Owner graph and lifetime
+
+```text
+QueryCompositeValue / QueryArrayValue / QueryValueElements
+    -> immutable QueryValueStorage
+        -> scalar payload owners
+        -> array/composite records -> child indices and dimension ranges
+        -> immutable QueryTypeStorage
+            -> scalar type records
+            -> array element indices
+            -> composite column ranges and field type indices
+QueryArrayDimensions -> QueryValueStorage
+QueryCompositeType / QueryCompositeColumns -> QueryTypeStorage
+```
+
+These are concrete internal owners, not new public conformance points. Value
+records store scalar-only payload alternatives and integer edges. They never
+store QueryValue.array/composite wrappers, collection views, another value
+storage or a reference to their own owner. Type records likewise store scalar
+type alternatives, column metadata and integer edges, never nested public
+DataType.composite wrappers or QueryColumn values. All structural edges refer
+to already constructed records. Type storage never retains value storage.
+The descriptor remains usable independently of payload lifetime and never
+keeps an entire result payload alive merely to retain column metadata.
+
+An imported nested array/composite is flattened into the destination records;
+retaining its external structural owner as a scalar shortcut is invalid.
+Existing immutable ByteString and JSONB leaf owners may be shared under their
+own contracts. Import copies structural records/indices once at the ownership
+boundary and retains leaf payloads; it does not copy their byte contents.
+Production construction and decoding append child indices directly instead
+of repeatedly importing completed parent subtrees.
+
+Wire and Kit share one package, so direct descriptor decoding uses the concrete
+package-access `QueryTypeBuilder` rather than another public API or SPI.
+`init(limits: QueryValueLimits)` creates it;
+`append(_ scalar: QueryColumnType) throws(QueryValueError) -> Int` accepts a
+primitive declaration or resolved SQL scalar;
+`appendArray(element: Int)` and
+`appendComposite(columns: [QueryTypeColumn])` append already-constructed type
+indices and return an Int, with the same typed failure contract. The
+package-access `QueryTypeColumn.init(number: UInt32, name: String, type: Int,
+isNullable: Bool)` supplies ordered metadata and a builder-local type index.
+`consuming finish(root: Int) throws(QueryValueError) -> DataType` freezes one
+SQL descriptor owner. Invalid indices, metadata or unresolved/nested-array
+element declarations fail before publication. Type edges may share immutable
+earlier nodes, but cannot point forward or to another owner. This seam appends
+decoder type nodes once; it does not rebuild each completed nested descriptor
+through QueryCompositeType's public factory. Standalone raw DataType carriage
+outside an admitted composite retains its existing representation contract.
+
+A child view retains its complete value/type owner after the original root is
+released. Access constructs only a small wrapper for the requested node, with
+no pointer escape and no owner-to-view back edge. Final-owner destruction
+releases flat buffers without recursively destroying nested SQL collections
+or descriptors. Representation equality and hashing traverse indices/views
+iteratively, including descriptor names, ordinals, types, nullability, array
+dimensions and positional fields. They do not invoke recursive synthesized
+witnesses across the new structural edges or implement SQL equality.
+
+#### Postorder construction and capacity seam
+
+| API | Frozen responsibility |
+|---|---|
+| `QueryValueBuilder.init(limits: QueryValueLimits)` | Pure bounded task-local construction using the existing QueryValueLimits. |
+| `QueryValueBuilder.init(limits:nodeCapacity:childIndexCapacity:dimensionCapacity:typeNodeCapacity:columnCapacity:) throws(QueryValueError)` | Select five nonnegative logical capacity ceilings and admit their checked storage sizes before initial reservations. The counts respectively own value records, positional child indices, QueryArrayDimension slots, type records and descriptor column slots. |
+| `QueryValueBuilder.append(_ value: QueryValue) throws(QueryValueError) -> Int` | Append a scalar or iteratively import an existing subtree. Return a builder-local record index; import never retains another SQL collection owner. |
+| `QueryValueBuilder.appendArray(elementType: DataType, dimensions: [QueryArrayDimension], elements: [Int]) throws(QueryValueError) -> Int` | Validate dimensions, element count and selected element types, then append one array record referring to already appended unparented child indices. |
+| `QueryValueBuilder.appendComposite(type: QueryCompositeType, fields: [Int]) throws(QueryValueError) -> Int` | Import descriptor metadata, validate exact arity/type/nullability and append one composite record over already appended unparented children. |
+| `QueryValueBuilder.finish(root: Int) consuming throws(QueryValueError) -> QueryValue` | Publish only the final root, with every earlier value record reachable exactly once. Scalar roots release builder buffers; collection roots freeze the flat owners. |
+| `QueryValueBuilder.constructionByteCount(nodeCapacity:childIndexCapacity:dimensionCapacity:typeNodeCapacity:columnCapacity:) throws(QueryValueError) -> UInt64` | Checked canonical buffer/container bytes for the selected five capacities, including per-record depth/parent scratch and bounded import/assembly scratch. This is a pure calculation and allocates no buffers. |
+| `QueryValueBuilder.constructionRetainedByteCount: UInt64` | Reconcile all observed buffer capacities, containers and live construction scratch; UTF-8 content and separately retained scalar leaf owners are reported separately below. |
+| `QueryCompositeType.storageFootprint` / `QueryCompositeValue.storageFootprint` / `QueryArrayValue.storageFootprint` | Return the immutable owner's observed capacities, canonical retained structural bytes, UTF-8 content count and retained scalar-leaf byte claims. The type-only report has no value records, child indices or dimensions. |
+
+The concrete reports are `QueryTypeStorageFootprint` and
+`QueryValueStorageFootprint`. The former exposes `typeNodeCapacity`,
+`columnCapacity`, `retainedStorageByteCount` and `utf8ByteCount`. The latter
+exposes `nodeCapacity`, `childIndexCapacity`, `dimensionCapacity`,
+`retainedStorageByteCount`, `utf8ByteCount`, `leafRetainedByteCount` and the
+independent `typeStorageFootprint`. A report counts its complete owner, even
+when obtained through a subtree view. Canonical bytes use checked container
+and observed-capacity times MemoryLayout stride accounting, not allocator/OS
+physical-size claims. String counts are UTF-8 content counts, not inferred
+String allocation capacities. Known ByteString retained capacities and JSONB
+storage footprints retain their existing meaning; unknown capacity fails.
+
+Five planned capacities bound logical append counts; extra capacity selected
+by Swift Array growth never raises them. Reconcile observed growth before
+publication. Intrinsic retained-output limits include value/type buffers,
+descriptor UTF-8 and all retained scalar leaves. Construction scratch remains
+separate from retained-output bytes. Descriptor logical counts and value
+logical counts are reported separately and admitted cumulatively by a root
+constructor/decoder, with residual budgets rather than fresh child limits.
+The existing value subtree counts do not multiply full-owner bytes per child
+view: logical traversal follows the selected subtree, while retained storage
+and leaf claims include everything kept alive by that complete owner.
+Externally supplied aliased owners remain conservatively charged; these APIs
+make no global physical deduplication claim.
+
+Framework selects capacities, reserves construction/output/retained-input
+claims before calling the pure constructor, reconciles observed reports and
+attaches the output lease before publication. Kit's prospective checks and
+reports do not themselves confer runtime work or memory authority. Framework
+uses a unique task-local builder and consumes finish; copying a Swift builder
+can incur COW allocations and is not a zero-copy runtime construction path.
+
+Invalid builder indices or already-parented children throw
+`QueryValueError.invalidBuilderReference(index: Int)`; failed or invalid finish
+throws `.invalidValueConstruction`. Exact composite arity and nonnullable NULL
+violations throw `.compositeFieldCountMismatch(expected: UInt64, actual: UInt64)`
+and `.nullCompositeField(index: UInt64)` respectively. Field type disagreement
+uses existing `.elementTypeMismatch(index:)`; invalid descriptors use
+`.incompatibleType` or existing `.invalidColumnNumber`. Arithmetic overflow,
+unknown retained capacity and resource failures retain their existing typed
+cases. Planned ceiling failures use resource names `queryPlannedNodeCapacity`,
+`queryPlannedChildIndexCapacity`, `queryPlannedDimensionCapacity`,
+`queryPlannedTypeNodeCapacity` and `queryPlannedColumnCapacity`, with required
+count as actual and selected count as maximum. Any failed mutation poisons
+that builder; it cannot subsequently publish a root. Failed construction
+releases scratch and partial owners without converting failure to NULL.
+
+#### Result-only boundary and evidence
+
+Composite descriptors and values, including arrays with a composite element
+or a composite reachable inside any descriptor, are result/parameter values
+only in S08. QueryFieldStorageAdapter, model-field/schema admission and default
+value validation reject such persistence descriptors explicitly with
+QueryValueError.invalidPersistenceDescriptor. No persisted envelope, custom
+type registry, DatabaseTypes alternative or storage migration is introduced.
+
+| ID | Required falsifiable evidence |
+|---|---|
+| S08-V01 | Ordered zero-field/nested descriptors, duplicate and exact-UTF-8 names, consecutive ordinals, SQL and primitive field declarations; invalid ordinals/unresolved types, wrong arity/type/nonnullable NULL fail before a value is published. Typed NULL parameter/result metadata survives; a non-NULL all-NULL composite remains distinct. |
+| S08-V02 | Nested ROW/array-of-composite/composite-with-array roundtrips preserve selected scalar types, arbitrary valid lower bounds, flat cell order, six-rank boundary and canonical empty arrays. Existing typed scalar arrays and JSONB scalar leaf behavior regress without conversion or synthetic values. |
+| S08-V03 | Exact/one-past value and descriptor node/edge/depth/retained limits, all five planned ceilings, negative capacities and arithmetic overflow fail before the associated growth/publication. Observed-capacity, UTF-8, retained leaf and construction-scratch reports reconcile independently. |
+| S08-V04 | Deep alternating array/composite values and descriptors compare, hash, traverse and release without recursive structural stack growth. A retained field/element/column view remains valid after root release and charges its complete owner's storage and sibling-retained payloads. Final view release frees all owned storage. |
+| S08-V05 | Invalid/repeated child IDs, poisoned builders, orphan records, invalid final root and failed import cannot publish success; scratch and partial-owner cleanup allow a subsequent independently constructed value. SQL collection storage retains neither a public child view nor an external structural owner. |
+| S08-V06 | Every model/schema/field-storage encode, decode and descriptor admission rejects direct/nested/array composite persistence explicitly. Existing scalar and rich persistence envelopes retain their prior behavior. No primitive object fallback is accepted. |
+| S08-V07 | Separate-consumer construction proves the public capacity/builder/view APIs without testable import, SPI, reflection or Foundation. Native behavioral tests and the exact ordinary-WASM/Embedded runtime harness execute descriptor, typed-NULL, nested value, bounds, quota, retained-view and failure cases; compile-only evidence is insufficient. |
+
+Portable toolchain/SDK identity and runtime completion requirements remain
+owned by the package harness contract; this section neither selects another
+baseline nor generalizes native evidence. SQL ROW comparison, descriptor
+naming, TO_JSON/TO_JSONB/ROW_TO_JSON integration and ARRAY(subquery) binding and
+execution require Framework's S08 behavioral evidence. In particular, the
+chosen PostgreSQL18.6 ARRAY(subquery) behavior preserves inner dimensions and
+lower bounds while adding outer lower bound one; that execution rule does not
+narrow the intrinsic carrier's representable bounds. General table functions
+remain at their existing S10 gate.

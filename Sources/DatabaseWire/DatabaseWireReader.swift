@@ -13,6 +13,7 @@ public struct DatabaseWireReader: Sendable {
     private var queryViewBytes: UInt64
     private var queryMaterializedUTF8Bytes: UInt64
     private var queryMaterializedJSONBBytes: UInt64
+    private var queryMaterializedCollectionBytes: UInt64
     public let limits: DatabaseWireLimits
 
     public init(_ bytes: [UInt8], limits: DatabaseWireLimits = .default) {
@@ -32,6 +33,7 @@ public struct DatabaseWireReader: Sendable {
         self.queryViewBytes = 0
         self.queryMaterializedUTF8Bytes = 0
         self.queryMaterializedJSONBBytes = 0
+        self.queryMaterializedCollectionBytes = 0
         self.limits = limits
     }
 
@@ -217,6 +219,7 @@ public struct DatabaseWireReader: Sendable {
         child.queryViewBytes = queryViewBytes
         child.queryMaterializedUTF8Bytes = queryMaterializedUTF8Bytes
         child.queryMaterializedJSONBBytes = queryMaterializedJSONBBytes
+        child.queryMaterializedCollectionBytes = queryMaterializedCollectionBytes
         let result = try decode(&child)
         try child.ensureFullyRead()
         decodedObjectCount = child.decodedObjectCount
@@ -224,6 +227,7 @@ public struct DatabaseWireReader: Sendable {
         queryViewBytes = child.queryViewBytes
         queryMaterializedUTF8Bytes = child.queryMaterializedUTF8Bytes
         queryMaterializedJSONBBytes = child.queryMaterializedJSONBBytes
+        queryMaterializedCollectionBytes = child.queryMaterializedCollectionBytes
         return result
     }
 
@@ -381,6 +385,20 @@ public struct DatabaseWireReader: Sendable {
 
     var queryValueLimits: QueryValueLimits { limits.queryValueLimits }
 
+    var queryValueConstructionLimits: QueryValueLimits {
+        QueryValueLimits(maximumRetainedBytes: UInt64(limits.maximumFrameBytes),
+            maximumTotalNodes: UInt64(limits.maximumObjectCount),
+            maximumNestingDepth: UInt64(max(0, limits.maximumNestingDepth - nestingDepth)),
+            maximumCollectionElements: UInt64(limits.maximumObjectCount))
+    }
+
+    var queryTypeConstructionLimits: QueryValueLimits {
+        QueryValueLimits(maximumRetainedBytes: UInt64(limits.maximumFrameBytes),
+            maximumTotalNodes: UInt64(limits.maximumObjectCount),
+            maximumNestingDepth: UInt64(max(0, limits.maximumNestingDepth - nestingDepth + 1)),
+            maximumCollectionElements: UInt64(limits.maximumObjectCount))
+    }
+
     mutating func admitQueryRootRetention() throws(DatabaseWireError) {
         guard !queryRootRetentionAdmitted else { return }
         try validateFrameSize()
@@ -430,6 +448,18 @@ public struct DatabaseWireReader: Sendable {
         guard !retained.overflow else { throw .byteCountOverflow }
         try Self.addQueryBytes(retained.partialValue, to: &queryMaterializedJSONBBytes,
                                maximum: UInt64(limits.maximumFrameBytes), resource: "jsonbRetainedBytes")
+    }
+
+    mutating func registerQueryTypeStorage(_ footprint: QueryTypeStorageFootprint) throws(DatabaseWireError) {
+        try Self.addQueryBytes(footprint.retainedStorageByteCount, to: &queryMaterializedCollectionBytes,
+            maximum: UInt64(limits.maximumFrameBytes), resource: "collectionRetainedBytes")
+    }
+
+    mutating func registerQueryValueStorage(_ footprint: QueryValueStorageFootprint) throws(DatabaseWireError) {
+        let bytes = footprint.retainedStorageByteCount.addingReportingOverflow(footprint.typeStorageFootprint.retainedStorageByteCount)
+        guard !bytes.overflow else { throw .byteCountOverflow }
+        try Self.addQueryBytes(bytes.partialValue, to: &queryMaterializedCollectionBytes,
+            maximum: UInt64(limits.maximumFrameBytes), resource: "collectionRetainedBytes")
     }
 
     mutating func registerQueryJSONFootprint(_ footprint: QueryValueFootprint) throws(DatabaseWireError) {

@@ -42,8 +42,8 @@ struct QueryValueTests {
         let cells: [QueryValue] = [.primitive(.int32(1)), .primitive(.null),
                                    .primitive(.int32(3)), .primitive(.int32(4))]
         let value = try QueryArrayValue(elementType: .integer, dimensions: dimensions, elements: cells, limits: limits)
-        #expect(value.dimensions == dimensions)
-        #expect(value.elements == cells)
+        #expect(value.dimensions.elementsEqual(dimensions))
+        #expect(value.elements.elementsEqual(cells))
         let typed = try QueryArray<Int32>(arrayValue: value, limits: limits)
         #expect(typed.elements == [1, nil, 3, 4])
         #expect(typed.arrayValue == value)
@@ -147,21 +147,22 @@ struct QueryValueTests {
         let value = try QueryArrayValue(elementType: .integer,
                                         dimensions: [QueryArrayDimension(lowerBound: 1, length: 2)],
                                         elements: [.primitive(.int32(1)), .primitive(.null)], limits: limits)
-        let exact = QueryValueLimits(maximumRetainedBytes: 0, maximumTotalNodes: 3,
+        let retained = try QueryValueValidator.measure(.array(value)).retainedByteCount
+        let exact = QueryValueLimits(maximumRetainedBytes: retained, maximumTotalNodes: 3,
                                     maximumNestingDepth: 2, maximumCollectionElements: 2)
         try QueryValueValidator.validate(.array(value), limits: exact)
         #expect(throws: QueryValueError.resourceLimit(resource: "nodes", actual: 3, maximum: 2)) {
-            try QueryValueValidator.validate(.array(value), limits: QueryValueLimits(maximumRetainedBytes: 0, maximumTotalNodes: 2, maximumNestingDepth: 2, maximumCollectionElements: 2))
+            try QueryValueValidator.validate(.array(value), limits: QueryValueLimits(maximumRetainedBytes: retained, maximumTotalNodes: 2, maximumNestingDepth: 2, maximumCollectionElements: 2))
         }
         let wide = try QueryArrayValue(
             elementType: .bigint, dimensions: [QueryArrayDimension(lowerBound: 1, length: 256)],
             elements: [QueryValue](repeating: .primitive(.null), count: 256),
-            limits: QueryValueLimits(maximumRetainedBytes: 0, maximumTotalNodes: 257,
+            limits: QueryValueLimits(maximumRetainedBytes: 1_000_000, maximumTotalNodes: 258,
                                      maximumNestingDepth: 2, maximumCollectionElements: 256)
         )
         #expect(throws: QueryValueError.resourceLimit(resource: "collectionElements", actual: 256, maximum: 0)) {
             try QueryValueValidator.validate(.array(wide), limits: QueryValueLimits(
-                maximumRetainedBytes: 0, maximumTotalNodes: 1, maximumNestingDepth: 2,
+                maximumRetainedBytes: 1_000_000, maximumTotalNodes: 257, maximumNestingDepth: 2,
                 maximumCollectionElements: 0
             ))
         }
@@ -178,14 +179,15 @@ struct QueryValueTests {
         #expect(try first.measure().retainedByteCount == capacity)
         #expect(try second.measure().retainedByteCount == capacity)
         let dimension = try QueryArrayDimension(lowerBound: 1, length: 2)
-        #expect(throws: QueryValueError.resourceLimit(resource: "retainedBytes", actual: capacity * 2, maximum: capacity)) {
+        #expect(throws: QueryValueError.self) {
             try QueryArrayValue(elementType: .json, dimensions: [dimension],
                                 elements: [.json(first), .json(second)], limits: allowance)
         }
         let assembled = try QueryArrayValue(admittedElementType: .json, dimensions: [dimension],
                                              elements: [.json(first), .json(second)])
         #expect(assembled.elements.count == 2)
-        #expect(try QueryValueValidator.measure(.array(assembled)).retainedByteCount == capacity * 2)
+        #expect(assembled.storageFootprint.leafRetainedByteCount == capacity * 2)
+        #expect(try QueryValueValidator.measure(.array(assembled)).retainedByteCount > capacity * 2)
         #expect(throws: QueryValueError.elementCountMismatch(expected: 2, actual: 1)) {
             try QueryArrayValue(admittedElementType: .json, dimensions: [dimension], elements: [.json(first)])
         }

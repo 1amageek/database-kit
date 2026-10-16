@@ -70,6 +70,7 @@ private extension QueryIRExpressionWireDecoder {
     enum SelectKind {
         case scalar
         case exists
+        case array
     }
 
     enum AggregateExpressionKind {
@@ -78,17 +79,6 @@ private extension QueryIRExpressionWireDecoder {
         case minimum
         case maximum
         case sample
-    }
-
-    enum ProjectionKind {
-        case items
-        case distinctItems
-    }
-
-    enum DataSourceCollectionKind {
-        case union
-        case unionAll
-        case intersect
     }
 
     enum GraphPatternBinaryKind {
@@ -109,16 +99,20 @@ private extension QueryIRExpressionWireDecoder {
     }
 
     struct SelectDecodingState {
-        let projection: Projection
+        let projection: [ProjectionItem]
         let source: DataSource
         let accessPath: AccessPath?
         var filter: Expression?
         var groupBy: [Expression]?
         var having: Expression?
         var orderBy: [SortKey]?
+        var quantifier: SelectQuantifier = .all
+        var offset: QueryCount?
+        var limit: QueryLimit?
+        var subqueries: [NamedSubquery]?
 
         init(
-            projection: Projection,
+            projection: [ProjectionItem],
             source: DataSource,
             accessPath: AccessPath?
         ) {
@@ -160,7 +154,7 @@ private extension QueryIRExpressionWireDecoder {
     enum DecodingStep {
         case expression
         case select
-        case dataSource
+        case dataSource(allowSet: Bool = false)
         case graphPattern
         case endNestedValue
         case assembleUnary(UnaryKind)
@@ -207,18 +201,21 @@ private extension QueryIRExpressionWireDecoder {
         case castTail
         case selectExpression(SelectKind)
         case selectExpressionFinish(SelectKind)
-        case selectAfterProjection
-        case selectAfterSource(Projection)
+        case selectAfterSubqueries(hasSubqueries: Bool)
+        case selectAfterProjection(subqueries: [NamedSubquery]?)
+        case selectAfterSource([ProjectionItem], subqueries: [NamedSubquery]?)
         case selectAdvance(SelectDecodingState, stage: Int)
         case selectStoreExpression(SelectDecodingState, SelectExpressionField, nextStage: Int)
         case selectStoreExpressionList(SelectDecodingState, SelectExpressionListField, nextStage: Int)
         case selectStoreSortKeys(SelectDecodingState, nextStage: Int)
-        case selectFinish(SelectDecodingState, limit: UInt64?, offset: UInt64?, distinct: Bool, hasSubqueries: Bool)
+        case selectStoreQuantifier(SelectDecodingState)
+        case selectStoreCount(SelectDecodingState, isLimit: Bool, withTies: Bool)
+        case selectFinish(SelectDecodingState)
         case projection
         case projectionItemCursor(CollectionCursor<ProjectionItem>)
         case projectionItemCursorAppend(CollectionCursor<ProjectionItem>)
         case projectionItemTail
-        case projectionFinish(ProjectionKind)
+        case projectionFinish
         case namedSubqueryCursor(CollectionCursor<NamedSubquery>)
         case namedSubqueryCursorAppend(CollectionCursor<NamedSubquery>)
         case namedSubquery
@@ -228,10 +225,14 @@ private extension QueryIRExpressionWireDecoder {
         case dataSourceJoinAfterRight(JoinType, DataSource)
         case dataSourceJoinCondition(JoinType, DataSource, DataSource)
         case dataSourceJoinOnFinish(JoinType, DataSource, DataSource)
-        case dataSourceCursor(CollectionCursor<DataSource>)
-        case dataSourceCursorAppend(CollectionCursor<DataSource>)
-        case dataSourceCollectionFinish(DataSourceCollectionKind)
-        case dataSourceExceptFinish
+        case valuesCursor(CollectionCursor<[Expression]>)
+        case valuesCursorAppend(CollectionCursor<[Expression]>)
+        case dataSourceAliasFinish(String, [String]?)
+        case dataSourceSetAfterLeft(SetOperator, SetQuantifier)
+        case dataSourceSetFinish(SetOperator, SetQuantifier, SelectQuery)
+        case collateFinish(SQLCollation)
+        case fieldFinish(String)
+        case fieldExpansionFinish
         case dataSourceGraphPatternFinish
         case dataSourceGraphTableFinish
         case dataSourceNamedGraphFinish(String)
@@ -289,7 +290,7 @@ private extension QueryIRExpressionWireDecoder {
         private var selectQueries: [SelectQuery] = []
         private var dataSources: [DataSource] = []
         private var graphPatterns: [GraphPattern] = []
-        private var projections: [Projection] = []
+        private var projections: [[ProjectionItem]] = []
         private var projectionItems: [ProjectionItem] = []
         private var namedSubqueries: [NamedSubquery] = []
         private var aggregateBindings: [AggregateBinding] = []
@@ -305,7 +306,6 @@ private extension QueryIRExpressionWireDecoder {
         private var sortKeyCollections: [[SortKey]] = []
         private var projectionItemCollections: [[ProjectionItem]] = []
         private var namedSubqueryCollections: [[NamedSubquery]] = []
-        private var dataSourceCollections: [[DataSource]] = []
         private var aggregateBindingCollections: [[AggregateBinding]] = []
         private var graphTableColumnCollections: [[GraphTableColumn]] = []
         private var pathPatternCollections: [[PathPattern]] = []
@@ -339,7 +339,7 @@ private extension QueryIRExpressionWireDecoder {
         mutating func decodeDataSource(
             from reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) -> DataSource {
-            try decodeTraversal(startingWith: .dataSource, reader: &reader)
+            try decodeTraversal(startingWith: .dataSource(), reader: &reader)
             guard dataSources.count == 1,
                   let result = dataSources.popLast() else {
                 throw .invalidQueryIRWireState
@@ -364,29 +364,35 @@ private extension QueryIRExpressionWireDecoder {
             startingWith initialStep: DecodingStep,
             reader: inout DatabaseWireReader
         ) throws(DatabaseWireError) {
+            let initialDepth = reader.currentNestingDepth
+            defer { reader.abandonNestedValues(reader.currentNestingDepth - initialDepth) }
             var decodingSteps: [DecodingStep] = [initialStep]
             while let decodingStep = decodingSteps.popLast() {
-                try decode(decodingStep, reader: &reader, decodingSteps: &decodingSteps)
+                // Child entry points must not retain the large assembly frame on the WASM stack.
+                switch consume decodingStep {
+                case .expression:
+                    try beginExpression(reader: &reader, decodingSteps: &decodingSteps)
+                case .select:
+                    try beginSelect(reader: &reader, decodingSteps: &decodingSteps)
+                case .dataSource(let allowSet):
+                    try beginDataSource(allowSet: allowSet, reader: &reader, decodingSteps: &decodingSteps)
+                case .graphPattern:
+                    try beginGraphPattern(reader: &reader, decodingSteps: &decodingSteps)
+                case let continuation:
+                    try decodeContinuation(continuation, reader: &reader, decodingSteps: &decodingSteps)
+                }
             }
         }
 
-        private mutating func decode(
+        @inline(never)
+        private mutating func decodeContinuation(
             _ decodingStep: consuming DecodingStep,
             reader: inout DatabaseWireReader,
             decodingSteps: inout [DecodingStep]
         ) throws(DatabaseWireError) {
             switch consume decodingStep {
-            case .expression:
-                try beginExpression(reader: &reader, decodingSteps: &decodingSteps)
-
-            case .select:
-                try beginSelect(reader: &reader, decodingSteps: &decodingSteps)
-
-            case .dataSource:
-                try beginDataSource(reader: &reader, decodingSteps: &decodingSteps)
-
-            case .graphPattern:
-                try beginGraphPattern(reader: &reader, decodingSteps: &decodingSteps)
+            case .expression, .select, .dataSource, .graphPattern:
+                throw .invalidQueryIRWireState
 
             case .endNestedValue:
                 try reader.endNestedValue()
@@ -708,29 +714,29 @@ private extension QueryIRExpressionWireDecoder {
                     expressions.append(.subquery(query))
                 case .exists:
                     expressions.append(.exists(query))
+                case .array:
+                    expressions.append(.arraySubquery(query))
                 }
 
-            case .selectAfterProjection:
-                let projection = try popProjection()
-                decodingSteps.append(.selectAfterSource(projection))
-                decodingSteps.append(.dataSource)
+            case .selectAfterSubqueries(let hasSubqueries):
+                let subqueries = hasSubqueries ? try popNamedSubqueryCollection() : nil
+                decodingSteps.append(.selectAfterProjection(subqueries: subqueries))
+                decodingSteps.append(.projection)
 
-            case .selectAfterSource(let projection):
+            case .selectAfterProjection(let subqueries):
+                let projection = try popProjection()
+                decodingSteps.append(.selectAfterSource(projection, subqueries: subqueries))
+                decodingSteps.append(.dataSource(allowSet: true))
+
+            case .selectAfterSource(let projection, let subqueries):
                 let source = try popDataSource()
                 let accessPath = try QueryIRWireFormat.readOptional(
                     from: &reader,
                     decode: QueryIRWireFormat.decodeAccessPath
                 )
-                decodingSteps.append(
-                    .selectAdvance(
-                        SelectDecodingState(
-                            projection: projection,
-                            source: source,
-                            accessPath: accessPath
-                        ),
-                        stage: 0
-                    )
-                )
+                var state = SelectDecodingState(projection: projection, source: source, accessPath: accessPath)
+                state.subqueries = subqueries
+                decodingSteps.append(.selectAdvance(state, stage: 0))
 
             case .selectAdvance(let state, let stage):
                 try advanceSelect(
@@ -762,30 +768,28 @@ private extension QueryIRExpressionWireDecoder {
                 state.orderBy = try popSortKeyCollection()
                 decodingSteps.append(.selectAdvance(state, stage: nextStage))
 
-            case .selectFinish(let state, let limit, let offset, let distinct, let hasSubqueries):
-                let subqueries: [NamedSubquery]?
-                if hasSubqueries {
-                    subqueries = try popNamedSubqueryCollection()
-                } else {
-                    subqueries = nil
-                }
-                selectQueries.append(
-                    SelectQuery(
-                        projection: state.projection,
-                        source: state.source,
-                        accessPath: state.accessPath,
-                        filter: state.filter,
-                        groupBy: state.groupBy,
-                        having: state.having,
-                        orderBy: state.orderBy,
-                        limit: limit,
-                        offset: offset,
-                        distinct: distinct,
-                        subqueries: subqueries,
-                        reduced: try reader.readBool(),
-                        dataset: try QueryIRWireFormat.decodeSPARQLDataset(from: &reader)
-                    )
+            case .selectStoreQuantifier(var state):
+                state.quantifier = .distinctOn(try popExpressionCollection())
+                decodingSteps.append(.selectAdvance(state, stage: 4))
+
+            case .selectStoreCount(var state, let isLimit, let withTies):
+                let count = QueryCount.expression(try popExpression())
+                if isLimit { state.limit = .count(count, withTies: withTies) }
+                else { state.offset = count }
+                decodingSteps.append(.selectAdvance(state, stage: isLimit ? 7 : 6))
+
+            case .selectFinish(let state):
+                let query = SelectQuery(
+                    projection: state.projection, source: state.source,
+                    accessPath: state.accessPath, filter: state.filter,
+                    groupBy: state.groupBy, having: state.having,
+                    orderBy: state.orderBy, quantifier: state.quantifier,
+                    pagination: QueryPagination(limit: state.limit, offset: state.offset),
+                    subqueries: state.subqueries, reduced: try reader.readBool(),
+                    dataset: try QueryIRWireFormat.decodeSPARQLDataset(from: &reader)
                 )
+                try QueryIRWireFormat.validateSetEnvelope(query)
+                selectQueries.append(query)
 
             case .projection:
                 try beginProjection(reader: &reader, decodingSteps: &decodingSteps)
@@ -796,8 +800,14 @@ private extension QueryIRExpressionWireDecoder {
                     return
                 }
                 decodingSteps.append(.projectionItemCursorAppend(cursor))
-                decodingSteps.append(.projectionItemTail)
-                decodingSteps.append(.expression)
+                switch try reader.readUInt8() {
+                case 0:
+                    decodingSteps.append(.projectionItemTail)
+                    decodingSteps.append(.expression)
+                case 1:
+                    projectionItems.append(.wildcard(qualifier: try QueryIRWireFormat.readOptionalString(from: &reader)))
+                case let tag: throw .invalidValueTag(tag)
+                }
 
             case .projectionItemCursorAppend(var cursor):
                 try cursor.append(try popProjectionItem())
@@ -811,12 +821,8 @@ private extension QueryIRExpressionWireDecoder {
                     )
                 )
 
-            case .projectionFinish(let kind):
-                let items = try popProjectionItemCollection()
-                switch kind {
-                case .items: projections.append(.items(items))
-                case .distinctItems: projections.append(.distinctItems(items))
-                }
+            case .projectionFinish:
+                projections.append(try popProjectionItemCollection())
 
             case .namedSubqueryCursor(let cursor):
                 guard cursor.remaining > 0 else {
@@ -856,17 +862,51 @@ private extension QueryIRExpressionWireDecoder {
                 )
 
             case .dataSourceSubqueryTail:
-                dataSources.append(
-                    .subquery(
-                        try popSelectQuery(),
-                        alias: try reader.readString()
-                    )
-                )
+                dataSources.append(.subquery(try popSelectQuery()))
+
+            case .dataSourceAliasFinish(let name, let columns):
+                dataSources.append(.aliased(try popDataSource(), name: name, columns: columns))
+
+            case .dataSourceSetAfterLeft(let operation, let quantifier):
+                decodingSteps.append(.dataSourceSetFinish(operation, quantifier, try popSelectQuery()))
+                decodingSteps.append(.select)
+
+            case .dataSourceSetFinish(let operation, let quantifier, let left):
+                dataSources.append(.setOperation(operator: operation, quantifier: quantifier, left: left, right: try popSelectQuery()))
+
+            case .valuesCursor(let cursor):
+                guard cursor.remaining > 0 else {
+                    // A later row can defer width validation to composite binding.
+                    let hasDirectExpansion = cursor.values.contains { row in
+                        row.contains { if case .fieldExpansion = $0 { return true }; return false }
+                    }
+                    if !hasDirectExpansion, let first = cursor.values.first {
+                        for (index, row) in cursor.values.enumerated() where row.count != first.count {
+                            throw .invalidQueryStructure(.invalidValuesRowArity(row: index, expected: first.count, actual: row.count))
+                        }
+                    }
+                    dataSources.append(.values(cursor.values))
+                    return
+                }
+                let count = try reader.readCount()
+                decodingSteps.append(.valuesCursorAppend(cursor))
+                decodingSteps.append(.expressionCursor(CollectionCursor(count: count)))
+
+            case .valuesCursorAppend(var cursor):
+                try cursor.append(try popExpressionCollection())
+                decodingSteps.append(.valuesCursor(cursor))
+
+            case .collateFinish(let collation):
+                expressions.append(.collate(try popExpression(), collation: collation))
+            case .fieldFinish(let name):
+                expressions.append(.field(try popExpression(), name: name))
+            case .fieldExpansionFinish:
+                expressions.append(.fieldExpansion(try popExpression()))
 
             case .dataSourceJoinAfterLeft(let type):
                 let left = try popDataSource()
                 decodingSteps.append(.dataSourceJoinAfterRight(type, left))
-                decodingSteps.append(.dataSource)
+                decodingSteps.append(.dataSource())
 
             case .dataSourceJoinAfterRight(let type, let left):
                 let right = try popDataSource()
@@ -911,31 +951,6 @@ private extension QueryIRExpressionWireDecoder {
                         )
                     )
                 )
-
-            case .dataSourceCursor(let cursor):
-                guard cursor.remaining > 0 else {
-                    dataSourceCollections.append(cursor.values)
-                    return
-                }
-                decodingSteps.append(.dataSourceCursorAppend(cursor))
-                decodingSteps.append(.dataSource)
-
-            case .dataSourceCursorAppend(var cursor):
-                try cursor.append(try popDataSource())
-                decodingSteps.append(.dataSourceCursor(cursor))
-
-            case .dataSourceCollectionFinish(let kind):
-                let sources = try popDataSourceCollection()
-                switch kind {
-                case .union: dataSources.append(.union(sources))
-                case .unionAll: dataSources.append(.unionAll(sources))
-                case .intersect: dataSources.append(.intersect(sources))
-                }
-
-            case .dataSourceExceptFinish:
-                let rhs = try popDataSource()
-                let lhs = try popDataSource()
-                dataSources.append(.except(lhs, rhs))
 
             case .dataSourceGraphPatternFinish:
                 dataSources.append(.graphPattern(try popGraphPattern()))
@@ -1125,8 +1140,7 @@ private extension QueryIRExpressionWireDecoder {
                     GraphTableSource(
                         graphName: graphName,
                         matchPattern: matchPattern,
-                        columns: columns,
-                        alias: try QueryIRWireFormat.readOptionalString(from: &reader)
+                        columns: columns
                     )
                 )
 
@@ -1286,8 +1300,11 @@ private extension QueryIRExpressionWireDecoder {
         ) throws(DatabaseWireError) {
             try reader.beginNestedValue()
             decodingSteps.append(.endNestedValue)
-            decodingSteps.append(.selectAfterProjection)
-            decodingSteps.append(.projection)
+            let hasSubqueries = try reader.readBool()
+            decodingSteps.append(.selectAfterSubqueries(hasSubqueries: hasSubqueries))
+            if hasSubqueries {
+                decodingSteps.append(.namedSubqueryCursor(CollectionCursor(count: try reader.readCount())))
+            }
         }
 
         private mutating func advanceSelect(
@@ -1296,76 +1313,70 @@ private extension QueryIRExpressionWireDecoder {
             reader: inout DatabaseWireReader,
             decodingSteps: inout [DecodingStep]
         ) throws(DatabaseWireError) {
+            var state = state
             switch stage {
-            case 0:
+            case 0, 2:
+                let next = stage + 1
                 guard try reader.readBool() else {
-                    decodingSteps.append(.selectAdvance(state, stage: 1))
-                    return
+                    decodingSteps.append(.selectAdvance(state, stage: next)); return
                 }
-                decodingSteps.append(
-                    .selectStoreExpression(state, .filter, nextStage: 1)
-                )
+                decodingSteps.append(.selectStoreExpression(state, stage == 0 ? .filter : .having, nextStage: next))
                 decodingSteps.append(.expression)
             case 1:
                 guard try reader.readBool() else {
-                    decodingSteps.append(.selectAdvance(state, stage: 2))
-                    return
+                    decodingSteps.append(.selectAdvance(state, stage: 2)); return
                 }
                 let count = try reader.readCount()
-                decodingSteps.append(
-                    .selectStoreExpressionList(
-                        state,
-                        .groupBy,
-                        nextStage: 2
-                    )
-                )
+                decodingSteps.append(.selectStoreExpressionList(state, .groupBy, nextStage: 2))
                 decodingSteps.append(.expressionCursor(CollectionCursor(count: count)))
-            case 2:
-                guard try reader.readBool() else {
-                    decodingSteps.append(.selectAdvance(state, stage: 3))
-                    return
-                }
-                decodingSteps.append(
-                    .selectStoreExpression(state, .having, nextStage: 3)
-                )
-                decodingSteps.append(.expression)
             case 3:
-                guard try reader.readBool() else {
-                    decodingSteps.append(.selectAdvance(state, stage: 4))
+                switch try reader.readUInt8() {
+                case 0: state.quantifier = .all
+                case 1: state.quantifier = .distinct
+                case 2:
+                    let count = try reader.readCount()
+                    guard count > 0 else { throw .invalidQueryStructure(.emptyDistinctOn) }
+                    decodingSteps.append(.selectStoreQuantifier(state))
+                    decodingSteps.append(.expressionCursor(CollectionCursor(count: count)))
                     return
+                case let tag: throw .invalidValueTag(tag)
+                }
+                decodingSteps.append(.selectAdvance(state, stage: 4))
+            case 4:
+                guard try reader.readBool() else {
+                    decodingSteps.append(.selectAdvance(state, stage: 5)); return
                 }
                 let count = try reader.readCount()
-                decodingSteps.append(
-                    .selectStoreSortKeys(
-                        state,
-                        nextStage: 4
-                    )
-                )
+                decodingSteps.append(.selectStoreSortKeys(state, nextStage: 5))
                 decodingSteps.append(.sortKeyCursor(CollectionCursor(count: count)))
-            case 4:
-                let limit = try QueryIRWireFormat.readOptionalUInt64(from: &reader)
-                let offset = try QueryIRWireFormat.readOptionalUInt64(from: &reader)
-                let distinct = try reader.readBool()
-                let hasSubqueries = try reader.readBool()
-                decodingSteps.append(
-                    .selectFinish(
-                        state,
-                        limit: limit,
-                        offset: offset,
-                        distinct: distinct,
-                        hasSubqueries: hasSubqueries
-                    )
-                )
-                if hasSubqueries {
-                    let subqueryCount = try reader.readCount()
-                    decodingSteps.append(
-                        .namedSubqueryCursor(
-                            CollectionCursor(count: subqueryCount)
-                        )
-                    )
+            case 5, 6:
+                let isLimit = stage == 6
+                guard try reader.readBool() else {
+                    decodingSteps.append(.selectAdvance(state, stage: stage + 1)); return
                 }
-            default:
-                throw .invalidQueryIRWireState
+                var withTies = false
+                if isLimit {
+                    switch try reader.readUInt8() {
+                    case 0:
+                        state.limit = .all
+                        decodingSteps.append(.selectAdvance(state, stage: 7)); return
+                    case 1: withTies = try reader.readBool()
+                    case let tag: throw .invalidValueTag(tag)
+                    }
+                }
+                switch try reader.readUInt8() {
+                case 0:
+                    let count = QueryCount.fixed(try reader.readUInt64())
+                    if isLimit { state.limit = .count(count, withTies: withTies) }
+                    else { state.offset = count }
+                    decodingSteps.append(.selectAdvance(state, stage: stage + 1))
+                case 1:
+                    decodingSteps.append(.selectStoreCount(state, isLimit: isLimit, withTies: withTies))
+                    decodingSteps.append(.expression)
+                case let tag: throw .invalidValueTag(tag)
+                }
+            case 7: decodingSteps.append(.selectFinish(state))
+            default: throw .invalidQueryIRWireState
             }
         }
 
@@ -1373,29 +1384,13 @@ private extension QueryIRExpressionWireDecoder {
             reader: inout DatabaseWireReader,
             decodingSteps: inout [DecodingStep]
         ) throws(DatabaseWireError) {
-            switch try reader.readUInt8() {
-            case 0:
-                projections.append(.all)
-            case 1:
-                projections.append(.allFrom(try reader.readString()))
-            case 2:
-                let count = try reader.readCount()
-                decodingSteps.append(.projectionFinish(.items))
-                decodingSteps.append(
-                    .projectionItemCursor(CollectionCursor(count: count))
-                )
-            case 3:
-                let count = try reader.readCount()
-                decodingSteps.append(.projectionFinish(.distinctItems))
-                decodingSteps.append(
-                    .projectionItemCursor(CollectionCursor(count: count))
-                )
-            case let tag:
-                throw .invalidValueTag(tag)
-            }
+            let count = try reader.readCount()
+            decodingSteps.append(.projectionFinish)
+            decodingSteps.append(.projectionItemCursor(CollectionCursor(count: count)))
         }
 
         private mutating func beginDataSource(
+            allowSet: Bool,
             reader: inout DatabaseWireReader,
             decodingSteps: inout [DecodingStep]
         ) throws(DatabaseWireError) {
@@ -1403,42 +1398,42 @@ private extension QueryIRExpressionWireDecoder {
             decodingSteps.append(.endNestedValue)
             switch try reader.readUInt8() {
             case 0:
-                dataSources.append(
-                    .table(try QueryIRWireFormat.decodeTableRef(from: &reader))
-                )
+                let table = try QueryIRWireFormat.decodeTableRef(from: &reader)
+                guard table.alias == nil else { throw .invalidQueryStructure(.sourceAliasInTableReference) }
+                dataSources.append(.table(table))
             case 1:
-                dataSources.append(
-                    .logical(
-                        LogicalSourceRef(
-                            kindIdentifier: try reader.readString(),
-                            identifier: try reader.readString(),
-                            alias: try QueryIRWireFormat.readOptionalString(from: &reader)
-                        )
-                    )
-                )
-            case 2:
+                dataSources.append(.logical(LogicalSourceRef(kindIdentifier: try reader.readString(), identifier: try reader.readString())))
+            case 15:
                 decodingSteps.append(.dataSourceSubqueryTail)
                 decodingSteps.append(.select)
             case 3:
                 let type = try decodeJoinType(reader: &reader)
                 decodingSteps.append(.dataSourceJoinAfterLeft(type))
-                decodingSteps.append(.dataSource)
-            case 4:
-                let rows = try QueryIRWireFormat.readArray(from: &reader) {
-                    (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> [Literal] in
-                    try QueryIRWireFormat.readArray(
-                        from: &reader,
-                        decode: QueryIRWireFormat.decodeLiteral
-                    )
+                decodingSteps.append(.dataSource())
+            case 14:
+                decodingSteps.append(.valuesCursor(CollectionCursor(count: try reader.readCount())))
+            case 16:
+                let name = try reader.readString()
+                let columns = try QueryIRWireFormat.readOptionalStrings(from: &reader)
+                decodingSteps.append(.dataSourceAliasFinish(name, columns))
+                decodingSteps.append(.dataSource())
+            case 17:
+                guard allowSet else { throw .invalidQueryStructure(.invalidSetQueryEnvelope) }
+                let operation: SetOperator
+                switch try reader.readUInt8() {
+                case 0: operation = .union
+                case 1: operation = .intersect
+                case 2: operation = .except
+                case let tag: throw .invalidValueTag(tag)
                 }
-                dataSources.append(
-                    .values(
-                        rows,
-                        columnNames: try QueryIRWireFormat.readOptionalStrings(
-                            from: &reader
-                        )
-                    )
-                )
+                let quantifier: SetQuantifier
+                switch try reader.readUInt8() {
+                case 0: quantifier = .all
+                case 1: quantifier = .distinct
+                case let tag: throw .invalidValueTag(tag)
+                }
+                decodingSteps.append(.dataSourceSetAfterLeft(operation, quantifier))
+                decodingSteps.append(.select)
             case 5:
                 decodingSteps.append(.dataSourceGraphTableFinish)
                 decodingSteps.append(.graphTable)
@@ -1453,48 +1448,16 @@ private extension QueryIRExpressionWireDecoder {
                 let endpoint = try QueryIRWireFormat.readSPARQLIRI(from: &reader)
                 decodingSteps.append(.dataSourceServiceFinish(endpoint))
                 decodingSteps.append(.graphPattern)
-            case 9:
-                try enqueueDataSourceCollectionDecodingSteps(
-                    .union,
-                    reader: &reader,
-                    decodingSteps: &decodingSteps
-                )
-            case 10:
-                try enqueueDataSourceCollectionDecodingSteps(
-                    .unionAll,
-                    reader: &reader,
-                    decodingSteps: &decodingSteps
-                )
-            case 11:
-                try enqueueDataSourceCollectionDecodingSteps(
-                    .intersect,
-                    reader: &reader,
-                    decodingSteps: &decodingSteps
-                )
-            case 12:
-                decodingSteps.append(.dataSourceExceptFinish)
-                decodingSteps.append(.dataSource)
-                decodingSteps.append(.dataSource)
             #if DATABASE_KIT_MULTI_BASE
             case 13:
                 decodingSteps.append(
                     .dataSourceBaseFinish(try Base.ID(from: &reader))
                 )
-                decodingSteps.append(.dataSource)
+                decodingSteps.append(.dataSource())
             #endif
             case let tag:
                 throw .invalidValueTag(tag)
             }
-        }
-
-        private func enqueueDataSourceCollectionDecodingSteps(
-            _ kind: DataSourceCollectionKind,
-            reader: inout DatabaseWireReader,
-            decodingSteps: inout [DecodingStep]
-        ) throws(DatabaseWireError) {
-            let count = try reader.readCount()
-            decodingSteps.append(.dataSourceCollectionFinish(kind))
-            decodingSteps.append(.dataSourceCursor(CollectionCursor(count: count)))
         }
 
         private mutating func beginGraphPattern(
@@ -1761,6 +1724,30 @@ private extension QueryIRExpressionWireDecoder {
                 decodingSteps.append(.assembleCollectionOperation(operation))
                 decodingSteps.append(.expression)
                 decodingSteps.append(.expression)
+            case 56:
+                let collation: SQLCollation
+                switch try reader.readUInt8() {
+                case 0: collation = .c
+                case 1: collation = .posix
+                case let tag: throw .invalidValueTag(tag)
+                }
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.collateFinish(collation))
+                decodingSteps.append(.expression)
+            case 57:
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.selectExpression(.array))
+            case 58:
+                expressions.append(.wholeRow(try reader.readString()))
+                try reader.endNestedValue()
+            case 59:
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.fieldFinish(try reader.readString()))
+                decodingSteps.append(.expression)
+            case 60:
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.fieldExpansionFinish)
+                decodingSteps.append(.expression)
             case 55:
                 let schema = try QueryIRWireFormat.readOptionalString(from: &reader)
                 let name = try reader.readString()
@@ -2016,11 +2003,6 @@ private extension QueryIRExpressionWireDecoder {
             return value
         }
 
-        private mutating func popDataSourceCollection(
-        ) throws(DatabaseWireError) -> [DataSource] {
-            try Self.popLast(from: &dataSourceCollections)
-        }
-
         private mutating func popGraphPattern() throws(DatabaseWireError) -> GraphPattern {
             guard let value = graphPatterns.popLast() else {
                 throw .invalidQueryIRWireState
@@ -2028,7 +2010,7 @@ private extension QueryIRExpressionWireDecoder {
             return value
         }
 
-        private mutating func popProjection() throws(DatabaseWireError) -> Projection {
+        private mutating func popProjection() throws(DatabaseWireError) -> [ProjectionItem] {
             guard let value = projections.popLast() else {
                 throw .invalidQueryIRWireState
             }
@@ -2157,7 +2139,6 @@ private extension QueryIRExpressionWireDecoder {
                   sortKeyCollections.isEmpty,
                   projectionItemCollections.isEmpty,
                   namedSubqueryCollections.isEmpty,
-                  dataSourceCollections.isEmpty,
                   aggregateBindingCollections.isEmpty,
                   graphTableColumnCollections.isEmpty,
                   pathPatternCollections.isEmpty,
