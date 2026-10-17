@@ -15,6 +15,7 @@ struct RelationalQueryWireTests {
             1, 0, 0, 0, 1, 0, // One unqualified wildcard.
             14, 1, 0, 0, 0, 0, 0, 0, 0, // One zero-column VALUES row.
             0, 0, 0, 0, // Access path, filter, grouping, having absent.
+            0, 0, 0, 0, // No named windows.
             0, 0, // ALL, no ordering.
             0, 0, // Offset and limit absent.
             0, 0, // Reduced and implicit dataset.
@@ -45,7 +46,7 @@ struct RelationalQueryWireTests {
         let query = SelectQuery(projection: [], source: .values([]), quantifier: .distinctOn([.wholeRow("r")]),
             pagination: QueryPagination(limit: .count(.fixed(UInt64.max), withTies: true), offset: .fixed(UInt64.max)))
         let golden: [UInt8] = [0, 0, 0, 0, 0, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0,
-            2, 1, 0, 0, 0, 58, 1, 0, 0, 0, 114, 0, 1, 0]
+            0, 0, 0, 0, 2, 1, 0, 0, 0, 58, 1, 0, 0, 0, 114, 0, 1, 0]
             + Array(repeating: 255, count: 8) + [1, 1, 1, 0]
             + Array(repeating: 255, count: 8) + [0, 0]
         #expect(try QueryIRWireFormat.encode(.select(query)) == ByteString(golden))
@@ -68,7 +69,7 @@ struct RelationalQueryWireTests {
                 let query = SelectQuery(projection: [.wildcard()], source: .setOperation(
                     operator: operation, quantifier: quantifier, left: identityQuery(), right: identityQuery()))
                 let expected = [UInt8(0), 0, 1, 0, 0, 0, 1, 0, 17, byte, quantifierByte]
-                    + identityBytes + identityBytes + Array(repeating: UInt8(0), count: 10)
+                    + identityBytes + identityBytes + Array(repeating: UInt8(0), count: 14)
                 #expect(try QueryIRWireFormat.encode(.select(query)) == ByteString(expected))
             }
         }
@@ -165,7 +166,8 @@ struct RelationalQueryWireTests {
         }
         #expect(ragged.currentNestingDepth == 0)
         var emptyDistinct = Array(try QueryIRWireFormat.encode(.select(identityQuery())))
-        emptyDistinct.replaceSubrange(21..<22, with: [2, 0, 0, 0, 0])
+        // The quantifier follows the four-byte named-window count at offsets 21...24.
+        emptyDistinct.replaceSubrange(25..<26, with: [2, 0, 0, 0, 0])
         #expect(throws: DatabaseWireError.invalidQueryStructure(.emptyDistinctOn)) {
             try QueryIRWireFormat.decode(ByteString(emptyDistinct))
         }

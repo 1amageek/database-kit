@@ -1519,3 +1519,33 @@ chosen PostgreSQL18.6 ARRAY(subquery) behavior preserves inner dimensions and
 lower bounds while adding outer lower bound one; that execution rule does not
 narrow the intrinsic carrier's representable bounds. General table functions
 remain at their existing S10 gate.
+
+### S09 declaration contract and proof obligations
+
+S09 implements Q11/Q14 and F11-F13 with Query-owned immutable grouping,
+aggregate and window models described by [Query](../DESIGN.md#s09-frozen-grouping-aggregate-and-window-declarations).
+SQL aggregate identity is a closed SQLAggregateFunction raw-name enum covering
+every F11/F12 inventory spelling. SQLWindowFunction similarly covers F13.
+SQLAggregateCall retains exact optional schema, ordered arguments, DISTINCT,
+internal ORDER BY, FILTER and optional WITHIN GROUP. Only recognized canonical
+lowercase terminal names enter these enums; unknown quoted names remain
+generic FunctionCall declarations. COUNT(*) has no argument; COUNT() is a
+syntax error. Generic aggregate declarations are normalized once by SQL binding.
+
+GROUPING has ordered expression arguments and an integer result with at most
+31 keys. ROLLUP/CUBE retain each composite key as an ordered expression array;
+GROUPING SETS retains nested grouping-element arrays, including empty sets and
+duplicates. Window references preserve named versus inline identity. Frames
+retain ROWS/RANGE/GROUPS, both offset-expression bounds and NO OTHERS/CURRENT
+ROW/GROUP/TIES. No runtime default frame is inserted by the model or codec.
+
+| Case | Required behavioral evidence |
+|---|---|
+| S09-K01 | Every grouping tree, aggregate modifier and named/inline window child participates in exact identity/hash, references, occurrence edges and parameter validation/binding; preserving SELECT copies retain all fields. |
+| S09-K02 | Closed aggregate/analytic names and exact schema metadata survive native/portable carriage; empty groups, nested sets, frame offsets, absent/present-empty modifiers remain distinguishable. |
+| S09-K03 | Shared structural count/depth/string/node budgets reject exact one-past nested and wide children without reset or width-proportional scheduling. |
+| S09-K04 | SPARQL rejects SQL aggregates, GROUPING, window calls, non-expression grouping and named WINDOW definitions with explicit typed failures while existing generic SPARQL aggregates retain behavior. |
+
+These declaration witnesses do not prove aggregate evaluation, SQLSTATE,
+statistical accuracy, peer/frame behavior or runtime resource cleanup; those
+contracts and their success/failure/boundary witnesses belong to Framework.

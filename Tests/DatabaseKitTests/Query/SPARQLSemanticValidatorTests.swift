@@ -560,7 +560,7 @@ struct SPARQLSemanticValidatorTests {
             .sum(.variable(Variable("value")), distinct: false)
         )
         let source: DataSource
-        let groupBy: [Expression]?
+        let groupBy: [GroupingElement]?
         switch context {
         case .filter:
             source = .graphPattern(.filter(.basic([]), aggregate))
@@ -572,7 +572,7 @@ struct SPARQLSemanticValidatorTests {
             groupBy = nil
         case .groupBy:
             source = .graphPattern(.basic([]))
-            groupBy = [aggregate]
+            groupBy = [.expression(aggregate)]
         case .aggregateOperand:
             Issue.record("Aggregate operand is covered by the nested test")
             return
@@ -615,7 +615,7 @@ struct SPARQLSemanticValidatorTests {
             SelectQuery(
                 projection: [.wildcard()],
                 source: .graphPattern(.basic([])),
-                groupBy: [.variable(Variable("key"))]
+                groupBy: [.expression(.variable(Variable("key")))]
             ),
             SelectQuery(
                 projection: [.wildcard()],
@@ -689,7 +689,7 @@ struct SPARQLSemanticValidatorTests {
                 ProjectionItem(.variable(Variable("notGrouped")))
             ],
             source: .graphPattern(.basic([])),
-            groupBy: [.variable(Variable("grouped"))]
+            groupBy: [.expression(.variable(Variable("grouped")))]
         )
 
         #expect(

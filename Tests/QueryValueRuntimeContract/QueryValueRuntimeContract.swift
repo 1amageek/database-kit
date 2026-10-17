@@ -31,7 +31,7 @@ struct QueryValueRuntimeContract {
         print("QUERY_VALUE_RUNTIME_BEGIN")
         do {
             try run()
-            print("QUERY_VALUE_RUNTIME_PASS cases=14")
+            print("QUERY_VALUE_RUNTIME_PASS cases=15")
         } catch {
             switch error {
             case .assertion(let code): print("QUERY_VALUE_RUNTIME_FAIL assertion=\(code)")
@@ -128,6 +128,65 @@ struct QueryValueRuntimeContract {
         pass("sql-composite-value-carriage")
         try sqlRelationalQueryCarriage()
         pass("sql-relational-query-carriage")
+        try sqlGroupingAggregateWindowCarriage()
+        pass("sql-grouping-aggregate-window-carriage")
+    }
+
+    private static func sqlGroupingAggregateWindowCarriage() throws(Failure) {
+        let parameter = Expression.parameter(.position(1))
+        let aggregate = SQLAggregateCall(function: .arrayAgg, arguments: [parameter], distinct: true,
+            orderBy: [SortKey(parameter)], filter: parameter, withinGroup: [], schema: "pg_catalog")
+        let spec = WindowSpecification(inheritedName: "base", partitionBy: [parameter], orderBy: [SortKey(parameter)],
+            frame: WindowFrame(mode: .groups, start: .preceding(parameter), end: .following(parameter), exclusion: .ties))
+        let query = SelectQuery(projection: [ProjectionItem(.aggregate(.sql(aggregate))), ProjectionItem(.grouping([parameter])),
+            ProjectionItem(.window(WindowCall(function: .analytic(.lag, arguments: [parameter]), reference: .specification(spec))))],
+            source: .values([[]]), groupBy: [.groupingSets([[], [.rollup([[parameter], [parameter, parameter]])], [.cube([[parameter]])]])],
+            windows: [NamedWindow(name: "named", specification: spec)])
+        let encoded = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(.select(query)) }
+        let decoded = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(encoded) }
+        try require(decoded == .select(query), code: 220)
+        try require(query.hashValue == query.replacing(windows: query.windows).hashValue, code: 221)
+        let bound: QueryStatement
+        do {
+            let binder = try QueryParameterBinder(parameters: [QueryParameter(position: 1, value: .primitive(.int64(7)))])
+            bound = try binder.bind(decoded)
+        } catch { throw .binding(error) }
+        guard case .select(let result) = bound,
+              case .expression(.aggregate(.sql(let restored)), _) = result.projection[0],
+              case .expression(.window(let call), _) = result.projection[2],
+              case .specification(let inline) = call.reference else { throw .assertion(222) }
+        try require(restored.arguments == [.int(7)] && restored.filter == .int(7) && restored.withinGroup == [], code: 223)
+        try require(inline.partitionBy == [.int(7)] && inline.frame?.start == .preceding(.int(7))
+            && inline.frame?.end == .following(.int(7)) && result.windows[0].specification == inline, code: 224)
+        var rejectedParameter = false
+        do { try QueryParameterBinder(parameters: []).validate(decoded) } catch {
+            guard error == .missingPosition(1) else { throw .binding(error) }
+            rejectedParameter = true
+        }
+        try require(rejectedParameter, code: 225)
+        let referenceSpec = WindowSpecification(partitionBy: [.col("c")], frame: WindowFrame(mode: .rows,
+            start: .preceding(.col("d")), end: .following(.col("e"))))
+        let column = Expression.window(WindowCall(function: .aggregate(SQLAggregateCall(function: .sum,
+            arguments: [.col("a")], filter: .col("b"))), reference: .specification(referenceSpec)))
+        try require(SelectQuery(projection: [ProjectionItem(column)], source: .values([[]])).referencedColumns == Set(["a", "b", "c", "d", "e"].map(ColumnRef.init)), code: 226)
+        var rejectedDepth = false
+        do { try QueryStructuralValidator.validate(query, limits: QueryStructuralLimits(maximumNestingDepth: 2)) } catch {
+            guard case .resourceLimitExceeded(resource: .nestingDepth, actual: _, maximum: 2) = error else { throw .structure(error) }
+            rejectedDepth = true
+        }
+        try require(rejectedDepth, code: 227)
+        var rejectedSPARQL = false
+        do { _ = try column.toSPARQL() } catch { rejectedSPARQL = true }
+        try require(rejectedSPARQL, code: 228)
+        for count in 0..<encoded.count {
+            var rejectedPrefix = false
+            do { _ = try QueryIRWireFormat.decode(encoded[0..<count]) } catch { rejectedPrefix = true }
+            try require(rejectedPrefix, code: 229)
+        }
+        var nested = GroupingElement.expression(.int(1))
+        var independent = GroupingElement.expression(.int(1))
+        for _ in 0..<48 { nested = .groupingSets([[nested]]); independent = .groupingSets([[independent]]) }
+        try require(nested == independent && nested.hashValue == independent.hashValue, code: 230)
     }
 
     private static func sqlCompositeValueCarriage() throws(Failure) {

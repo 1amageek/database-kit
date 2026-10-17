@@ -4,8 +4,9 @@ public struct SelectQuery: Sendable, Hashable {
     public let source: DataSource
     public let accessPath: AccessPath?
     public let filter: Expression?
-    public let groupBy: [Expression]?
+    public let groupBy: [GroupingElement]?
     public let having: Expression?
+    public let windows: [NamedWindow]
     public let orderBy: [SortKey]?
     public let quantifier: SelectQuantifier
     public let pagination: QueryPagination
@@ -18,8 +19,9 @@ public struct SelectQuery: Sendable, Hashable {
         source: DataSource,
         accessPath: AccessPath? = nil,
         filter: Expression? = nil,
-        groupBy: [Expression]? = nil,
+        groupBy: [GroupingElement]? = nil,
         having: Expression? = nil,
+        windows: [NamedWindow] = [],
         orderBy: [SortKey]? = nil,
         quantifier: SelectQuantifier = .all,
         pagination: QueryPagination = QueryPagination(),
@@ -33,6 +35,7 @@ public struct SelectQuery: Sendable, Hashable {
         self.filter = filter
         self.groupBy = groupBy
         self.having = having
+        self.windows = windows
         self.orderBy = orderBy
         self.quantifier = quantifier
         self.pagination = pagination
@@ -59,6 +62,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,
@@ -76,6 +80,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,
@@ -93,6 +98,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,
@@ -110,6 +116,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,
@@ -119,7 +126,7 @@ extension SelectQuery {
         )
     }
 
-    public func replacing(groupBy: [Expression]?) -> SelectQuery {
+    public func replacing(groupBy: [GroupingElement]?) -> SelectQuery {
         SelectQuery(
             projection: projection,
             source: source,
@@ -127,6 +134,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,
@@ -144,6 +152,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,
@@ -151,6 +160,13 @@ extension SelectQuery {
             reduced: reduced,
             dataset: dataset
         )
+    }
+
+    public func replacing(windows: [NamedWindow]) -> SelectQuery {
+        SelectQuery(projection: projection, source: source, accessPath: accessPath,
+            filter: filter, groupBy: groupBy, having: having, windows: windows,
+            orderBy: orderBy, quantifier: quantifier, pagination: pagination,
+            subqueries: subqueries, reduced: reduced, dataset: dataset)
     }
 
     public func replacing(orderBy: [SortKey]?) -> SelectQuery {
@@ -161,6 +177,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,
@@ -178,6 +195,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,
@@ -195,6 +213,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,
@@ -212,6 +231,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,
@@ -229,6 +249,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,
@@ -246,6 +267,7 @@ extension SelectQuery {
             filter: filter,
             groupBy: groupBy,
             having: having,
+            windows: windows,
             orderBy: orderBy,
             quantifier: quantifier,
             pagination: pagination,

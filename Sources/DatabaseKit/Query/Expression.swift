@@ -92,6 +92,7 @@ extension Variable: CustomStringConvertible {
 
 /// Aggregate function types
 public enum AggregateFunction: Sendable, Equatable, Hashable {
+    case sql(SQLAggregateCall)
     case count(Expression?, distinct: Bool)
     case sum(Expression, distinct: Bool)
     case avg(Expression, distinct: Bool)
@@ -103,6 +104,9 @@ public enum AggregateFunction: Sendable, Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         switch self {
+        case .sql(let call):
+            hasher.combine(8)
+            hasher.combine(call)
         case .count(let expr, let distinct):
             hasher.combine(0)
             hasher.combine(expr)
@@ -351,6 +355,12 @@ public indirect enum Expression: Sendable, Hashable {
 
     /// Aggregate function call
     case aggregate(AggregateFunction)
+
+    /// SQL GROUPING bit-mask arguments.
+    case grouping([Expression])
+
+    /// SQL window invocation.
+    case window(WindowCall)
 
     // MARK: - Scalar Functions
 

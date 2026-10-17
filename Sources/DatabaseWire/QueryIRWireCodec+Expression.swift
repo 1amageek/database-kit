@@ -19,77 +19,13 @@ extension QueryIRWireFormat {
         _ aggregate: AggregateFunction,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
-        switch aggregate {
-        case .count(let expression, let distinct):
-            writer.writeUInt8(0)
-            try writeOptional(expression, into: &writer, encode: encodeExpression)
-            writer.writeBool(distinct)
-        case .sum(let expression, let distinct):
-            writer.writeUInt8(1)
-            try encodeExpression(expression, into: &writer)
-            writer.writeBool(distinct)
-        case .avg(let expression, let distinct):
-            writer.writeUInt8(2)
-            try encodeExpression(expression, into: &writer)
-            writer.writeBool(distinct)
-        case .min(let expression):
-            writer.writeUInt8(3)
-            try encodeExpression(expression, into: &writer)
-        case .max(let expression):
-            writer.writeUInt8(4)
-            try encodeExpression(expression, into: &writer)
-        case .groupConcat(let expression, let separator, let distinct):
-            writer.writeUInt8(5)
-            try encodeExpression(expression, into: &writer)
-            try writeOptionalString(separator, into: &writer)
-            writer.writeBool(distinct)
-        case .sample(let expression):
-            writer.writeUInt8(6)
-            try encodeExpression(expression, into: &writer)
-        case .arrayAgg(let expression, let orderBy, let distinct):
-            writer.writeUInt8(7)
-            try encodeExpression(expression, into: &writer)
-            try writeOptional(orderBy, into: &writer) {
-                (keys: [SortKey], writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
-                try writeArray(keys, into: &writer, encode: encodeSortKey)
-            }
-            writer.writeBool(distinct)
-        }
+        try QueryIRExpressionWireEncoder.encode(aggregate, into: &writer)
     }
 
     static func decodeAggregate(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) -> AggregateFunction {
-        switch try reader.readUInt8() {
-        case 0:
-            return .count(
-                try readOptional(from: &reader, decode: decodeExpression),
-                distinct: try reader.readBool()
-            )
-        case 1:
-            return .sum(try decodeExpression(from: &reader), distinct: try reader.readBool())
-        case 2:
-            return .avg(try decodeExpression(from: &reader), distinct: try reader.readBool())
-        case 3: return .min(try decodeExpression(from: &reader))
-        case 4: return .max(try decodeExpression(from: &reader))
-        case 5:
-            return .groupConcat(
-                try decodeExpression(from: &reader),
-                separator: try readOptionalString(from: &reader),
-                distinct: try reader.readBool()
-            )
-        case 6: return .sample(try decodeExpression(from: &reader))
-        case 7:
-            return .arrayAgg(
-                try decodeExpression(from: &reader),
-                orderBy: try readOptional(from: &reader) {
-                    (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> [SortKey] in
-                    try readArray(from: &reader, decode: decodeSortKey)
-                },
-                distinct: try reader.readBool()
-            )
-        case let tag: throw .invalidValueTag(tag)
-        }
+        try QueryIRExpressionWireDecoder.decodeAggregate(from: &reader)
     }
 
     static func encodeSortKey(

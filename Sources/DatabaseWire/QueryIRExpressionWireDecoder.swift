@@ -10,6 +10,13 @@ enum QueryIRExpressionWireDecoder {
         return try traversal.decode(from: &reader)
     }
 
+    static func decodeAggregate(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> AggregateFunction {
+        var traversal = DecodingTraversal()
+        return try traversal.decodeAggregate(from: &reader)
+    }
+
     static func decodeSelect(
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) -> SelectQuery {
@@ -94,16 +101,13 @@ private extension QueryIRExpressionWireDecoder {
         case having
     }
 
-    enum SelectExpressionListField {
-        case groupBy
-    }
-
     struct SelectDecodingState {
         let projection: [ProjectionItem]
         let source: DataSource
         let accessPath: AccessPath?
         var filter: Expression?
-        var groupBy: [Expression]?
+        var groupBy: [GroupingElement]?
+        var windows: [NamedWindow] = []
         var having: Expression?
         var orderBy: [SortKey]?
         var quantifier: SelectQuantifier = .all
@@ -151,6 +155,16 @@ private extension QueryIRExpressionWireDecoder {
         case slice(hasLower: Bool, hasUpper: Bool)
     }
 
+    struct SQLAggregateDecodingState {
+        let function: SQLAggregateFunction
+        let schema: String?
+        var arguments: [Expression] = []
+        var distinct = false
+        var orderBy: [SortKey] = []
+        var filter: Expression?
+        var withinGroup: [SortKey]?
+    }
+
     enum DecodingStep {
         case expression
         case select
@@ -172,6 +186,35 @@ private extension QueryIRExpressionWireDecoder {
         case assembleList(ListKind)
         case inSubqueryTail
         case inSubqueryFinish(Expression)
+        case grouping
+        case groupingFinishExpression
+        case groupingUnits(CollectionCursor<[Expression]>, isCube: Bool)
+        case groupingUnitsAppend(CollectionCursor<[Expression]>, isCube: Bool)
+        case groupingSets(CollectionCursor<[GroupingElement]>)
+        case groupingSetsAppend(CollectionCursor<[GroupingElement]>)
+        case groupingCursor(CollectionCursor<GroupingElement>)
+        case groupingCursorAppend(CollectionCursor<GroupingElement>)
+        case groupingExpressionFinish
+        case sqlAggregate
+        case sqlAggregateAdvance(SQLAggregateDecodingState, stage: Int)
+        case sqlAggregateExpression(SQLAggregateDecodingState)
+        case sqlAggregateFinish(SQLAggregateDecodingState, hasWithinGroup: Bool)
+        case aggregateSQLFinish
+        case window
+        case windowAnalyticFinish(SQLWindowFunction)
+        case windowAggregateFinish
+        case windowReference(WindowFunction)
+        case windowFinish(WindowFunction)
+        case specification
+        case specificationAfterPartition(String?)
+        case specificationAfterOrder(String?, [Expression])
+        case specificationAfterStart(String?, [Expression], [SortKey], WindowFrameMode)
+        case specificationAfterEnd(String?, [Expression], [SortKey], WindowFrameMode, WindowFrameBound)
+        case windowBound
+        case windowBoundFinish(isFollowing: Bool)
+        case namedWindows(CollectionCursor<NamedWindow>)
+        case namedWindowsAppend(CollectionCursor<NamedWindow>, String)
+        case selectStoreWindows(SelectDecodingState)
         case aggregate
         case aggregateCountTail
         case aggregateExpressionTail(AggregateExpressionKind, readsDistinct: Bool)
@@ -206,7 +249,7 @@ private extension QueryIRExpressionWireDecoder {
         case selectAfterSource([ProjectionItem], subqueries: [NamedSubquery]?)
         case selectAdvance(SelectDecodingState, stage: Int)
         case selectStoreExpression(SelectDecodingState, SelectExpressionField, nextStage: Int)
-        case selectStoreExpressionList(SelectDecodingState, SelectExpressionListField, nextStage: Int)
+        case selectStoreGrouping(SelectDecodingState)
         case selectStoreSortKeys(SelectDecodingState, nextStage: Int)
         case selectStoreQuantifier(SelectDecodingState)
         case selectStoreCount(SelectDecodingState, isLimit: Bool, withTies: Bool)
@@ -285,6 +328,12 @@ private extension QueryIRExpressionWireDecoder {
     }
 
     struct DecodingTraversal {
+        private var groupings: [GroupingElement] = []
+        private var groupingCollections: [[GroupingElement]] = []
+        private var sqlAggregates: [SQLAggregateCall] = []
+        private var specifications: [WindowSpecification] = []
+        private var windowBounds: [WindowFrameBound] = []
+        private var namedWindowCollections: [[NamedWindow]] = []
         private var expressions: [Expression] = []
         private var sortKeys: [SortKey] = []
         private var selectQueries: [SelectQuery] = []
@@ -320,6 +369,15 @@ private extension QueryIRExpressionWireDecoder {
                   let result = expressions.popLast() else {
                 throw .invalidQueryIRWireState
             }
+            try ensureQueryStacksAreEmpty()
+            return result
+        }
+
+        mutating func decodeAggregate(
+            from reader: inout DatabaseWireReader
+        ) throws(DatabaseWireError) -> AggregateFunction {
+            try decodeTraversal(startingWith: .aggregate, reader: &reader)
+            guard case .aggregate(let result) = try popExpression() else { throw .invalidQueryIRWireState }
             try ensureQueryStacksAreEmpty()
             return result
         }
@@ -478,6 +536,177 @@ private extension QueryIRExpressionWireDecoder {
                 expressions.append(
                     .inSubquery(value, subquery: try popSelectQuery())
                 )
+
+            case .grouping:
+                try reader.beginNestedValue()
+                decodingSteps.append(.endNestedValue)
+                switch try reader.readUInt8() {
+                case 0:
+                    decodingSteps.append(.groupingFinishExpression)
+                    decodingSteps.append(.expression)
+                case 1:
+                    decodingSteps.append(.groupingUnits(CollectionCursor(count: try reader.readCount()), isCube: false))
+                case 2:
+                    decodingSteps.append(.groupingUnits(CollectionCursor(count: try reader.readCount()), isCube: true))
+                case 3:
+                    decodingSteps.append(.groupingSets(CollectionCursor(count: try reader.readCount())))
+                case let tag: throw .invalidValueTag(tag)
+                }
+            case .groupingFinishExpression:
+                groupings.append(.expression(try popExpression()))
+            case .groupingCursor(let cursor):
+                guard cursor.remaining > 0 else { groupingCollections.append(cursor.values); return }
+                decodingSteps.append(.groupingCursorAppend(cursor))
+                decodingSteps.append(.grouping)
+            case .groupingCursorAppend(var cursor):
+                try cursor.append(Self.popLast(from: &groupings))
+                decodingSteps.append(.groupingCursor(cursor))
+            case .groupingUnits(let cursor, let isCube):
+                guard cursor.remaining > 0 else {
+                    groupings.append(isCube ? .cube(cursor.values) : .rollup(cursor.values)); return
+                }
+                decodingSteps.append(.groupingUnitsAppend(cursor, isCube: isCube))
+                decodingSteps.append(.expressionCursor(CollectionCursor(count: try reader.readCount())))
+            case .groupingUnitsAppend(var cursor, let isCube):
+                try cursor.append(popExpressionCollection())
+                decodingSteps.append(.groupingUnits(cursor, isCube: isCube))
+            case .groupingSets(let cursor):
+                guard cursor.remaining > 0 else { groupings.append(.groupingSets(cursor.values)); return }
+                decodingSteps.append(.groupingSetsAppend(cursor))
+                decodingSteps.append(.groupingCursor(CollectionCursor(count: try reader.readCount())))
+            case .groupingSetsAppend(var cursor):
+                try cursor.append(Self.popLast(from: &groupingCollections))
+                decodingSteps.append(.groupingSets(cursor))
+            case .groupingExpressionFinish:
+                expressions.append(.grouping(try popExpressionCollection()))
+            case .sqlAggregate:
+                guard let function = SQLAggregateFunction(rawValue: try reader.readString()) else {
+                    throw .invalidQueryIRWireState
+                }
+                let schema = try QueryIRWireFormat.readOptionalString(from: &reader)
+                let call = SQLAggregateDecodingState(function: function, schema: schema)
+                decodingSteps.append(.sqlAggregateAdvance(call, stage: 0))
+                decodingSteps.append(.expressionCursor(CollectionCursor(count: try reader.readCount())))
+            case .sqlAggregateAdvance(var call, let stage):
+                switch stage {
+                case 0:
+                    call.arguments = try popExpressionCollection()
+                    call.distinct = try reader.readBool()
+                    decodingSteps.append(.sqlAggregateAdvance(call, stage: 1))
+                    decodingSteps.append(.sortKeyCursor(CollectionCursor(count: try reader.readCount())))
+                case 1:
+                    call.orderBy = try popSortKeyCollection()
+                    if try reader.readBool() {
+                        decodingSteps.append(.sqlAggregateExpression(call))
+                        decodingSteps.append(.expression)
+                    } else {
+                        decodingSteps.append(.sqlAggregateAdvance(call, stage: 2))
+                    }
+                case 2:
+                    let present = try reader.readBool()
+                    decodingSteps.append(.sqlAggregateFinish(call, hasWithinGroup: present))
+                    if present { decodingSteps.append(.sortKeyCursor(CollectionCursor(count: try reader.readCount()))) }
+                default: throw .invalidQueryIRWireState
+                }
+            case .sqlAggregateExpression(var call):
+                call.filter = try popExpression()
+                decodingSteps.append(.sqlAggregateAdvance(call, stage: 2))
+            case .sqlAggregateFinish(var call, let hasWithinGroup):
+                if hasWithinGroup { call.withinGroup = try popSortKeyCollection() }
+                sqlAggregates.append(SQLAggregateCall(function: call.function, arguments: call.arguments,
+                    distinct: call.distinct, orderBy: call.orderBy, filter: call.filter,
+                    withinGroup: call.withinGroup, schema: call.schema))
+            case .aggregateSQLFinish:
+                expressions.append(.aggregate(.sql(try Self.popLast(from: &sqlAggregates))))
+            case .window:
+                switch try reader.readUInt8() {
+                case 0:
+                    decodingSteps.append(.windowAggregateFinish)
+                    decodingSteps.append(.sqlAggregate)
+                case 1:
+                    guard let function = SQLWindowFunction(rawValue: try reader.readString()) else {
+                        throw .invalidQueryIRWireState
+                    }
+                    decodingSteps.append(.windowAnalyticFinish(function))
+                    decodingSteps.append(.expressionCursor(CollectionCursor(count: try reader.readCount())))
+                case let tag: throw .invalidValueTag(tag)
+                }
+            case .windowAggregateFinish:
+                decodingSteps.append(.windowReference(.aggregate(try Self.popLast(from: &sqlAggregates))))
+            case .windowAnalyticFinish(let function):
+                decodingSteps.append(.windowReference(.analytic(function, arguments: try popExpressionCollection())))
+            case .windowReference(let function):
+                switch try reader.readUInt8() {
+                case 0:
+                    expressions.append(.window(WindowCall(function: function, reference: .named(try reader.readString()))))
+                case 1:
+                    decodingSteps.append(.windowFinish(function))
+                    decodingSteps.append(.specification)
+                case let tag: throw .invalidValueTag(tag)
+                }
+            case .windowFinish(let function):
+                expressions.append(.window(WindowCall(function: function,
+                    reference: .specification(try Self.popLast(from: &specifications)))))
+            case .specification:
+                let inheritedName = try QueryIRWireFormat.readOptionalString(from: &reader)
+                decodingSteps.append(.specificationAfterPartition(inheritedName))
+                decodingSteps.append(.expressionCursor(CollectionCursor(count: try reader.readCount())))
+            case .specificationAfterPartition(let inheritedName):
+                let partition = try popExpressionCollection()
+                decodingSteps.append(.specificationAfterOrder(inheritedName, partition))
+                decodingSteps.append(.sortKeyCursor(CollectionCursor(count: try reader.readCount())))
+            case .specificationAfterOrder(let inheritedName, let partition):
+                let order = try popSortKeyCollection()
+                guard try reader.readBool() else {
+                    specifications.append(WindowSpecification(inheritedName: inheritedName, partitionBy: partition, orderBy: order)); return
+                }
+                let mode: WindowFrameMode
+                switch try reader.readUInt8() {
+                case 0: mode = .rows
+                case 1: mode = .range
+                case 2: mode = .groups
+                case let tag: throw .invalidValueTag(tag)
+                }
+                decodingSteps.append(.specificationAfterStart(inheritedName, partition, order, mode))
+                decodingSteps.append(.windowBound)
+            case .specificationAfterStart(let inheritedName, let partition, let order, let mode):
+                let start = try Self.popLast(from: &windowBounds)
+                decodingSteps.append(.specificationAfterEnd(inheritedName, partition, order, mode, start))
+                decodingSteps.append(.windowBound)
+            case .specificationAfterEnd(let inheritedName, let partition, let order, let mode, let start):
+                let end = try Self.popLast(from: &windowBounds)
+                let exclusion: WindowFrameExclusion
+                switch try reader.readUInt8() {
+                case 0: exclusion = .noOthers
+                case 1: exclusion = .currentRow
+                case 2: exclusion = .group
+                case 3: exclusion = .ties
+                case let tag: throw .invalidValueTag(tag)
+                }
+                specifications.append(WindowSpecification(inheritedName: inheritedName, partitionBy: partition, orderBy: order,
+                    frame: WindowFrame(mode: mode, start: start, end: end, exclusion: exclusion)))
+            case .windowBound:
+                switch try reader.readUInt8() {
+                case 0: windowBounds.append(.unboundedPreceding)
+                case 1:
+                    decodingSteps.append(.windowBoundFinish(isFollowing: false)); decodingSteps.append(.expression)
+                case 2: windowBounds.append(.currentRow)
+                case 3:
+                    decodingSteps.append(.windowBoundFinish(isFollowing: true)); decodingSteps.append(.expression)
+                case 4: windowBounds.append(.unboundedFollowing)
+                case let tag: throw .invalidValueTag(tag)
+                }
+            case .windowBoundFinish(let isFollowing):
+                let expression = try popExpression()
+                windowBounds.append(isFollowing ? .following(expression) : .preceding(expression))
+            case .namedWindows(let cursor):
+                guard cursor.remaining > 0 else { namedWindowCollections.append(cursor.values); return }
+                let name = try reader.readString()
+                decodingSteps.append(.namedWindowsAppend(cursor, name))
+                decodingSteps.append(.specification)
+            case .namedWindowsAppend(var cursor, let name):
+                try cursor.append(NamedWindow(name: name, specification: Self.popLast(from: &specifications)))
+                decodingSteps.append(.namedWindows(cursor))
 
             case .aggregate:
                 try beginAggregate(reader: &reader, decodingSteps: &decodingSteps)
@@ -755,13 +984,13 @@ private extension QueryIRExpressionWireDecoder {
                 }
                 decodingSteps.append(.selectAdvance(state, stage: nextStage))
 
-            case .selectStoreExpressionList(let state, let field, let nextStage):
-                var state = state
-                let values = try popExpressionCollection()
-                switch field {
-                case .groupBy: state.groupBy = values
-                }
-                decodingSteps.append(.selectAdvance(state, stage: nextStage))
+            case .selectStoreGrouping(var state):
+                state.groupBy = try Self.popLast(from: &groupingCollections)
+                decodingSteps.append(.selectAdvance(state, stage: 2))
+
+            case .selectStoreWindows(var state):
+                state.windows = try Self.popLast(from: &namedWindowCollections)
+                decodingSteps.append(.selectAdvance(state, stage: 3))
 
             case .selectStoreSortKeys(let state, let nextStage):
                 var state = state
@@ -782,7 +1011,7 @@ private extension QueryIRExpressionWireDecoder {
                 let query = SelectQuery(
                     projection: state.projection, source: state.source,
                     accessPath: state.accessPath, filter: state.filter,
-                    groupBy: state.groupBy, having: state.having,
+                    groupBy: state.groupBy, having: state.having, windows: state.windows,
                     orderBy: state.orderBy, quantifier: state.quantifier,
                     pagination: QueryPagination(limit: state.limit, offset: state.offset),
                     subqueries: state.subqueries, reduced: try reader.readBool(),
@@ -1316,7 +1545,7 @@ private extension QueryIRExpressionWireDecoder {
             var state = state
             switch stage {
             case 0, 2:
-                let next = stage + 1
+                let next = stage == 2 ? 8 : stage + 1
                 guard try reader.readBool() else {
                     decodingSteps.append(.selectAdvance(state, stage: next)); return
                 }
@@ -1327,8 +1556,8 @@ private extension QueryIRExpressionWireDecoder {
                     decodingSteps.append(.selectAdvance(state, stage: 2)); return
                 }
                 let count = try reader.readCount()
-                decodingSteps.append(.selectStoreExpressionList(state, .groupBy, nextStage: 2))
-                decodingSteps.append(.expressionCursor(CollectionCursor(count: count)))
+                decodingSteps.append(.selectStoreGrouping(state))
+                decodingSteps.append(.groupingCursor(CollectionCursor(count: count)))
             case 3:
                 switch try reader.readUInt8() {
                 case 0: state.quantifier = .all
@@ -1376,6 +1605,10 @@ private extension QueryIRExpressionWireDecoder {
                 case let tag: throw .invalidValueTag(tag)
                 }
             case 7: decodingSteps.append(.selectFinish(state))
+            case 8:
+                let count = try reader.readCount()
+                decodingSteps.append(.selectStoreWindows(state))
+                decodingSteps.append(.namedWindows(CollectionCursor(count: count)))
             default: throw .invalidQueryIRWireState
             }
         }
@@ -1744,6 +1977,13 @@ private extension QueryIRExpressionWireDecoder {
                 decodingSteps.append(.endNestedValue)
                 decodingSteps.append(.fieldFinish(try reader.readString()))
                 decodingSteps.append(.expression)
+            case 61:
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.groupingExpressionFinish)
+                decodingSteps.append(.expressionCursor(CollectionCursor(count: try reader.readCount())))
+            case 62:
+                decodingSteps.append(.endNestedValue)
+                decodingSteps.append(.window)
             case 60:
                 decodingSteps.append(.endNestedValue)
                 decodingSteps.append(.fieldExpansionFinish)
@@ -1904,6 +2144,9 @@ private extension QueryIRExpressionWireDecoder {
             decodingSteps: inout [DecodingStep]
         ) throws(DatabaseWireError) {
             switch try reader.readUInt8() {
+            case 8:
+                decodingSteps.append(.aggregateSQLFinish)
+                decodingSteps.append(.sqlAggregate)
             case 0:
                 guard try reader.readBool() else {
                     expressions.append(
@@ -2118,7 +2361,10 @@ private extension QueryIRExpressionWireDecoder {
         }
 
         private mutating func ensureQueryStacksAreEmpty() throws(DatabaseWireError) {
-            guard expressions.isEmpty,
+            guard groupings.isEmpty, groupingCollections.isEmpty,
+                  sqlAggregates.isEmpty, specifications.isEmpty, windowBounds.isEmpty,
+                  namedWindowCollections.isEmpty,
+                  expressions.isEmpty,
                   sortKeys.isEmpty,
                   selectQueries.isEmpty,
                   dataSources.isEmpty,

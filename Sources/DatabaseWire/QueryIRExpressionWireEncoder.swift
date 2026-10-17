@@ -15,6 +15,13 @@ enum QueryIRExpressionWireEncoder {
     }
 
     static func encode(
+        _ aggregate: AggregateFunction,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        try encodeTraversal(startingWith: .aggregate(aggregate), writer: &writer)
+    }
+
+    static func encode(
         _ query: SelectQuery,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
@@ -107,6 +114,20 @@ private extension QueryIRExpressionWireEncoder {
         case optionalExpression(Expression?)
         case casePairCursor([CaseWhenPair], index: Int)
         case caseWhenTail([CaseWhenPair], Expression?)
+        case grouping(GroupingElement)
+        case groupingArray([GroupingElement])
+        case groupingCursor([GroupingElement], Int)
+        case groupingSetsCursor([[GroupingElement]], Int)
+        case expressionUnitsCursor([[Expression]], Int)
+        case optionalGroupingArray([GroupingElement]?)
+        case sqlAggregate(SQLAggregateCall)
+        case sortKeyArray([SortKey])
+        case window(WindowCall)
+        case windowReference(WindowReference)
+        case specification(WindowSpecification)
+        case namedWindows([NamedWindow], Int)
+        case windowFrame(WindowFrame?)
+        case windowBound(WindowFrameBound)
         case aggregate(AggregateFunction)
         case arrayAggregateTail([SortKey]?, distinct: Bool)
         case sortKeyCursor([SortKey], index: Int)
@@ -439,6 +460,106 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.expression(pair.result))
             encodingSteps.append(.expression(pair.condition))
 
+        case .optionalGroupingArray(let values):
+            writer.writeBool(values != nil)
+            if let values { encodingSteps.append(.groupingArray(values)) }
+        case .groupingArray(let values):
+            try writer.writeCount(values.count)
+            encodingSteps.append(.groupingCursor(values, 0))
+        case .groupingCursor(let values, let index):
+            guard index < values.count else { return }
+            encodingSteps.append(.groupingCursor(values, index + 1))
+            encodingSteps.append(.grouping(values[index]))
+        case .groupingSetsCursor(let values, let index):
+            guard index < values.count else { return }
+            encodingSteps.append(.groupingSetsCursor(values, index + 1))
+            encodingSteps.append(.groupingArray(values[index]))
+        case .expressionUnitsCursor(let values, let index):
+            guard index < values.count else { return }
+            encodingSteps.append(.expressionUnitsCursor(values, index + 1))
+            encodingSteps.append(.expressionArray(values[index]))
+        case .grouping(let value):
+            try writer.beginNestedValue()
+            encodingSteps.append(.endNestedValue)
+            switch value {
+            case .expression(let expression):
+                writer.writeUInt8(0)
+                encodingSteps.append(.expression(expression))
+            case .rollup(let units), .cube(let units):
+                if case .rollup = value { writer.writeUInt8(1) } else { writer.writeUInt8(2) }
+                try writer.writeCount(units.count)
+                encodingSteps.append(.expressionUnitsCursor(units, 0))
+            case .groupingSets(let sets):
+                writer.writeUInt8(3)
+                try writer.writeCount(sets.count)
+                encodingSteps.append(.groupingSetsCursor(sets, 0))
+            }
+        case .sortKeyArray(let keys):
+            try writer.writeCount(keys.count)
+            encodingSteps.append(.sortKeyCursor(keys, index: 0))
+        case .sqlAggregate(let call):
+            try writer.writeString(call.function.rawValue)
+            try QueryIRWireFormat.writeOptionalString(call.schema, into: &writer)
+            encodingSteps.append(.optionalSortKeyArray(call.withinGroup))
+            encodingSteps.append(.optionalExpression(call.filter))
+            encodingSteps.append(.sortKeyArray(call.orderBy))
+            encodingSteps.append(.bool(call.distinct))
+            encodingSteps.append(.expressionArray(call.arguments))
+        case .window(let call):
+            encodingSteps.append(.windowReference(call.reference))
+            switch call.function {
+            case .aggregate(let aggregate):
+                writer.writeUInt8(0)
+                encodingSteps.append(.sqlAggregate(aggregate))
+            case .analytic(let function, let arguments):
+                writer.writeUInt8(1)
+                try writer.writeString(function.rawValue)
+                encodingSteps.append(.expressionArray(arguments))
+            }
+        case .windowReference(let reference):
+            switch reference {
+            case .named(let name): writer.writeUInt8(0); try writer.writeString(name)
+            case .specification(let value):
+                writer.writeUInt8(1)
+                encodingSteps.append(.specification(value))
+            }
+        case .specification(let value):
+            try QueryIRWireFormat.writeOptionalString(value.inheritedName, into: &writer)
+            encodingSteps.append(.windowFrame(value.frame))
+            encodingSteps.append(.sortKeyArray(value.orderBy))
+            encodingSteps.append(.expressionArray(value.partitionBy))
+        case .namedWindows(let values, let index):
+            if index == 0 { try writer.writeCount(values.count) }
+            guard index < values.count else { return }
+            try writer.writeString(values[index].name)
+            encodingSteps.append(.namedWindows(values, index + 1))
+            encodingSteps.append(.specification(values[index].specification))
+        case .windowFrame(let value):
+            writer.writeBool(value != nil)
+            guard let value else { return }
+            switch value.mode {
+            case .rows: writer.writeUInt8(0)
+            case .range: writer.writeUInt8(1)
+            case .groups: writer.writeUInt8(2)
+            }
+            let exclusion: UInt8
+            switch value.exclusion {
+            case .noOthers: exclusion = 0
+            case .currentRow: exclusion = 1
+            case .group: exclusion = 2
+            case .ties: exclusion = 3
+            }
+            encodingSteps.append(.byte(exclusion))
+            encodingSteps.append(.windowBound(value.end))
+            encodingSteps.append(.windowBound(value.start))
+        case .windowBound(let value):
+            switch value {
+            case .unboundedPreceding: writer.writeUInt8(0)
+            case .preceding(let expression): writer.writeUInt8(1); encodingSteps.append(.expression(expression))
+            case .currentRow: writer.writeUInt8(2)
+            case .following(let expression): writer.writeUInt8(3); encodingSteps.append(.expression(expression))
+            case .unboundedFollowing: writer.writeUInt8(4)
+            }
         case .aggregate(let aggregate):
             try beginAggregate(aggregate, writer: &writer, encodingSteps: &encodingSteps)
 
@@ -657,6 +778,12 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.select(query))
             encodingSteps.append(.expression(value))
 
+        case .grouping(let arguments):
+            writer.writeUInt8(61)
+            encodingSteps.append(.expressionArray(arguments))
+        case .window(let call):
+            writer.writeUInt8(62)
+            encodingSteps.append(.window(call))
         case .aggregate(let aggregate):
             writer.writeUInt8(27)
             encodingSteps.append(.aggregate(aggregate))
@@ -754,6 +881,9 @@ private extension QueryIRExpressionWireEncoder {
         encodingSteps: inout [EncodingStep]
     ) throws(DatabaseWireError) {
         switch aggregate {
+        case .sql(let call):
+            writer.writeUInt8(8)
+            encodingSteps.append(.sqlAggregate(call))
         case .count(let expression, let distinct):
             writer.writeUInt8(0)
             writer.writeBool(expression != nil)
@@ -825,8 +955,9 @@ private extension QueryIRExpressionWireEncoder {
         encodingSteps.append(.pagination(query.pagination))
         encodingSteps.append(.optionalSortKeyArray(query.orderBy))
         encodingSteps.append(.quantifier(query.quantifier))
+        encodingSteps.append(.namedWindows(query.windows, 0))
         encodingSteps.append(.optionalExpression(query.having))
-        encodingSteps.append(.optionalExpressionArray(query.groupBy))
+        encodingSteps.append(.optionalGroupingArray(query.groupBy))
         encodingSteps.append(.optionalExpression(query.filter))
         encodingSteps.append(.optionalAccessPath(query.accessPath))
         encodingSteps.append(.dataSource(query.source, allowSet: true))

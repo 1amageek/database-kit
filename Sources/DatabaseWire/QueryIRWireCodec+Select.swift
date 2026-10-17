@@ -52,7 +52,7 @@ extension QueryIRWireFormat {
         guard case .setOperation = query.source else { return }
         guard query.projection == [.wildcard()], query.quantifier == .all,
               query.filter == nil, query.groupBy == nil, query.having == nil,
-              query.accessPath == nil, !query.reduced, query.dataset == .implicit else {
+              query.accessPath == nil, query.windows.isEmpty, !query.reduced, query.dataset == .implicit else {
             throw .invalidQueryStructure(.invalidSetQueryEnvelope)
         }
     }

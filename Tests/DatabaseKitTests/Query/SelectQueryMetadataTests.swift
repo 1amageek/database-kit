@@ -18,7 +18,7 @@ struct SelectQueryMetadataTests {
         #expect(base.replacing(groupBy: []).hasAggregation == false)
         #expect(
             base.replacing(
-                groupBy: [.column(ColumnRef("calendarID"))]
+                groupBy: [.expression(.column(ColumnRef("calendarID")))]
             ).hasAggregation
         )
     }

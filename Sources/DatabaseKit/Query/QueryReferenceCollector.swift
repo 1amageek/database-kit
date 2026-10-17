@@ -19,6 +19,8 @@ struct QueryReferenceCollector {
     }
 
     private enum Step {
+        case grouping(GroupingElement), groupings([GroupingElement], Int), groupingSets([[GroupingElement]], Int)
+        case sqlAggregate(SQLAggregateCall), window(WindowCall), specification(WindowSpecification), windows([NamedWindow], Int)
         case query(SelectQuery), source(DataSource), expression(Expression), aggregate(AggregateFunction)
         case expressions([Expression], Int), projection([ProjectionItem], Int), sorts([SortKey], Int)
         case ctes([NamedSubquery], Int), rows([[Expression]], Int), pairs([CaseWhenPair], Int)
@@ -46,7 +48,8 @@ struct QueryReferenceCollector {
                 steps.append(.sorts(query.orderBy ?? [], 0))
                 if case .distinctOn(let keys) = query.quantifier { steps.append(.expressions(keys, 0)) }
                 expression(query.having)
-                steps.append(.expressions(query.groupBy ?? [], 0))
+                steps.append(.groupings(query.groupBy ?? [], 0))
+                steps.append(.windows(query.windows, 0))
                 expression(query.filter)
                 steps.append(.source(query.source))
                 steps.append(.projection(query.projection, 0))
@@ -73,6 +76,8 @@ struct QueryReferenceCollector {
                 }
             case .expression(let value):
                 switch value {
+                case .grouping(let expressions): steps.append(.expressions(expressions, 0))
+                case .window(let call): steps.append(.window(call))
                 case .column(let column): columns.insert(column)
                 case .variable(let variable), .bound(let variable): variables.insert(variable.name)
                 case .wholeRow, .literal, .currentValue, .parameter: break
@@ -112,9 +117,41 @@ struct QueryReferenceCollector {
                 }
             case .aggregate(let aggregate):
                 switch aggregate {
+                case .sql(let call): steps.append(.sqlAggregate(call))
                 case .count(let e, _): expression(e)
                 case .sum(let e, _), .avg(let e, _), .min(let e), .max(let e), .groupConcat(let e, _, _), .sample(let e): expression(e)
                 case .arrayAgg(let e, let order, _): steps.append(.sorts(order ?? [], 0)); expression(e)
+                }
+            case .grouping(let value):
+                switch value {
+                case .expression(let value): expression(value)
+                case .rollup(let rows), .cube(let rows): steps.append(.rows(rows, 0))
+                case .groupingSets(let sets): steps.append(.groupingSets(sets, 0))
+                }
+            case .groupings(let values, let index):
+                guard index < values.count else { continue }
+                steps.append(.groupings(values, index + 1)); steps.append(.grouping(values[index]))
+            case .groupingSets(let sets, let index):
+                guard index < sets.count else { continue }
+                steps.append(.groupingSets(sets, index + 1)); steps.append(.groupings(sets[index], 0))
+            case .sqlAggregate(let call):
+                steps.append(.sorts(call.withinGroup ?? [], 0)); expression(call.filter)
+                steps.append(.sorts(call.orderBy, 0)); steps.append(.expressions(call.arguments, 0))
+            case .window(let call):
+                if case .specification(let spec) = call.reference { steps.append(.specification(spec)) }
+                switch call.function {
+                case .aggregate(let call): steps.append(.sqlAggregate(call))
+                case .analytic(_, let arguments): steps.append(.expressions(arguments, 0))
+                }
+            case .windows(let values, let index):
+                guard index < values.count else { continue }
+                steps.append(.windows(values, index + 1)); steps.append(.specification(values[index].specification))
+            case .specification(let spec):
+                steps.append(.expressions(spec.partitionBy, 0)); steps.append(.sorts(spec.orderBy, 0))
+                if let frame = spec.frame {
+                    for bound in [frame.start, frame.end] {
+                        switch bound { case .preceding(let value), .following(let value): expression(value); default: break }
+                    }
                 }
             case .expressions(let values, let index):
                 guard index < values.count else { continue }

@@ -691,6 +691,7 @@ private struct QueryScopeState {
         if let offset = query.pagination.offset {
             guard case .fixed = offset else { throw .unsupportedSQLExpression }
         }
+        guard query.windows.isEmpty else { throw .unsupportedSQLExpression }
         try SPARQLSemanticValidator.validateDataset(query.dataset)
         try validate(
             query.source,
@@ -701,7 +702,8 @@ private struct QueryScopeState {
             try validate(filter, context: .filter)
         }
         if let groupBy = query.groupBy {
-            for expression in groupBy {
+            for element in groupBy {
+                guard case .expression(let expression) = element else { throw .unsupportedSQLExpression }
                 try validate(expression, context: .groupBy)
             }
         }
@@ -724,7 +726,10 @@ private struct QueryScopeState {
             .scope(of: query.source).visibleVariables
             .union(inputVisibleVariables)
         let groupVisibleVariables = Set(
-            (query.groupBy ?? []).compactMap(directVariable)
+            (query.groupBy ?? []).compactMap { element in
+                guard case .expression(let expression) = element else { return nil as String? }
+                return directVariable(expression)
+            }
         )
         try validate(
             query.projection,
@@ -1060,6 +1065,7 @@ private struct QueryScopeState {
         _ aggregate: AggregateFunction
     ) throws(SPARQLSemanticValidationError) {
         switch aggregate {
+        case .sql: throw .unsupportedSQLExpression
         case .count(let expression, _):
             if let expression {
                 try validate(expression, context: .aggregateOperand)
@@ -1086,7 +1092,7 @@ private struct QueryScopeState {
         context: SPARQLExpressionSemanticContext
     ) throws(SPARQLSemanticValidationError) {
         switch expression {
-        case .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
+        case .grouping, .window, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
             throw .unsupportedSQLExpression
         // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
         // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.
@@ -1339,7 +1345,7 @@ private struct QueryScopeState {
             return expressions
         case .triple(let subject, let predicate, let object):
             return [subject, predicate, object]
-        case .aggregate, .subquery, .exists, .arraySubquery, .wholeRow, .literal, .currentValue, .column, .variable,
+        case .grouping, .window, .aggregate, .subquery, .exists, .arraySubquery, .wholeRow, .literal, .currentValue, .column, .variable,
              .bound, .parameter:
             return []
         }

@@ -235,10 +235,10 @@ summary_number() {
 
 case "$TEST_TRAITS" in
   "")
-    default_expected_test_count=939
+    default_expected_test_count=953
     ;;
   "MultiBase")
-    default_expected_test_count=954
+    default_expected_test_count=968
     ;;
   *)
     echo "error: DATABASE_KIT_TEST_TRAITS must be empty or MultiBase" >&2

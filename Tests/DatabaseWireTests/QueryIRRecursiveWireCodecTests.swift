@@ -366,7 +366,7 @@ struct QueryIRRecursiveWireCodecTests {
                         right: setQuery(unionAllSources, quantifier: .all))
                 )),
                 filter: .caseWhen(cases: [], elseResult: nil),
-                groupBy: arguments,
+                groupBy: arguments.map(GroupingElement.expression),
                 having: .coalesce(arguments),
                 orderBy: orderBy,
                 subqueries: subqueries

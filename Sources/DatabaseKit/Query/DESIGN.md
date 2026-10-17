@@ -814,3 +814,63 @@ Composition; Server admission/dispatch; Client/CLI/Cloudflare or other package
 callers present in the dependency graph. Migrate source before deleting old
 cases, and verify the replacement path before removing its obsolete tests.
 Affected upper designs must consume this contract before implementation.
+
+### S09 frozen grouping, aggregate and window declarations
+
+Query owns the immutable SQL-S09 carriage and child identity. The canonical
+SELECT groupBy is `[GroupingElement]?`; its indirect alternatives are
+expression(Expression), rollup([[Expression]]), cube([[Expression]]) and
+groupingSets([[GroupingElement]]). No parallel flat grouping list is retained.
+SelectQuery also owns `windows: [NamedWindow]`, defaulting to an empty array.
+Every preserving copy retains grouping shape and window definitions.
+
+AggregateFunction.sql(SQLAggregateCall) carries one closed SQL aggregate
+function plus ordered arguments, DISTINCT, internal ORDER BY, optional FILTER,
+optional WITHIN GROUP and exact optional schema. Existing aggregate cases
+remain generic/SPARQL declarations; SQL binding normalizes them once before
+selecting the SQL execution path. Expression.grouping([Expression]) and
+Expression.window(WindowCall) have explicit SQL language applicability.
+
+WindowCall owns a WindowFunction (aggregate or analytic) and WindowReference
+(named or specification). WindowSpecification owns inheritedName, partitionBy,
+orderBy and optional frame. WindowFrame owns mode, start, end and exclusion;
+bound offsets remain Expression children. NamedWindow owns its exact name and
+specification. The exact frozen spellings and initializer layout are recorded
+in the task's kit-api-contract.json; this section owns their semantics.
+
+```mermaid
+flowchart LR
+  Select[SelectQuery] --> Group[GroupingElement tree]
+  Select --> Named[NamedWindow]
+  Expr[Expression] --> Aggregate[SQLAggregateCall]
+  Expr --> Call[WindowCall]
+  Call --> Spec[WindowSpecification]
+  Named --> Spec
+  Spec --> Frame[WindowFrame]
+  Group --> Expr
+  Aggregate --> Expr
+  Frame --> Expr
+```
+
+All edges participate in iterative declaration equality/hash, reference and
+parameter traversal, structural resource admission, occurrence identity and
+Wire encoding/decoding. Grouping components, nested sets, filter, aggregate
+ordering, named-window partitions/order and both frame offsets retain distinct
+semantic occurrence roles. Arrays are visited by retained cursors, not flattened
+into width-proportional work stacks. Metadata, counts and prospective builder
+capacity are admitted before growth. No platform-dependent mutable state,
+registry, execution handle or capability is added to these values.
+
+SPARQL accepts only expression grouping elements and rejects SQL aggregate,
+GROUPING, window calls and named WINDOW definitions explicitly. SQL binders and
+executors own context, nesting, type/coercion, default frame, peers and resource
+semantics; successful carriage does not imply executable SQL. Native and exact
+ordinary/Embedded WASM witnesses must check every child, preserving copies,
+identity, bound parameters and typed invalid/truncated/over-limit rejection.
+
+S09's measured ordinary-WASM validator path keeps the iterative ledger driver
+separate from declaration scheduling and value validation phases. Non-inlined
+phase calls release unrelated case temporaries before value measurement; they
+retain one ledger and one explicit continuation stack. The default SDK stack
+size is unchanged. Runtime validation must demonstrate the actual fixed-stack
+path, with generated prologue evidence for any stack-frame repair.

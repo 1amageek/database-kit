@@ -697,13 +697,14 @@ nested-value scope; no stored field is omitted from canonical encoding:
 | 3 | DataSource. |
 | 4 | Optional AccessPath using its existing production. |
 | 5 | Optional filter Expression. |
-| 6 | Optional groupBy Expression array. |
+| 6 | Optional groupBy GroupingElement array (S09). |
 | 7 | Optional having Expression. |
-| 8 | SelectQuantifier. |
-| 9 | Optional SortKey array, each retaining Expression, direction byte (0 ascending, 1 descending), optional NULL order byte (0 first, 1 last). |
-| 10 | QueryPagination. |
-| 11 | Bool reduced. |
-| 12 | Existing SPARQLDataset production. |
+| 8 | NamedWindow array (S09). |
+| 9 | SelectQuantifier. |
+| 10 | Optional SortKey array, each retaining Expression, direction byte (0 ascending, 1 descending), optional NULL order byte (0 first, 1 last). |
+| 11 | QueryPagination. |
+| 12 | Bool reduced. |
+| 13 | Existing SPARQLDataset production. |
 
 | Production | Discriminator and exact remaining payload |
 |---|---|
@@ -821,3 +822,47 @@ Canonical continuation fingerprints change with the complete new encoding;
 their consumers cannot omit a quantifier, alias, nested modifier or pagination
 expression to preserve a historical fingerprint. Semantic compatibility or
 language admission is never inferred from a successful representation roundtrip.
+
+### S09 canonical grouping, aggregate and window carriage
+
+S09 replaces the SELECT grouping field with optional GroupingElement array
+and inserts the bounded NamedWindow array immediately after HAVING, before
+SelectQuantifier. Standard v3 and MultiBase v5 use this same grammar, with no
+version alias or historical-layout decoder. Query owns shape and meaning in
+[its S09 contract](../DatabaseKit/Query/DESIGN.md#s09-frozen-grouping-aggregate-and-window-declarations).
+
+| Production | Exact ordered payload |
+|---|---|
+| GroupingElement | UInt8 0 expression + Expression; 1 rollup / 2 cube + array of expression arrays; 3 groupingSets + array of GroupingElement arrays. |
+| AggregateFunction.sql | Aggregate tag8 + SQLAggregateCall. Existing generic tags0...7 remain unchanged. |
+| SQLAggregateCall | Canonical function raw-name String; optional schema String; Expression array arguments; Bool distinct; SortKey array orderBy; optional Expression filter; optional SortKey array withinGroup. |
+| Expression.grouping | Expression tag61 + Expression array. |
+| Expression.window | Expression tag62 + WindowCall. |
+| WindowCall | WindowFunction then WindowReference. Function tag0 + SQLAggregateCall; tag1 + canonical analytic raw-name String + Expression array arguments. Reference tag0 + name String; tag1 + WindowSpecification. |
+| NamedWindow | Name String then WindowSpecification. |
+| WindowSpecification | Optional inheritedName String; Expression array partitionBy; SortKey array orderBy; optional WindowFrame. |
+| WindowFrame | Mode byte 0 rows / 1 range / 2 groups; start bound; end bound; exclusion byte 0 noOthers / 1 currentRow / 2 group / 3 ties. |
+| WindowFrameBound | Byte0 unboundedPreceding; 1 preceding + Expression; 2 currentRow; 3 following + Expression; 4 unboundedFollowing. |
+
+Nil grouping and a present grouping list containing an empty grouping set have
+different bytes. Composite ROLLUP/CUBE units, empty grouping units, duplicate
+grouping sets and source order are preserved. A named OVER reference differs
+from an inline specification that inherits that name. An absent frame differs
+from every explicit frame, including its exclusion. No encoder infers SQL
+defaults or normalizes any of these declarations.
+
+All arrays, strings, optional values and strict Booleans use existing bounded
+productions. Every recursive child enters the shared iterative SCC, including
+nested grouping sets and frame offsets. Cursors keep one active collection
+frame; no recursive side codec or preflattened expression list is permitted.
+Counts, metadata and assembly capacity share the enclosing ledger. Native
+materialized, measured/streaming and helper paths encode identical bytes.
+Unknown names/tags, malformed Booleans/UTF-8, truncation, trailing bytes and
+limits fail with typed Wire errors before publication or sink emission.
+
+| Case | Required falsifiable evidence |
+|---|---|
+| S09-W01 | Exact deterministic SELECT/group/aggregate/window bytes and owned/streaming parity in standard/MultiBase, preserving order and nil versus present-empty metadata. |
+| S09-W02 | Every expression-bearing child round-trips through the shared iterative encoder/decoder, including nested grouping sets, aggregate FILTER/order and both window offsets. |
+| S09-W03 | Every truncated prefix, unknown name/tag, invalid Bool, trailing input and one-past structural budget rejects explicitly without a repaired or partial success. |
+| S09-W04 | Native and exact ordinary/Embedded runtime lanes execute carriage, identity, parameter and bounded failure witnesses; compilation alone is insufficient. |

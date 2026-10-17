@@ -27,6 +27,14 @@ enum ExpressionIdentity {
     static func hash(_ query: SelectQuery, into hasher: inout Hasher) { hash(Cursor(.select(query)), into: &hasher) }
     static func hash(_ source: DataSource, into hasher: inout Hasher) { hash(Cursor(.source(source)), into: &hasher) }
 
+    static func areEqual(_ lhs: GroupingElement, _ rhs: GroupingElement) -> Bool {
+        equal(Cursor(.grouping(lhs)), Cursor(.grouping(rhs)))
+    }
+
+    static func hash(_ value: GroupingElement, into hasher: inout Hasher) {
+        hash(Cursor(.grouping(value)), into: &hasher)
+    }
+
     private static func equal(_ lhs: Cursor, _ rhs: Cursor) -> Bool {
         var left = lhs
         var right = rhs
@@ -130,6 +138,11 @@ enum ExpressionIdentity {
         case pairs([CaseWhenPair], index: Int)
         case sortKeys([SortKey], index: Int)
         case aggregate(AggregateFunction)
+        case sqlAggregate(SQLAggregateCall)
+        case grouping(GroupingElement), groupings([GroupingElement], Int)
+        case groupingSets([[GroupingElement]], Int)
+        case windows([NamedWindow], Int), window(WindowCall), specification(WindowSpecification)
+        case frame(WindowFrame), bound(WindowFrameBound)
         case token(Token)
     }
 
@@ -154,8 +167,10 @@ enum ExpressionIdentity {
                     steps.append(.count(query.pagination.offset))
                     steps.append(.optionalSorts(query.orderBy))
                     steps.append(.quantifier(query.quantifier))
+                    steps.append(.windows(query.windows, 0)); steps.append(.token(.count(query.windows.count)))
                     steps.append(.optionalExpression(query.having))
-                    steps.append(.optionalExpressions(query.groupBy))
+                    if let groups = query.groupBy { steps.append(.groupings(groups, 0)); steps.append(.token(.count(groups.count))) }
+                    steps.append(.token(.bool(query.groupBy != nil)))
                     steps.append(.optionalExpression(query.filter))
                     steps.append(.access(query.accessPath))
                     steps.append(.source(query.source))
@@ -302,6 +317,53 @@ enum ExpressionIdentity {
                     steps.append(.token(.nulls(key.nulls)))
                     steps.append(.token(.direction(key.direction)))
                     steps.append(.expression(key.expression))
+                case .grouping(let value):
+                    switch value {
+                    case .expression(let expression): steps.append(.expression(expression)); return .kind(0)
+                    case .rollup(let rows): steps.append(.rows(rows, 0)); steps.append(.token(.count(rows.count))); return .kind(1)
+                    case .cube(let rows): steps.append(.rows(rows, 0)); steps.append(.token(.count(rows.count))); return .kind(2)
+                    case .groupingSets(let sets): steps.append(.groupingSets(sets, 0)); steps.append(.token(.count(sets.count))); return .kind(3)
+                    }
+                case .groupings(let values, let index):
+                    guard index < values.count else { continue }
+                    steps.append(.groupings(values, index + 1)); steps.append(.grouping(values[index]))
+                case .groupingSets(let sets, let index):
+                    guard index < sets.count else { continue }
+                    steps.append(.groupingSets(sets, index + 1)); steps.append(.groupings(sets[index], 0)); return .count(sets[index].count)
+                case .sqlAggregate(let call):
+                    steps.append(.optionalSorts(call.withinGroup)); steps.append(.optionalExpression(call.filter))
+                    steps.append(.sortKeys(call.orderBy, index: 0)); steps.append(.token(.count(call.orderBy.count)))
+                    steps.append(.token(.bool(call.distinct))); list(call.arguments)
+                    steps.append(.token(optionalName(call.schema))); return nameToken(call.function.rawValue)
+                case .windows(let windows, let index):
+                    guard index < windows.count else { continue }
+                    steps.append(.windows(windows, index + 1)); steps.append(.specification(windows[index].specification))
+                    return nameToken(windows[index].name)
+                case .window(let call):
+                    switch call.reference {
+                    case .named(let name): steps.append(.token(nameToken(name))); steps.append(.token(.kind(0)))
+                    case .specification(let spec): steps.append(.specification(spec)); steps.append(.token(.kind(1)))
+                    }
+                    switch call.function {
+                    case .aggregate(let aggregate): steps.append(.sqlAggregate(aggregate)); return .kind(0)
+                    case .analytic(let function, let arguments): list(arguments); steps.append(.token(nameToken(function.rawValue))); return .kind(1)
+                    }
+                case .specification(let spec):
+                    if let frame = spec.frame { steps.append(.frame(frame)) }
+                    steps.append(.token(.bool(spec.frame != nil)))
+                    steps.append(.sortKeys(spec.orderBy, index: 0)); steps.append(.token(.count(spec.orderBy.count)))
+                    list(spec.partitionBy); return optionalName(spec.inheritedName)
+                case .frame(let frame):
+                    steps.append(.token(nameToken(frame.exclusion.rawValue))); steps.append(.bound(frame.end)); steps.append(.bound(frame.start))
+                    return nameToken(frame.mode.rawValue)
+                case .bound(let bound):
+                    switch bound {
+                    case .unboundedPreceding: return .kind(0)
+                    case .preceding(let expression): return unary(expression, kind: 1)
+                    case .currentRow: return .kind(2)
+                    case .following(let expression): return unary(expression, kind: 3)
+                    case .unboundedFollowing: return .kind(4)
+                    }
                 case .aggregate(let value): return enqueue(value)
                 case .expression(let value): return enqueue(value)
                 }
@@ -327,6 +389,8 @@ enum ExpressionIdentity {
 
         private mutating func enqueue(_ expression: Expression) -> Token {
             switch expression {
+            case .grouping(let arguments): list(arguments); return .kind(61)
+            case .window(let call): steps.append(.window(call)); return .kind(62)
             case .collate(let expression, let collation):
                 steps.append(.token(.collation(collation))); return unary(expression, kind: 56)
             case .arraySubquery(let query): steps.append(.select(query)); return .kind(57)
@@ -517,6 +581,7 @@ enum ExpressionIdentity {
 
         private mutating func enqueue(_ aggregate: AggregateFunction) -> Token {
             switch aggregate {
+            case .sql(let call): steps.append(.sqlAggregate(call)); return .kind(8)
             case .count(let value, let distinct):
                 steps.append(.token(.bool(distinct)))
                 steps.append(.optionalExpression(value))

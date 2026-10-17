@@ -246,7 +246,7 @@ extension Expression {
     /// Independent implementation for proper SPARQL semantics
     public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
         switch self {
-        case .collate, .arraySubquery, .wholeRow, .field, .fieldExpansion, .arrayAccess, .collectionOperation, .currentValue, .concatenate, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
+        case .grouping, .window, .collate, .arraySubquery, .wholeRow, .field, .fieldExpansion, .arrayAccess, .collectionOperation, .currentValue, .concatenate, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
             throw .unsupportedSPARQLLiteral
         // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
         // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.
@@ -443,6 +443,7 @@ extension AggregateFunction {
     /// Generate SPARQL aggregate syntax
     public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
         switch self {
+        case .sql: throw .unsupportedSPARQLLiteral
         case .count(let expr, let distinct):
             let distinctStr = distinct ? "DISTINCT " : ""
             if let e = expr {
@@ -550,6 +551,7 @@ extension SelectQuery {
         case .distinct: result += "DISTINCT "
         case .distinctOn: throw .unsupportedSPARQLLiteral
         }
+        guard windows.isEmpty else { throw .unsupportedSPARQLLiteral }
         if reduced { result += "REDUCED " }
 
         result += try projection.map { (item) throws(QueryLiteralConversionError) -> String in
@@ -580,7 +582,10 @@ extension SelectQuery {
 
         // GROUP BY
         if let groupBy = groupBy, !groupBy.isEmpty {
-            result += try "GROUP BY " + groupBy.map { (value) throws(QueryLiteralConversionError) -> String in try value.toSPARQL() }.joined(separator: " ") + "\n"
+            result += try "GROUP BY " + groupBy.map { (value) throws(QueryLiteralConversionError) -> String in
+                guard case .expression(let expression) = value else { throw .unsupportedSPARQLLiteral }
+                return try expression.toSPARQL()
+            }.joined(separator: " ") + "\n"
         }
 
         // HAVING

@@ -29,5 +29,17 @@ public enum QueryOccurrenceField: Sendable, Equatable, Hashable {
     case castType
     case aggregateArgument
     case aggregateOrderBy
+    case groupingElement
+    case groupingComponent
+    case groupingSet
+    case aggregateFilter
+    case aggregateWithinGroup
+    case windowFunction
+    case windowReference
+    case windowPartitionBy
+    case windowOrderBy
+    case windowFrameStart
+    case windowFrameEnd
+    case namedWindow
     case elementType
 }
