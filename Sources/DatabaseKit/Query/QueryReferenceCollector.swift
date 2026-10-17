@@ -81,7 +81,7 @@ struct QueryReferenceCollector {
                 case .window(let call): steps.append(.window(call))
                 case .column(let column): columns.insert(column)
                 case .variable(let variable), .bound(let variable): variables.insert(variable.name)
-                case .wholeRow, .literal, .currentValue, .parameter: break
+                case .defaultValue, .wholeRow, .literal, .currentValue, .parameter: break
                 case .add(let l, let r), .subtract(let l, let r), .multiply(let l, let r),
                      .divide(let l, let r), .modulo(let l, let r), .concatenate(let l, let r),
                      .equal(let l, let r), .notEqual(let l, let r), .lessThan(let l, let r),

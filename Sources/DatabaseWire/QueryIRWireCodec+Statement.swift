@@ -110,6 +110,11 @@ extension QueryIRWireFormat {
             (items: [ProjectionItem], writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             try writeArray(items, into: &writer, encode: encodeProjectionItem)
         }
+        switch query.overriding {
+        case nil: writer.writeUInt8(0)
+        case .systemValue?: writer.writeUInt8(1)
+        case .userValue?: writer.writeUInt8(2)
+        }
     }
 
     private static func decodeInsertQuery(
@@ -123,8 +128,20 @@ extension QueryIRWireFormat {
             returning: try readOptional(from: &reader) {
                 (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> [ProjectionItem] in
                 try readArray(from: &reader, decode: decodeProjectionItem)
-            }
+            },
+            overriding: try decodeIdentityOverride(from: &reader)
         )
+    }
+
+    private static func decodeIdentityOverride(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> SQLIdentityOverride? {
+        switch try reader.readUInt8() {
+        case 0: return nil
+        case 1: return .systemValue
+        case 2: return .userValue
+        case let tag: throw .invalidValueTag(tag)
+        }
     }
 
     private static func encodeInsertSource(

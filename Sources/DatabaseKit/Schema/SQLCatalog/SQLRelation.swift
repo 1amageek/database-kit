@@ -6,6 +6,8 @@ public struct SQLRelation: Sendable, Hashable {
     public let entityName: String
     public let columns: [SQLColumn]
     public let primaryKeyColumnIDs: [String]?
+    public let primaryKeyConstraint: SQLConstraintAttributes?
+    public let constraints: [SQLConstraint]
 
     public init(
         id: String,
@@ -13,7 +15,9 @@ public struct SQLRelation: Sendable, Hashable {
         name: String,
         entityName: String,
         columns: [SQLColumn],
-        primaryKeyColumnIDs: [String]? = nil
+        primaryKeyColumnIDs: [String]? = nil,
+        primaryKeyConstraint: SQLConstraintAttributes? = nil,
+        constraints: [SQLConstraint] = []
     ) throws(SQLCatalogError) {
         try SQLIdentifier.validate(id)
         try SQLIdentifier.validate(namespaceID)
@@ -29,8 +33,8 @@ public struct SQLRelation: Sendable, Hashable {
             guard columnNames.insert(SQLIdentifier(value: column.name)).inserted else {
                 throw .duplicateColumnName(column.name)
             }
-            guard fieldNumbers.insert(column.fieldNumber).inserted else {
-                throw .duplicateFieldNumber(column.fieldNumber)
+            if let number = column.fieldNumber, !fieldNumbers.insert(number).inserted {
+                throw .duplicateFieldNumber(number)
             }
         }
         if let primaryKeyColumnIDs {
@@ -47,6 +51,43 @@ public struct SQLRelation: Sendable, Hashable {
                 }
             }
         }
+        let primaryAttributes: SQLConstraintAttributes?
+        if primaryKeyColumnIDs != nil {
+            if let primaryKeyConstraint {
+                primaryAttributes = primaryKeyConstraint
+            } else {
+                primaryAttributes = try SQLConstraintAttributes(id: id + ":primary-key", name: name + "_pkey")
+            }
+        } else {
+            guard primaryKeyConstraint == nil else { throw .primaryKeyAttributesWithoutKey }
+            primaryAttributes = nil
+        }
+        var constraintIDs: Set<SQLIdentifier> = []
+        var constraintNames: Set<SQLIdentifier> = []
+        if let primaryAttributes {
+            constraintIDs.insert(SQLIdentifier(value: primaryAttributes.id))
+            constraintNames.insert(SQLIdentifier(value: primaryAttributes.name))
+        }
+        for constraint in constraints {
+            guard constraintIDs.insert(SQLIdentifier(value: constraint.id)).inserted else {
+                throw .duplicateConstraintID(constraint.id)
+            }
+            guard constraintNames.insert(SQLIdentifier(value: constraint.name)).inserted else {
+                throw .duplicateConstraintName(constraint.name)
+            }
+            let references: [String]
+            switch constraint.kind {
+            case .unique(let ids, _): references = ids
+            case .notNull(let id): references = [id]
+            case .foreignKey(let key): references = key.columnIDs
+            case .check: references = []
+            }
+            for reference in references where !columnIDs.contains(SQLIdentifier(value: reference)) {
+                throw .unknownConstraintColumnID(reference)
+            }
+        }
+        self.primaryKeyConstraint = primaryAttributes
+        self.constraints = constraints
         self.id = id
         self.namespaceID = namespaceID
         self.name = name
@@ -61,6 +102,8 @@ public struct SQLRelation: Sendable, Hashable {
             && SQLIdentifier(value: lhs.name) == SQLIdentifier(value: rhs.name)
             && SQLIdentifier(value: lhs.entityName) == SQLIdentifier(value: rhs.entityName)
             && lhs.columns == rhs.columns
+            && lhs.primaryKeyConstraint == rhs.primaryKeyConstraint
+            && lhs.constraints == rhs.constraints
             && SQLIdentifier.equal(lhs.primaryKeyColumnIDs, rhs.primaryKeyColumnIDs)
     }
 
@@ -70,6 +113,8 @@ public struct SQLRelation: Sendable, Hashable {
         hasher.combine(SQLIdentifier(value: name))
         hasher.combine(SQLIdentifier(value: entityName))
         hasher.combine(columns)
+        hasher.combine(primaryKeyConstraint)
+        hasher.combine(constraints)
         hasher.combine(primaryKeyColumnIDs?.count)
         if let primaryKeyColumnIDs {
             for columnID in primaryKeyColumnIDs {

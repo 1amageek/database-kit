@@ -1,12 +1,16 @@
 /// One statement or named checkpoint transition within an SQL block.
 public enum SQLBlockStep: Sendable, Hashable {
     case statement(QueryStatement)
+    case setConstraints(SQLSetConstraints)
+    case sequence(SQLSequenceCommand)
     case savepoint(String)
     case rollbackTo(String)
     case release(String)
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
+        case (.setConstraints(let left), .setConstraints(let right)): return left == right
+        case (.sequence(let left), .sequence(let right)): return left == right
         case (.statement(let left), .statement(let right)):
             return left == right
         case (.savepoint(let left), .savepoint(let right)),
@@ -21,6 +25,8 @@ public enum SQLBlockStep: Sendable, Hashable {
     public func hash(into hasher: inout Hasher) {
         let name: String
         switch self {
+        case .setConstraints(let control): hasher.combine(4); hasher.combine(control); return
+        case .sequence(let command): hasher.combine(5); hasher.combine(command); return
         case .statement(let statement):
             hasher.combine(0)
             hasher.combine(statement)

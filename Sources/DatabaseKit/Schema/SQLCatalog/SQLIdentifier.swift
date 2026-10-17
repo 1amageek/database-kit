@@ -16,6 +16,17 @@ struct SQLIdentifier: Hashable {
         for byte in value.utf8 { hasher.combine(byte) }
     }
 
+    static func validateColumnIDs(_ values: [String]) throws(SQLCatalogError) {
+        guard !values.isEmpty else { throw .emptyConstraintColumns }
+        var seen: Set<SQLIdentifier> = []
+        for value in values {
+            try validate(value)
+            guard seen.insert(SQLIdentifier(value: value)).inserted else {
+                throw .duplicateConstraintColumnID(value)
+            }
+        }
+    }
+
     static func equal(_ lhs: [String]?, _ rhs: [String]?) -> Bool {
         switch (lhs, rhs) {
         case (nil, nil):

@@ -699,7 +699,7 @@ private extension QueryParameterBindingTraversal {
             bindingSteps.append(.assembleExpression(expression)); enqueueExpressionBindings(arguments)
         case .window(let call):
             bindingSteps.append(.assembleExpression(expression)); bindingSteps.append(.window(call))
-        case .literal, .currentValue, .column, .variable, .bound, .wholeRow:
+        case .defaultValue, .literal, .currentValue, .column, .variable, .bound, .wholeRow:
             results.append(.expression(Bound(value: expression, changed: false)))
         case .parameter(let reference):
             results.append(
@@ -1010,7 +1010,8 @@ private extension QueryParameterBindingTraversal {
                     columns: query.columns,
                     source: source.value,
                     onConflict: conflict.value,
-                    returning: returning.value
+                    returning: returning.value,
+                    overriding: query.overriding
                 )
             ),
             changed: true
@@ -1666,7 +1667,7 @@ private extension QueryParameterBindingTraversal {
                 value: query.changed ? .exists(query.value) : expression,
                 changed: query.changed
             )
-        case .literal, .currentValue, .column, .variable, .parameter, .bound, .wholeRow:
+        case .defaultValue, .literal, .currentValue, .column, .variable, .parameter, .bound, .wholeRow:
             throw .invalidTraversalState
         }
         results.append(.expression(bound))

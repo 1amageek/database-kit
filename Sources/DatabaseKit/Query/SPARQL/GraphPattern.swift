@@ -246,7 +246,7 @@ extension Expression {
     /// Independent implementation for proper SPARQL semantics
     public func toSPARQL(prefixes: [String: String] = [:]) throws(QueryLiteralConversionError) -> String {
         switch self {
-        case .grouping, .window, .collate, .arraySubquery, .wholeRow, .field, .fieldExpansion, .arrayAccess, .collectionOperation, .currentValue, .concatenate, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
+        case .defaultValue, .grouping, .window, .collate, .arraySubquery, .wholeRow, .field, .fieldExpansion, .arrayAccess, .collectionOperation, .currentValue, .concatenate, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
             throw .unsupportedSPARQLLiteral
         // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
         // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.

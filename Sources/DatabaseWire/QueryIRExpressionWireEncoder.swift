@@ -606,6 +606,7 @@ private extension QueryIRExpressionWireEncoder {
         encodingSteps.append(.endNestedValue)
 
         switch expression {
+        case .defaultValue: writer.writeUInt8(63)
         case .collate(let value, let collation):
             writer.writeUInt8(56)
             writer.writeUInt8(collation == .c ? 0 : 1)

@@ -406,6 +406,7 @@ enum ExpressionIdentity {
 
         private mutating func enqueue(_ expression: Expression) -> Token {
             switch expression {
+            case .defaultValue: return .kind(63)
             case .grouping(let arguments): list(arguments); return .kind(61)
             case .window(let call): steps.append(.window(call)); return .kind(62)
             case .collate(let expression, let collation):

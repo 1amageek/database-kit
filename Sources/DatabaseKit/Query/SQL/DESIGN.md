@@ -1748,3 +1748,41 @@ callback recovery remains Transaction-owned and is not this public API.
 Kit tests own intrinsic cases. Framework's SQLBlock behavioral cases own
 checkpoint lookup, data effects, result retention and publication; parser and
 remote block tests remain the later S16/S17 evidence rather than substitutes.
+
+
+## S13 Semantic Constraint and Sequence Controls
+
+S13 owns D05–D08, D12 and sequence portions of F14. The declaration authority is
+[SQLCatalog](../../Schema/SQLCatalog/DESIGN.md#s13-constraint-column-policy-and-sequence-contract).
+General DDL text remains S15, full DML syntax remains S14, operational SQL text
+remains S16 and remote dispatch remains S17.
+
+| Public declaration | Contract |
+|---|---|
+| `SQLIdentityOverride` | `.systemValue`, `.userValue`; `InsertQuery.overriding: SQLIdentityOverride?` defaults nil and remains part of statement identity, every reconstruction and bounded codec. SYSTEM accepts explicit ALWAYS identity values; USER discards identity input and generates it. |
+| `Expression.defaultValue` | Intrinsic childless SQL DEFAULT marker; identity, structural/reference/parameter traversal and bounded standard/MultiBase expression codecs preserve it. Runtime rejects it outside admitted mutation assignment/value positions. |
+| `SQLConstraintSelection` | `.all`, `.named([String])`; named values are exact nonempty/NUL-free constraint identifiers and the list is nonempty. |
+| `SQLSetConstraints` | immutable `selection`, `deferred: Bool`; throwing intrinsic initializer |
+| `SQLSequenceCommand` | `.create(SQLSequence)`, `.alter(SQLSequence, restart: Int64?)`, `.drop(id: String, cascade: Bool)`; alter supplies the complete candidate declaration; no missing option silently resets existing state. |
+| `SQLBlockStep` | adds `.setConstraints(SQLSetConstraints)`, `.sequence(SQLSequenceCommand)` |
+| `SQLCommandKind` | adds `.setConstraints`, `.createSequence`, `.alterSequence`, `.dropSequence`; none reports affected-row count |
+
+SET CONSTRAINTS controls only the current request transaction's deferrable checks.
+IMMEDIATE validates the selected pending checks before changing mode; unknown names
+and attempts to defer nondeferrable constraints fail. Sequence command authorization,
+namespace resolution, ownership/dependency checks, restart state and commit/publication
+are Framework responsibilities. Sequence consumption state survives SQL data
+rollback; block-visible CURRVAL/LASTVAL are initialized by successful NEXTVAL and
+retain their sequence-operation history through SQL savepoint rollback. No fabricated
+principal/namespace/database identity is introduced.
+
+Block structural admission counts every control, name, sequence field and contained
+expression against the existing cumulative ledger; this is declaration admission,
+not execution proof. `SQLCatalogError` identifies intrinsic control/declaration
+failures. `QueryStructuralValidationError.invalidSQLControl` identifies malformed
+block command payloads not already guaranteed by their value initializer.
+
+DatabaseWire exposes `QueryIRWireFormat.encodeExpression(_:limits:)` and
+`decodeExpression(_:limits:)` over ByteString as a bounded select-envelope adapter
+for catalog expression persistence. It uses the existing select codec and limits,
+requires the exact envelope shape on decode, and adds no operation/version/dispatch.

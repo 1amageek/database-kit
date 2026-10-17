@@ -1093,7 +1093,7 @@ private struct QueryScopeState {
         context: SPARQLExpressionSemanticContext
     ) throws(SPARQLSemanticValidationError) {
         switch expression {
-        case .grouping, .window, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
+        case .defaultValue, .grouping, .window, .greatest, .least, .truthTest, .isDistinctFrom, .quantifiedComparison:
             throw .unsupportedSQLExpression
         // FIXME(INCOMPLETE_IMPLEMENTATION): SPARQL admission rejects SQL-only constructors here.
         // S07/S08 must supply SQL execution; RDF term semantics cannot implement these forms.
@@ -1346,7 +1346,7 @@ private struct QueryScopeState {
             return expressions
         case .triple(let subject, let predicate, let object):
             return [subject, predicate, object]
-        case .grouping, .window, .aggregate, .subquery, .exists, .arraySubquery, .wholeRow, .literal, .currentValue, .column, .variable,
+        case .defaultValue, .grouping, .window, .aggregate, .subquery, .exists, .arraySubquery, .wholeRow, .literal, .currentValue, .column, .variable,
              .bound, .parameter:
             return []
         }

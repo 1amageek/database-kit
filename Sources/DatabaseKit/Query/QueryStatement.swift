@@ -80,6 +80,7 @@ public struct InsertQuery: Sendable, Equatable, Hashable {
     public let target: TableRef
     public let columns: [String]?
     public let source: InsertSource
+    public let overriding: SQLIdentityOverride?
     public let onConflict: OnConflictAction?
     public let returning: [ProjectionItem]?
 
@@ -88,8 +89,10 @@ public struct InsertQuery: Sendable, Equatable, Hashable {
         columns: [String]? = nil,
         source: InsertSource,
         onConflict: OnConflictAction? = nil,
-        returning: [ProjectionItem]? = nil
+        returning: [ProjectionItem]? = nil,
+        overriding: SQLIdentityOverride? = nil
     ) {
+        self.overriding = overriding
         self.target = target
         self.columns = columns
         self.source = source

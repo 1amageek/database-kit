@@ -913,3 +913,31 @@ not change.
 | S10-W03 | Every truncated prefix, unknown SEARCH order/function expression/source tag, malformed Bool, invalid semantic shape and trailing bytes fails with its typed cause, with no repaired or partial output. |
 | S10-W04 | Exact and one-past frame/string/collection/object/nesting limits cover generated metadata, constants and function children on the same ledger; rejected measured encoding emits no sink bytes. |
 | S10-W05 | Native affected-target/consolidated and exact ordinary/Embedded runtime fixtures execute carriage and bounded failures on a frozen source graph at the existing default128KiB Kit stack. Fixtures extend the portable carriage owner; harness count changes are owned by the harness task. |
+
+
+## S13 Catalog Persistence Adapters and DEFAULT
+
+`Expression.defaultValue` is the childless expression tag 63 in the existing
+standard/MultiBase QueryIR codec; all earlier tags retain their production.
+`QueryIRWireFormat.encodeExpression(_:limits:)` and `decodeExpression(_:limits:)`
+provide bounded ByteString entry points over the existing SELECT envelope with
+exactly one unaliased projection and empty VALUES source. Decode rejects any
+other envelope shape and trailing bytes. This adapter adds no remote operation.
+
+`QueryIRWireFormat.encodeColumnType(_:limits:)` and `decodeColumnType(_:limits:)`
+reuse the existing closed QueryColumnTypeWireCodec for persisted virtual-column
+types, including primitive and SQL descriptors. Limits and complete input
+consumption remain mandatory; no catalog owner duplicates type codecs.
+
+Kit declarations own catalog semantics; Framework owns the catalog frame and
+its version/digest. Wire owns only the reusable existing expression/type bytes.
+Direct tests check tag63, deterministic roundtrip, malformed/truncated/trailing
+input, exact and one-past byte limits, and refusal of noncanonical envelopes.
+
+
+S13 extends the INSERT production after its existing returning field with one
+strict byte: 0 for absent override, 1 for SYSTEM VALUE, 2 for USER VALUE. Unknown
+tags and missing/trailing bytes fail explicitly. Initial development does not
+retain an old layout or negotiate versions; both standard and MultiBase consume
+the same statement production. Direct tests cover all three bytes and forced
+parameter reconstruction so an identity override cannot be dropped.

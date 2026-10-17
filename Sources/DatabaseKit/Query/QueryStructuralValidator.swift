@@ -20,6 +20,36 @@ public enum QueryStructuralValidator {
             switch step {
             case .statement(let statement):
                 try validation.validate([rootValidationStep(for: statement)])
+            case .setConstraints(let control):
+                if case .named(let names) = control.selection {
+                    try validation.ledger.consume(.collectionElements, amount: UInt64(names.count))
+                    for name in names {
+                        try validation.ledger.consume(.retainedBytes, amount: UInt64(name.utf8.count))
+                    }
+                }
+            case .sequence(let command):
+                let sequence: SQLSequence
+                switch command {
+                case .create(let value): sequence = value
+                case .alter(let value, let restart):
+                    if let restart, restart < value.minimum || restart > value.maximum {
+                        throw .invalidSQLControl
+                    }
+                    sequence = value
+                case .drop(let id, _):
+                    guard !id.isEmpty, !id.utf8.contains(0) else { throw .invalidSQLControl }
+                    try validation.ledger.consume(.retainedBytes, amount: UInt64(id.utf8.count))
+                    continue
+                }
+                try validation.ledger.consume(.totalNodes)
+                for value in [sequence.id, sequence.namespaceID, sequence.name] {
+                    try validation.ledger.consume(.retainedBytes, amount: UInt64(value.utf8.count))
+                }
+                if let owner = sequence.ownedBy {
+                    try validation.ledger.consume(.totalNodes)
+                    try validation.ledger.consume(.retainedBytes, amount: UInt64(owner.relationID.utf8.count))
+                    try validation.ledger.consume(.retainedBytes, amount: UInt64(owner.columnID.utf8.count))
+                }
             case .savepoint(let name), .rollbackTo(let name), .release(let name):
                 try validation.ledger.consume(.retainedBytes, amount: UInt64(name.utf8.count))
                 guard !name.isEmpty, !name.utf8.contains(0) else {
@@ -1092,7 +1122,7 @@ private extension QueryStructuralValidator {
                     } else if parameterValues != nil, firstMissingParameter == nil {
                         firstMissingParameter = reference
                     }
-                case .column, .variable, .bound:
+                case .defaultValue, .column, .variable, .bound:
                     break
                 }
 

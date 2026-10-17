@@ -34,6 +34,7 @@ public enum QueryStructuralValidationError: Error, Sendable, Equatable {
     case invalidPatternEscape
     case emptySQLBlock
     case invalidSQLCheckpointName
+    case invalidSQLControl
     case unbalancedNesting
     case invalidQueryValue(QueryValueError)
     case invalidReferenceIdentifier(ReferenceIdentifierValidationError)
@@ -68,6 +69,8 @@ extension QueryStructuralValidationError: CustomStringConvertible {
             return "ERE pattern predicates do not accept an escape expression"
         case .emptySQLBlock:
             return "An SQL block requires at least one step"
+        case .invalidSQLControl:
+            return "Invalid SQL semantic control payload"
         case .invalidSQLCheckpointName:
             return "An SQL checkpoint name must be nonempty and contain no NUL"
         case .unbalancedNesting:

@@ -227,6 +227,8 @@ public struct AggregateBinding: Sendable, Equatable, Hashable {
 /// Unified expression representation
 /// Combines SQL expressions and SPARQL filter expressions
 public indirect enum Expression: Sendable, Hashable {
+    /// SQL DEFAULT, admitted only by mutation assignment/value binding.
+    case defaultValue
     // MARK: - Literals
 
     /// Literal value

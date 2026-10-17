@@ -46,6 +46,46 @@ public enum QueryIRWireFormat {
         return statement
     }
 
+    /// Encodes one catalog expression through the existing canonical SELECT production.
+    public static func encodeExpression(
+        _ expression: Expression, limits: DatabaseWireLimits = .default
+    ) throws(DatabaseWireError) -> ByteString {
+        try encode(.select(expressionEnvelope(expression)), limits: limits)
+    }
+
+    /// Decodes only the canonical single-expression envelope, with complete input consumption.
+    public static func decodeExpression(
+        _ bytes: ByteString, limits: DatabaseWireLimits = .default
+    ) throws(DatabaseWireError) -> Expression {
+        guard case .select(let query) = try decode(bytes, limits: limits),
+              query.projection.count == 1,
+              case .expression(let expression, nil) = query.projection[0],
+              query == expressionEnvelope(expression) else { throw .invalidQueryIRWireState }
+        return expression
+    }
+
+    public static func encodeColumnType(
+        _ type: QueryColumnType, limits: DatabaseWireLimits = .default
+    ) throws(DatabaseWireError) -> ByteString {
+        try DatabaseWireWriter.encode(limits: limits) {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try QueryColumnTypeWireCodec.encode(type, into: &writer)
+        }
+    }
+
+    public static func decodeColumnType(
+        _ bytes: ByteString, limits: DatabaseWireLimits = .default
+    ) throws(DatabaseWireError) -> QueryColumnType {
+        var reader = DatabaseWireReader(bytes, limits: limits)
+        let type = try QueryColumnTypeWireCodec.decode(from: &reader)
+        try reader.ensureFullyRead()
+        return type
+    }
+
+    private static func expressionEnvelope(_ expression: Expression) -> SelectQuery {
+        SelectQuery(projection: [.expression(expression)], source: .values([]))
+    }
+
     static func writeOptional<Value>(
         _ value: Value?,
         into writer: inout DatabaseWireWriter,

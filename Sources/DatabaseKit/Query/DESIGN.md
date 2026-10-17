@@ -923,3 +923,13 @@ Verification owners are DatabaseKitTests query metadata/identity/traversal/limit
 CYCLE constants admit SQL scalar constant Literal cases and the existing flat `Literal.queryValue` carrier; recursive `Literal.array` and RDF-only literal cases are not SQL CYCLE constants. SQL typed constant text can select an admitted array/composite value through the existing cast owner. No generic recursive Literal identity refactor is required by this metadata. Payload bytes, including binary constants, are still admitted by the existing literal/value ledger before retention.
 
 The CTE body keeps the existing query-to-`.cte[index]` occurrence edge. Explicit mark/default Literal nodes use sibling query-to-`.cteCycleMark[index]` and `.cteCycleDefault[index]` roles. Literal construction capture is distinct from an expression wrapper; names/keys have no fabricated expression occurrence. A table-function source points directly to its existing `.argument[index]` expression children. Kit owns the two new occurrence fields; QueryAST owns capture construction and Engine consumes those exact roles.
+
+
+## S13 DEFAULT Leaf
+
+`Expression.defaultValue` represents SQL DEFAULT without a value or children.
+All existing identity, reference, structural, parameter and Wire traversals retain
+it as a distinct leaf. It is not NULL, an omitted expression or an application-model
+default. SQL execution admits it only in mutation positions selected by the
+[S13 SQL contract](SQL/DESIGN.md#s13-semantic-constraint-and-sequence-controls);
+SPARQL explicitly rejects the SQL-only marker. No evaluator invents a scalar value.

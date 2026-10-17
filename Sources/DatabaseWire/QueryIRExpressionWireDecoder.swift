@@ -1997,6 +1997,9 @@ private extension QueryIRExpressionWireDecoder {
                 decodingSteps.append(.endNestedValue)
                 decodingSteps.append(.fieldFinish(try reader.readString()))
                 decodingSteps.append(.expression)
+            case 63:
+                expressions.append(.defaultValue)
+                try reader.endNestedValue()
             case 61:
                 decodingSteps.append(.endNestedValue)
                 decodingSteps.append(.groupingExpressionFinish)
