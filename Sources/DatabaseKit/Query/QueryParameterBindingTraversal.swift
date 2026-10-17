@@ -166,7 +166,7 @@ private extension QueryParameterBindingTraversal {
             return Bound(value: .graphColumns(values), changed: value.changed)
         case .ctes(var values):
             guard case .select(let value) = result else { throw .invalidTraversalState }
-            if value.changed { values[index] = NamedSubquery(name: values[index].name, columns: values[index].columns, query: value.value, materialized: values[index].materialized) }
+            if value.changed { values[index] = NamedSubquery(name: values[index].name, columns: values[index].columns, query: value.value, materialized: values[index].materialized, search: values[index].search, cycle: values[index].cycle) }
             return Bound(value: .ctes(values), changed: value.changed)
         case .paths(var values):
             guard case .pathPattern(let value) = result else { throw .invalidTraversalState }
@@ -569,6 +569,9 @@ private extension QueryParameterBindingTraversal {
         switch source {
         case .table, .logical:
             results.append(.source(Bound(value: source, changed: false)))
+        case .tableFunction(let value):
+            bindingSteps.append(.assembleSource(source))
+            enqueueExpressionBindings(value.function.arguments)
         case .values(let rows):
             bindingSteps.append(.assembleSource(source))
             enqueueExpressionRowBindings(rows)
@@ -1106,7 +1109,7 @@ private extension QueryParameterBindingTraversal {
             filter: filter.value, groupBy: groupBy.value, having: having.value, windows: namedWindows,
             orderBy: orderBy.value, quantifier: quantifier.value,
             pagination: QueryPagination(limit: limit.value, offset: offset.value),
-            subqueries: subqueries.value, reduced: query.reduced, dataset: query.dataset
+            subqueries: subqueries.value, withRecursive: query.withRecursive, reduced: query.reduced, dataset: query.dataset
         ) : query
         results.append(.select(Bound(value: value, changed: changed)))
     }
@@ -1132,6 +1135,14 @@ private extension QueryParameterBindingTraversal {
     ) throws(QueryParameterBindingError) {
         let bound: Bound<DataSource>
         switch source {
+        case .tableFunction(let value):
+            let arguments = try popExpressions(value.function.arguments)
+            let function = value.function
+            bound = Bound(value: arguments.changed ? .tableFunction(TableFunctionSource(
+                function: FunctionCall(name: function.name, arguments: arguments.value,
+                    distinct: function.distinct, schema: function.schema,
+                    finalArrayIsVariadic: function.finalArrayIsVariadic),
+                withOrdinality: value.withOrdinality)) : source, changed: arguments.changed)
         case .subquery:
             let child = try popSelect()
             bound = Bound(

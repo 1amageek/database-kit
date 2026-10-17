@@ -271,6 +271,7 @@ private extension QueryIRExpressionWireDecoder {
         case valuesCursor(CollectionCursor<[Expression]>)
         case valuesCursorAppend(CollectionCursor<[Expression]>)
         case dataSourceAliasFinish(String, [String]?)
+        case dataSourceFunctionFinish(withOrdinality: Bool)
         case dataSourceSetAfterLeft(SetOperator, SetQuantifier)
         case dataSourceSetFinish(SetOperator, SetQuantifier, SelectQuery)
         case collateFinish(SQLCollation)
@@ -1008,14 +1009,17 @@ private extension QueryIRExpressionWireDecoder {
                 decodingSteps.append(.selectAdvance(state, stage: isLimit ? 7 : 6))
 
             case .selectFinish(let state):
+                let reduced = try reader.readBool()
+                let dataset = try QueryIRWireFormat.decodeSPARQLDataset(from: &reader)
+                let withRecursive = try reader.readBool()
                 let query = SelectQuery(
                     projection: state.projection, source: state.source,
                     accessPath: state.accessPath, filter: state.filter,
                     groupBy: state.groupBy, having: state.having, windows: state.windows,
                     orderBy: state.orderBy, quantifier: state.quantifier,
                     pagination: QueryPagination(limit: state.limit, offset: state.offset),
-                    subqueries: state.subqueries, reduced: try reader.readBool(),
-                    dataset: try QueryIRWireFormat.decodeSPARQLDataset(from: &reader)
+                    subqueries: state.subqueries, withRecursive: withRecursive,
+                    reduced: reduced, dataset: dataset
                 )
                 try QueryIRWireFormat.validateSetEnvelope(query)
                 selectQueries.append(query)
@@ -1081,20 +1085,33 @@ private extension QueryIRExpressionWireDecoder {
                 } else {
                     materialized = nil
                 }
-                namedSubqueries.append(
-                    NamedSubquery(
-                        name: name,
-                        columns: columns,
-                        query: query,
-                        materialized: materialized
-                    )
+                let metadata = try QueryIRWireFormat.decodeCTEMetadata(from: &reader)
+                let subquery = NamedSubquery(
+                    name: name,
+                    columns: columns,
+                    query: query,
+                    materialized: materialized,
+                    search: metadata.search,
+                    cycle: metadata.cycle
                 )
+                do { try QueryStructuralValidator.validate(subquery) }
+                catch { throw .invalidQueryStructure(error) }
+                namedSubqueries.append(subquery)
 
             case .dataSourceSubqueryTail:
                 dataSources.append(.subquery(try popSelectQuery()))
 
             case .dataSourceAliasFinish(let name, let columns):
                 dataSources.append(.aliased(try popDataSource(), name: name, columns: columns))
+
+            case .dataSourceFunctionFinish(let withOrdinality):
+                guard case .function(let function) = try popExpression() else {
+                    throw .invalidQueryIRWireState
+                }
+                let source = TableFunctionSource(function: function, withOrdinality: withOrdinality)
+                do { try QueryStructuralValidator.validate(source) }
+                catch { throw .invalidQueryStructure(error) }
+                dataSources.append(.tableFunction(source))
 
             case .dataSourceSetAfterLeft(let operation, let quantifier):
                 decodingSteps.append(.dataSourceSetFinish(operation, quantifier, try popSelectQuery()))
@@ -1650,6 +1667,9 @@ private extension QueryIRExpressionWireDecoder {
                 let columns = try QueryIRWireFormat.readOptionalStrings(from: &reader)
                 decodingSteps.append(.dataSourceAliasFinish(name, columns))
                 decodingSteps.append(.dataSource())
+            case 18:
+                decodingSteps.append(.dataSourceFunctionFinish(withOrdinality: try reader.readBool()))
+                decodingSteps.append(.expression)
             case 17:
                 guard allowSet else { throw .invalidQueryStructure(.invalidSetQueryEnvelope) }
                 let operation: SetOperator

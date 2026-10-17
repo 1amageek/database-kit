@@ -62,7 +62,7 @@ struct SQLGroupingWindowWireTests {
         let emptySet = SelectQuery(projection: [], source: .values([]), groupBy: [.groupingSets([[]])])
         let golden: [UInt8] = [0, 0, 0, 0, 0, 0, 14, 0, 0, 0, 0,
             0, 0, 1, 1, 0, 0, 0, 3, 1, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         #expect(try QueryIRWireFormat.encode(.select(emptySet)) == ByteString(golden))
         let x = Expression.parameter(.name("x"))
         let grouping: [GroupingElement] = [.expression(x), .rollup([[x, .int(1)], []]),

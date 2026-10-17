@@ -132,17 +132,23 @@ public struct NamedSubquery: Sendable, Equatable, Hashable {
     public let columns: [String]?
     public let query: SelectQuery
     public let materialized: Materialization?
+    public let search: CTESearchClause?
+    public let cycle: CTECycleClause?
 
     public init(
         name: String,
         columns: [String]? = nil,
         query: SelectQuery,
-        materialized: Materialization? = nil
+        materialized: Materialization? = nil,
+        search: CTESearchClause? = nil,
+        cycle: CTECycleClause? = nil
     ) {
         self.name = name
         self.columns = columns
         self.query = query
         self.materialized = materialized
+        self.search = search
+        self.cycle = cycle
     }
 }
 
@@ -193,6 +199,9 @@ public indirect enum DataSource: Sendable, Equatable, Hashable {
     /// Extensible logical source
     case logical(LogicalSourceRef)
 
+    /// One SQL function invocation with optional ordinality.
+    case tableFunction(TableFunctionSource)
+
     /// Subquery as data source
     case subquery(SelectQuery)
 
@@ -242,7 +251,7 @@ public indirect enum DataSource: Sendable, Equatable, Hashable {
         switch self {
         case .graphPattern, .namedGraph, .service:
             return true
-        case .table, .logical, .subquery, .join, .values, .graphTable,
+        case .table, .logical, .tableFunction, .subquery, .join, .values, .graphTable,
              .aliased, .setOperation:
             return false
         #if DATABASE_KIT_MULTI_BASE

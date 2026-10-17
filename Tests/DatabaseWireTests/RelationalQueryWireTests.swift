@@ -19,6 +19,7 @@ struct RelationalQueryWireTests {
             0, 0, // ALL, no ordering.
             0, 0, // Offset and limit absent.
             0, 0, // Reduced and implicit dataset.
+            0, // WITH RECURSIVE absent.
         ]
         #expect(bytes == ByteString(expected))
         #expect(try QueryIRWireFormat.decode(bytes) == .select(query))
@@ -48,7 +49,7 @@ struct RelationalQueryWireTests {
         let golden: [UInt8] = [0, 0, 0, 0, 0, 0, 14, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 2, 1, 0, 0, 0, 58, 1, 0, 0, 0, 114, 0, 1, 0]
             + Array(repeating: 255, count: 8) + [1, 1, 1, 0]
-            + Array(repeating: 255, count: 8) + [0, 0]
+            + Array(repeating: 255, count: 8) + [0, 0, 0]
         #expect(try QueryIRWireFormat.encode(.select(query)) == ByteString(golden))
 
     }
@@ -69,7 +70,7 @@ struct RelationalQueryWireTests {
                 let query = SelectQuery(projection: [.wildcard()], source: .setOperation(
                     operator: operation, quantifier: quantifier, left: identityQuery(), right: identityQuery()))
                 let expected = [UInt8(0), 0, 1, 0, 0, 0, 1, 0, 17, byte, quantifierByte]
-                    + identityBytes + identityBytes + Array(repeating: UInt8(0), count: 14)
+                    + identityBytes + identityBytes + Array(repeating: UInt8(0), count: 15)
                 #expect(try QueryIRWireFormat.encode(.select(query)) == ByteString(expected))
             }
         }
@@ -120,7 +121,7 @@ struct RelationalQueryWireTests {
 
     @Test("Reserved source and unknown metadata bytes fail explicitly")
     func reservedTagsAreRejected() throws {
-        var tags: [UInt8] = [2, 4, 9, 10, 11, 12, 18, 255]
+        var tags: [UInt8] = [2, 4, 9, 10, 11, 12, 19, 255]
         #if !DATABASE_KIT_MULTI_BASE
         tags.append(13)
         #endif

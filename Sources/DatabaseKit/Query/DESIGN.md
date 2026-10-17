@@ -874,3 +874,32 @@ phase calls release unrelated case temporaries before value measurement; they
 retain one ledger and one explicit continuation stack. The default SDK stack
 size is unchanged. Runtime validation must demonstrate the actual fixed-stack
 path, with generated prologue evidence for any stack-frame repair.
+
+
+## S10 Frozen Recursive and Function Source Carriage
+
+This section owns query representation for Q13/Q15. The [SQL profile](SQL/DESIGN.md#s10-frozen-recursion-and-table-functions) owns meaning; [QueryExecution](../../../../database-framework/Sources/DatabaseEngine/QueryExecution/DESIGN.md#s10-frozen-recursive-and-function-execution) owns execution. These are implementation contracts until their behavioral evidence is complete.
+
+| Declaration | Immutable meaning |
+|---|---|
+| `SelectQuery.withRecursive: Bool` | WITH-clause-wide recursive visibility, default false, retained by every replacement/copy. It is not a per-definition execution flag. |
+| `NamedSubquery.search: CTESearchClause?` | Optional SEARCH metadata, default nil. `CTESearchClause` has `order: CTESearchOrder` (`depthFirst`, `breadthFirst`), `columns: [String]`, and `sequenceColumn: String`. |
+| `NamedSubquery.cycle: CTECycleClause?` | Optional CYCLE metadata, default nil. `CTECycleClause` has `columns: [String]`, `markColumn: String`, `pathColumn: String`, `markValue: Literal?`, `defaultValue: Literal?`. Both literal fields are absent for the default Boolean pair, or both present. Marks are SQL constants, not row expressions or parameter slots. |
+| `DataSource.tableFunction(TableFunctionSource)` | One FROM function invocation. `TableFunctionSource` has `function: FunctionCall`, `withOrdinality: Bool` default false. Existing FunctionCall owns schema, name, arguments and final-array VARIADIC. Existing `DataSource.aliased` exclusively owns relation/column aliases. |
+
+Literal metadata uses existing value/type invariants and explicit iterative admission; it never creates hidden operational state. Search/cycle keys and generated names are bounded strings/collections. Generated metadata participates in equality/hash/structural accounting and both Wire paths. Complete query reconstruction retains withRecursive and every definition's search/cycle fields. Source traversal visits table-function arguments and constant metadata without recursive process-stack walks. Existing CTE body occurrence paths remain stable; additional declaration/source fields receive distinct occurrence roles where they have source nodes.
+
+SQL functions in FROM are implicitly lateral. The semantic source does not duplicate an explicit LATERAL spelling bit; existing join kinds retain explicit lateral subquery behavior. A leading explicit LATERAL function is the same invocation. SQL-only sources are rejected explicitly by SPARQL applicability/validation consumers. New source children must reach reference/parameter/identity/occurrence/structural traversal, security/Fusion consumers and standard/MultiBase bounded codecs together.
+
+`ROWS FROM`, SQL record column-definition lists, SELECT-list SRF expansion, user-defined functions and mutual recursion are outside this frozen S10 surface. Closed composite descriptors remain typed values: UNNEST can expose their known fields without inventing a dynamic record catalog. This descriptor knowledge is an explicit product difference from PostgreSQL's untyped anonymous record requirement; it never fabricates or guesses field types.
+
+Verification owners are DatabaseKitTests query metadata/identity/traversal/limit cases, DatabaseWireTests standard/MultiBase roundtrip/malformed/golden cases and QueryValueRuntimeContract on both formal targets. They must preserve recursive visibility and all function arguments/ordinality at exact/one-past limits, retain constant payload owners and reject invalid layouts without fallback.
+
+
+### S10 structural and occurrence integration
+
+`QueryStructuralValidationError.invalidCTESearchClause`, `.invalidCTECycleClause` and `.invalidTableFunctionSource` identify intrinsic declaration/source shape failures. Package-scoped shape validators on `QueryStructuralValidator` are shared by graph admission and bounded Wire metadata boundaries; they do not synthesize a query, walk a body again, or independently duplicate the graph resource ledger. Unknown key references and inferred seed-column collisions remain selected binding failures. Intrinsic validation rejects empty/duplicate keys, empty/generated-name collisions, unmatched constant pairs, explicit CTE-column/generated-name collisions and invalid function name/schema/modifier layouts.
+
+CYCLE constants admit SQL scalar constant Literal cases and the existing flat `Literal.queryValue` carrier; recursive `Literal.array` and RDF-only literal cases are not SQL CYCLE constants. SQL typed constant text can select an admitted array/composite value through the existing cast owner. No generic recursive Literal identity refactor is required by this metadata. Payload bytes, including binary constants, are still admitted by the existing literal/value ledger before retention.
+
+The CTE body keeps the existing query-to-`.cte[index]` occurrence edge. Explicit mark/default Literal nodes use sibling query-to-`.cteCycleMark[index]` and `.cteCycleDefault[index]` roles. Literal construction capture is distinct from an expression wrapper; names/keys have no fabricated expression occurrence. A table-function source points directly to its existing `.argument[index]` expression children. Kit owns the two new occurrence fields; QueryAST owns capture construction and Engine consumes those exact roles.

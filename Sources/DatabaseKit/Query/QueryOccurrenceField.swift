@@ -2,6 +2,8 @@
 public enum QueryOccurrenceField: Sendable, Equatable, Hashable {
     case statement
     case cte
+    case cteCycleMark
+    case cteCycleDefault
     case projection
     case source
     case filter

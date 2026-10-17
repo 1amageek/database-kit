@@ -278,6 +278,8 @@ private extension QueryStructuralValidator {
         case projectionItem(ProjectionItem, depth: UInt64)
         case assignment(Assignment, depth: UInt64)
         case sortKey(SortKey, depth: UInt64)
+        case cteSearch(CTESearchClause, depth: UInt64)
+        case cteCycle(CTECycleClause, depth: UInt64)
         case namedSubquery(NamedSubquery, depth: UInt64)
         case graphPattern(GraphPattern, depth: UInt64)
         case basicGraphPatternElement(
@@ -381,7 +383,7 @@ private extension QueryStructuralValidator {
                      .accessPath, .indexSource, .fusionStage, .fusionInput, .fusionIndexSource,
                      .fusionConnectedSource, .graphTableSource, .graphTableColumn, .matchPattern, .pathPattern,
                      .pathElement, .nodePattern, .edgePattern, .propertyBinding, .projectionItem,
-                     .assignment, .sortKey, .namedSubquery, .graphPattern, .basicGraphPatternElement:
+                     .assignment, .sortKey, .cteSearch, .cteCycle, .namedSubquery, .graphPattern, .basicGraphPatternElement:
                     try validateDeclarationStep(validationStep, depth: depth, childDepth: childDepth, steps: &validationSteps)
                 }
             }
@@ -641,6 +643,14 @@ private extension QueryStructuralValidator {
                     try appendTablePartitions(table, depth: childDepth, to: &validationSteps)
                 case .logical:
                     break
+                case .tableFunction(let source):
+                    try QueryStructuralValidator.validate(source)
+                    try ledger.consume(.retainedBytes, amount: UInt64(source.function.name.utf8.count))
+                    if let schema = source.function.schema {
+                        try ledger.consume(.retainedBytes, amount: UInt64(schema.utf8.count))
+                    }
+                    try consumeCollection(source.function.arguments.count)
+                    appendExpressions(source.function.arguments, depth: childDepth, to: &validationSteps)
                 case .subquery(let query):
                     validationSteps.append(.select(query, depth: childDepth))
                 case .join(let join):
@@ -820,10 +830,25 @@ private extension QueryStructuralValidator {
                 validationSteps.append(.expression(key.expression, depth: childDepth))
 
             case .namedSubquery(let subquery, _):
-                if let columns = subquery.columns {
-                    try consumeCollection(columns.count)
-                }
+                // Admit key collections before shape validation builds its uniqueness set.
+                if let search = subquery.search { try consumeCollection(search.columns.count) }
+                if let cycle = subquery.cycle { try consumeCollection(cycle.columns.count) }
+                try QueryStructuralValidator.validate(subquery)
+                if let columns = subquery.columns { try consumeCollection(columns.count) }
+                if let cycle = subquery.cycle { validationSteps.append(.cteCycle(cycle, depth: childDepth)) }
+                if let search = subquery.search { validationSteps.append(.cteSearch(search, depth: childDepth)) }
                 validationSteps.append(.select(subquery.query, depth: childDepth))
+
+            case .cteSearch(let search, _):
+                try ledger.consume(.retainedBytes, amount: UInt64(search.sequenceColumn.utf8.count))
+                for column in search.columns { try ledger.consume(.retainedBytes, amount: UInt64(column.utf8.count)) }
+
+            case .cteCycle(let cycle, _):
+                try ledger.consume(.retainedBytes, amount: UInt64(cycle.markColumn.utf8.count))
+                try ledger.consume(.retainedBytes, amount: UInt64(cycle.pathColumn.utf8.count))
+                for column in cycle.columns { try ledger.consume(.retainedBytes, amount: UInt64(column.utf8.count)) }
+                if let value = cycle.defaultValue { validationSteps.append(.literal(value, depth: childDepth)) }
+                if let value = cycle.markValue { validationSteps.append(.literal(value, depth: childDepth)) }
 
             case .graphPattern(let pattern, _):
                 switch pattern {
@@ -1212,6 +1237,9 @@ private extension QueryStructuralValidator {
                 switch literal {
                 case .string(let value), .sqlUnknownString(let value):
                     try ledger.consume(.retainedBytes, amount: UInt64(value.utf8.count))
+                case .binary(let value):
+                    guard let bytes = value.retainedByteCount else { throw .invalidQueryValue(.unknownRetainedByteCount) }
+                    try ledger.consume(.retainedBytes, amount: UInt64(bytes))
                 case .queryValue(let value, let type):
                     validationSteps.append(.queryValue(value, type, depth: childDepth))
                 case .array(let values):
@@ -1220,7 +1248,7 @@ private extension QueryStructuralValidator {
                 case .rdfTerm(let term):
                     validationSteps.append(.rdfTerm(term, depth: childDepth))
                 case .null, .bool, .int, .uint, .decimal, .double,
-                     .date, .timestamp, .binary, .uuid, .iri, .blankNode,
+                     .date, .timestamp, .uuid, .iri, .blankNode,
                      .typedLiteral, .langLiteral, .dirLangLiteral:
                     break
                 }
@@ -1401,7 +1429,7 @@ private extension QueryStructuralValidator {
                  .accessPath, .indexSource, .fusionStage, .fusionInput, .fusionIndexSource,
                  .fusionConnectedSource, .graphTableSource, .graphTableColumn, .matchPattern, .pathPattern,
                  .pathElement, .nodePattern, .edgePattern, .propertyBinding, .projectionItem,
-                 .assignment, .sortKey, .namedSubquery, .graphPattern, .basicGraphPatternElement:
+                 .assignment, .sortKey, .cteSearch, .cteCycle, .namedSubquery, .graphPattern, .basicGraphPatternElement:
                 throw .unbalancedNesting
             }
         }
@@ -1439,7 +1467,7 @@ private extension QueryStructuralValidator {
                  .pathElement(_, let depth), .nodePattern(_, let depth),
                  .edgePattern(_, let depth), .propertyBinding(_, let depth),
                  .projectionItem(_, let depth), .assignment(_, let depth),
-                 .sortKey(_, let depth), .namedSubquery(_, let depth),
+                 .sortKey(_, let depth), .cteSearch(_, let depth), .cteCycle(_, let depth), .namedSubquery(_, let depth),
                  .graphPattern(_, let depth),
                  .basicGraphPatternElement(_, let depth),
                  .expression(_, let depth),

@@ -58,6 +58,7 @@ struct QueryReferenceCollector {
             case .source(let source):
                 switch source {
                 case .table, .logical: break
+                case .tableFunction(let value): steps.append(.expressions(value.function.arguments, 0))
                 case .subquery(let query): steps.append(.query(query))
                 case .aliased(let child, _, _): steps.append(.source(child))
                 case .setOperation(_, _, let left, let right):

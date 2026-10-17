@@ -1549,3 +1549,50 @@ ROW/GROUP/TIES. No runtime default frame is inserted by the model or codec.
 These declaration witnesses do not prove aggregate evaluation, SQLSTATE,
 statistical accuracy, peer/frame behavior or runtime resource cleanup; those
 contracts and their success/failure/boundary witnesses belong to Framework.
+
+
+## S10 Frozen Recursion and Table Functions
+
+This section owns Q13/Q15 and the F05/F08/F09 public FROM completion gates. [Query carriage](../DESIGN.md#s10-frozen-recursive-and-function-source-carriage) owns syntax values; [QueryExecution](../../../../../database-framework/Sources/DatabaseEngine/QueryExecution/DESIGN.md#s10-frozen-recursive-and-function-execution) owns binding and execution. No primitive value algebra, persistence format, catalog, transaction authority or storage adapter changes are required.
+
+### Requirements, current facts and boundaries
+
+The S09 baseline has demand-driven nonrecursive CTE consumers and lower array/JSON/pattern cursors, but drops WITH RECURSIVE syntax and rejects FROM functions. S10 connects these paths. PostgreSQL18 documentation and pinned18.6 observations under `.codex-tools/sql-s10-evidence/oracle` resolve this sprint's selected contracts. A reference statement timeout/internal error is retained as such, never reclassified as an ordinary SQL result.
+
+| ID | Required contract and falsifiable completion evidence |
+|---|---|
+| S10-C01 / carriage | WITH-wide RECURSIVE, SEARCH/CYCLE constants/keys/names and function/ordinality survive parser, builder, serializer, immutable copies, all iterative visitors and bounded Wire. Invalid key/name/constant pairs and source/argument layouts fail typed. Positive text-to-execution and malformed/limit witnesses replace the S10 incomplete gates. |
+| S10-C02 / recursive binding | In recursive WITH, resolve forward sibling dependencies topologically while retaining lexical shadowing and rejecting mutual cycles. A recursive definition has a nonrecursive seed UNION or UNION ALL a linear recursive term. Seed output names/types select an immutable self schema before the term binds. Term arity and selected types must agree with the seed; a widening mismatch is rejected, not silently cast into a new recursive type. Bind unused definitions, reject repeated/self-in-seed/subquery/nullable-side/aggregate-invalid references before physical reads, and retain physical scan authorization. SEARCH/CYCLE require an actually recursive definition and unique existing keys/generated names. |
+| S10-C03 / demand and iteration | Seed rows form the first working frontier. Evaluate the recursive term against only the current frontier; accepted rows form the next frontier. UNION removes duplicates within seed, within each iteration and across all prior outputs with the selected SQL identity (including SQL NULL); ALL keeps multiplicity. Generated SEARCH/CYCLE columns are part of output/dedup identity. Unused CTEs do not run, outer LIMIT can stop an otherwise infinite generator, and multiple consumers replay one lazy invocation prefix. No process-stack recursion represents iteration. |
+| S10-C04 / SEARCH and CYCLE | SEARCH DEPTH generates a record[] path; SEARCH BREADTH generates a record containing bigint depth then key cells. Anonymous generated record fields use f1...fN, and depth starts at0. CYCLE appends mark then record[] path, emits a repeated-key row with its cycle mark, and prevents that row's further expansion. Key membership uses record-value NULL-safe equality: repeated NULL keys form a cycle. Optional constants select one common comparable mark type; omitted constants are Boolean true/false. Expansion uses SQL mark <> cycle-value truth, so NULL or identical mark/default pairs can stop after the seed. Recursive references can read generated columns. SEARCH controls sortable output values, not an implicit final ORDER BY. |
+| S10-C05 / source composition | Admit the closed UNNEST, GENERATE_SUBSCRIPTS, GENERATE_SERIES, REGEXP_MATCHES, REGEXP_SPLIT_TO_TABLE and existing JSON/JSONB each/each_text/array_elements/array_elements_text/object_keys families. Existing admitted scalar built-ins in FROM emit one row, including one SQL NULL row. Bind function signatures/output metadata before input reads. Table functions see preceding FROM sources implicitly; explicit/implicit lateral and LEFT lateral null extension preserve selected scope, row presence, aliases and typed empty metadata. |
+| S10-C06 / arrays and JSON | Reuse S07 cursors and exact lower contracts. Multi-array UNNEST zips through the longest input with NULL padding; flat row-major order and actual subscripts/reverse are retained. Closed composite elements expose ordered known descriptor fields and NULL fields for a NULL composite. JSON preserves lexical order/duplicate keys, JSONB canonical order, JSON null differs from SQL NULL, and wrong roots fail. No all-results staging replaces the cursors. |
+| S10-C07 / pattern rows | Reuse S05 iterators: MATCHES emits text[] captures, first/global behavior and unmatched/empty capture distinction; SPLIT_TO_TABLE emits text with existing zero-width/edge rules. NULL is strict zero rows, invalid flags/patterns remain typed and metered. General scalar SRF invocation remains explicitly rejected. |
+| S10-C08 / series | Support integer, bigint, numeric and timestamp/timestamptz overloads; temporal step is interval, timezone-aware form accepts an optional explicit text zone and otherwise uses the admitted temporal environment. Numeric default step is1, temporal step is required, ambiguous all-unknown overloads fail. Inclusive endpoints, descending and mismatched directions, strict NULL before zero-step validation, and zero-step errors follow PostgreSQL18. Advance beyond the final endpoint terminates without a spurious integer/numeric overflow. Temporal months/DST use S06 arithmetic and timezone rules. Timestamp infinities retain their S06 meaning; nonterminating series remain demand-driven and bounded by the same work/row/byte/deadline/cancel contract. Numeric retains the finite38-digit product profile. |
+| S10-C09 / ordinality | WITH ORDINALITY appends bigint NOT NULL named ordinality, starts at1 for each invocation and counts emitted rows. It is independent of input array lower bounds. Aliases use existing leading positional overrides; excess aliases fail before reads, even for empty/NULL functions. |
+| S10-C10 / resources | Charge every iteration and emitted/visited/path step to the existing work meter, and admit frontier, visited identity, cursor, path, descriptor and output owners before allocation/publication. Work units bound iteration count without a guessed new recursion cap. Cancellation/deadline, exact/one-past work/rows/bytes, failure during growth, early LIMIT/EXISTS, awaited child close, zero final retention and same-meter follow-up are mandatory. Output retains values only, never producers/session/authority. Preserve fixed toolchain/SDK and existing Engine8MiB/Kit default-stack budgets. |
+| S10-C11 / authority and language | Recursive self references are logical working-table inputs, including when a physical entity shares the name; real physical sources still require their original list/field authorization. Fusion/security/occurrence consumers must use the same frozen visibility. Base-local execution reuses the admitted authority. General Composition CTE/table-function placement remains its explicit existing capability boundary, and SPARQL does not acquire SQL semantics. |
+| S10-C12 / proof | Public SQL fixtures and local kernel/lifecycle tests exercise successful and failing recursion/functions, not only model construction. Native affected-target/consolidated, real SQLite/PostgreSQL, consumer and exact formal WASM/Embedded lanes use frozen source graphs with actual compiled hashes/counts. Evidence reuse preserves the original proof subject and explicit causal deltas. Full FDB/Graph-enabled Database portable/MultiBase portable/final URL integration remain user-deferred S18. |
+
+The [Builder-owned intrinsic constant profile](../../../../../database-framework/Sources/QueryAST/Builder/DESIGN.md#s10-recursive-and-function-source-emission) defines exact CYCLE text carriage and typed failures for unrepresentable constants; runtime-dependent temporal lexical conversion remains Engine-owned.
+
+### State and flow
+
+```text
+bound seed + immutable self schema + bound recursive term
+  -> lazy invocation-owned seed producer
+  -> accepted output / immutable current frontier
+  -> recursive child using a frontier-only self consumer
+  -> next frontier / selected visited identity / generated value columns
+  -> repeat on demand or detach and await terminal cleanup
+
+bound function + selected input values
+  -> invocation-owned lower cursor
+  -> one retained typed row -> optional bigint ordinal
+  -> existing alias/join/filter/group/window/result pipeline
+  -> await close before Read makes results Ready
+```
+
+Recursive type exactness compares SQL meaning, including width and type modifiers. A corresponding native scalar metadata spelling is accepted only when it has the identical value carrier; the recursive term normalizes back to the immutable seed representation. This equivalence never performs set common-type widening.
+
+Recursive generated values may be computed by an internal selected projection adapter; it must reuse already evaluated user target values and preserve each parent's path/depth without volatile reevaluation. No ownership cycle may connect an immutable plan or a completed output to a live self consumer. Existing S08 nonrecursive demand and S09 grouping/window contracts are regression owners, not duplicated definitions here.

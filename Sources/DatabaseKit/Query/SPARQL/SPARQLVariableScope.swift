@@ -194,7 +194,7 @@ public enum SPARQLVariableScopeAnalyzer {
             case .inner, .cross, .natural, .lateral:
                 return joining(left, right)
             }
-        case .values, .aliased, .setOperation:
+        case .tableFunction, .values, .aliased, .setOperation:
             return .empty
         #if DATABASE_KIT_MULTI_BASE
         case .base(_, let source):

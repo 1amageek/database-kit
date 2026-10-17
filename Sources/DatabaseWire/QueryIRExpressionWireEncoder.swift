@@ -86,7 +86,7 @@ private extension QueryIRExpressionWireEncoder {
         case optionalNamedSubqueryArray([NamedSubquery]?)
         case namedSubqueryCursor([NamedSubquery], index: Int)
         case namedSubquery(NamedSubquery)
-        case namedSubqueryTail(Materialization?)
+        case namedSubqueryTail(NamedSubquery)
         case sparqlDataset(SPARQLDataset)
         case join(JoinClause)
         case joinCondition(JoinCondition?)
@@ -286,21 +286,24 @@ private extension QueryIRExpressionWireEncoder {
             encodingSteps.append(.namedSubquery(values[index]))
 
         case .namedSubquery(let subquery):
+            do { try QueryStructuralValidator.validate(subquery) }
+            catch { throw .invalidQueryStructure(error) }
             try writer.writeString(subquery.name)
             try QueryIRWireFormat.writeOptionalStrings(
                 subquery.columns,
                 into: &writer
             )
-            encodingSteps.append(.namedSubqueryTail(subquery.materialized))
+            encodingSteps.append(.namedSubqueryTail(subquery))
             encodingSteps.append(.select(subquery.query))
 
-        case .namedSubqueryTail(let materialized):
-            guard let materialized else {
+        case .namedSubqueryTail(let subquery):
+            if let materialized = subquery.materialized {
+                writer.writeBool(true)
+                writer.writeUInt8(materialized == .materialized ? 0 : 1)
+            } else {
                 writer.writeBool(false)
-                return
             }
-            writer.writeBool(true)
-            writer.writeUInt8(materialized == .materialized ? 0 : 1)
+            try QueryIRWireFormat.encodeCTEMetadata(subquery, into: &writer)
 
         case .sparqlDataset(let dataset):
             try QueryIRWireFormat.encodeSPARQLDataset(dataset, into: &writer)
@@ -950,6 +953,7 @@ private extension QueryIRExpressionWireEncoder {
         try QueryIRWireFormat.validateSetEnvelope(query)
         try writer.beginNestedValue()
         encodingSteps.append(.endNestedValue)
+        encodingSteps.append(.bool(query.withRecursive))
         encodingSteps.append(.sparqlDataset(query.dataset))
         encodingSteps.append(.bool(query.reduced))
         encodingSteps.append(.pagination(query.pagination))
@@ -1014,6 +1018,12 @@ private extension QueryIRExpressionWireEncoder {
             try writer.writeString(name)
             try QueryIRWireFormat.writeOptionalStrings(columns, into: &writer)
             encodingSteps.append(.dataSource(source))
+        case .tableFunction(let source):
+            do { try QueryStructuralValidator.validate(source) }
+            catch { throw .invalidQueryStructure(error) }
+            writer.writeUInt8(18)
+            writer.writeBool(source.withOrdinality)
+            encodingSteps.append(.expression(.function(source.function)))
         case .graphTable(let source):
             writer.writeUInt8(5)
             encodingSteps.append(.graphTable(source))

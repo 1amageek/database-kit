@@ -692,7 +692,7 @@ nested-value scope; no stored field is omitted from canonical encoding:
 
 | Position | Payload |
 |---|---|
-| 1 | Optional NamedSubquery array. Each element retains name String, optional column-name String array, complete SELECT query, optional Materialization (0 materialized, 1 notMaterialized). |
+| 1 | Optional NamedSubquery array. Each element uses the complete production below, including S10 SEARCH/CYCLE metadata. |
 | 2 | Projection item count, then ordered ProjectionItem productions. |
 | 3 | DataSource. |
 | 4 | Optional AccessPath using its existing production. |
@@ -705,6 +705,7 @@ nested-value scope; no stored field is omitted from canonical encoding:
 | 11 | QueryPagination. |
 | 12 | Bool reduced. |
 | 13 | Existing SPARQLDataset production. |
+| 14 | Bool withRecursive (S10). |
 
 | Production | Discriminator and exact remaining payload |
 |---|---|
@@ -866,3 +867,49 @@ limits fail with typed Wire errors before publication or sink emission.
 | S09-W02 | Every expression-bearing child round-trips through the shared iterative encoder/decoder, including nested grouping sets, aggregate FILTER/order and both window offsets. |
 | S09-W03 | Every truncated prefix, unknown name/tag, invalid Bool, trailing input and one-past structural budget rejects explicitly without a repaired or partial success. |
 | S09-W04 | Native and exact ordinary/Embedded runtime lanes execute carriage, identity, parameter and bounded failure witnesses; compilation alone is insufficient. |
+
+### S10 canonical recursive and function-source carriage
+
+The [Query carriage contract](../DatabaseKit/Query/DESIGN.md#s10-frozen-recursive-and-function-source-carriage)
+owns the declarations; the [SQL profile](../DatabaseKit/Query/SQL/DESIGN.md#s10-frozen-recursion-and-table-functions)
+owns recursive evaluation, function selection, generated columns and SQL name
+admission. Wire owns only this deterministic, bounded representation. Both
+standard v3 and MultiBase v5 use the following grammar without an older-layout
+decoder or version alias.
+
+| Production | Exact ordered payload |
+|---|---|
+| SelectQuery | Existing positions1...13 followed by strict Bool withRecursive. |
+| NamedSubquery | Name String; optional column-name String array; complete SelectQuery; optional Materialization byte0 materialized /1 notMaterialized; optional CTESearchClause; optional CTECycleClause. |
+| CTESearchClause | Order byte0 depthFirst /1 breadthFirst; bounded key-name String array; sequenceColumn String. |
+| CTECycleClause | Bounded key-name String array; markColumn String; pathColumn String; strict Bool constants-present; when true, markValue Literal followed by defaultValue Literal. |
+| DataSource.tableFunction | Source tag18; strict Bool withOrdinality; existing Expression.function production, including its tag28/43/55, schema, name, argument order, DISTINCT and final-array VARIADIC metadata. |
+
+The single constants presence bit encodes exactly the two absent or two
+present fields. A materialized declaration containing only one constant fails
+with the semantic owner's typed structural error; a truncated pair fails with
+the existing truncated error. Key/name shape validation also uses Kit's
+structural error contract. SQL visibility, existence/type compatibility of
+keys, actual recursion and supported function names are binding decisions and
+are not inferred from Wire roundtrips. Source18 rejects an encoded expression
+other than FunctionCall with invalidQueryIRWireState. Alias/column overrides
+remain exclusively in source16; no alias field is duplicated in source18.
+
+SELECT/source/function arguments traverse the existing explicit continuation
+SCC. SEARCH/CYCLE collections use existing bounded strings/counts and CYCLE
+constants use the existing iterative Literal codec; neither side introduces a
+recursive process-stack walk, separate quota or alternate value algebra.
+Residual NamedSubquery entry points use the identical metadata production.
+Measurement, owned encoding and sink emission must agree before publication.
+All nesting, object, collection, string and frame charges remain in the
+enclosing reader/writer. No budget or formal default128KiB Kit runtime stack
+is increased for these fields. Primitive FieldValue and persistence bytes do
+not change.
+
+| Case | Required falsifiable evidence |
+|---|---|
+| S10-W01 | Exact SELECT tail, SEARCH order/key/name, CYCLE default/explicit Literal pair, source18 ordinary/schema/VARIADIC and alias-wrapper goldens; independently owned equal values have equal bytes and streaming matches owned encoding. |
+| S10-W02 | Full query and residual NamedSubquery roundtrips preserve withRecursive, optional declaration metadata, rich/array constant owners, function arguments and ordinality in standard/MultiBase. |
+| S10-W03 | Every truncated prefix, unknown SEARCH order/function expression/source tag, malformed Bool, invalid semantic shape and trailing bytes fails with its typed cause, with no repaired or partial output. |
+| S10-W04 | Exact and one-past frame/string/collection/object/nesting limits cover generated metadata, constants and function children on the same ledger; rejected measured encoding emits no sink bytes. |
+| S10-W05 | Native affected-target/consolidated and exact ordinary/Embedded runtime fixtures execute carriage and bounded failures on a frozen source graph at the existing default128KiB Kit stack. Fixtures extend the portable carriage owner; harness count changes are owned by the harness task. |

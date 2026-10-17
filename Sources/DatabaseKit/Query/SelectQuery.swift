@@ -11,6 +11,7 @@ public struct SelectQuery: Sendable, Hashable {
     public let quantifier: SelectQuantifier
     public let pagination: QueryPagination
     public let subqueries: [NamedSubquery]?
+    public let withRecursive: Bool
     public let reduced: Bool
     public let dataset: SPARQLDataset
 
@@ -26,6 +27,7 @@ public struct SelectQuery: Sendable, Hashable {
         quantifier: SelectQuantifier = .all,
         pagination: QueryPagination = QueryPagination(),
         subqueries: [NamedSubquery]? = nil,
+        withRecursive: Bool = false,
         reduced: Bool = false,
         dataset: SPARQLDataset = .implicit
     ) {
@@ -40,6 +42,7 @@ public struct SelectQuery: Sendable, Hashable {
         self.quantifier = quantifier
         self.pagination = pagination
         self.subqueries = subqueries
+        self.withRecursive = withRecursive
         self.reduced = reduced
         self.dataset = dataset
     }
@@ -67,6 +70,7 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )
@@ -85,6 +89,7 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )
@@ -103,6 +108,7 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )
@@ -121,6 +127,7 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )
@@ -139,6 +146,7 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )
@@ -157,6 +165,7 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )
@@ -166,7 +175,8 @@ extension SelectQuery {
         SelectQuery(projection: projection, source: source, accessPath: accessPath,
             filter: filter, groupBy: groupBy, having: having, windows: windows,
             orderBy: orderBy, quantifier: quantifier, pagination: pagination,
-            subqueries: subqueries, reduced: reduced, dataset: dataset)
+            subqueries: subqueries,
+            withRecursive: withRecursive, reduced: reduced, dataset: dataset)
     }
 
     public func replacing(orderBy: [SortKey]?) -> SelectQuery {
@@ -182,6 +192,7 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )
@@ -200,6 +211,7 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )
@@ -218,6 +230,7 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )
@@ -236,9 +249,17 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )
+    }
+
+    public func replacing(withRecursive: Bool) -> SelectQuery {
+        SelectQuery(projection: projection, source: source, accessPath: accessPath,
+            filter: filter, groupBy: groupBy, having: having, windows: windows,
+            orderBy: orderBy, quantifier: quantifier, pagination: pagination,
+            subqueries: subqueries, withRecursive: withRecursive, reduced: reduced, dataset: dataset)
     }
 
     public func replacing(reduced: Bool) -> SelectQuery {
@@ -254,6 +275,7 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )
@@ -272,6 +294,7 @@ extension SelectQuery {
             quantifier: quantifier,
             pagination: pagination,
             subqueries: subqueries,
+            withRecursive: withRecursive,
             reduced: reduced,
             dataset: dataset
         )

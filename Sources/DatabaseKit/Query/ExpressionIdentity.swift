@@ -163,6 +163,7 @@ enum ExpressionIdentity {
                 case .select(let query):
                     steps.append(.token(.dataset(query.dataset)))
                     steps.append(.token(.bool(query.reduced)))
+                    steps.append(.token(.bool(query.withRecursive)))
                     steps.append(.limit(query.pagination.limit))
                     steps.append(.count(query.pagination.offset))
                     steps.append(.optionalSorts(query.orderBy))
@@ -196,6 +197,22 @@ enum ExpressionIdentity {
                     guard index < ctes.count else { continue }
                     let cte = ctes[index]
                     steps.append(.ctes(ctes, index + 1)); steps.append(.select(cte.query))
+                    if let cycle = cte.cycle {
+                        if let value = cycle.defaultValue { steps.append(.token(.literal(value))) }
+                        steps.append(.token(.bool(cycle.defaultValue != nil)))
+                        if let value = cycle.markValue { steps.append(.token(.literal(value))) }
+                        steps.append(.token(.bool(cycle.markValue != nil)))
+                        steps.append(.token(nameToken(cycle.pathColumn)))
+                        steps.append(.token(nameToken(cycle.markColumn)))
+                        steps.append(.token(names(cycle.columns)))
+                    }
+                    steps.append(.token(.bool(cte.cycle != nil)))
+                    if let search = cte.search {
+                        steps.append(.token(nameToken(search.sequenceColumn)))
+                        steps.append(.token(names(search.columns)))
+                        steps.append(.token(.bool(search.order == .depthFirst)))
+                    }
+                    steps.append(.token(.bool(cte.search != nil)))
                     steps.append(.token(.materialization(cte.materialized))); steps.append(.token(names(cte.columns)))
                     return nameToken(cte.name)
                 case .optionalExpressions(let values):
@@ -516,6 +533,14 @@ enum ExpressionIdentity {
                 steps.append(.token(.fieldObject(table.partitions)))
                 steps.append(.token(optionalName(table.alias))); steps.append(.token(optionalName(table.schema)))
                 steps.append(.token(nameToken(table.table))); return .kind(100)
+            case .tableFunction(let value):
+                list(value.function.arguments)
+                steps.append(.token(.bool(value.function.finalArrayIsVariadic)))
+                steps.append(.token(.bool(value.function.distinct)))
+                steps.append(.token(nameToken(value.function.name)))
+                steps.append(.token(optionalName(value.function.schema)))
+                steps.append(.token(.bool(value.withOrdinality)))
+                return .kind(116)
             case .logical(let logical):
                 steps.append(.token(nameToken(logical.identifier))); steps.append(.token(nameToken(logical.kindIdentifier))); return .kind(101)
             case .subquery(let query): steps.append(.select(query)); return .kind(102)

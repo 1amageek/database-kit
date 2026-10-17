@@ -86,12 +86,15 @@ extension QueryIRWireFormat {
         _ subquery: NamedSubquery,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
+        do { try QueryStructuralValidator.validate(subquery) }
+        catch { throw .invalidQueryStructure(error) }
         try writer.writeString(subquery.name)
         try writeOptionalStrings(subquery.columns, into: &writer)
         try encodeSelectQuery(subquery.query, into: &writer)
         try writeOptional(subquery.materialized, into: &writer) { value, writer in
             writer.writeUInt8(value == .materialized ? 0 : 1)
         }
+        try encodeCTEMetadata(subquery, into: &writer)
     }
 
     static func decodeNamedSubquery(
@@ -106,12 +109,18 @@ extension QueryIRWireFormat {
             guard tag <= 1 else { throw .invalidValueTag(tag) }
             return tag == 0 ? .materialized : .notMaterialized
         }
-        return NamedSubquery(
+        let metadata = try decodeCTEMetadata(from: &reader)
+        let subquery = NamedSubquery(
             name: name,
             columns: columns,
             query: query,
-            materialized: materialized
+            materialized: materialized,
+            search: metadata.search,
+            cycle: metadata.cycle
         )
+        do { try QueryStructuralValidator.validate(subquery) }
+        catch { throw .invalidQueryStructure(error) }
+        return subquery
     }
 
     private static func encodeIndexScanSource(

@@ -22,6 +22,9 @@ public enum QueryStructuralValidationError: Error, Sendable, Equatable {
         maximum: UInt64
     )
     case invalidValuesRowArity(row: Int, expected: Int, actual: Int)
+    case invalidCTESearchClause
+    case invalidCTECycleClause
+    case invalidTableFunctionSource
     case emptyDistinctOn
     case invalidSetQueryEnvelope
     case sourceAliasInTableReference
@@ -41,6 +44,12 @@ extension QueryStructuralValidationError: CustomStringConvertible {
             return "Query \(resource.rawValue) limit exceeded: \(actual) > \(maximum)"
         case .invalidValuesRowArity(let row, let expected, let actual):
             return "VALUES row \(row) has \(actual) cells; expected \(expected)"
+        case .invalidCTESearchClause:
+            return "Invalid CTE SEARCH keys or generated column"
+        case .invalidCTECycleClause:
+            return "Invalid CTE CYCLE keys, generated columns or constants"
+        case .invalidTableFunctionSource:
+            return "Invalid table function name, schema or modifiers"
         case .emptyDistinctOn:
             return "DISTINCT ON requires at least one expression"
         case .invalidSetQueryEnvelope:

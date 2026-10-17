@@ -691,7 +691,8 @@ private struct QueryScopeState {
         if let offset = query.pagination.offset {
             guard case .fixed = offset else { throw .unsupportedSQLExpression }
         }
-        guard query.windows.isEmpty else { throw .unsupportedSQLExpression }
+        guard query.windows.isEmpty, !query.withRecursive,
+              !(query.subqueries ?? []).contains(where: { $0.search != nil || $0.cycle != nil }) else { throw .unsupportedSQLExpression }
         try SPARQLSemanticValidator.validateDataset(query.dataset)
         try validate(
             query.source,
@@ -813,7 +814,7 @@ private struct QueryScopeState {
                 pattern,
                 inputVisibleVariables: inputVisibleVariables
             )
-        case .aliased, .setOperation, .values:
+        case .tableFunction, .aliased, .setOperation, .values:
             throw .unsupportedSQLExpression
         #if DATABASE_KIT_MULTI_BASE
         case .base(_, let source):

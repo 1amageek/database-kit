@@ -551,7 +551,8 @@ extension SelectQuery {
         case .distinct: result += "DISTINCT "
         case .distinctOn: throw .unsupportedSPARQLLiteral
         }
-        guard windows.isEmpty else { throw .unsupportedSPARQLLiteral }
+        guard windows.isEmpty, !withRecursive,
+              !(subqueries ?? []).contains(where: { $0.search != nil || $0.cycle != nil }) else { throw .unsupportedSPARQLLiteral }
         if reduced { result += "REDUCED " }
 
         result += try projection.map { (item) throws(QueryLiteralConversionError) -> String in

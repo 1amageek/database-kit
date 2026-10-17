@@ -31,7 +31,7 @@ struct QueryValueRuntimeContract {
         print("QUERY_VALUE_RUNTIME_BEGIN")
         do {
             try run()
-            print("QUERY_VALUE_RUNTIME_PASS cases=15")
+            print("QUERY_VALUE_RUNTIME_PASS cases=16")
         } catch {
             switch error {
             case .assertion(let code): print("QUERY_VALUE_RUNTIME_FAIL assertion=\(code)")
@@ -130,6 +130,72 @@ struct QueryValueRuntimeContract {
         pass("sql-relational-query-carriage")
         try sqlGroupingAggregateWindowCarriage()
         pass("sql-grouping-aggregate-window-carriage")
+        try sqlRecursiveFunctionCarriage()
+        pass("sql-recursive-function-carriage")
+    }
+
+    private static func sqlRecursiveFunctionCarriage() throws(Failure) {
+        let constant = Literal.binary(ByteString([1, 2, 3, 4]))
+        let definition = NamedSubquery(name: "c", columns: ["k"],
+            query: SelectQuery(projection: [.expression(.int(1))], source: .values([[]])),
+            search: CTESearchClause(order: .breadthFirst, columns: ["k"], sequenceColumn: "sequence"),
+            cycle: CTECycleClause(columns: ["k"], markColumn: "mark", pathColumn: "path",
+                markValue: constant, defaultValue: .null))
+        let call = FunctionCall(name: "generate_series", arguments: [.int(1), .parameter(.position(1))], schema: "pg_catalog")
+        let query = SelectQuery(projection: [.wildcard()], source: .aliased(
+            .tableFunction(TableFunctionSource(function: call, withOrdinality: true)), name: "f", columns: ["value", "ordinal"]),
+            subqueries: [definition], withRecursive: true)
+        let original = QueryStatement.select(query)
+        do { try QueryStructuralValidator.validate(original) } catch { throw .structure(error) }
+        let bytes = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(original) }
+        let restored = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(bytes) }
+        try require(restored == original && restored.hashValue == original.hashValue, code: 231)
+        let bound: QueryStatement
+        do {
+            let binder = try QueryParameterBinder(parameters: [QueryParameter(position: 1, value: .primitive(.int64(3)))])
+            bound = try binder.bind(restored)
+        } catch { throw .binding(error) }
+        guard case .select(let selected) = bound,
+              case .aliased(.tableFunction(let function), _, _) = selected.source else { throw .assertion(232) }
+        try require(selected.withRecursive && function.withOrdinality && function.function.arguments == [.int(1), .int(3)], code: 233)
+        try require(selected.subqueries?[0].search == definition.search && selected.subqueries?[0].cycle == definition.cycle, code: 234)
+        try require(query != query.replacing(withRecursive: false), code: 235)
+        try sqlRecursiveFunctionWireFailures(original, bytes: bytes)
+    }
+
+    @inline(never)
+    private static func sqlRecursiveFunctionWireFailures(_ statement: QueryStatement, bytes: ByteString) throws(Failure) {
+        for count in 0..<bytes.count {
+            var rejected = false
+            do { _ = try QueryIRWireFormat.decode(bytes.prefix(count)) } catch { rejected = true }
+            try require(rejected, code: 236)
+        }
+        var malformed = Array(bytes)
+        malformed[malformed.count - 1] = 2
+        try rejectWire(.invalidBool(2), code: 237) { () throws(DatabaseWireError) in
+            _ = try QueryIRWireFormat.decode(ByteString(malformed))
+        }
+        let exact: DatabaseWireLimits
+        let onePast: DatabaseWireLimits
+        do {
+            exact = try DatabaseWireLimits(maximumFrameBytes: bytes.count, maximumStringBytes: 64,
+                maximumByteStringBytes: 64, maximumCollectionCount: 2, maximumNestingDepth: 64, maximumObjectCount: 256)
+            onePast = try DatabaseWireLimits(maximumFrameBytes: bytes.count - 1, maximumStringBytes: 64,
+                maximumByteStringBytes: 64, maximumCollectionCount: 2, maximumNestingDepth: 64, maximumObjectCount: 256)
+        } catch { throw .wireLimits(error) }
+        try require(try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(statement, limits: exact) } == bytes, code: 238)
+        try require(try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(bytes, limits: exact) } == statement, code: 239)
+        var rejected = false
+        do { _ = try QueryIRWireFormat.decode(bytes, limits: onePast) } catch {
+            guard case .frameTooLarge = error else { throw .wire(error) }
+            rejected = true
+        }
+        try require(rejected, code: 240)
+        let invalid = NamedSubquery(name: "c", query: SelectQuery(projection: [], source: .values([])),
+            cycle: CTECycleClause(columns: ["k"], markColumn: "m", pathColumn: "p", markValue: .bool(true)))
+        try rejectWire(.invalidQueryStructure(.invalidCTECycleClause), code: 241) { () throws(DatabaseWireError) in
+            _ = try QueryIRWireFormat.encode(.select(SelectQuery(projection: [], source: .values([]), subqueries: [invalid])))
+        }
     }
 
     private static func sqlGroupingAggregateWindowCarriage() throws(Failure) {
