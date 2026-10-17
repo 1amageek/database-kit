@@ -111,7 +111,7 @@ progress record rather than inferred from test declarations.
   and results, with explicit type or contextual inference. Primitive callers
   adapt explicitly without losing identity or metadata.
 - Planned runtime entry points are executeStatement and executeSQLBlock in
-  Framework, alongside the read-only SELECT facade. A statement result
+  Framework, alongside the read-only SELECT facade. A Framework-owned statement result
   distinguishes rows, command count and schema change; a block result preserves
   statement order and is published only after authoritative close.
 - DatabaseWire extends its existing positional row representation with these
@@ -1658,9 +1658,93 @@ DDL grammar and principal admission to the same internal owner. S11 adds no SQL
 role, GRANT, fictitious administrative identity or cross-request session state.
 DDL execution, transactional blocks/checkpoints, constraint enforcement,
 complete DML and information_schema remain S15/S12/S13/S14/S16 respectively.
+
 These are existing sprint boundaries, not removal from the accepted profile.
 
 Dialect references are PostgreSQL 18 [schemas and search path](https://www.postgresql.org/docs/18/ddl-schemas.html)
 and [primary keys](https://www.postgresql.org/docs/18/ddl-constraints.html#DDL-CONSTRAINTS-PRIMARY-KEYS).
 The product's physical row identifier is not PostgreSQL ctid or an OID and is
 not exposed as a synthetic compatibility column.
+
+## S12 Semantic Block Contract
+
+This section freezes the S12 declaration boundary and public failure policy.
+It is not runtime implementation evidence. The
+[Framework SQLBlock design](../../../../../database-framework/Sources/DatabaseEngine/SQLBlock/DESIGN.md)
+owns execution and result lifetimes; [Database](../../../../../database-framework/Sources/Database/DESIGN.md#s12-semantic-entry-contract)
+owns public adaptation. The workspace progress record owns completion.
+
+### Declarations
+
+| Declaration | Meaning and owner |
+|---|---|
+| `SQLBlock` | DatabaseKit immutable ordered, nonempty collection of `SQLBlockStep`. |
+| `SQLBlockStep.statement(QueryStatement)` | Execute one existing semantic statement; availability is an execution admission decision. |
+| `SQLBlockStep.savepoint(String)` | Introduce a named checkpoint within the current request. |
+| `SQLBlockStep.rollbackTo(String)` | Restore the nearest matching live checkpoint and discard its descendants. |
+| `SQLBlockStep.release(String)` | Remove the nearest matching live checkpoint and descendants while retaining their writes. |
+| `SQLCommandKind` | INSERT/UPDATE/DELETE report affected-row counts; SAVEPOINT/ROLLBACK TO/RELEASE do not. Framework owns values resulting from execution. |
+
+`SQLBlock.init(steps:limits:)` consumes its step array and throws
+`QueryStructuralValidationError` for an empty block, malformed checkpoint name,
+invalid contained structure or exceeded bound. Runtime entry revalidates with
+its admitted limits and canonical parameters using
+`QueryStructuralValidator.validate(_:parameters:limits:)`.
+
+Names are exact UTF-8 SQL identifiers, without Unicode normalization. An
+empty name or embedded NUL fails intrinsic validation. SQL text folding and
+quoting remain QueryAST responsibilities. Repeated names shadow older live
+names; releasing the newer checkpoint reveals an older same-name checkpoint.
+Rollback preserves its target, so it may be used again. Unknown or released
+names fail explicitly. These are SQL semantics above StorageKit's opaque,
+attempt-bound checkpoint identity; declaration values never store that token.
+
+The block uses an implicit request transaction and one terminal commit or
+rollback. It does not add BEGIN/COMMIT/ROLLBACK text grammar, cross-request
+transaction handles, setting/preparation syntax, SQL DDL, complete DML, or a
+new Wire operation. S13 through S17 retain their recorded responsibilities.
+Existing `QueryStatement` cases remain the only ordinary statement algebra.
+
+### Result and admission assumptions
+
+Framework's public statement result distinguishes typed positional rows from
+command outcomes. Later DDL supplies schema-change outcomes. A block preserves
+successful statement/control outcomes in input order. The accepted policy
+retains a successful statement's result even when a later rollback-to removes
+its effects; a result records what that statement observed, not final state.
+Duplicate labels, empty-result columns, types, typmods and positional values
+retain their existing meaning. No third Kit row payload is introduced.
+
+Intrinsic admission counts block steps, checkpoint names, parameters and
+every contained statement against one cumulative structural ledger before
+execution; restarting validation at each statement cannot evade bounds.
+Runtime work, deadline, output and retained bytes use the exact single request
+meter. Rollback and retry never refund consumed work or elapsed time.
+
+S12 execution admits existing SQL SELECT semantics and only the explicitly
+catalog-checked existing mutation subset defined by the Framework SQLBlock
+owner. A physical entity-name match alone is not logical SQL binding.
+Unimplemented statement forms fail explicitly before their effects; declaration
+construction or parser support is not an execution-capability claim.
+
+### Public failure policy
+
+At the first statement or checkpoint error, an immutable public block stops,
+rolls back the entire request, completes mandatory cleanup and throws the
+typed failure. Later steps, including ROLLBACK TO, are not executed. No earlier
+successful result is published from that failed request. Primary and cleanup
+failures retain their existing combined-failure contract. Explicit lower-level
+callback recovery remains Transaction-owned and is not this public API.
+
+### Falsifiable S12 declaration cases
+
+| ID | Required evidence |
+|---|---|
+| S12-K01 | Construction preserves step order and wraps all admitted ordinary statements without converting their values. |
+| S12-K02 | Exact/non-normalized names, duplicate-name stack behavior, target survival, descendant invalidation and unknown/released failures agree with runtime. |
+| S12-K03 | Empty block/name, NUL name and cumulative step/name/statement/parameter exact and one-past budgets fail before execution. |
+| S12-K04 | Standard and Embedded declarations share immutable storage, Sendable and validation contracts and contain no Framework/runtime dependency. |
+
+Kit tests own intrinsic cases. Framework's SQLBlock behavioral cases own
+checkpoint lookup, data effects, result retention and publication; parser and
+remote block tests remain the later S16/S17 evidence rather than substitutes.

@@ -5,6 +5,36 @@ import DatabaseTypes
 /// The explicit validation-step stack ensures adversarial QueryIR cannot exhaust
 /// the process stack before semantic validation reports a typed resource error.
 public enum QueryStructuralValidator {
+    /// Admits all block steps and parameter payloads against one cumulative ledger.
+    public static func validate(
+        _ block: SQLBlock,
+        parameters: [QueryParameter] = [],
+        limits: QueryStructuralLimits = .default
+    ) throws(QueryStructuralValidationError) {
+        guard !block.steps.isEmpty else { throw .emptySQLBlock }
+        var validation = ValidationTraversal(limits: limits)
+        try validation.ledger.consume(.totalNodes)
+        try validation.ledger.consume(.collectionElements, amount: UInt64(block.steps.count))
+        for step in block.steps {
+            try validation.ledger.consume(.totalNodes)
+            switch step {
+            case .statement(let statement):
+                try validation.validate([rootValidationStep(for: statement)])
+            case .savepoint(let name), .rollbackTo(let name), .release(let name):
+                try validation.ledger.consume(.retainedBytes, amount: UInt64(name.utf8.count))
+                guard !name.isEmpty, !name.utf8.contains(0) else {
+                    throw .invalidSQLCheckpointName
+                }
+            }
+        }
+        try validation.validateParameters(parameters)
+        for parameter in parameters {
+            if let name = parameter.name {
+                try validation.ledger.consume(.retainedBytes, amount: UInt64(name.utf8.count))
+            }
+        }
+    }
+
     public static func validate(
         _ statement: QueryStatement,
         limits: QueryStructuralLimits = .default

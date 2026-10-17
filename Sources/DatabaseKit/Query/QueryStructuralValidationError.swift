@@ -32,6 +32,8 @@ public enum QueryStructuralValidationError: Error, Sendable, Equatable {
     case invalidArrayAccessSubscriptCount(Int)
     case emptyVariadicFunctionArguments
     case invalidPatternEscape
+    case emptySQLBlock
+    case invalidSQLCheckpointName
     case unbalancedNesting
     case invalidQueryValue(QueryValueError)
     case invalidReferenceIdentifier(ReferenceIdentifierValidationError)
@@ -64,6 +66,10 @@ extension QueryStructuralValidationError: CustomStringConvertible {
             return "Explicit VARIADIC requires a final array argument"
         case .invalidPatternEscape:
             return "ERE pattern predicates do not accept an escape expression"
+        case .emptySQLBlock:
+            return "An SQL block requires at least one step"
+        case .invalidSQLCheckpointName:
+            return "An SQL checkpoint name must be nonempty and contain no NUL"
         case .unbalancedNesting:
             return "Query nesting admission is unbalanced"
         case .invalidQueryValue:

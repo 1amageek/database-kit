@@ -52,6 +52,26 @@ flowchart LR
 
 ## Contracts and Invariants
 
+### S12 semantic block carriage
+
+The [SQL component](SQL/DESIGN.md#s12-semantic-block-contract)
+owns `SQLBlock`, `SQLBlockStep`, command metadata, and their
+intrinsic validation. A block step wraps the existing `QueryStatement`;
+it does not introduce a second SQL statement algebra or change SPARQL meaning.
+These immutable declarations contain no transaction, checkpoint token, meter,
+runtime generation, executable closure, or Framework result owner.
+
+Framework owns statement results derived from execution, including rows and
+retained claims, and the aggregate Collecting-to-Ready transition. Existing
+`QueryColumn` and `QueryValue` remain their semantic vocabulary. S12 does not
+add a third materialized row representation alongside existing Framework and
+Wire rows. Binary block descriptors and remote invocation remain S17.
+
+The public immutable block stops at the first statement or checkpoint error,
+rolls back the entire request and throws the typed failure. It does not execute
+later recovery steps. Lower-level callback recovery remains Transaction-owned.
+Declarations and test definitions alone do not establish runtime completion.
+
 ### SQL lexical value construction
 
 Query-owned context-free constructors form existing query values from bounded
