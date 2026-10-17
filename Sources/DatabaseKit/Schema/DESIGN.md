@@ -3,7 +3,7 @@
 ## Purpose and Scope
 
 Schema owns validated database declaration catalogs and their identity/evolution
-contracts inside [DatabaseKit](../DESIGN.md). Children: none. This document
+contracts inside [DatabaseKit](../DESIGN.md). Child: [SQLCatalog](SQLCatalog/DESIGN.md). This document
 fixes S01/S06 field query-metadata admission; existing unrelated catalog
 features retain their contracts.
 
@@ -20,6 +20,7 @@ Schema does not infer SQL meaning from persisted object or byte payloads.
 | Design | Relationship | Contract Used | Summary | Cautions |
 |---|---|---|---|---|
 | [DatabaseKit](../DESIGN.md) | parent | declaration-only module | Composes Schema with its sibling semantic owners. | No mutable runtime catalog. |
+| [SQLCatalog](SQLCatalog/DESIGN.md) | child | Immutable logical SQL catalog and search-path declarations | Separates SQL relation/column identity from physical Schema.Entity and field declarations. | It is not part of SchemaManifest; Framework couples both snapshots in one execution generation. |
 | [Model](../Model/DESIGN.md) | coordinates with | declared Field.queryType and static adaptation | Supplies field declarations from statically known model types. | Instance contents do not choose the schema. |
 | [Query](../Query/DESIGN.md) | depends on | QueryColumnType | Supplies query type descriptors. | Preserve SPARQL/primitive type meaning. |
 | [SQL](../Query/SQL/DESIGN.md) | depends on | declared rich envelope validation | Validates query-specific defaults and field types. | A matching primitive storage kind is insufficient. |

@@ -716,7 +716,7 @@ These are dialect facts, not evidence that Framework already implements them.
 | Parameter base type | Explicit QueryParameter.type wins. Without it, a non-NULL typed Wire payload supplies its intrinsic base type, preserving primitive width/rich metadata. NULL and empty primitive arrays require context. This existing typed invocation contract differs from PostgreSQL's untyped textual PREPARE inputs and is tested separately. |
 | Contextual inference order | Infer one base type for each parameter in PostgreSQL semantic visitation order, retain every occurrence and validate its permitted use-site coercion. Do not globally optimize or retroactively repair unresolved earlier occurrences. A final bare NULL parameter output resolves to text; IS NULL alone remains unresolved. A prior unresolved IS NULL is not rescued by a later integer CAST; a prior integer CAST permits a later explicit text CAST. Projection abs($1) selects double precision before the WHERE integer comparison. |
 | Operator/function resolution | Apply exact matches, admitted implicit conversions, type categories and preferred overloads for the executable subset. Unknown abs input prefers double precision; typed abs retains smallint/integer/bigint/real/double precision overload width. length(text/bytea) returns integer with checked result bounds. Signature, NULL behavior, runtime capability and output metadata agree even with zero rows. |
-| SQL namespace | Existing built-ins match exact lowercase terminal names, unqualified or explicitly in pg_catalog. Quoted uppercase and quoted dotted identifiers are different names. Resolve admitted pg_catalog type names without dropping the schema. Other schema-qualified functions/types fail explicitly until an admitted owner provides them; schema-qualified tables fail until S11 rather than looking up their terminal relation in the static registry. |
+| SQL namespace | Existing built-ins match exact lowercase terminal names, unqualified or explicitly in pg_catalog. Quoted uppercase and quoted dotted identifiers are different names. Resolve admitted pg_catalog type names without dropping the schema. Other schema-qualified functions/types fail explicitly until an admitted owner provides them; table lookup uses the S11 logical catalog and never drops qualification to search the static registry. |
 | Product SQL/SPARQL boundary | The SQL-embedded product SPARQL call matches only its exact unqualified semantic name. Its established SQL spelling and SPARQL language case policy remain distinct. The existing graph signature, parent transaction and retained prepared storage are preserved. |
 | CAST of NULL | Bare untyped NULL may acquire any valid resolved target type. A typed NULL retains its incoming type and must pass the same source-to-target cast-signature check as a non-NULL operand. Legal same-family temporal precision casts preserve NULL and target precision without performing S06 rounding. Unknown/custom targets and illegal chains fail before reads. |
 | ORDER/GROUP names | Bare ORDER BY names prefer output labels; matching duplicate labels are valid only when the output expressions are equivalent, otherwise ambiguous. Bare GROUP BY names prefer an input column, then output labels. Names inside a larger expression resolve against input scope. Integer ordinals address the expanded output list and reject zero/negative/out-of-range values; GROUP ordinals cannot select aggregates. |
@@ -1596,3 +1596,71 @@ bound function + selected input values
 Recursive type exactness compares SQL meaning, including width and type modifiers. A corresponding native scalar metadata spelling is accepted only when it has the identical value carrier; the recursive term normalizes back to the immutable seed representation. This equivalence never performs set common-type widening.
 
 Recursive generated values may be computed by an internal selected projection adapter; it must reuse already evaluated user target values and preserve each parent's path/depth without volatile reevaluation. No ownership cycle may connect an immutable plan or a completed output to a live self consumer. Existing S08 nonrecursive demand and S09 grouping/window contracts are regression owners, not duplicated definitions here.
+
+
+## S11 Frozen Logical Catalog and Identity
+
+This section owns the S11 subset of D01/D05: logical names, stable identity,
+key declarations, static-model protection and restart-safe catalog binding.
+[Schema SQLCatalog](../../Schema/SQLCatalog/DESIGN.md) owns the immutable public
+values and their intrinsic validation. Framework [SQLCatalog](../../../../../database-framework/Sources/DatabaseEngine/SQLCatalog/DESIGN.md)
+owns resolved physical bindings and its durable catalog format; [Schema](../../../../../database-framework/Sources/DatabaseEngine/Schema/DESIGN.md)
+owns the aggregate generation lifecycle. [QueryExecution](../../../../../database-framework/Sources/DatabaseEngine/QueryExecution/DESIGN.md)
+consumes those contracts for actual SQL SELECT execution.
+
+### Confirmed facts and required change
+
+Existing Schema.Entity names and FieldSchema names/numbers identify physical
+model/runtime/storage contracts. Schema-driven runtime identity still reads
+its physical id field. The pre-S11 schema publication and restoration paths
+already coupled Schema, runtime, authorization and generation leases. They did
+not supply logical SQL identities or namespace lookup. S11 adds an
+independent semantic catalog to that aggregate rather than renaming a physical
+entity, changing Persistable.id or redefining SchemaManifest.
+
+```text
+SQL names + request search path
+    -> one leased catalog/schema generation
+        -> resolved relation and ordered public-to-physical columns
+            -> existing entity/field authorization
+                -> existing runtime + Directory/Partition scan
+                    -> logical SQL source layout -> existing SQL operators
+
+trusted local catalog candidate
+    -> validate physical/static contracts -> one transaction stores the pair
+        -> authoritative commit -> publish immutable generation
+            -> shutdown/reopen -> restore and validate the same pair
+```
+
+### Frozen acceptance contracts
+
+| ID | Required behavior and counterexample |
+|---|---|
+| S11-C01 | Public declarations keep namespace/relation IDs unique in their catalog and column IDs unique within their relation. SQL column identity is the pair of relation ID and column ID, separate from its physical field number. Empty/NUL identifiers, duplicate names/IDs/backings and invalid namespace/key/field references fail explicitly. Names and IDs compare/hash as exact UTF-8, without Unicode-normalization equality, refolding or truncation. |
+| S11-C02 | SQL SELECT uses an explicit request search path. Its default is current authenticated principal identifier followed by public; anonymous requests skip the current-user entry. Missing path namespaces are skipped in order. A qualified name selects only that namespace and never falls back to its terminal physical entity name. CTE shadowing applies only to unqualified names. Search path changes no permissions, Directory, Partition or Base selection. |
+| S11-C03 | Authorization, binding, index/Fusion selection and scan consume the same resolved relation from one retained schema/catalog generation. Existing typed QueryIR and SPARQL retain their physical-name semantics when no SQL resolution policy is supplied. No layer independently re-resolves SQL names through the physical registry. |
+| S11-C04 | Ordered public columns map to validated physical field numbers/names. Wildcards, aliases, joins, correlated/derived/CTE sources and existing aggregate/window/set operations observe the logical names and values. Direct, paged, join and index/Fusion sources use the same alignment contract. An expected physical column missing from that mapping is a typed failure, never a fabricated NULL. Outer-join NULL extension keeps its separate existing meaning. |
+| S11-C05 | A relation may declare no SQL primary key, an arbitrary single-column key or an ordered composite key. These declarations neither replace the physical internal row identifier nor add it to SQL wildcard output. Physical rows with distinct internal identities can retain identical visible values where no SQL key exists. S13 owns SQL key constraint enforcement and S14 owns automatic SQL row mutation/allocation; S11 does not claim those later behaviors. |
+| S11-C06 | Logical schema/table/column rename preserves surviving stable IDs, backing entity/field identities, data and Directory placement. A surviving ID cannot be retargeted to a different physical owner. New leases see committed names while existing leases retain their original mapping. Continuations/prepared execution cannot silently reuse a different catalog meaning after a generation change. |
+| S11-C07 | Compiled model registration supplies an explicit immutable exact physical-model witness, including additional indexes; grouping functional-dependency metadata is not this witness. Durable static protection survives schema-driven restoration. SQL catalog changes reject removal, retargeting or incompatible field/key/identity/Directory/index/reference/security changes to protected contracts. Pure logical rename may retain those contracts. Trusted application schema evolution retains its existing distinct authority and validation path. |
+| S11-C08 | Physical Schema and logical catalog are independent semantic snapshots coupled in one immutable execution generation. SchemaManifest/fingerprint continues to identify Schema only. Catalog digest contributes to executionRuntimeFingerprint, not indexPhysicalFingerprint. Catalog-only rename participates in generation CAS/idempotency even when the physical Schema fingerprint is unchanged. |
+| S11-C09 | One transaction-owned aggregate persistence path stores global schema registry, SQL catalog, active fingerprints and generation; data-root-only metadata writers do not duplicate the global catalog. Publication occurs only after authoritative commit. Failure, cancellation, stale CAS and commit-unknown retain their existing distinct outcomes and cannot expose a partial candidate. MultiBase control/data-root and Grant boundaries remain intact. |
+| S11-C10 | Reopen loads the schema/catalog/metadata pair from one transaction snapshot, validates its digest, mappings and persisted static contracts, then reconstructs the runtime. Missing/partial/corrupt/mismatched nonempty state fails explicitly. A genuinely fresh empty database may initialize its default catalog; existing incomplete state is not silently rebuilt or adopted. Mixed static/schema-driven backing survives real file-backed shutdown and reopen. |
+| S11-C11 | Snapshot indexes, decode and bound-source metadata use checked existing frame/work/row/byte/deadline policies and preadmitted query allocations. Catalog state is immutable within the existing generation owner; shared state keeps identical Mutex/actor storage and entry points on Native, WASM and Embedded. Failure/early stop/cancellation releases claims and transaction resources, and a subsequent request remains usable. |
+| S11-C12 | Focused declaration/codec/transition/generation tests and public SQL SELECT tests distinguish success, exact names, missing names, authorization, hidden row identity, stale state, corruption, resource limits and file-backed restart. Native affected targets, exact formal targets, production SQLite/PostgreSQL and downstream consumers use recorded source/trait/count/link/runtime evidence. Full FoundationDB, Graph-enabled Database portable, MultiBase portable and final URL graph/push remain S18. |
+
+### Scope and administration authority
+
+S11 exposes catalog configuration/publication to trusted local DBContainer
+composition using the existing schema-administration boundary. Ordinary SQL
+SELECT and its search path do not acquire this capability. S15 will supply SQL
+DDL grammar and principal admission to the same internal owner. S11 adds no SQL
+role, GRANT, fictitious administrative identity or cross-request session state.
+DDL execution, transactional blocks/checkpoints, constraint enforcement,
+complete DML and information_schema remain S15/S12/S13/S14/S16 respectively.
+These are existing sprint boundaries, not removal from the accepted profile.
+
+Dialect references are PostgreSQL 18 [schemas and search path](https://www.postgresql.org/docs/18/ddl-schemas.html)
+and [primary keys](https://www.postgresql.org/docs/18/ddl-constraints.html#DDL-CONSTRAINTS-PRIMARY-KEYS).
+The product's physical row identifier is not PostgreSQL ctid or an OID and is
+not exposed as a synthetic compatibility column.

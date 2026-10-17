@@ -60,6 +60,7 @@ let package = Package(
                 "Query/DESIGN.md",
                 "Query/SQL/DESIGN.md",
                 "Schema/DESIGN.md",
+                "Schema/SQLCatalog/DESIGN.md",
             ],
             swiftSettings: [
                 .define(

@@ -20,6 +20,7 @@ struct QueryValueRuntimeContract {
         case wireLimits(DatabaseWireLimitsError)
         case structure(QueryStructuralValidationError)
         case binding(QueryParameterBindingError)
+        case catalog(SQLCatalogError)
     }
 
     private static let limits = QueryValueLimits(
@@ -31,7 +32,7 @@ struct QueryValueRuntimeContract {
         print("QUERY_VALUE_RUNTIME_BEGIN")
         do {
             try run()
-            print("QUERY_VALUE_RUNTIME_PASS cases=16")
+            print("QUERY_VALUE_RUNTIME_PASS cases=17")
         } catch {
             switch error {
             case .assertion(let code): print("QUERY_VALUE_RUNTIME_FAIL assertion=\(code)")
@@ -41,6 +42,7 @@ struct QueryValueRuntimeContract {
             case .wireLimits: print("QUERY_VALUE_RUNTIME_FAIL wire-limits")
             case .structure: print("QUERY_VALUE_RUNTIME_FAIL structure")
             case .binding: print("QUERY_VALUE_RUNTIME_FAIL binding")
+            case .catalog: print("QUERY_VALUE_RUNTIME_FAIL catalog")
             }
             exit(1)
         }
@@ -132,6 +134,74 @@ struct QueryValueRuntimeContract {
         pass("sql-grouping-aggregate-window-carriage")
         try sqlRecursiveFunctionCarriage()
         pass("sql-recursive-function-carriage")
+        try sqlCatalogDeclarations()
+        pass("sql-catalog-declarations")
+    }
+
+    private static func sqlCatalogDeclarations() throws(Failure) {
+        let composed = "\u{00e9}"
+        let decomposed = "e\u{0301}"
+        let first = try catalog { () throws(SQLCatalogError) in
+            try SQLColumn(id: composed, name: composed, fieldNumber: 9)
+        }
+        let second = try catalog { () throws(SQLCatalogError) in
+            try SQLColumn(id: decomposed, name: decomposed, fieldNumber: 2)
+        }
+        let namespace = try catalog { () throws(SQLCatalogError) in
+            try SQLNamespace(id: "namespace", name: "public")
+        }
+        let relation = try catalog { () throws(SQLCatalogError) in
+            try SQLRelation(id: "relation", namespaceID: "namespace", name: "items", entityName: "Item",
+                columns: [first, second], primaryKeyColumnIDs: [decomposed, composed])
+        }
+        let declaration = try catalog { () throws(SQLCatalogError) in
+            try SQLCatalog(namespaces: [namespace], relations: [relation])
+        }
+        try require(declaration.relations.count == 1 && relation.columns[0].fieldNumber == 9
+            && relation.primaryKeyColumnIDs?[0].utf8.elementsEqual(decomposed.utf8) == true, code: 242)
+        try require(first != second && Set([first, second]).count == 2, code: 243)
+        let noKey = try catalog { () throws(SQLCatalogError) in
+            try SQLRelation(id: "relation", namespaceID: "namespace", name: "items", entityName: "Item", columns: [])
+        }
+        try require(noKey.primaryKeyColumnIDs == nil && noKey.columns.isEmpty, code: 244)
+        try rejectCatalog(.emptyIdentifier, code: 245) { () throws(SQLCatalogError) in
+            _ = try SQLNamespace(id: "namespace", name: "")
+        }
+        try rejectCatalog(.nulInIdentifier, code: 246) { () throws(SQLCatalogError) in
+            _ = try SQLSearchPath(entries: [.schema("bad\u{0}name")])
+        }
+        try rejectCatalog(.invalidFieldNumber(0), code: 247) { () throws(SQLCatalogError) in
+            _ = try SQLColumn(id: "column", name: "value", fieldNumber: 0)
+        }
+        try rejectCatalog(.unknownNamespaceID("namespace"), code: 248) { () throws(SQLCatalogError) in
+            _ = try SQLCatalog(namespaces: [], relations: [relation])
+        }
+        try rejectCatalog(.duplicatePrimaryKeyColumnID(composed), code: 249) { () throws(SQLCatalogError) in
+            _ = try SQLRelation(id: "r", namespaceID: "n", name: "items", entityName: "Item",
+                columns: [first], primaryKeyColumnIDs: [composed, composed])
+        }
+        try rejectCatalog(.unknownPrimaryKeyColumnID(decomposed), code: 250) { () throws(SQLCatalogError) in
+            _ = try SQLRelation(id: "r", namespaceID: "n", name: "items", entityName: "Item",
+                columns: [first], primaryKeyColumnIDs: [decomposed])
+        }
+        try rejectCatalog(.emptyPrimaryKey, code: 251) { () throws(SQLCatalogError) in
+            _ = try SQLRelation(id: "r", namespaceID: "n", name: "items", entityName: "Item",
+                columns: [], primaryKeyColumnIDs: [])
+        }
+        try require(SQLSearchPath.default.entries == [.currentUser, .schema("public")], code: 252)
+        let entries: [SQLSearchPathEntry] = [.schema(composed), .schema(decomposed), .schema(composed)]
+        let path = try catalog { () throws(SQLCatalogError) in try SQLSearchPath(entries: entries) }
+        try require(path.entries == entries && Set(path.entries).count == 2, code: 253)
+        let renamed = try catalog { () throws(SQLCatalogError) in
+            try SQLRelation(id: relation.id, namespaceID: relation.namespaceID, name: "renamed", entityName: relation.entityName,
+                columns: relation.columns, primaryKeyColumnIDs: relation.primaryKeyColumnIDs)
+        }
+        try require(renamed.id == relation.id && renamed.columns == relation.columns
+            && Set([renamed, relation]).count == 2, code: 254)
+        try rejectCatalog(.duplicateEntityName("Item"), code: 255) { () throws(SQLCatalogError) in
+            let alias = try SQLRelation(id: "alias", namespaceID: "namespace", name: "alias", entityName: "Item", columns: [])
+            _ = try SQLCatalog(namespaces: [namespace], relations: [relation, alias])
+        }
     }
 
     private static func sqlRecursiveFunctionCarriage() throws(Failure) {
@@ -1088,6 +1158,21 @@ struct QueryValueRuntimeContract {
 
     private static func query<Value>(_ body: () throws(QueryValueError) -> Value) throws(Failure) -> Value {
         do { return try body() } catch { throw .query(error) }
+    }
+
+    private static func catalog<Value>(_ body: () throws(SQLCatalogError) -> Value) throws(Failure) -> Value {
+        do { return try body() } catch { throw .catalog(error) }
+    }
+
+    private static func rejectCatalog(_ expected: SQLCatalogError, code: UInt8,
+                                      _ body: () throws(SQLCatalogError) -> Void) throws(Failure) {
+        var rejected = false
+        do { try body() }
+        catch {
+            guard error == expected else { throw .catalog(error) }
+            rejected = true
+        }
+        try require(rejected, code: code)
     }
 
     private static func wire<Value>(_ body: () throws(DatabaseWireError) -> Value) throws(Failure) -> Value {
