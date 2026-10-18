@@ -5,7 +5,14 @@ extension QueryIRWireFormat {
         _ subquery: NamedSubquery,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
-        try writeOptional(subquery.search, into: &writer) {
+        try encodeCTEMetadata(search: subquery.search, cycle: subquery.cycle, into: &writer)
+    }
+
+    static func encodeCTEMetadata(
+        search: CTESearchClause?, cycle: CTECycleClause?,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        try writeOptional(search, into: &writer) {
             (search: CTESearchClause, writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             writer.writeUInt8(search.order == .depthFirst ? 0 : 1)
             try writeArray(search.columns, into: &writer) {
@@ -14,7 +21,7 @@ extension QueryIRWireFormat {
             }
             try writer.writeString(search.sequenceColumn)
         }
-        try writeOptional(subquery.cycle, into: &writer) {
+        try writeOptional(cycle, into: &writer) {
             (cycle: CTECycleClause, writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             try writeArray(cycle.columns, into: &writer) {
                 (value: String, writer: inout DatabaseWireWriter) throws(DatabaseWireError) in

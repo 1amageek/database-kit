@@ -941,3 +941,53 @@ tags and missing/trailing bytes fail explicitly. Initial development does not
 retain an old layout or negotiate versions; both standard and MultiBase consume
 the same statement production. Direct tests cover all three bytes and forced
 parameter reconstruction so an identity override cannot be dropped.
+
+## S14 Mutation Carriage
+
+[Query](../DatabaseKit/Query/DESIGN.md#s14-mutation-declaration-carriage)
+owns declarations; [SQL](../DatabaseKit/Query/SQL/DESIGN.md#s14-mutation-semantics)
+owns their meaning. This section fixes one binary layout for standard and
+MultiBase. It adds no operation, protocol version, compatibility decoder or
+runtime execution policy.
+
+| Production | Ordered fields and strict discriminators |
+|---|---|
+| Statement tag 10, WITH | recursive Bool; bounded named-statement array; body Statement. |
+| Named statement | name String; optional columns String array; optional Materialization using existing production; optional SEARCH; optional CYCLE; child Statement. |
+| Statement tag 11, MERGE | target TableRef; source DataSource; join Expression; bounded clause array; optional RETURNING ProjectionItem array; optional returning aliases. |
+| MERGE clause | match byte 0 matched / 1 byTarget / 2 bySource; optional condition Expression; action production. |
+| MERGE action | byte 0 insert / 1 update / 2 delete / 3 nothing. Insert carries optional column-name array, optional expression array (absent means DEFAULT VALUES), strict identity override; update carries bounded Assignment array; delete/nothing have no payload. |
+| Statement tag 12, TRUNCATE | bounded TableRef array; identity byte 0 continue / 1 restart; references byte 0 restrict / 1 cascade. |
+| Assignment | bounded nonempty target-name array; one Expression. Scalar construction encodes a singleton target array. |
+| INSERT addition | After existing override byte, optional conflict target then optional returning aliases. Target byte 0 columns / 1 constraint; columns carries bounded names followed by optional inference Expression, constraint carries one String. |
+| UPDATE/DELETE addition | After existing RETURNING, optional returning aliases. |
+| Returning aliases | Optional old String then optional new String; enclosing optional preserves explicit clause presence. |
+
+Statement tags 0–9 and existing action/source/override discriminators retain
+their meaning. Assignment and DML payload layouts change together without
+old-layout inference. All existing optional, Bool, string, array, TableRef,
+expression and SELECT metadata productions retain their bounds and exact
+validation. DEFAULT VALUES cannot decode as a fabricated empty VALUES list.
+
+```text
+validate structure -> measure complete statement -> emit exact bytes
+bounded reader -> explicit statement continuation -> child decode
+    -> assemble immutable statement -> require end of input
+```
+
+Statement-WITH edges use explicit continuations and indexed collection
+cursors for measure, owned encode, streaming emission and decode. Nested
+SELECT/source/expression edges use the existing iterative SCC. One enclosing
+frame/object/collection/name/nesting ledger charges every wrapper and child;
+there is no per-CTE reset or enlarged formal target stack. Owned encoding and
+streaming must agree. Failed admission publishes no sink bytes.
+
+| Case | Falsifiable completion evidence |
+|---|---|
+| S14-W01 | Deterministic goldens for every statement/match/action/identity/reference/conflict tag; tuple RHS, returning aliases, mixed CTE metadata and parameters survive roundtrip and owned/streaming equivalence. |
+| S14-W02 | Every truncated prefix, unknown tag, malformed Bool/optional, invalid intrinsic shape and trailing byte fails typed without partial repair. |
+| S14-W03 | Exact/one-past frame, names, collections, objects and nesting use the shared ledger; rejected measured encoding emits nothing. |
+| S14-W04 | Native, ordinary WASM and Embedded execute deep mixed statement encode/decode/identity at the existing stack size; standard/MultiBase direct tests cover identical productions. |
+
+These witnesses establish carriage, never mutation execution, arbiter
+selection, eager CTE completion or authoritative publication.

@@ -58,6 +58,8 @@ public enum SPARQLSemanticValidator {
             try state.validate(query.modifiers)
         case .sparqlUpdate(let request):
             try validateSemantics(request)
+        case .with, .merge, .truncate:
+            throw .unsupportedSQLExpression
         case .insert, .update, .delete, .createGraph, .dropGraph:
             break
         }

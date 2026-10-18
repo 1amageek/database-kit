@@ -41,6 +41,8 @@ private extension QueryParameterBindingTraversal {
 
     /// A cursor retains one eventual output buffer and one active child per collection.
     enum OwnedCollection {
+        case namedStatements([SQLNamedStatement])
+        case mergeClauses([SQLMergeClause])
         case groupings([GroupingElement])
         case groupingSets([[GroupingElement]])
         case windows([NamedWindow])
@@ -62,6 +64,8 @@ private extension QueryParameterBindingTraversal {
 
         var count: Int {
             switch self {
+            case .namedStatements(let values): return values.count
+            case .mergeClauses(let values): return values.count
             case .groupings(let values): return values.count
             case .groupingSets(let values): return values.count
             case .windows(let values): return values.count
@@ -85,6 +89,8 @@ private extension QueryParameterBindingTraversal {
 
         func child(at index: Int) -> BindingStep? {
             switch self {
+            case .namedStatements(let values): return .statement(values[index].statement)
+            case .mergeClauses(let values): return .mergeClause(values[index])
             case .groupings(let values): return .grouping(values[index])
             case .groupingSets(let values): return .collection(.groupings(values[index]), index: 0, changed: false)
             case .windows(let values): return .specification(values[index].specification)
@@ -127,6 +133,18 @@ private extension QueryParameterBindingTraversal {
         _ original: consuming OwnedCollection, at index: Int, with result: consuming BindingResult
     ) throws(QueryParameterBindingError) -> Bound<OwnedCollection> {
         switch consume original {
+        case .namedStatements(var values):
+            guard case .statement(let value) = result else { throw .invalidTraversalState }
+            if value.changed {
+                let original = values[index]
+                values[index] = SQLNamedStatement(name: original.name, columns: original.columns, statement: value.value,
+                    materialized: original.materialized, search: original.search, cycle: original.cycle)
+            }
+            return Bound(value: .namedStatements(values), changed: value.changed)
+        case .mergeClauses(var values):
+            guard case .mergeClause(let value) = result else { throw .invalidTraversalState }
+            if value.changed { values[index] = value.value }
+            return Bound(value: .mergeClauses(values), changed: value.changed)
         case .groupings(var values):
             guard case .grouping(let value) = result else { throw .invalidTraversalState }
             if value.changed { values[index] = value.value }
@@ -154,7 +172,7 @@ private extension QueryParameterBindingTraversal {
             return Bound(value: .sortKeys(values), changed: value.changed)
         case .assignments(var values):
             guard case .expression(let value) = result else { throw .invalidTraversalState }
-            if value.changed { values[index] = Assignment(column: values[index].column, value: value.value) }
+            if value.changed { values[index] = Assignment(columns: values[index].columns, value: value.value) }
             return Bound(value: .assignments(values), changed: value.changed)
         case .properties(var values):
             guard case .expression(let value) = result else { throw .invalidTraversalState }
@@ -221,6 +239,8 @@ private extension QueryParameterBindingTraversal {
         case assembleFusionInput(FusionInput)
         case fusionStage(FusionStageSource)
         case assembleFusionStage
+        case mergeClause(SQLMergeClause)
+        case assembleMergeClause(SQLMergeClause)
         case statement(QueryStatement)
         case assembleStatement(QueryStatement)
         case select(SelectQuery)
@@ -256,6 +276,7 @@ private extension QueryParameterBindingTraversal {
         case casePair(Bound<CaseWhenPair>)
         case fusionInput(Bound<FusionInput>)
         case fusionStage(Bound<FusionStageSource>)
+        case mergeClause(Bound<SQLMergeClause>)
         case statement(Bound<QueryStatement>)
         case select(Bound<SelectQuery>)
         case source(Bound<DataSource>)
@@ -410,6 +431,32 @@ private extension QueryParameterBindingTraversal {
             let result = try popCollection()
             guard case .fusionInputs(let inputs) = result.value else { throw .invalidTraversalState }
             results.append(.fusionStage(Bound(value: FusionStageSource(inputs: inputs), changed: result.changed)))
+        case .mergeClause(let clause):
+            bindingSteps.append(.assembleMergeClause(clause))
+            if let condition = clause.condition { bindingSteps.append(.expression(condition)) }
+            switch clause.action {
+            case .insert(_, let values, _): if let values { enqueueExpressionBindings(values) }
+            case .update(let assignments): enqueueAssignmentBindings(assignments)
+            case .delete, .doNothing: break
+            }
+        case .assembleMergeClause(let clause):
+            let condition = try popOptionalExpression(clause.condition)
+            let action: SQLMergeAction
+            var changed = condition.changed
+            switch clause.action {
+            case .insert(let columns, let values, let overriding):
+                if let values {
+                    let bound = try popExpressions(values)
+                    action = .insert(columns: columns, values: bound.value, overriding: overriding)
+                    changed = changed || bound.changed
+                } else { action = clause.action }
+            case .update(let assignments):
+                let bound = try popAssignments(assignments)
+                action = .update(bound.value); changed = changed || bound.changed
+            case .delete, .doNothing: action = clause.action
+            }
+            results.append(.mergeClause(Bound(value: changed ? SQLMergeClause(match: clause.match,
+                condition: condition.value, action: action) : clause, changed: changed)))
         case .statement(let statement):
             enqueueBindings(statement)
         case .assembleStatement(let statement):
@@ -469,15 +516,26 @@ private extension QueryParameterBindingTraversal {
         _ statement: QueryStatement
     ) {
         switch statement {
-        case .createGraph, .dropGraph:
+        case .createGraph, .dropGraph, .truncate:
             results.append(.statement(Bound(value: statement, changed: false)))
         case .select(let query):
             bindingSteps.append(.assembleStatement(statement))
             bindingSteps.append(.select(query))
+        case .with(let value):
+            bindingSteps.append(.assembleStatement(statement))
+            bindingSteps.append(.statement(value.body))
+            bindingSteps.append(.collection(.namedStatements(value.statements), index: 0, changed: false))
+        case .merge(let query):
+            bindingSteps.append(.assembleStatement(statement))
+            enqueueProjectionItemBindings(query.returning)
+            bindingSteps.append(.collection(.mergeClauses(query.clauses), index: 0, changed: false))
+            bindingSteps.append(.expression(query.condition))
+            bindingSteps.append(.source(query.source))
         case .insert(let query):
             bindingSteps.append(.assembleStatement(statement))
             enqueueProjectionItemBindings(query.returning)
             enqueueConflictActionBindings(query.onConflict)
+            if case .columns(_, let predicate) = query.conflictTarget, let predicate { bindingSteps.append(.expression(predicate)) }
             enqueueBindings(query.source)
         case .update(let query):
             bindingSteps.append(.assembleStatement(statement))
@@ -924,6 +982,23 @@ private extension QueryParameterBindingTraversal {
                 value: query.changed ? .select(query.value) : statement,
                 changed: query.changed
             )
+        case .with(let value):
+            let body = try popStatement()
+            let definitions = try popCollection()
+            guard case .namedStatements(let statements) = definitions.value else { throw .invalidTraversalState }
+            let changed = body.changed || definitions.changed
+            bound = Bound(value: changed ? .with(SQLWithStatement(recursive: value.recursive,
+                statements: statements, body: body.value)) : statement, changed: changed)
+        case .merge(let query):
+            let returning = try popOptionalProjectionItems(query.returning)
+            let clauses = try popCollection()
+            guard case .mergeClauses(let values) = clauses.value else { throw .invalidTraversalState }
+            let condition = try popExpression()
+            let source = try popSource()
+            let changed = returning.changed || clauses.changed || condition.changed || source.changed
+            bound = Bound(value: changed ? .merge(MergeQuery(target: query.target, source: source.value,
+                condition: condition.value, clauses: values, returning: returning.value,
+                returningAliases: query.returningAliases)) : statement, changed: changed)
         case .insert(let query):
             bound = try assembleInsert(query, original: statement)
         case .update(let query):
@@ -986,7 +1061,7 @@ private extension QueryParameterBindingTraversal {
                     : statement,
                 changed: changed
             )
-        case .createGraph, .dropGraph:
+        case .createGraph, .dropGraph, .truncate:
             throw .invalidTraversalState
         }
         results.append(.statement(bound))
@@ -998,8 +1073,14 @@ private extension QueryParameterBindingTraversal {
     ) throws(QueryParameterBindingError) -> Bound<QueryStatement> {
         let returning = try popOptionalProjectionItems(query.returning)
         let conflict = try popConflictAction(query.onConflict)
+        let target: SQLConflictTarget?
+        let targetChanged: Bool
+        if case .columns(let names, let predicate) = query.conflictTarget {
+            let bound = try popOptionalExpression(predicate)
+            target = .columns(names, where: bound.value); targetChanged = bound.changed
+        } else { target = query.conflictTarget; targetChanged = false }
         let source = try popInsertSource(query.source)
-        let changed = returning.changed || conflict.changed || source.changed
+        let changed = returning.changed || conflict.changed || source.changed || targetChanged
         guard changed else {
             return Bound(value: original, changed: false)
         }
@@ -1011,7 +1092,9 @@ private extension QueryParameterBindingTraversal {
                     source: source.value,
                     onConflict: conflict.value,
                     returning: returning.value,
-                    overriding: query.overriding
+                    overriding: query.overriding,
+                    conflictTarget: target,
+                    returningAliases: query.returningAliases
                 )
             ),
             changed: true
@@ -1038,7 +1121,8 @@ private extension QueryParameterBindingTraversal {
                     assignments: assignments.value,
                     from: source.value,
                     filter: filter.value,
-                    returning: returning.value
+                    returning: returning.value,
+                    returningAliases: query.returningAliases
                 )
             ),
             changed: true
@@ -1062,7 +1146,8 @@ private extension QueryParameterBindingTraversal {
                     target: query.target,
                     using: source.value,
                     filter: filter.value,
-                    returning: returning.value
+                    returning: returning.value,
+                    returningAliases: query.returningAliases
                 )
             ),
             changed: true

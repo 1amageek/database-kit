@@ -35,6 +35,7 @@ public enum QueryStructuralValidationError: Error, Sendable, Equatable {
     case emptySQLBlock
     case invalidSQLCheckpointName
     case invalidSQLControl
+    case invalidSQLMutation(String)
     case unbalancedNesting
     case invalidQueryValue(QueryValueError)
     case invalidReferenceIdentifier(ReferenceIdentifierValidationError)
@@ -69,6 +70,8 @@ extension QueryStructuralValidationError: CustomStringConvertible {
             return "ERE pattern predicates do not accept an escape expression"
         case .emptySQLBlock:
             return "An SQL block requires at least one step"
+        case .invalidSQLMutation(let reason):
+            return "Invalid SQL mutation: \(reason)"
         case .invalidSQLControl:
             return "Invalid SQL semantic control payload"
         case .invalidSQLCheckpointName:

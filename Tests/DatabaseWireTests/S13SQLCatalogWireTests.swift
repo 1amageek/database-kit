@@ -29,13 +29,13 @@ struct S13SQLCatalogWireTests {
         for (overriding, tag): (SQLIdentityOverride?, UInt8) in [(nil, 0), (.systemValue, 1), (.userValue, 2)] {
             let statement = QueryStatement.insert(InsertQuery(target: TableRef("t"), source: .defaultValues, overriding: overriding))
             let bytes = try QueryIRWireFormat.encode(statement)
-            #expect(bytes[bytes.count - 1] == tag)
+            #expect(bytes[bytes.count - 3] == tag)
             #expect(try QueryIRWireFormat.decode(bytes) == statement)
             #expect(throws: DatabaseWireError.self) {
                 try QueryIRWireFormat.decode(ByteString(Array(bytes[0..<(bytes.count - 1)])))
             }
             var malformed = Array(bytes)
-            malformed[malformed.count - 1] = 3
+            malformed[malformed.count - 3] = 3
             #expect(throws: DatabaseWireError.invalidValueTag(3)) {
                 try QueryIRWireFormat.decode(ByteString(malformed))
             }

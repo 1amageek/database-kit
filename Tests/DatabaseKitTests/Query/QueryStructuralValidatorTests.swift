@@ -162,13 +162,14 @@ struct QueryStructuralValidatorTests {
                 columns: ["id", "title"],
                 source: .values([[
                     .literal(.int(1)),
+                    .literal(.string("Event")),
                 ]])
             )
         )
 
         try QueryStructuralValidator.validate(
             statement,
-            limits: QueryStructuralLimits(maximumCollectionElements: 4)
+            limits: QueryStructuralLimits(maximumCollectionElements: 5)
         )
     }
 
@@ -180,6 +181,7 @@ struct QueryStructuralValidatorTests {
                 columns: ["id", "title"],
                 source: .values([[
                     .literal(.int(1)),
+                    .literal(.string("Event")),
                 ]])
             )
         )
@@ -187,13 +189,13 @@ struct QueryStructuralValidatorTests {
         #expect(
             throws: QueryStructuralValidationError.resourceLimitExceeded(
                 resource: .collectionElements,
-                actual: 4,
-                maximum: 3
+                actual: 5,
+                maximum: 4
             )
         ) {
             try QueryStructuralValidator.validate(
                 statement,
-                limits: QueryStructuralLimits(maximumCollectionElements: 3)
+                limits: QueryStructuralLimits(maximumCollectionElements: 4)
             )
         }
     }

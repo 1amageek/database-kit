@@ -2,13 +2,145 @@ import DatabaseTypes
 import DatabaseKit
 
 extension QueryIRWireFormat {
+    private enum StatementEncodingStep {
+        case statement(QueryStatement)
+        case namedStatements([SQLNamedStatement], Int)
+        case end
+    }
+
+    private struct WithDecodingState {
+        let recursive: Bool
+        let count: Int
+        var statements: [SQLNamedStatement] = []
+    }
+
+    private struct NamedStatementMetadata {
+        let name: String
+        let columns: [String]?
+        let materialized: Materialization?
+        let search: CTESearchClause?
+        let cycle: CTECycleClause?
+    }
+
+    private enum StatementDecodingStep {
+        case statement
+        case namedStatements(WithDecodingState)
+        case finishNamed(WithDecodingState, NamedStatementMetadata)
+        case finishWith(WithDecodingState)
+    }
+
     static func encodeStatement(
-        _ statement: QueryStatement,
-        into writer: inout DatabaseWireWriter
+        _ statement: QueryStatement, into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
-        try writer.withNestedValue {
-            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) -> Void in
-            switch statement {
+        let initialDepth = writer.currentNestingDepth
+        defer { writer.abandonNestedValues(writer.currentNestingDepth - initialDepth) }
+        var steps: [StatementEncodingStep] = [.statement(statement)]
+        while let step = steps.popLast() {
+            switch consume step {
+            case .statement(let statement):
+                try writer.beginNestedValue()
+                steps.append(.end)
+                if case .with(let query) = statement {
+                    writer.writeUInt8(10)
+                    writer.writeBool(query.recursive)
+                    try writer.writeCount(query.statements.count)
+                    steps.append(.statement(query.body))
+                    steps.append(.namedStatements(query.statements, 0))
+                } else {
+                    try encodeStatementLeaf(statement, into: &writer)
+                }
+            case .namedStatements(let statements, let index):
+                guard index < statements.count else { continue }
+                let named = statements[index]
+                try writer.writeString(named.name)
+                try writeOptionalStrings(named.columns, into: &writer)
+                try writeOptional(named.materialized, into: &writer) { value, writer in
+                    writer.writeUInt8(value == .materialized ? 0 : 1)
+                }
+                try encodeCTEMetadata(search: named.search, cycle: named.cycle, into: &writer)
+                steps.append(.namedStatements(statements, index + 1))
+                steps.append(.statement(named.statement))
+            case .end:
+                try writer.endNestedValue()
+            }
+        }
+        try validateMutationStructure(statement)
+    }
+
+    static func decodeStatement(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> QueryStatement {
+        let initialDepth = reader.currentNestingDepth
+        defer { reader.abandonNestedValues(reader.currentNestingDepth - initialDepth) }
+        var steps: [StatementDecodingStep] = [.statement]
+        var result: QueryStatement?
+        while let step = steps.popLast() {
+            switch consume step {
+            case .statement:
+                try reader.beginNestedValue()
+                let tag = try reader.readUInt8()
+                if tag == 10 {
+                    let recursive = try reader.readBool()
+                    let count = try reader.readCount()
+                    steps.append(.namedStatements(WithDecodingState(recursive: recursive, count: count)))
+                } else {
+                    result = try decodeStatementLeaf(tag, from: &reader)
+                    try reader.endNestedValue()
+                }
+            case .namedStatements(let state):
+                if state.statements.count == state.count {
+                    steps.append(.finishWith(state))
+                    steps.append(.statement)
+                } else {
+                    let name = try reader.readString()
+                    let columns = try readOptionalStrings(from: &reader)
+                    let materialized: Materialization? = try readOptional(from: &reader) {
+                        (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> Materialization in
+                        switch try reader.readUInt8() {
+                        case 0: return .materialized
+                        case 1: return .notMaterialized
+                        case let tag: throw .invalidValueTag(tag)
+                        }
+                    }
+                    let metadata = try decodeCTEMetadata(from: &reader)
+                    steps.append(.finishNamed(state, NamedStatementMetadata(name: name, columns: columns,
+                        materialized: materialized, search: metadata.search, cycle: metadata.cycle)))
+                    steps.append(.statement)
+                }
+            case .finishNamed(var state, let metadata):
+                guard let child = result else { throw .invalidQueryIRWireState }
+                state.statements.append(SQLNamedStatement(name: metadata.name, columns: metadata.columns,
+                    statement: child, materialized: metadata.materialized, search: metadata.search, cycle: metadata.cycle))
+                result = nil
+                steps.append(.namedStatements(state))
+            case .finishWith(let state):
+                guard let body = result else { throw .invalidQueryIRWireState }
+                result = .with(SQLWithStatement(recursive: state.recursive, statements: state.statements, body: body))
+                try reader.endNestedValue()
+            }
+        }
+        guard let result else { throw .invalidQueryIRWireState }
+        try validateMutationStructure(result)
+        return result
+    }
+
+    private static func validateMutationStructure(_ statement: QueryStatement) throws(DatabaseWireError) {
+        switch statement {
+        case .insert, .update, .delete, .with, .merge, .truncate: break
+        default: return
+        }
+        // Wire owns resource admission; Kit owns intrinsic mutation shape admission.
+        let limits = QueryStructuralLimits(maximumNestingDepth: .max, maximumRetainedBytes: .max,
+            maximumTotalNodes: .max, maximumCollectionElements: .max,
+            maximumBasicGraphPatterns: .max, maximumTriplePatterns: .max,
+            maximumValuesRows: .max, maximumValuesVariables: .max, maximumValuesCells: .max,
+            maximumReifiedTripleExpansions: .max)
+        do { try QueryStructuralValidator.validate(statement, limits: limits) }
+        catch { throw .invalidQueryStructure(error) }
+    }
+
+    private static func encodeStatementLeaf(_ statement: QueryStatement, into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+        switch statement {
         case .select(let query):
             writer.writeUInt8(0)
             try encodeSelectQuery(query, into: &writer)
@@ -47,16 +179,20 @@ extension QueryIRWireFormat {
             try writeOptional(query.pattern, into: &writer, encode: encodeGraphPattern)
             try encodeSPARQLDataset(query.dataset, into: &writer)
             try encodeSPARQLSolutionModifiers(query.modifiers, into: &writer)
-            }
+        case .merge(let query):
+            writer.writeUInt8(11)
+            try encodeMergeQuery(query, into: &writer)
+        case .truncate(let query):
+            writer.writeUInt8(12)
+            try writeArray(query.tables, into: &writer, encode: encodeTableRef)
+            writer.writeUInt8(query.identity == .continue ? 0 : 1)
+            writer.writeUInt8(query.references == .restrict ? 0 : 1)
+        case .with: throw .invalidQueryIRWireState
         }
     }
 
-    static func decodeStatement(
-        from reader: inout DatabaseWireReader
-    ) throws(DatabaseWireError) -> QueryStatement {
-        try reader.withNestedValue {
-            (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> QueryStatement in
-            switch try reader.readUInt8() {
+    private static func decodeStatementLeaf(_ tag: UInt8, from reader: inout DatabaseWireReader) throws(DatabaseWireError) -> QueryStatement {
+        switch tag {
             case 0: return .select(try decodeSelectQuery(from: &reader))
             case 1: return .insert(try decodeInsertQuery(from: &reader))
             case 2: return .update(try decodeUpdateQuery(from: &reader))
@@ -93,9 +229,147 @@ extension QueryIRWireFormat {
                         modifiers: try decodeSPARQLSolutionModifiers(from: &reader)
                     )
                 )
+            case 11: return .merge(try decodeMergeQuery(from: &reader))
+            case 12:
+                let tables = try readArray(from: &reader, decode: decodeTableRef)
+                let identity: SQLTruncateIdentity
+                switch try reader.readUInt8() {
+                case 0: identity = .continue
+                case 1: identity = .restart
+                case let tag: throw .invalidValueTag(tag)
+                }
+                let references: SQLTruncateReferences
+                switch try reader.readUInt8() {
+                case 0: references = .restrict
+                case 1: references = .cascade
+                case let tag: throw .invalidValueTag(tag)
+                }
+                return .truncate(TruncateQuery(tables: tables, identity: identity, references: references))
             case let tag: throw .invalidValueTag(tag)
+        }
+    }
+
+    private static func encodeIdentityOverride(_ value: SQLIdentityOverride?, into writer: inout DatabaseWireWriter) {
+        switch value {
+        case nil: writer.writeUInt8(0)
+        case .systemValue?: writer.writeUInt8(1)
+        case .userValue?: writer.writeUInt8(2)
+        }
+    }
+
+    private static func encodeReturningAliases(
+        _ value: SQLReturningAliases, into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        try writeOptionalString(value.old, into: &writer)
+        try writeOptionalString(value.new, into: &writer)
+    }
+
+    private static func decodeReturningAliases(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> SQLReturningAliases {
+        SQLReturningAliases(old: try readOptionalString(from: &reader), new: try readOptionalString(from: &reader))
+    }
+
+    private static func encodeConflictTarget(
+        _ target: SQLConflictTarget, into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        switch target {
+        case .columns(let columns, let predicate):
+            writer.writeUInt8(0)
+            try writeStrings(columns, into: &writer)
+            try writeOptional(predicate, into: &writer, encode: encodeExpression)
+        case .constraint(let name):
+            writer.writeUInt8(1)
+            try writer.writeString(name)
+        }
+    }
+
+    private static func decodeConflictTarget(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> SQLConflictTarget {
+        switch try reader.readUInt8() {
+        case 0: return .columns(try readStrings(from: &reader), where: try readOptional(from: &reader, decode: decodeExpression))
+        case 1: return .constraint(try reader.readString())
+        case let tag: throw .invalidValueTag(tag)
+        }
+    }
+
+    private static func encodeMergeQuery(
+        _ query: MergeQuery, into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        try encodeTableRef(query.target, into: &writer)
+        try encodeDataSource(query.source, into: &writer)
+        try encodeExpression(query.condition, into: &writer)
+        try writeArray(query.clauses, into: &writer) {
+            (clause: SQLMergeClause, writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            switch clause.match {
+            case .matched: writer.writeUInt8(0)
+            case .notMatchedByTarget: writer.writeUInt8(1)
+            case .notMatchedBySource: writer.writeUInt8(2)
+            }
+            try writeOptional(clause.condition, into: &writer, encode: encodeExpression)
+            switch clause.action {
+            case .insert(let columns, let values, let overriding):
+                writer.writeUInt8(0)
+                try writeOptionalStrings(columns, into: &writer)
+                try writeOptional(values, into: &writer) {
+                    (values: [Expression], writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+                    try writeArray(values, into: &writer, encode: encodeExpression)
+                }
+                encodeIdentityOverride(overriding, into: &writer)
+            case .update(let assignments):
+                writer.writeUInt8(1)
+                try writeArray(assignments, into: &writer, encode: encodeAssignment)
+            case .delete: writer.writeUInt8(2)
+            case .doNothing: writer.writeUInt8(3)
             }
         }
+        try writeOptional(query.returning, into: &writer) {
+            (items: [ProjectionItem], writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try writeArray(items, into: &writer, encode: encodeProjectionItem)
+        }
+        try writeOptional(query.returningAliases, into: &writer, encode: encodeReturningAliases)
+    }
+
+    private static func decodeMergeQuery(
+        from reader: inout DatabaseWireReader
+    ) throws(DatabaseWireError) -> MergeQuery {
+        let target = try decodeTableRef(from: &reader)
+        let source = try decodeDataSource(from: &reader)
+        let condition = try decodeExpression(from: &reader)
+        let clauses: [SQLMergeClause] = try readArray(from: &reader) {
+            (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> SQLMergeClause in
+            let match: SQLMergeMatch
+            switch try reader.readUInt8() {
+            case 0: match = .matched
+            case 1: match = .notMatchedByTarget
+            case 2: match = .notMatchedBySource
+            case let tag: throw .invalidValueTag(tag)
+            }
+            let condition = try readOptional(from: &reader, decode: decodeExpression)
+            let action: SQLMergeAction
+            switch try reader.readUInt8() {
+            case 0:
+                let columns = try readOptionalStrings(from: &reader)
+                let values: [Expression]? = try readOptional(from: &reader) {
+                    (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> [Expression] in
+                    try readArray(from: &reader, decode: decodeExpression)
+                }
+                action = .insert(columns: columns, values: values, overriding: try decodeIdentityOverride(from: &reader))
+            case 1: action = .update(try readArray(from: &reader, decode: decodeAssignment))
+            case 2: action = .delete
+            case 3: action = .doNothing
+            case let tag: throw .invalidValueTag(tag)
+            }
+            return SQLMergeClause(match: match, condition: condition, action: action)
+        }
+        let returning: [ProjectionItem]? = try readOptional(from: &reader) {
+            (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> [ProjectionItem] in
+            try readArray(from: &reader, decode: decodeProjectionItem)
+        }
+        let aliases = try readOptional(from: &reader, decode: decodeReturningAliases)
+        return MergeQuery(target: target, source: source, condition: condition, clauses: clauses,
+                          returning: returning, returningAliases: aliases)
     }
 
     private static func encodeInsertQuery(
@@ -110,11 +384,9 @@ extension QueryIRWireFormat {
             (items: [ProjectionItem], writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             try writeArray(items, into: &writer, encode: encodeProjectionItem)
         }
-        switch query.overriding {
-        case nil: writer.writeUInt8(0)
-        case .systemValue?: writer.writeUInt8(1)
-        case .userValue?: writer.writeUInt8(2)
-        }
+        encodeIdentityOverride(query.overriding, into: &writer)
+        try writeOptional(query.conflictTarget, into: &writer, encode: encodeConflictTarget)
+        try writeOptional(query.returningAliases, into: &writer, encode: encodeReturningAliases)
     }
 
     private static func decodeInsertQuery(
@@ -129,7 +401,9 @@ extension QueryIRWireFormat {
                 (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> [ProjectionItem] in
                 try readArray(from: &reader, decode: decodeProjectionItem)
             },
-            overriding: try decodeIdentityOverride(from: &reader)
+            overriding: try decodeIdentityOverride(from: &reader),
+            conflictTarget: try readOptional(from: &reader, decode: decodeConflictTarget),
+            returningAliases: try readOptional(from: &reader, decode: decodeReturningAliases)
         )
     }
 
@@ -220,6 +494,7 @@ extension QueryIRWireFormat {
             (items: [ProjectionItem], writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             try writeArray(items, into: &writer, encode: encodeProjectionItem)
         }
+        try writeOptional(query.returningAliases, into: &writer, encode: encodeReturningAliases)
     }
 
     private static func decodeUpdateQuery(
@@ -233,7 +508,8 @@ extension QueryIRWireFormat {
             returning: try readOptional(from: &reader) {
                 (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> [ProjectionItem] in
                 try readArray(from: &reader, decode: decodeProjectionItem)
-            }
+            },
+            returningAliases: try readOptional(from: &reader, decode: decodeReturningAliases)
         )
     }
 
@@ -248,6 +524,7 @@ extension QueryIRWireFormat {
             (items: [ProjectionItem], writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             try writeArray(items, into: &writer, encode: encodeProjectionItem)
         }
+        try writeOptional(query.returningAliases, into: &writer, encode: encodeReturningAliases)
     }
 
     private static func decodeDeleteQuery(
@@ -260,7 +537,8 @@ extension QueryIRWireFormat {
             returning: try readOptional(from: &reader) {
                 (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> [ProjectionItem] in
                 try readArray(from: &reader, decode: decodeProjectionItem)
-            }
+            },
+            returningAliases: try readOptional(from: &reader, decode: decodeReturningAliases)
         )
     }
 
@@ -268,7 +546,7 @@ extension QueryIRWireFormat {
         _ assignment: Assignment,
         into writer: inout DatabaseWireWriter
     ) throws(DatabaseWireError) {
-        try writer.writeString(assignment.column)
+        try writeStrings(assignment.columns, into: &writer)
         try encodeExpression(assignment.value, into: &writer)
     }
 
@@ -276,7 +554,7 @@ extension QueryIRWireFormat {
         from reader: inout DatabaseWireReader
     ) throws(DatabaseWireError) -> Assignment {
         Assignment(
-            column: try reader.readString(),
+            columns: try readStrings(from: &reader),
             value: try decodeExpression(from: &reader)
         )
     }

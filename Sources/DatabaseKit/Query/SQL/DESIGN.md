@@ -1786,3 +1786,44 @@ DatabaseWire exposes `QueryIRWireFormat.encodeExpression(_:limits:)` and
 `decodeExpression(_:limits:)` over ByteString as a bounded select-envelope adapter
 for catalog expression persistence. It uses the existing select codec and limits,
 requires the exact envelope shape on decode, and adds no operation/version/dispatch.
+
+## S14 Mutation Semantics
+
+M01–M08 use [Query's frozen declarations](../DESIGN.md#s14-mutation-declaration-carriage).
+Engine owns execution, candidate and output lifetimes, catalog resolution,
+transaction composition and resource enforcement. S15 owns general DDL,
+views and index creation; S17 owns remote/public text DML dispatch. Parser
+acceptance and Wire carriage do not establish execution completion.
+
+```text
+statement snapshot and catalog scope
+    -> source and old target candidates
+        -> one evaluation of assignments/defaults and action selection
+            -> atomic data/index/reference/Directory effects
+                -> retained ordered RETURNING plus direct affected count
+                    -> authoritative transaction close -> publication
+```
+
+| Feature | Frozen semantic guarantee and explicit failure |
+|---|---|
+| M01 INSERT | Multiple VALUES, DEFAULT cells/VALUES, SELECT and omitted columns share S13 conversion/default/generated/identity policy. A short unqualified VALUES row associates with the first supplied number of declared columns; the rest use defaults. Each proposed row evaluates its defaults once. Explicit-column arity, required-column or conversion failure rolls back the statement. Schema-driven hidden physical identities are allocated without becoming SQL columns; compiled-model identity contracts remain enforced. |
+| M02 UPDATE | FROM and correlated values bind target/source scopes. All RHS expressions observe the old target row; tuple assignment evaluates its RHS once, enforces width, maps zero subquery rows to NULLs and rejects multiple rows with cardinality failure. Multiple source matches update a target once using one unspecified matching source row; this is not MERGE's duplicate-effect error. DEFAULT delegates to column policy. Rekey/placement changes remain one atomic transaction. |
+| M03 DELETE | USING and correlated conditions select each target once; retained old target/source images supply RETURNING. Required referential actions, index changes and deletions succeed or roll back together. |
+| M04 Output | RETURNING preserves ordered columns, duplicate labels, declared types and zero-row metadata. INSERT uses new, DELETE old, UPDATE/MERGE their relevant images. Qualified OLD/NEW and RETURNING WITH aliases expose both images with NULL extension when absent. Explicit aliases hide the corresponding default OLD/NEW name. Unqualified star excludes transition bindings; MERGE star includes actual source and target columns only. FROM/USING/MERGE source remains visible as admitted. Affected count counts direct affected rows, including unchanged UPDATEs, excludes cascades and DO NOTHING/false conflict filters, and remains available alongside returned rows. No physical result order is promised. |
+| M05 Conflict | Resolve the complete ordered-name column set or named constraint against real unique arbiters, using SQL equality and NULL policy. Column order does not change inference. DO UPDATE requires a target; DO NOTHING may omit it. A selected arbiter does not swallow unrelated unique failures. Deferrable unique constraints are not arbiters even when currently immediate. EXCLUDED is the proposed default/generated row and binds only in conflict UPDATE SET/WHERE. Inference predicate and action WHERE remain distinct. FALSE/NULL action WHERE produces no update/output; repeated effective update of one row is a cardinality error. Unsupported partial/expression arbiters fail explicitly until their owner provides them. |
+| M06 Writable WITH | Writable definitions execute once to completion even unreferenced, multiply referenced or consumed with LIMIT 0. Siblings/main share one statement source snapshot; reads of returned CTE relations observe their produced output, while base scans observe the snapshot. A writable definition without RETURNING still executes and cannot be read as a relation. Main-body count excludes CTE counts. Mixed nonrecursive writes and recursive SELECT siblings are legal under WITH RECURSIVE; writable recursive dependency/self-reference and nested writable WITH fail typed. Repeated writes to one target across siblings/main fail typed as an explicit product restriction on PostgreSQL's unspecified outcome. Later failure rolls back all transactional effects. |
+| M07 MERGE | Establish MATCHED / NOT MATCHED BY TARGET / NOT MATCHED BY SOURCE once per candidate. Evaluate ordered WHEN conditions; first TRUE action wins, including DO NOTHING. Plain NOT MATCHED means BY TARGET. Matched and BY SOURCE admit UPDATE/DELETE/NOTHING; BY TARGET admits INSERT/NOTHING. Unconditional clauses make later same-class clauses invalid before effects. Repeated effective UPDATE/DELETE of one target fails cardinality; duplicate INSERT keys fail uniqueness. RETURNING excludes NOTHING; merge_action() reports the actual selected mutation and is invalid outside MERGE RETURNING. |
+| M08 TRUNCATE | Resolve/authorize all named tables and RESTRICT/CASCADE FK closure before effects, regardless of current child rows. Preserve schema, compiled-model witnesses, catalog identity, security and index definitions. CONTINUE is default; RESTART resets only sequences owned by all truncated columns, including cascaded tables. Table clearing and restart roll back together, retaining S13 request-local sequence history. TRUNCATE has no affected-row count. |
+
+Existing serializable single-domain isolation remains authoritative; PostgreSQL
+TRUNCATE lock/MVCC anomalies and Read Committed behavior are outside that
+profile. Data/constraint failure rolls back transactional effects while
+ordinary sequence consumption retains S13's nonrollback contract. Cancellation,
+admission failure, commit-unknown and authoritative close remain Engine-owned
+typed outcomes, with no intermediate result publication.
+
+The runtime owners must prove each M01–M08 row using source-to-execution cases,
+committed readback and unchanged state on failure. Query/Parser/Wire tests
+prove carriage only. The retained PostgreSQL18 research and selected oracle
+observations distinguish SQL semantics from Framework-only authority,
+Directory, resource and lifecycle evidence; neither substitutes for the other.

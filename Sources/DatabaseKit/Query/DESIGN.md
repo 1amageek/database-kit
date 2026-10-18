@@ -933,3 +933,89 @@ it as a distinct leaf. It is not NULL, an omitted expression or an application-m
 default. SQL execution admits it only in mutation positions selected by the
 [S13 SQL contract](SQL/DESIGN.md#s13-semantic-constraint-and-sequence-controls);
 SPARQL explicitly rejects the SQL-only marker. No evaluator invents a scalar value.
+
+### S14 mutation declaration carriage
+
+This section freezes the declaration changes for SQL M01–M08. It is a design
+contract, not evidence that the currently incomplete execution paths work.
+[SQL](SQL/DESIGN.md#s14-mutation-semantics) owns their observable SQL meaning;
+[DatabaseWire](../../DatabaseWire/DESIGN.md#s14-mutation-carriage) owns binary
+layout; Framework [Parser](../../../../database-framework/Sources/QueryAST/Parser/DESIGN.md#s14-complete-mutation-grammar)
+and [Builder](../../../../database-framework/Sources/QueryAST/Builder/DESIGN.md#s14-mutation-emission)
+own text adaptation. Every declaration is immutable, Sendable, Equatable and
+Hashable, with the same storage and conformance on all targets.
+
+New mutation identifiers use exact UTF-8 identity for equality and hashing,
+including tuple targets, conflict targets, returning aliases, MERGE INSERT
+columns and named-statement names/columns/SEARCH/CYCLE metadata. Canonically
+equivalent Unicode spellings are distinct SQL identifiers. Named statement
+metadata uses the same intrinsic cross-collision checks as NamedSubquery,
+after the enclosing traversal admits its collections once on the shared ledger.
+
+| Declaration | Frozen public shape |
+|---|---|
+| `QueryStatement` | Indirect enum adding `with(SQLWithStatement)`, `merge(MergeQuery)` and `truncate(TruncateQuery)`. Existing cases retain their meaning. |
+| `Assignment` | Stored `columns: [String]` and `value: Expression`. `init(column:value:)` constructs one target; `init(columns:value:)` constructs an ordered tuple. No duplicate stored scalar target or compatibility property. |
+| `SQLConflictTarget` | Enum `columns([String], where: Expression?)`, `constraint(String)`. `InsertQuery.conflictTarget: SQLConflictTarget?` defaults nil independently of its existing `onConflict` action. |
+| `SQLReturningAliases` | Stored `old: String?`, `new: String?`; initializer defaults both nil. All four DML queries add optional `returningAliases`, default nil, and retain `returning: [ProjectionItem]?`. |
+| `SQLWithStatement` | Stored `recursive: Bool`, `statements: [SQLNamedStatement]`, `body: QueryStatement`; recursive defaults false. |
+| `SQLNamedStatement` | Stored `name: String`, `columns: [String]?`, `statement: QueryStatement`, `materialized: Materialization?`, `search: CTESearchClause?`, `cycle: CTECycleClause?`; optional metadata defaults nil. |
+| `MergeQuery` | Stored `target: TableRef`, `source: DataSource`, `condition: Expression`, `clauses: [SQLMergeClause]`, `returning: [ProjectionItem]?`, `returningAliases: SQLReturningAliases?`. |
+| `SQLMergeClause` | Stored `match: SQLMergeMatch`, `condition: Expression?`, `action: SQLMergeAction`; condition defaults nil. |
+| `SQLMergeMatch` | Enum `matched`, `notMatchedByTarget`, `notMatchedBySource`. |
+| `SQLMergeAction` | Enum `insert(columns: [String]?, values: [Expression]?, overriding: SQLIdentityOverride?)`, `update([Assignment])`, `delete`, `doNothing`. Nil values means DEFAULT VALUES and requires nil columns; an explicit empty values array is invalid. |
+| `TruncateQuery` | Stored `tables: [TableRef]`, `identity: SQLTruncateIdentity`, `references: SQLTruncateReferences`; defaults `continue` and `restrict`. |
+| `SQLTruncateIdentity` / `SQLTruncateReferences` | Enums `continue` / `restart`, and `restrict` / `cascade`. |
+| `SQLCommandKind` | Adds `merge` (reports affected rows) and `truncate` (does not report affected rows). WITH takes the observable command of its main body. |
+
+NamedSubquery and SelectQuery remain the SELECT-only CTE owner. Pure SELECT
+WITH normalizes to that existing representation. WITH with a DML main body or
+any writable definition uses SQLWithStatement; its SELECT definitions retain
+all materialization/SEARCH/CYCLE metadata. No second accepted representation
+is introduced for the same parsed SQL. Query values own neither eager CTE
+execution state, snapshots, mutation images nor retained result leases.
+
+#### Intrinsic admission and traversal
+
+Structural validation rejects empty assignment targets, target-free conflict
+UPDATE, conflictTarget without an action, empty conflict columns, invalid
+identifiers, empty WITH definitions, empty MERGE clauses and empty TRUNCATE
+targets. Aliases require RETURNING and at least one nonempty/NUL-free member.
+An explicit empty RETURNING list fails. Assignment and MERGE INSERT value
+arity is checked where statically known; catalog-dependent arity, aliases,
+action legality, scope and constraint existence belong to binding. INSERT
+VALUES rows are nonempty and rectangular, with explicit target-column arity
+checked before traversal succeeds. A tuple RHS is one Expression child, never
+copied into one expression per target column.
+
+Every new child participates in structural budgets, parameter discovery and
+substitution, complete immutable reconstruction, equality/hash, Wire, SQL
+serialization and SQL-only SPARQL rejection. WITH statement edges use explicit
+continuation stacks and indexed sibling cursors; no new recursive statement
+walk may bypass the existing bounded stack contract. Names, metadata, tuple
+targets and every nested statement share the enclosing admission ledger.
+There is no per-CTE reset or increased formal target stack allowance.
+
+| Semantic child | Canonical occurrence roles |
+|---|---|
+| DML target and assignment | `mutationTarget`, indexed `assignment`, its single `assignmentValue`; nested expression roles remain unchanged. |
+| Conflict inference/action | `conflictTarget`, `conflictPredicate`, `conflictAction`; the action's own WHERE retains a distinct `filter` child. |
+| Output | Indexed `returning`, `returningAlias`; OLD/NEW qualified columns and wildcards retain existing expression/projection roles. |
+| Statement WITH | Indexed `cte`, child `cteStatement`, and `withBody`; SELECT metadata retains existing SEARCH/CYCLE child roles. |
+| MERGE | `source`, `mergeCondition`, indexed `mergeClause`, optional `filter`, `mergeAction`, and existing assignment/value roles. |
+| TRUNCATE | Indexed `truncateRelation`. |
+
+Construction provenance identifies equal repeated expressions separately.
+Finishing a DML statement must retain these children, rather than dropping
+their captures and retaining only a statement root. Occurrences own no source
+text; QueryAST owns UTF-8 annotations and Engine owns error annotation.
+
+| Case | Falsifiable completion evidence |
+|---|---|
+| S14-K01 | All fields survive equal/different identity, forced parameter substitution and standard/MultiBase carriage, including conflict predicate, tuple RHS, CTE metadata and returning aliases. |
+| S14-K02 | Intrinsically invalid shape and exact/one-past node, collection, retained-byte and nesting limits fail typed on a shared ledger. |
+| S14-K03 | Deep statement/SELECT/expression mixtures execute identity, validation, reconstruction and bounded Wire on Native, ordinary WASM and Embedded at the existing stack allowance. |
+| S14-K04 | SQL-only new statements explicitly fail SPARQL validation; unchanged SELECT CTE, recursive metadata and SPARQL behavior retain their existing witnesses. |
+
+Kit owns these declaration tests; Framework owns actual effects, shared
+snapshots, tuple evaluation cardinality, authorization, lifecycle and outputs.

@@ -7,7 +7,7 @@
 
 
 /// Top-level query statement
-public enum QueryStatement: Sendable, Equatable, Hashable {
+public indirect enum QueryStatement: Sendable, Equatable, Hashable {
     // MARK: - Data Retrieval
 
     /// SELECT query (SQL / SPARQL)
@@ -23,6 +23,15 @@ public enum QueryStatement: Sendable, Equatable, Hashable {
 
     /// DELETE statement
     case delete(DeleteQuery)
+
+    /// Statement-level WITH, including writable definitions.
+    case with(SQLWithStatement)
+
+    /// Ordered conditional row mutation.
+    case merge(MergeQuery)
+
+    /// Transactional relation clearing.
+    case truncate(TruncateQuery)
 
     // MARK: - Graph Definition (SQL/PGQ)
 
@@ -53,12 +62,26 @@ public enum QueryStatement: Sendable, Equatable, Hashable {
 
 /// Column assignment (SET column = value)
 public struct Assignment: Sendable, Equatable, Hashable {
-    public let column: String
+    public let columns: [String]
     public let value: Expression
 
     public init(column: String, value: Expression) {
-        self.column = column
+        self.columns = [column]
         self.value = value
+    }
+
+    public init(columns: [String], value: Expression) {
+        self.columns = columns
+        self.value = value
+    }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        ExpressionIdentity.namesEqual(lhs.columns, rhs.columns) && ExpressionIdentity.areEqual(lhs.value, rhs.value)
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        ExpressionIdentity.hashNames(columns, into: &hasher)
+        hasher.combine(value)
     }
 }
 
@@ -82,7 +105,9 @@ public struct InsertQuery: Sendable, Equatable, Hashable {
     public let source: InsertSource
     public let overriding: SQLIdentityOverride?
     public let onConflict: OnConflictAction?
+    public let conflictTarget: SQLConflictTarget?
     public let returning: [ProjectionItem]?
+    public let returningAliases: SQLReturningAliases?
 
     public init(
         target: TableRef,
@@ -90,14 +115,18 @@ public struct InsertQuery: Sendable, Equatable, Hashable {
         source: InsertSource,
         onConflict: OnConflictAction? = nil,
         returning: [ProjectionItem]? = nil,
-        overriding: SQLIdentityOverride? = nil
+        overriding: SQLIdentityOverride? = nil,
+        conflictTarget: SQLConflictTarget? = nil,
+        returningAliases: SQLReturningAliases? = nil
     ) {
         self.overriding = overriding
         self.target = target
         self.columns = columns
         self.source = source
         self.onConflict = onConflict
+        self.conflictTarget = conflictTarget
         self.returning = returning
+        self.returningAliases = returningAliases
     }
 }
 
@@ -129,19 +158,22 @@ public struct UpdateQuery: Sendable, Equatable, Hashable {
     public let from: DataSource?
     public let filter: Expression?
     public let returning: [ProjectionItem]?
+    public let returningAliases: SQLReturningAliases?
 
     public init(
         target: TableRef,
         assignments: [Assignment],
         from: DataSource? = nil,
         filter: Expression? = nil,
-        returning: [ProjectionItem]? = nil
+        returning: [ProjectionItem]? = nil,
+        returningAliases: SQLReturningAliases? = nil
     ) {
         self.target = target
         self.assignments = assignments
         self.from = from
         self.filter = filter
         self.returning = returning
+        self.returningAliases = returningAliases
     }
 }
 
@@ -151,17 +183,20 @@ public struct DeleteQuery: Sendable, Equatable, Hashable {
     public let using: DataSource?
     public let filter: Expression?
     public let returning: [ProjectionItem]?
+    public let returningAliases: SQLReturningAliases?
 
     public init(
         target: TableRef,
         using: DataSource? = nil,
         filter: Expression? = nil,
-        returning: [ProjectionItem]? = nil
+        returning: [ProjectionItem]? = nil,
+        returningAliases: SQLReturningAliases? = nil
     ) {
         self.target = target
         self.using = using
         self.filter = filter
         self.returning = returning
+        self.returningAliases = returningAliases
     }
 }
 
@@ -337,31 +372,131 @@ public struct DescribeQuery: Sendable, Equatable, Hashable {
 extension QueryStatement {
     /// Returns true if this is a read-only statement
     public var isReadOnly: Bool {
-        switch self {
-        case .select, .construct, .ask, .describe:
-            return true
-        default:
-            return false
+        allStatementLeavesSatisfy {
+            switch $0 {
+            case .select, .construct, .ask, .describe: return true
+            default: return false
+            }
         }
     }
 
     /// Returns true if this is a data modification statement
     public var isModification: Bool {
-        switch self {
-        case .insert, .update, .delete, .sparqlUpdate:
-            return true
-        default:
-            return false
+        !allStatementLeavesSatisfy {
+            switch $0 {
+            case .insert, .update, .delete, .merge, .truncate, .sparqlUpdate: return false
+            default: return true
+            }
         }
     }
 
     /// Returns true if this is a schema definition statement
     public var isSchemaDefinition: Bool {
-        switch self {
-        case .createGraph, .dropGraph:
-            return true
-        default:
-            return false
+        !allStatementLeavesSatisfy {
+            switch $0 {
+            case .createGraph, .dropGraph: return false
+            default: return true
+            }
+        }
+    }
+}
+
+private extension QueryStatement {
+    enum StatementCursor {
+        case statement(QueryStatement)
+        case definitions([SQLNamedStatement], Int)
+    }
+
+    func allStatementLeavesSatisfy(_ predicate: (QueryStatement) -> Bool) -> Bool {
+        var work: [StatementCursor] = [.statement(self)]
+        while let item = work.popLast() {
+            switch item {
+            case .statement(.with(let value)):
+                work.append(.statement(value.body))
+                work.append(.definitions(value.statements, 0))
+            case .statement(let value):
+                if !predicate(value) { return false }
+            case .definitions(let values, let index):
+                if index < values.count {
+                    work.append(.definitions(values, index + 1))
+                    work.append(.statement(values[index].statement))
+                }
+            }
+        }
+        return true
+    }
+}
+
+extension QueryStatement {
+    public static func == (lhs: QueryStatement, rhs: QueryStatement) -> Bool {
+        enum Comparison {
+            case statement(QueryStatement, QueryStatement)
+            case definitions([SQLNamedStatement], [SQLNamedStatement], Int)
+        }
+        var work: [Comparison] = [.statement(lhs, rhs)]
+        while let item = work.popLast() {
+            switch item {
+            case .definitions(let left, let right, let index):
+                guard left.count == right.count else { return false }
+                guard index < left.count else { continue }
+                let a = left[index], b = right[index]
+                guard ExpressionIdentity.namedStatementMetadataEqual(a, b) else { return false }
+                work.append(.definitions(left, right, index + 1))
+                work.append(.statement(a.statement, b.statement))
+            case .statement(let left, let right):
+                switch (left, right) {
+                case (.with(let a), .with(let b)):
+                    guard a.recursive == b.recursive else { return false }
+                    work.append(.statement(a.body, b.body))
+                    work.append(.definitions(a.statements, b.statements, 0))
+                case (.select(let a), .select(let b)): if a != b { return false }
+                case (.insert(let a), .insert(let b)): if a != b { return false }
+                case (.update(let a), .update(let b)): if a != b { return false }
+                case (.delete(let a), .delete(let b)): if a != b { return false }
+                case (.merge(let a), .merge(let b)): if a != b { return false }
+                case (.truncate(let a), .truncate(let b)): if a != b { return false }
+                case (.createGraph(let a), .createGraph(let b)): if a != b { return false }
+                case (.dropGraph(let a), .dropGraph(let b)): if a != b { return false }
+                case (.sparqlUpdate(let a), .sparqlUpdate(let b)): if a != b { return false }
+                case (.construct(let a), .construct(let b)): if a != b { return false }
+                case (.ask(let a), .ask(let b)): if a != b { return false }
+                case (.describe(let a), .describe(let b)): if a != b { return false }
+                default: return false
+                }
+            }
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        var work: [StatementCursor] = [.statement(self)]
+        while let item = work.popLast() {
+            switch item {
+            case .definitions(let values, let index):
+                guard index < values.count else { continue }
+                let value = values[index]
+                ExpressionIdentity.hashNamedStatementMetadata(value, into: &hasher)
+                work.append(.definitions(values, index + 1))
+                work.append(.statement(value.statement))
+            case .statement(let value):
+                switch value {
+                case .select(let query): hasher.combine(0); hasher.combine(query)
+                case .insert(let query): hasher.combine(1); hasher.combine(query)
+                case .update(let query): hasher.combine(2); hasher.combine(query)
+                case .delete(let query): hasher.combine(3); hasher.combine(query)
+                case .createGraph(let query): hasher.combine(4); hasher.combine(query)
+                case .dropGraph(let query): hasher.combine(5); hasher.combine(query)
+                case .sparqlUpdate(let query): hasher.combine(6); hasher.combine(query)
+                case .construct(let query): hasher.combine(7); hasher.combine(query)
+                case .ask(let query): hasher.combine(8); hasher.combine(query)
+                case .describe(let query): hasher.combine(9); hasher.combine(query)
+                case .with(let query):
+                    hasher.combine(10); hasher.combine(query.recursive); hasher.combine(query.statements.count)
+                    work.append(.statement(query.body)); work.append(.definitions(query.statements, 0))
+                case .merge(let query): hasher.combine(11); hasher.combine(query)
+                case .truncate(let query): hasher.combine(12); hasher.combine(query)
+                }
+            }
         }
     }
 }

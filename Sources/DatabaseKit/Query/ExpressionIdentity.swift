@@ -49,6 +49,59 @@ enum ExpressionIdentity {
         while let token = cursor.next() { hasher.combine(token) }
     }
 
+    static func nameEqual(_ lhs: String?, _ rhs: String?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil): return true
+        case (.some(let lhs), .some(let rhs)): return ExactName(value: lhs) == ExactName(value: rhs)
+        default: return false
+        }
+    }
+
+    static func namesEqual(_ lhs: [String]?, _ rhs: [String]?) -> Bool {
+        ExactNames(values: lhs) == ExactNames(values: rhs)
+    }
+
+    static func hashName(_ value: String?, into hasher: inout Hasher) {
+        hasher.combine(value != nil)
+        if let value { ExactName(value: value).hash(into: &hasher) }
+    }
+
+    static func hashNames(_ values: [String]?, into hasher: inout Hasher) {
+        ExactNames(values: values).hash(into: &hasher)
+    }
+
+    static func namedStatementMetadataEqual(_ lhs: SQLNamedStatement, _ rhs: SQLNamedStatement) -> Bool {
+        guard nameEqual(lhs.name, rhs.name), namesEqual(lhs.columns, rhs.columns), lhs.materialized == rhs.materialized else { return false }
+        switch (lhs.search, rhs.search) {
+        case (nil, nil): break
+        case (.some(let a), .some(let b)):
+            guard a.order == b.order, namesEqual(a.columns, b.columns), nameEqual(a.sequenceColumn, b.sequenceColumn) else { return false }
+        default: return false
+        }
+        switch (lhs.cycle, rhs.cycle) {
+        case (nil, nil): break
+        case (.some(let a), .some(let b)):
+            guard namesEqual(a.columns, b.columns), nameEqual(a.markColumn, b.markColumn), nameEqual(a.pathColumn, b.pathColumn),
+                  a.markValue == b.markValue, a.defaultValue == b.defaultValue else { return false }
+        default: return false
+        }
+        return true
+    }
+
+    static func hashNamedStatementMetadata(_ value: SQLNamedStatement, into hasher: inout Hasher) {
+        hashName(value.name, into: &hasher); hashNames(value.columns, into: &hasher)
+        hasher.combine(value.materialized)
+        hasher.combine(value.search != nil)
+        if let search = value.search {
+            hasher.combine(search.order); hashNames(search.columns, into: &hasher); hashName(search.sequenceColumn, into: &hasher)
+        }
+        hasher.combine(value.cycle != nil)
+        if let cycle = value.cycle {
+            hashNames(cycle.columns, into: &hasher); hashName(cycle.markColumn, into: &hasher); hashName(cycle.pathColumn, into: &hasher)
+            hasher.combine(cycle.markValue); hasher.combine(cycle.defaultValue)
+        }
+    }
+
     private struct ExactName: Equatable, Hashable {
         let value: String
         static func == (lhs: Self, rhs: Self) -> Bool { lhs.value.utf8.elementsEqual(rhs.value.utf8) }

@@ -140,29 +140,32 @@ public enum QueryStructuralValidator {
     }
 
     private static func rootValidationStep(
-        for statement: QueryStatement
+        for statement: QueryStatement, depth: UInt64 = 0
     ) -> ValidationStep {
         switch statement {
+        case .with(let value): return .sqlWith(value, depth: depth)
+        case .merge(let value): return .merge(value, depth: depth)
+        case .truncate(let value): return .truncate(value, depth: depth)
         case .select(let query):
-            return .select(query, depth: 0)
+            return .select(query, depth: depth)
         case .insert(let query):
-            return .insert(query, depth: 0)
+            return .insert(query, depth: depth)
         case .update(let query):
-            return .sqlUpdate(query, depth: 0)
+            return .sqlUpdate(query, depth: depth)
         case .delete(let query):
-            return .delete(query, depth: 0)
+            return .delete(query, depth: depth)
         case .createGraph(let statement):
-            return .createGraph(statement, depth: 0)
+            return .createGraph(statement, depth: depth)
         case .dropGraph:
-            return .dropGraph(depth: 0)
+            return .dropGraph(depth: depth)
         case .sparqlUpdate(let request):
-            return .sparqlUpdateRequest(request, depth: 0)
+            return .sparqlUpdateRequest(request, depth: depth)
         case .construct(let query):
-            return .construct(query, depth: 0)
+            return .construct(query, depth: depth)
         case .ask(let query):
-            return .ask(query, depth: 0)
+            return .ask(query, depth: depth)
         case .describe(let query):
-            return .describe(query, depth: 0)
+            return .describe(query, depth: depth)
         }
     }
 }
@@ -170,6 +173,9 @@ public enum QueryStructuralValidator {
 private extension QueryStructuralValidator {
     /// Indexed input cursors keep the validation work stack independent of collection width.
     enum ValidationCollection {
+        case namedStatements([SQLNamedStatement])
+        case mergeClauses([SQLMergeClause])
+        case tables([TableRef])
         case terms([SPARQLTerm])
         case vertices([VertexTableDefinition])
         case edges([EdgeTableDefinition])
@@ -207,6 +213,9 @@ private extension QueryStructuralValidator {
             case .groupingSets(let values): return values.count
             case .groupingRows(let values): return values.count
             case .windows(let values): return values.count
+            case .namedStatements(let values): return values.count
+            case .mergeClauses(let values): return values.count
+            case .tables(let values): return values.count
             case .terms(let values): return values.count
             case .vertices(let values): return values.count
             case .edges(let values): return values.count
@@ -241,6 +250,9 @@ private extension QueryStructuralValidator {
             case .groupings(let values): return .grouping(values[index], depth: depth)
             case .windows(let values): return .namedWindow(values[index], depth: depth)
             case .groupingSets, .groupingRows: return nil
+            case .namedStatements(let values): return .namedStatement(values[index], depth: depth)
+            case .mergeClauses(let values): return .mergeClause(values[index], depth: depth)
+            case .tables(let values): return .table(values[index], depth: depth)
             case .terms(let values):
                 return .term(values[index], depth: depth)
             case .vertices(let values):
@@ -307,6 +319,13 @@ private extension QueryStructuralValidator {
         case construct(ConstructQuery, depth: UInt64)
         case ask(AskQuery, depth: UInt64)
         case describe(DescribeQuery, depth: UInt64)
+        case sqlWith(SQLWithStatement, depth: UInt64)
+        case namedStatement(SQLNamedStatement, depth: UInt64)
+        case merge(MergeQuery, depth: UInt64)
+        case mergeClause(SQLMergeClause, depth: UInt64)
+        case truncate(TruncateQuery, depth: UInt64)
+        case table(TableRef, depth: UInt64)
+        case conflictTarget(SQLConflictTarget, depth: UInt64)
         case insert(InsertQuery, depth: UInt64)
         case insertSource(InsertSource, depth: UInt64)
         case conflictAction(OnConflictAction, depth: UInt64)
@@ -437,7 +456,7 @@ private extension QueryStructuralValidator {
                     try validateValueStep(validationStep, depth: depth, childDepth: childDepth, steps: &validationSteps)
                 case .collectionCursor, .expressionsCursor, .projectionCursor, .sortCursor, .cteCursor,
                      .rowsCursor, .valueRow, .select, .construct, .ask,
-                     .describe, .insert, .insertSource, .conflictAction, .sqlUpdate,
+                     .describe, .sqlWith, .namedStatement, .merge, .mergeClause, .truncate, .table, .conflictTarget, .insert, .insertSource, .conflictAction, .sqlUpdate,
                      .delete, .createGraph, .dropGraph, .vertexDefinition, .edgeDefinition,
                      .vertexReference, .keyColumnMapping, .labelExpression, .propertiesSpec, .source,
                      .accessPath, .indexSource, .fusionStage, .fusionInput, .fusionIndexSource,
@@ -568,11 +587,79 @@ private extension QueryStructuralValidator {
                     validationSteps.append(.term(first, depth: childDepth))
                 }
 
-            case .insert(let query, _):
-                try appendTablePartitions(query.target, depth: childDepth, to: &validationSteps)
-                if let columns = query.columns {
-                    try consumeCollection(columns.count)
+            case .sqlWith(let value, _):
+                guard !value.statements.isEmpty else { throw .invalidSQLMutation("Empty WITH definitions") }
+                try consumeCollection(value.statements.count)
+                validationSteps.append(QueryStructuralValidator.rootValidationStep(for: value.body, depth: childDepth))
+                validationSteps.append(.collectionCursor(.namedStatements(value.statements), 0, depth: childDepth))
+            case .namedStatement(let value, _):
+                try admitMutationName(value.name)
+                if let columns = value.columns { try admitMutationNames(columns) }
+                if let search = value.search { try consumeCollection(search.columns.count) }
+                if let cycle = value.cycle { try consumeCollection(cycle.columns.count) }
+                try QueryStructuralValidator.validate(value)
+                if let search = value.search {
+                    validationSteps.append(.cteSearch(search, depth: childDepth))
                 }
+                if let cycle = value.cycle {
+                    validationSteps.append(.cteCycle(cycle, depth: childDepth))
+                }
+                validationSteps.append(QueryStructuralValidator.rootValidationStep(for: value.statement, depth: childDepth))
+            case .merge(let value, _):
+                guard !value.clauses.isEmpty else { throw .invalidSQLMutation("Empty MERGE clauses") }
+                try admitMutationTable(value.target)
+                try appendTablePartitions(value.target, depth: childDepth, to: &validationSteps)
+                try admitMutationReturning(value.returning, aliases: value.returningAliases)
+                if let items = value.returning { try consumeCollection(items.count); appendProjectionItems(items, depth: childDepth, to: &validationSteps) }
+                try consumeCollection(value.clauses.count)
+                validationSteps.append(.collectionCursor(.mergeClauses(value.clauses), 0, depth: childDepth))
+                validationSteps.append(.expression(value.condition, depth: childDepth))
+                validationSteps.append(.source(value.source, depth: childDepth))
+            case .mergeClause(let value, _):
+                if let condition = value.condition { validationSteps.append(.expression(condition, depth: childDepth)) }
+                switch value.action {
+                case .insert(let columns, let values, _):
+                    if let columns { try admitMutationNames(columns) }
+                    if let values {
+                        guard !values.isEmpty, columns == nil || columns?.count == values.count else { throw .invalidSQLMutation("Invalid MERGE INSERT arity") }
+                        try consumeCollection(values.count)
+                        appendExpressions(values, depth: childDepth, to: &validationSteps)
+                    } else if columns != nil { throw .invalidSQLMutation("DEFAULT VALUES cannot specify columns") }
+                case .update(let assignments):
+                    guard !assignments.isEmpty else { throw .invalidSQLMutation("Empty MERGE assignments") }
+                    try consumeCollection(assignments.count)
+                    appendAssignments(assignments, depth: childDepth, to: &validationSteps)
+                case .delete, .doNothing: break
+                }
+            case .truncate(let value, _):
+                guard !value.tables.isEmpty else { throw .invalidSQLMutation("Empty TRUNCATE targets") }
+                try consumeCollection(value.tables.count)
+                validationSteps.append(.collectionCursor(.tables(value.tables), 0, depth: childDepth))
+            case .table(let table, _):
+                try admitMutationTable(table)
+                guard table.alias == nil else { throw .invalidSQLMutation("TRUNCATE target cannot have an alias") }
+                try appendTablePartitions(table, depth: childDepth, to: &validationSteps)
+            case .conflictTarget(let target, _):
+                switch target {
+                case .columns(let columns, let predicate):
+                    try admitMutationNames(columns)
+                    if let predicate { validationSteps.append(.expression(predicate, depth: childDepth)) }
+                case .constraint(let name): try admitMutationName(name)
+                }
+            case .insert(let query, _):
+                try admitMutationReturning(query.returning, aliases: query.returningAliases)
+                if let target = query.conflictTarget {
+                    guard query.onConflict != nil else { throw .invalidSQLMutation("Conflict target requires action") }
+                    validationSteps.append(.conflictTarget(target, depth: childDepth))
+                }
+                if case .doUpdate = query.onConflict, query.conflictTarget == nil { throw .invalidSQLMutation("Conflict UPDATE requires target") }
+                if case .values(let rows) = query.source {
+                    guard let width = rows.first?.count, width > 0,
+                          rows.allSatisfy({ $0.count == width }), query.columns == nil || query.columns?.count == width else { throw .invalidSQLMutation("Invalid INSERT VALUES arity") }
+                }
+                try admitMutationTable(query.target)
+                try appendTablePartitions(query.target, depth: childDepth, to: &validationSteps)
+                if let columns = query.columns { try admitMutationNames(columns) }
                 if let returning = query.returning {
                     try consumeCollection(returning.count)
                     appendProjectionItems(returning, depth: childDepth, to: &validationSteps)
@@ -598,6 +685,7 @@ private extension QueryStructuralValidator {
                 case .doNothing:
                     break
                 case .doUpdate(let assignments, let predicate):
+                    guard !assignments.isEmpty else { throw .invalidSQLMutation("Empty conflict assignments") }
                     try consumeCollection(assignments.count)
                     appendAssignments(assignments, depth: childDepth, to: &validationSteps)
                     if let predicate {
@@ -606,6 +694,9 @@ private extension QueryStructuralValidator {
                 }
 
             case .sqlUpdate(let query, _):
+                guard !query.assignments.isEmpty else { throw .invalidSQLMutation("Empty UPDATE assignments") }
+                try admitMutationReturning(query.returning, aliases: query.returningAliases)
+                try admitMutationTable(query.target)
                 try appendTablePartitions(query.target, depth: childDepth, to: &validationSteps)
                 try consumeCollection(query.assignments.count)
                 appendAssignments(query.assignments, depth: childDepth, to: &validationSteps)
@@ -621,6 +712,8 @@ private extension QueryStructuralValidator {
                 }
 
             case .delete(let query, _):
+                try admitMutationReturning(query.returning, aliases: query.returningAliases)
+                try admitMutationTable(query.target)
                 try appendTablePartitions(query.target, depth: childDepth, to: &validationSteps)
                 if let source = query.using {
                     validationSteps.append(.source(source, depth: childDepth))
@@ -884,6 +977,8 @@ private extension QueryStructuralValidator {
                 }
 
             case .assignment(let assignment, _):
+                try admitMutationNames(assignment.columns)
+                if assignment.columns.count > 1, case .row(let values) = assignment.value, values.count != assignment.columns.count { throw .invalidSQLMutation("Tuple assignment arity mismatch") }
                 validationSteps.append(.expression(assignment.value, depth: childDepth))
 
             case .sortKey(let key, _):
@@ -1483,7 +1578,7 @@ private extension QueryStructuralValidator {
                 }
             case .collectionCursor, .expressionsCursor, .projectionCursor, .sortCursor, .cteCursor,
                  .rowsCursor, .valueRow, .select, .construct, .ask,
-                 .describe, .insert, .insertSource, .conflictAction, .sqlUpdate,
+                 .describe, .sqlWith, .namedStatement, .merge, .mergeClause, .truncate, .table, .conflictTarget, .insert, .insertSource, .conflictAction, .sqlUpdate,
                  .delete, .createGraph, .dropGraph, .vertexDefinition, .edgeDefinition,
                  .vertexReference, .keyColumnMapping, .labelExpression, .propertiesSpec, .source,
                  .accessPath, .indexSource, .fusionStage, .fusionInput, .fusionIndexSource,
@@ -1508,6 +1603,8 @@ private extension QueryStructuralValidator {
                  .sortCursor(_, _, let depth), .cteCursor(_, _, let depth), .rowsCursor(_, _, let depth),
                  .valueRow(_, let depth), .select(_, let depth), .construct(_, let depth),
                  .ask(_, let depth), .describe(_, let depth),
+                 .sqlWith(_, let depth), .namedStatement(_, let depth), .merge(_, let depth),
+                 .mergeClause(_, let depth), .truncate(_, let depth), .table(_, let depth), .conflictTarget(_, let depth),
                  .insert(_, let depth), .insertSource(_, let depth),
                  .conflictAction(_, let depth), .sqlUpdate(_, let depth),
                  .delete(_, let depth), .createGraph(_, let depth),
@@ -1547,6 +1644,31 @@ private extension QueryStructuralValidator {
                  .sparqlUpdateOperation(_, let depth), .dropGraph(let depth):
                 return depth
             }
+        }
+
+        private mutating func admitMutationTable(_ table: TableRef) throws(QueryStructuralValidationError) {
+            try admitMutationName(table.table)
+            if let name = table.schema { try admitMutationName(name) }
+            if let name = table.alias { try admitMutationName(name) }
+        }
+
+        private mutating func admitMutationName(_ name: String) throws(QueryStructuralValidationError) {
+            guard !name.isEmpty, !name.utf8.contains(0) else { throw .invalidSQLMutation("Invalid mutation identifier") }
+            try ledger.consume(.retainedBytes, amount: UInt64(name.utf8.count))
+        }
+
+        private mutating func admitMutationNames(_ names: [String]) throws(QueryStructuralValidationError) {
+            guard !names.isEmpty else { throw .invalidSQLMutation("Empty mutation target names") }
+            try consumeCollection(names.count)
+            for name in names { try admitMutationName(name) }
+        }
+
+        private mutating func admitMutationReturning(_ items: [ProjectionItem]?, aliases: SQLReturningAliases?) throws(QueryStructuralValidationError) {
+            if let items, items.isEmpty { throw .invalidSQLMutation("Empty RETURNING") }
+            guard let aliases else { return }
+            guard items != nil, aliases.old != nil || aliases.new != nil else { throw .invalidSQLMutation("Invalid RETURNING aliases") }
+            if let name = aliases.old { try admitMutationName(name) }
+            if let name = aliases.new { try admitMutationName(name) }
         }
 
         private func nextDepth(

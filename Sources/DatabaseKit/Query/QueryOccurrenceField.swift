@@ -1,6 +1,20 @@
 /// Source-independent semantic child roles within QueryIR.
 public enum QueryOccurrenceField: Sendable, Equatable, Hashable {
     case statement
+    case mutationTarget
+    case assignment
+    case assignmentValue
+    case conflictTarget
+    case conflictPredicate
+    case conflictAction
+    case returning
+    case returningAlias
+    case cteStatement
+    case withBody
+    case mergeCondition
+    case mergeClause
+    case mergeAction
+    case truncateRelation
     case cte
     case cteCycleMark
     case cteCycleDefault

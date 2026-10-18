@@ -7,6 +7,8 @@ public enum SQLCommandKind: Sendable, Hashable {
     case insert
     case update
     case delete
+    case merge
+    case truncate
     case savepoint
     case rollbackTo
     case release
@@ -14,8 +16,8 @@ public enum SQLCommandKind: Sendable, Hashable {
     /// Mutation commands report an affected-row count; checkpoint commands do not.
     public var reportsAffectedRows: Bool {
         switch self {
-        case .insert, .update, .delete: return true
-        case .savepoint, .rollbackTo, .release, .setConstraints, .createSequence, .alterSequence, .dropSequence: return false
+        case .insert, .update, .delete, .merge: return true
+        case .truncate, .savepoint, .rollbackTo, .release, .setConstraints, .createSequence, .alterSequence, .dropSequence: return false
         }
     }
 }

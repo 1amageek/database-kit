@@ -59,18 +59,26 @@ extension QueryStructuralValidator {
     }
 
     package static func validate(_ subquery: NamedSubquery) throws(QueryStructuralValidationError) {
-        if let search = subquery.search {
+        try validateCTEMetadata(columns: subquery.columns, search: subquery.search, cycle: subquery.cycle)
+    }
+
+    package static func validate(_ statement: SQLNamedStatement) throws(QueryStructuralValidationError) {
+        try validateCTEMetadata(columns: statement.columns, search: statement.search, cycle: statement.cycle)
+    }
+
+    private static func validateCTEMetadata(columns: [String]?, search: CTESearchClause?, cycle: CTECycleClause?) throws(QueryStructuralValidationError) {
+        if let search = search {
             try validate(search)
-            guard !contains(subquery.columns ?? [], search.sequenceColumn),
-                  !contains(subquery.cycle?.columns ?? [], search.sequenceColumn) else { throw .invalidCTESearchClause }
+            guard !contains(columns ?? [], search.sequenceColumn),
+                  !contains(cycle?.columns ?? [], search.sequenceColumn) else { throw .invalidCTESearchClause }
         }
-        if let cycle = subquery.cycle {
+        if let cycle = cycle {
             try validate(cycle)
-            let columns = subquery.columns ?? []
-            let searchKeys = subquery.search?.columns ?? []
-            guard !contains(columns, cycle.markColumn), !contains(columns, cycle.pathColumn),
+            let declaredColumns = columns ?? []
+            let searchKeys = search?.columns ?? []
+            guard !contains(declaredColumns, cycle.markColumn), !contains(declaredColumns, cycle.pathColumn),
                   !contains(searchKeys, cycle.markColumn), !contains(searchKeys, cycle.pathColumn) else { throw .invalidCTECycleClause }
-            if let sequence = subquery.search?.sequenceColumn {
+            if let sequence = search?.sequenceColumn {
                 guard !sequence.utf8.elementsEqual(cycle.markColumn.utf8),
                       !sequence.utf8.elementsEqual(cycle.pathColumn.utf8) else { throw .invalidCTECycleClause }
             }
