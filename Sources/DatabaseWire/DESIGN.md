@@ -1036,3 +1036,17 @@ Wire does not introduce a duplicate catalog representation or semantic validator
 Direct S15 Wire tests own deterministic bytes, every declaration alternative,
 child preservation, truncation/trailing/unknown/Bool/shape failures and shared
 budget/deep/wide witnesses. Runtime DDL effects remain Framework evidence.
+
+## S16 SQL Block Carriage
+
+[SQL S16](../DatabaseKit/Query/SQL/DESIGN.md#s16-block-operations-and-diagnostics)
+owns the semantic contract. `QueryIRWireFormat.encode(SQLBlock)` and
+`decodeBlock` use a distinct block envelope and closed step tags 0–12, retaining
+existing QueryStatement tags unchanged. Every nested query, option, identifier,
+sequence field and request byte payload shares the same bounded reader/writer.
+Unknown tags, invalid values, truncation and trailing bytes fail typed. Semantic
+admission uses Kit's cumulative ledger after decode and before encode.
+
+`S16SQLBlockWireTests` verifies deterministic mixed-block round trips, independent
+PREPARE parameter scope, malformed prefixes/tags/trailing bytes and exact/one-past
+resource limits. Block carriage adds no operation dispatch or transport.

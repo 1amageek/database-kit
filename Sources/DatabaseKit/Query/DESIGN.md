@@ -1061,3 +1061,26 @@ owns direct child substitution, missing parameters, metadata identity,
 malformed declarations, cumulative limits, deep mixed children, classification,
 SPARQL rejection and lexical renaming. Actual effects and binary layouts remain
 Framework and Wire evidence.
+
+## S16 Operational Declaration Carriage
+
+[SQL S16](SQL/DESIGN.md#s16-block-operations-and-diagnostics) owns the operational
+contract. Query owns its one cumulative structural ledger and parameter traversal.
+PREPARE bodies participate in structural admission but have independent parameters;
+request binding traverses statements, settings, EXECUTE arguments, EXPLAIN and COPY
+queries, preserving PREPARE bodies verbatim. SQLBlockStep is the sole operational
+algebra; QueryStatement remains ordinary query/mutation/DDL. Names retain exact
+UTF-8 identity. COPY owns immutable input bytes; its options resolve format defaults
+and reject invalid single-byte delimiters, quoting and null markers.
+PREPARE's newly declared parameter types charge custom terminal-name bytes at
+that operation boundary, including array element types, on the same ledger as
+its prepared name and statement. Existing DataType traversal owns depth, nodes,
+schema qualifiers and composite footprints; ordinary CAST admission is unchanged.
+
+```text
+SQLBlock -> one structural ledger -> bounded ordinary child traversal
+         -> request binder -> independent PREPARE definition retained
+```
+
+Verification: S16SQLOperationTests owns identity, invalid payloads, cumulative
+boundaries and independent parameter scopes. Wire tests establish carriage only.

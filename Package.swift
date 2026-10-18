@@ -59,6 +59,7 @@ let package = Package(
                 "Model/DESIGN.md",
                 "Query/DESIGN.md",
                 "Query/SQL/DESIGN.md",
+                "Query/SQL/DDL/DESIGN.md",
                 "Schema/DESIGN.md",
                 "Schema/SQLCatalog/DESIGN.md",
             ],

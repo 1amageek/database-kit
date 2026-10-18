@@ -11,13 +11,98 @@ public enum QueryStructuralValidator {
         parameters: [QueryParameter] = [],
         limits: QueryStructuralLimits = .default
     ) throws(QueryStructuralValidationError) {
+        _ = try validateBlockStructure(block, parameters: parameters, limits: limits, parameterValues: nil)
+    }
+
+    static func validateBoundStructure(
+        _ block: SQLBlock,
+        positionalParameters: [UInt32: QueryParameter],
+        namedParameters: [String: QueryParameter],
+        limits: QueryStructuralLimits
+    ) throws(QueryStructuralValidationError) -> QueryParameterReference? {
+        try validateBlockStructure(block, parameters: [], limits: limits,
+            parameterValues: ParameterValues(positions: positionalParameters, names: namedParameters))
+    }
+
+    private static func validateBlockStructure(
+        _ block: SQLBlock, parameters: [QueryParameter], limits: QueryStructuralLimits,
+        parameterValues: ParameterValues?
+    ) throws(QueryStructuralValidationError) -> QueryParameterReference? {
         guard !block.steps.isEmpty else { throw .emptySQLBlock }
-        var validation = ValidationTraversal(limits: limits)
+        var validation: ValidationTraversal
+        if let parameterValues { validation = ValidationTraversal(limits: limits, parameterValues: parameterValues) }
+        else { validation = ValidationTraversal(limits: limits) }
         try validation.ledger.consume(.totalNodes)
         try validation.ledger.consume(.collectionElements, amount: UInt64(block.steps.count))
-        for step in block.steps {
+        var began = false
+        var terminal = false
+        for (index, step) in block.steps.enumerated() {
             try validation.ledger.consume(.totalNodes)
             switch step {
+            case .transaction(let control):
+                switch control {
+                case .begin:
+                    guard index == 0 else { throw .invalidSQLControl }
+                    began = true
+                case .commit, .rollback:
+                    guard index == block.steps.count - 1 else { throw .invalidSQLControl }
+                    terminal = true
+                }
+            case .setting(let command):
+                if case .set(_, let value, _) = command {
+                    try validation.validate([.expression(value, depth: 1)])
+                }
+            case .prepare(let command):
+                try validateControlName(command.name, ledger: &validation.ledger)
+                try validation.ledger.consume(.collectionElements, amount: UInt64(command.parameterTypes.count))
+                for type in command.parameterTypes {
+                    try validation.validate([.dataType(type, depth: 1)])
+                    // PREPARE owns new declared terminal names; ordinary CAST accounting is unchanged.
+                    var declaredType = type
+                    while case .array(let element) = declaredType { declaredType = element }
+                    if case .custom(let name, _) = declaredType {
+                        try validation.ledger.consume(.retainedBytes, amount: UInt64(name.utf8.count))
+                    }
+                }
+                // Definition parameters never resolve against the invoking request.
+                var definition = ValidationTraversal(limits: limits)
+                definition.ledger = validation.ledger
+                try definition.validate([rootValidationStep(for: command.statement, depth: 1)])
+                validation.ledger = definition.ledger
+            case .execute(let command):
+                try validateControlName(command.name, ledger: &validation.ledger)
+                try validation.ledger.consume(.collectionElements, amount: UInt64(command.arguments.count))
+                for argument in command.arguments { try validation.validate([.expression(argument, depth: 1)]) }
+            case .deallocate(let name):
+                if let name { try validateControlName(name, ledger: &validation.ledger) }
+            case .explain(let command):
+                try validation.ledger.consume(.totalNodes)
+                try validation.validate([rootValidationStep(for: command.statement, depth: 1)])
+            case .copy(let command):
+                try validation.ledger.consume(.totalNodes, amount: 2)
+                for option in [command.options.delimiter, command.options.null, command.options.quote, command.options.escape] {
+                    try validation.ledger.consume(.retainedBytes, amount: UInt64(option.utf8.count))
+                }
+                guard (command.direction == .from) == (command.data != nil) else { throw .invalidSQLControl }
+                if let data = command.data {
+                    try validation.ledger.consume(.retainedBytes, amount: UInt64(data.count))
+                }
+                switch command.target {
+                case .table(let table, let columns):
+                    guard table.alias == nil else { throw .invalidSQLControl }
+                    try validation.validate([.source(.table(table), depth: 1)])
+                    try validateControlName(table.table, ledger: &validation.ledger)
+                    if let schema = table.schema { try validateControlName(schema, ledger: &validation.ledger) }
+                    try validation.ledger.consume(.collectionElements, amount: UInt64(columns.count))
+                    var seen: Set<SQLIdentifier> = []
+                    for column in columns {
+                        try validateControlName(column, ledger: &validation.ledger)
+                        guard seen.insert(SQLIdentifier(value: column)).inserted else { throw .invalidSQLControl }
+                    }
+                case .query(let query):
+                    guard command.direction == .to else { throw .invalidSQLControl }
+                    try validation.validate([.select(query, depth: 1)])
+                }
             case .statement(let statement):
                 try validation.validate([rootValidationStep(for: statement)])
             case .setConstraints(let control):
@@ -42,6 +127,7 @@ public enum QueryStructuralValidator {
                     continue
                 }
                 try validation.ledger.consume(.totalNodes)
+                try validation.validate([.dataType(sequence.declaredType, depth: 1)])
                 for value in [sequence.id, sequence.namespaceID, sequence.name] {
                     try validation.ledger.consume(.retainedBytes, amount: UInt64(value.utf8.count))
                 }
@@ -57,12 +143,21 @@ public enum QueryStructuralValidator {
                 }
             }
         }
+        guard !began || terminal else { throw .invalidSQLControl }
         try validation.validateParameters(parameters)
         for parameter in parameters {
             if let name = parameter.name {
                 try validation.ledger.consume(.retainedBytes, amount: UInt64(name.utf8.count))
             }
         }
+        return validation.firstMissingParameter
+    }
+
+    private static func validateControlName(
+        _ name: String, ledger: inout QueryStructuralResourceLedger
+    ) throws(QueryStructuralValidationError) {
+        guard !name.isEmpty, !name.utf8.contains(0) else { throw .invalidSQLControl }
+        try ledger.consume(.retainedBytes, amount: UInt64(name.utf8.count))
     }
 
     public static func validate(

@@ -222,7 +222,8 @@ SQLRelation -> durable field-number high-water mark
 |---|---|
 | `SQLViewColumn` | `id: String`, `name: String`, `type: QueryColumnType`, `isNullable: Bool`. |
 | `SQLViewColumnBinding` | `id: String`, `name: String`, `type: QueryColumnType`; original name, admitted input type and stable source-column identity. |
-| `SQLViewSourceBinding` | `schema: String?`, `table: String`, `relationID: String`, `columns: [SQLViewColumnBinding]`; original source name and the frozen referenced columns. |
+| `SQLViewSourceKind` | `.catalog`, `.informationSchema`; disjoint durable source identity domains. |
+| `SQLViewSourceBinding` | `kind: SQLViewSourceKind` (default `.catalog`), `schema: String?`, `table: String`, `relationID: String`, `columns: [SQLViewColumnBinding]`; original source name and the frozen referenced columns. |
 | `SQLViewDefinition` | `query: SelectQuery`, `columns: [SQLViewColumn]`, `bindings: [SQLViewSourceBinding]`; original query, stable output identity and resolved dependencies. |
 | `SQLView` | `id: String`, `namespaceID: String`, `name: String`, `definition: SQLViewDefinition`. |
 | `SQLMaterializedView` | `id: String`, `namespaceID: String`, `name: String`, `definition: SQLViewDefinition`, `backingRelationID: String`, `isPopulated: Bool`. |
@@ -239,8 +240,15 @@ construction failures. Catalog construction validates unique IDs, namespace
 references and shared namespace name scopes. View outputs and frozen source
 columns have unique IDs and names. Source binding keys are exact original
 schema/table pairs; repeated physical source references share one binding.
-Relation dependencies may name physical relations or logical views, while an
-MV backing reference must name a physical relation. Framework validates cycles,
+Catalog-kind source dependencies name physical relations or logical views.
+Information-schema source dependencies retain their canonical virtual descriptor
+identity in `relationID` and canonical column names in column binding IDs; they
+never fabricate a physical relation. Kit validates intrinsic identifier, column
+uniqueness and type contracts for both kinds, and validates catalog membership
+only for catalog-kind sources. Framework validates the closed virtual descriptor
+and its column shape/type before retaining or executing a generation. Binding
+identity includes its kind, so a virtual descriptor cannot alias a physical ID.
+An MV backing reference must name a physical relation. Framework validates cycles,
 source shape/type compatibility, physical index registration and admission
 budgets before retaining a generation. A materialized view is read-only and
 querying an unpopulated view fails explicitly; these are runtime guarantees.
@@ -277,3 +285,8 @@ Kit construction tests own identity, valid/malformed metadata, missing/colliding
 references and high-water boundaries. Framework owns codec persistence,
 transactional publication, restart, lexical binding, wildcard stability, actual
 index maintenance, read-only rejection and MV population behavior.
+
+S16 virtual source composition is covered by `S16SQLViewSourceTests`: kind identity,
+exact names, intrinsic failures and catalog membership admission. Persisted-kind
+codec, actual virtual descriptor validation and view execution/restart evidence
+remain Framework-owned.

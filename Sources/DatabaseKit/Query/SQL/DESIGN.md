@@ -1829,3 +1829,93 @@ committed readback and unchanged state on failure. Query/Parser/Wire tests
 prove carriage only. The retained PostgreSQL18 research and selected oracle
 observations distinguish SQL semantics from Framework-only authority,
 Directory, resource and lifecycle evidence; neither substitutes for the other.
+
+
+## S16 Block Operations and Diagnostics
+
+S16 completes O01-O08 within the accepted single-request profile. S17 owns
+remote operation dispatch and CLI presentation; S18 owns final URL and integrated
+backend/platform evidence. These are designed contracts until their behavioral
+proof and commits are recorded in the workspace progress authority.
+
+### Declaration boundary
+
+Operational statements extend the existing immutable `SQLBlockStep`, not a
+parallel statement algebra or runtime state in Kit. Ordinary SELECT/DML/DDL stay
+`QueryStatement`. EXPLAIN and COPY are block steps, including a one-step block.
+A named PREPARE contains an ordinary `QueryStatement`, exact name and ordered
+optional declared parameter types. It cannot prepare another control statement.
+Every child query/expression/type/name and COPY byte payload participates in the
+one cumulative structural ledger. PREPARE definition parameters have their own
+scope and are never substituted with request parameters before EXECUTE.
+
+| Proposed declaration | Meaning |
+|---|---|
+| `SQLTransactionControl` | begin, commit, rollback; text aliases normalize to these values. |
+| `SQLSettingName` / `SQLSettingScope` / `SQLSettingCommand` | searchPath, timeZone, statementTimeout; set/show/reset, local/session spelling and SHOW/RESET ALL. Unknown settings fail explicitly. |
+| `SQLPrepare` / `SQLExecute` | Exact prepared name, declared `DataType` list, ordinary statement; EXECUTE argument expressions are evaluated in the invoking statement scope. |
+| `SQLExplain` / `SQLExplainOptions` | Ordinary statement with analyze/verbose and text/json format; unsupported options fail explicitly. |
+| `SQLCopyCommand` / `SQLCopyTarget` / `SQLCopyOptions` | Table/ordered columns or SELECT target, STDIN/STDOUT direction, bounded request-owned `ByteString`, text/csv format, delimiter/null/header/quote/escape. |
+| `SQLDiagnostic` | Valid five-character SQLSTATE, optional one-based source character position and exact schema/table/column/constraint identifiers. Native runtime cause ownership remains Framework-owned. |
+
+`SQLBlockStep` adds `.transaction(SQLTransactionControl)`,
+`.setting(SQLSettingCommand)`, `.prepare(SQLPrepare)`, `.execute(SQLExecute)`,
+`.deallocate(String?)` (nil means ALL), `.explain(SQLExplain)` and
+`.copy(SQLCopyCommand)`. The existing constraint and checkpoint cases retain
+meaning. Bounded block Wire encoding is additive to existing statement carriage;
+no existing statement discriminator is reassigned and no transport is introduced.
+
+### Request and transactional semantics
+
+| Capability | Frozen meaning and distinguishing failure |
+|---|---|
+| O01 | One serializable request transaction. BEGIN is optional and appears only first; explicit COMMIT/ROLLBACK is terminal and last. If BEGIN appears its explicit terminal is required. Multiple transaction segments and CHAIN are unsupported before effects. A successful explicit ROLLBACK discards data/catalog/index effects and returns prior ordered observations only after authoritative rollback/close. |
+| O02 | Reuse the existing newest-name checkpoint lookup and physical/logical restoration. First error still aborts the whole immutable request; later ROLLBACK TO is never recovery from that error. |
+| O03 | SET and SET LOCAL both end at request close, an explicit product difference from PostgreSQL sessions. search_path, TimeZone and statement_timeout restore on rollback-to and survive release. Constraint modes use the existing actor journal. Statement timeout uses zero=disabled and unitless=milliseconds; it overlays the existing request deadline/meter, never replaces or refunds them. |
+| O04 | PREPARE analyzes names/types without data or sequence effects. Duplicate names fail. EXECUTE checks argument arity/types and current schema/search-path identity; stale prepared bindings fail explicitly rather than executing stale semantics. DEALLOCATE removes names. Names survive savepoint rollback (PostgreSQL session behavior), but end at request close and reset per automatic attempt. |
+| O05 | EXPLAIN describes the actual bound and selected engine plan. ANALYZE executes the ordinary statement once through the same admitted path and reports measured rows/work/time; DML effects obey the surrounding terminal/checkpoint disposition. No fabricated PostgreSQL cost or buffer statistics. TEXT/JSON describe the same plan; VERBOSE adds bound outputs/source details. |
+| O06 | COPY transfers request-owned bytes, never host files/programs. FROM uses existing column coercion/default/constraint/mutation semantics and rolls the entire request back on any malformed or failed row. TO uses existing selected reads and policies. NULL and empty string, quoted multiline CSV, HEADER and custom delimiter/quote/escape are preserved. The text parser supports explicit inline STDIN payload ending with the protocol-style terminator; semantic callers may supply the retained payload directly. |
+| O07 | Virtual information_schema tables, columns, table_constraints, key_column_usage, referential_constraints, views and sequences derive from the admitted committed or own-transaction catalog. Read policy filters relation/field/dependency metadata; operational failures propagate. No fake storage entities, fabricated OIDs or pg_catalog substitutes. |
+| O08 | SQLSTATE classifies syntax/name/type/cardinality/constraint/numeric/serialization/cancel/unsupported/resource failures. Class/identifier information is retained at the throw site where rollback could erase it. Text adapters convert UTF-8 byte offsets using the original input; direct semantic input has no invented position. Primary and mandatory-cleanup causes remain distinguishable. |
+
+The request boundary deliberately has no cross-request transaction, setting or
+prepared-statement state. The first-error policy above is the user-approved S12
+policy, not a new PostgreSQL-session recovery loop. Compatibility is checked by
+actual behavior and explicit product-difference fixtures, not by AST presence.
+
+### Ownership and falsifiable evidence
+
+```text
+QueryAST text/source -> immutable Kit block and request bytes
+    -> Framework SQLBlock request owner
+        -> existing transaction/checkpoint/meter/authority
+        -> QueryExecution plan / Mutation / SQLCatalog / Read policy
+    -> authoritative commit or rollback and complete close
+    -> ordered typed results or diagnostic retaining the real failure
+    -> S17 Wire operation and host/access adapters
+```
+
+Kit owns intrinsic identity, validation and bounded carriage. QueryAST owns
+syntax, canonical text and byte source ranges. Framework owns preparation,
+settings, actual execution/measurement, metadata visibility, cause classification
+and result readiness. The Database facade owns text-to-runtime source adaptation.
+Every runtime owner uses the same actor/Mutex/Sendable contracts on Native,
+ordinary WASM and Embedded; settings/prepared names remain attempt-local values.
+
+S16 evidence must reject invalid terminal order before effects; prove explicit
+rollback and suspended cleanup cannot publish early; preserve checkpoint settings
+and first-error behavior; reject duplicate/missing/stale prepared definitions and
+parameter misuse without preparation effects; compare actual EXPLAIN branches and
+ANALYZE mutation rollback; round-trip TEXT/CSV and reject late malformed/denied
+COPY rows atomically; verify own-DDL catalog visibility and metadata denial; and
+check each SQLSTATE category, multibyte source position, original cause and
+cleanup failure. Exact/one-past byte/row/work/depth limits and cancellation remain
+mandatory. Native focused then broad lanes and exact formal target runtime proof
+are sprint evidence; integrated final URL/backends are S18 evidence.
+
+Reference authority: PostgreSQL 18 [SET](https://www.postgresql.org/docs/18/sql-set.html),
+[PREPARE](https://www.postgresql.org/docs/18/sql-prepare.html),
+[EXPLAIN](https://www.postgresql.org/docs/18/sql-explain.html),
+[COPY](https://www.postgresql.org/docs/18/sql-copy.html),
+[information_schema](https://www.postgresql.org/docs/18/information-schema.html),
+and [SQLSTATE](https://www.postgresql.org/docs/18/errcodes-appendix.html).

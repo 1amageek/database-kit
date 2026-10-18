@@ -136,6 +136,8 @@ public struct SQLCatalog: Sendable, Hashable {
             .union(Set(materializedViews.map { SQLIdentifier(value: $0.id) }))
         for definition in views.map({ $0.definition }) + materializedViews.map({ $0.definition }) {
             for binding in definition.bindings {
+                // Virtual source membership and type validation belong to its execution owner.
+                if binding.kind == .informationSchema { continue }
                 let identity = SQLIdentifier(value: binding.relationID)
                 guard readableIDs.contains(identity) else { throw .unknownCatalogObjectID(binding.relationID) }
                 let columnIDs: Set<SQLIdentifier>
