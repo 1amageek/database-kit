@@ -143,6 +143,7 @@ public enum QueryStructuralValidator {
         for statement: QueryStatement, depth: UInt64 = 0
     ) -> ValidationStep {
         switch statement {
+        case .ddl(let value): return .ddl(.statement(value), depth: depth)
         case .with(let value): return .sqlWith(value, depth: depth)
         case .merge(let value): return .merge(value, depth: depth)
         case .truncate(let value): return .truncate(value, depth: depth)
@@ -308,6 +309,7 @@ private extension QueryStructuralValidator {
     }
 
     enum ValidationStep {
+        case ddl(SQLDDLValidationStep, depth: UInt64)
         case collectionCursor(ValidationCollection, Int, depth: UInt64)
         case expressionsCursor([Expression], Int, depth: UInt64)
         case projectionCursor([ProjectionItem], Int, depth: UInt64)
@@ -432,10 +434,19 @@ private extension QueryStructuralValidator {
         ) throws(QueryStructuralValidationError) {
             var validationSteps = consume initialValidationSteps
             while let validationStep = validationSteps.popLast() {
+                if case .ddl(let node, let nodeDepth) = validationStep {
+                    switch node {
+                    case .expression(let value): validationSteps.append(.expression(value, depth: nodeDepth)); continue
+                    case .query(let value): validationSteps.append(.select(value, depth: nodeDepth)); continue
+                    case .type(let value): validationSteps.append(.dataType(value, depth: nodeDepth)); continue
+                    default: break
+                    }
+                }
                 let depth = depth(of: validationStep)
                 let isCursor: Bool
                 switch validationStep {
                 case .collectionCursor, .expressionsCursor, .projectionCursor, .sortCursor, .cteCursor, .rowsCursor: isCursor = true
+                case .ddl(let node, _): isCursor = node.isCursor
                 default: isCursor = false
                 }
                 if !isCursor { try ledger.validateNestingDepth(depth) }
@@ -454,7 +465,7 @@ private extension QueryStructuralValidator {
                      .boundParameterLiteral, .fieldValue, .persistableIdentifier, .rdfTerm, .propertyPath,
                      .triple, .quad, .modifiers, .sparqlUpdateRequest, .sparqlUpdateOperation:
                     try validateValueStep(validationStep, depth: depth, childDepth: childDepth, steps: &validationSteps)
-                case .collectionCursor, .expressionsCursor, .projectionCursor, .sortCursor, .cteCursor,
+                case .ddl, .collectionCursor, .expressionsCursor, .projectionCursor, .sortCursor, .cteCursor,
                      .rowsCursor, .valueRow, .select, .construct, .ask,
                      .describe, .sqlWith, .namedStatement, .merge, .mergeClause, .truncate, .table, .conflictTarget, .insert, .insertSource, .conflictAction, .sqlUpdate,
                      .delete, .createGraph, .dropGraph, .vertexDefinition, .edgeDefinition,
@@ -475,6 +486,9 @@ private extension QueryStructuralValidator {
             steps validationSteps: inout [ValidationStep]
         ) throws(QueryStructuralValidationError) {
             switch consume validationStep {
+            case .ddl(let node, _):
+                let children = try SQLDDLStructuralValidation.schedule(node, ledger: &ledger)
+                for child in children { validationSteps.append(.ddl(child, depth: childDepth)) }
             case .collectionCursor(let collection, let index, _):
                 guard index < collection.count else { return }
                 validationSteps.append(.collectionCursor(collection, index + 1, depth: depth))
@@ -1576,7 +1590,7 @@ private extension QueryStructuralValidator {
                 case .load, .clear, .createGraph, .drop, .graphTransfer:
                     break
                 }
-            case .collectionCursor, .expressionsCursor, .projectionCursor, .sortCursor, .cteCursor,
+            case .ddl, .collectionCursor, .expressionsCursor, .projectionCursor, .sortCursor, .cteCursor,
                  .rowsCursor, .valueRow, .select, .construct, .ask,
                  .describe, .sqlWith, .namedStatement, .merge, .mergeClause, .truncate, .table, .conflictTarget, .insert, .insertSource, .conflictAction, .sqlUpdate,
                  .delete, .createGraph, .dropGraph, .vertexDefinition, .edgeDefinition,
@@ -1599,7 +1613,7 @@ private extension QueryStructuralValidator {
 
         private func depth(of validationStep: ValidationStep) -> UInt64 {
             switch validationStep {
-            case .collectionCursor(_, _, let depth), .expressionsCursor(_, _, let depth), .projectionCursor(_, _, let depth),
+            case .ddl(_, let depth), .collectionCursor(_, _, let depth), .expressionsCursor(_, _, let depth), .projectionCursor(_, _, let depth),
                  .sortCursor(_, _, let depth), .cteCursor(_, _, let depth), .rowsCursor(_, _, let depth),
                  .valueRow(_, let depth), .select(_, let depth), .construct(_, let depth),
                  .ask(_, let depth), .describe(_, let depth),

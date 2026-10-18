@@ -8,6 +8,7 @@ public struct SQLRelation: Sendable, Hashable {
     public let primaryKeyColumnIDs: [String]?
     public let primaryKeyConstraint: SQLConstraintAttributes?
     public let constraints: [SQLConstraint]
+    public let fieldNumberHighWaterMark: Int
 
     public init(
         id: String,
@@ -17,7 +18,8 @@ public struct SQLRelation: Sendable, Hashable {
         columns: [SQLColumn],
         primaryKeyColumnIDs: [String]? = nil,
         primaryKeyConstraint: SQLConstraintAttributes? = nil,
-        constraints: [SQLConstraint] = []
+        constraints: [SQLConstraint] = [],
+        fieldNumberHighWaterMark: Int? = nil
     ) throws(SQLCatalogError) {
         try SQLIdentifier.validate(id)
         try SQLIdentifier.validate(namespaceID)
@@ -86,6 +88,10 @@ public struct SQLRelation: Sendable, Hashable {
                 throw .unknownConstraintColumnID(reference)
             }
         }
+        let maximumField = fieldNumbers.max() ?? 0
+        let highWater = fieldNumberHighWaterMark ?? maximumField
+        guard highWater >= maximumField, highWater >= 0 else { throw .invalidFieldNumberHighWaterMark(highWater) }
+        self.fieldNumberHighWaterMark = highWater
         self.primaryKeyConstraint = primaryAttributes
         self.constraints = constraints
         self.id = id
@@ -102,6 +108,7 @@ public struct SQLRelation: Sendable, Hashable {
             && SQLIdentifier(value: lhs.name) == SQLIdentifier(value: rhs.name)
             && SQLIdentifier(value: lhs.entityName) == SQLIdentifier(value: rhs.entityName)
             && lhs.columns == rhs.columns
+            && lhs.fieldNumberHighWaterMark == rhs.fieldNumberHighWaterMark
             && lhs.primaryKeyConstraint == rhs.primaryKeyConstraint
             && lhs.constraints == rhs.constraints
             && SQLIdentifier.equal(lhs.primaryKeyColumnIDs, rhs.primaryKeyColumnIDs)
@@ -113,6 +120,7 @@ public struct SQLRelation: Sendable, Hashable {
         hasher.combine(SQLIdentifier(value: name))
         hasher.combine(SQLIdentifier(value: entityName))
         hasher.combine(columns)
+        hasher.combine(fieldNumberHighWaterMark)
         hasher.combine(primaryKeyConstraint)
         hasher.combine(constraints)
         hasher.combine(primaryKeyColumnIDs?.count)

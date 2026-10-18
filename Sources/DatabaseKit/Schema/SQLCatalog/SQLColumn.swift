@@ -4,6 +4,7 @@ public struct SQLColumn: Sendable, Hashable {
     public let name: String
     public let backing: SQLColumnBacking
     public let policy: SQLColumnPolicy
+    public let sequenceBindings: [SQLSequenceBinding]
     public var fieldNumber: Int? {
         if case .field(let number) = backing { return number }
         return nil
@@ -14,7 +15,8 @@ public struct SQLColumn: Sendable, Hashable {
     }
 
     public init(id: String, name: String, backing: SQLColumnBacking,
-                policy: SQLColumnPolicy = .input(defaultExpression: nil)) throws(SQLCatalogError) {
+                policy: SQLColumnPolicy = .input(defaultExpression: nil),
+                sequenceBindings: [SQLSequenceBinding] = []) throws(SQLCatalogError) {
         try SQLIdentifier.validate(id)
         try SQLIdentifier.validate(name)
         switch backing {
@@ -26,6 +28,12 @@ public struct SQLColumn: Sendable, Hashable {
                 throw .invalidColumnType(id)
             }
         }
+        var sequenceNames: Set<SQLIdentifier> = []
+        for binding in sequenceBindings {
+            guard sequenceNames.insert(SQLIdentifier(value: binding.originalName)).inserted else { throw .invalidColumnPolicy(id) }
+        }
+        guard sequenceBindings.isEmpty || { if case .input(.some) = policy { return true }; return false }() else { throw .invalidColumnPolicy(id) }
+        self.sequenceBindings = sequenceBindings
         self.id = id
         self.name = name
         self.backing = backing
@@ -37,6 +45,7 @@ public struct SQLColumn: Sendable, Hashable {
             && SQLIdentifier(value: lhs.name) == SQLIdentifier(value: rhs.name)
             && lhs.backing == rhs.backing
             && lhs.policy == rhs.policy
+            && lhs.sequenceBindings == rhs.sequenceBindings
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -44,5 +53,6 @@ public struct SQLColumn: Sendable, Hashable {
         hasher.combine(SQLIdentifier(value: name))
         hasher.combine(backing)
         hasher.combine(policy)
+        hasher.combine(sequenceBindings)
     }
 }

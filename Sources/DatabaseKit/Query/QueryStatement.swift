@@ -33,6 +33,9 @@ public indirect enum QueryStatement: Sendable, Equatable, Hashable {
     /// Transactional relation clearing.
     case truncate(TruncateQuery)
 
+    /// Name-based SQL schema, relation, index and view definition.
+    case ddl(SQLDDLStatement)
+
     // MARK: - Graph Definition (SQL/PGQ)
 
     /// CREATE PROPERTY GRAPH statement
@@ -394,7 +397,7 @@ extension QueryStatement {
     public var isSchemaDefinition: Bool {
         !allStatementLeavesSatisfy {
             switch $0 {
-            case .createGraph, .dropGraph: return false
+            case .ddl, .createGraph, .dropGraph: return false
             default: return true
             }
         }
@@ -455,6 +458,7 @@ extension QueryStatement {
                 case (.delete(let a), .delete(let b)): if a != b { return false }
                 case (.merge(let a), .merge(let b)): if a != b { return false }
                 case (.truncate(let a), .truncate(let b)): if a != b { return false }
+                case (.ddl(let a), .ddl(let b)): if a != b { return false }
                 case (.createGraph(let a), .createGraph(let b)): if a != b { return false }
                 case (.dropGraph(let a), .dropGraph(let b)): if a != b { return false }
                 case (.sparqlUpdate(let a), .sparqlUpdate(let b)): if a != b { return false }
@@ -495,6 +499,7 @@ extension QueryStatement {
                     work.append(.statement(query.body)); work.append(.definitions(query.statements, 0))
                 case .merge(let query): hasher.combine(11); hasher.combine(query)
                 case .truncate(let query): hasher.combine(12); hasher.combine(query)
+                case .ddl(let query): hasher.combine(13); hasher.combine(query)
                 }
             }
         }

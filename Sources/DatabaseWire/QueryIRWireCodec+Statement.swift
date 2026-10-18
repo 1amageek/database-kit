@@ -64,7 +64,7 @@ extension QueryIRWireFormat {
                 try writer.endNestedValue()
             }
         }
-        try validateMutationStructure(statement)
+        try validateStatementStructure(statement)
     }
 
     static func decodeStatement(
@@ -120,16 +120,16 @@ extension QueryIRWireFormat {
             }
         }
         guard let result else { throw .invalidQueryIRWireState }
-        try validateMutationStructure(result)
+        try validateStatementStructure(result)
         return result
     }
 
-    private static func validateMutationStructure(_ statement: QueryStatement) throws(DatabaseWireError) {
+    private static func validateStatementStructure(_ statement: QueryStatement) throws(DatabaseWireError) {
         switch statement {
-        case .insert, .update, .delete, .with, .merge, .truncate: break
+        case .insert, .update, .delete, .with, .merge, .truncate, .ddl: break
         default: return
         }
-        // Wire owns resource admission; Kit owns intrinsic mutation shape admission.
+        // Wire owns resource admission; Kit owns intrinsic statement shape admission.
         let limits = QueryStructuralLimits(maximumNestingDepth: .max, maximumRetainedBytes: .max,
             maximumTotalNodes: .max, maximumCollectionElements: .max,
             maximumBasicGraphPatterns: .max, maximumTriplePatterns: .max,
@@ -187,6 +187,9 @@ extension QueryIRWireFormat {
             try writeArray(query.tables, into: &writer, encode: encodeTableRef)
             writer.writeUInt8(query.identity == .continue ? 0 : 1)
             writer.writeUInt8(query.references == .restrict ? 0 : 1)
+        case .ddl(let statement):
+            writer.writeUInt8(13)
+            try encodeDDL(statement, into: &writer)
         case .with: throw .invalidQueryIRWireState
         }
     }
@@ -229,6 +232,7 @@ extension QueryIRWireFormat {
                         modifiers: try decodeSPARQLSolutionModifiers(from: &reader)
                     )
                 )
+            case 13: return .ddl(try decodeDDL(from: &reader))
             case 11: return .merge(try decodeMergeQuery(from: &reader))
             case 12:
                 let tables = try readArray(from: &reader, decode: decodeTableRef)

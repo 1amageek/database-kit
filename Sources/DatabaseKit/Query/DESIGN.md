@@ -1019,3 +1019,45 @@ text; QueryAST owns UTF-8 annotations and Engine owns error annotation.
 
 Kit owns these declaration tests; Framework owns actual effects, shared
 snapshots, tuple evaluation cardinality, authorization, lifecycle and outputs.
+
+## S15 DDL Statement Integration
+
+[DDL](SQL/DDL/DESIGN.md) owns the frozen name-based declaration algebra.
+QueryStatement adds `.ddl(SQLDDLStatement)`, classified as schema definition,
+not read-only or a row modification. Existing SQLBlockStep.statement carries
+DDL and shares its cumulative structural ledger. No statement operation or
+protocol version is added. The [SQLCatalog](../Schema/SQLCatalog/DESIGN.md#s15-ddl-catalog-metadata)
+owner receives resolved stable identities after Framework binding.
+
+DDL's declaration layers are fixed-depth and use retained indexed structural
+cursors. Embedded Expression, DataType and SelectQuery children enter the
+existing iterative validators and reconstruction machinery. Parameter binding
+first admits the entire statement on one ledger, then reconstructs fixed DDL
+layers and invokes the existing nonrecursive child traversal. There is no
+recursive statement/query walk or reset of admission counters. Unchanged final
+declarations retain the original value, and exact identifier identity preserves
+byte-distinct Unicode names.
+
+| DDL child | Semantic occurrence edge |
+|---|---|
+| Named target / indexed DROP target | `ddlTarget` |
+| CREATE column / inline constraint | Indexed `ddlColumn` / indexed `ddlConstraint` |
+| Default / generated / CHECK expression | `ddlDefault` / `ddlGenerated` / `ddlCheck` |
+| ALTER action / USING | Indexed `ddlAction` / `ddlUsing` |
+| Index expression key / predicate | Indexed `ddlIndexKey` then `operand` / `ddlIndexPredicate` |
+| CTAS, ordinary view or materialized view query | `ddlQuery`, then existing SELECT roles |
+
+The narrow `QueryColumnRenaming.rename(_:from:to:limits:)` operation reuses the
+same bounded expression reconstruction. It compares both qualifier and column
+name as exact UTF-8, preserves parameters and stops at nested SELECT lexical
+boundaries. Framework may use it only for the scalar default/generated/CHECK
+scope it already admitted; the helper does not resolve names or rewrite another
+query scope. Failure remains typed QueryParameterBindingError, including wrapped
+structural rejection. No callback, metatype, KeyPath or runtime registration is
+introduced.
+
+[S15SQLDDLCarriageTests](../../../Tests/DatabaseKitTests/Query/S15SQLDDLCarriageTests.swift)
+owns direct child substitution, missing parameters, metadata identity,
+malformed declarations, cumulative limits, deep mixed children, classification,
+SPARQL rejection and lexical renaming. Actual effects and binary layouts remain
+Framework and Wire evidence.

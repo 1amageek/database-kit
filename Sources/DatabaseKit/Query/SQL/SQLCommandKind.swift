@@ -1,5 +1,18 @@
 /// The observable command completed by an SQL statement or checkpoint step.
 public enum SQLCommandKind: Sendable, Hashable {
+    case createSchema
+    case alterSchema
+    case dropSchema
+    case createTable
+    case alterTable
+    case dropTable
+    case createIndex
+    case dropIndex
+    case createView
+    case dropView
+    case createMaterializedView
+    case refreshMaterializedView
+    case dropMaterializedView
     case setConstraints
     case createSequence
     case alterSequence
@@ -17,7 +30,7 @@ public enum SQLCommandKind: Sendable, Hashable {
     public var reportsAffectedRows: Bool {
         switch self {
         case .insert, .update, .delete, .merge: return true
-        case .truncate, .savepoint, .rollbackTo, .release, .setConstraints, .createSequence, .alterSequence, .dropSequence: return false
+        case .createSchema, .alterSchema, .dropSchema, .createTable, .alterTable, .dropTable, .createIndex, .dropIndex, .createView, .dropView, .createMaterializedView, .refreshMaterializedView, .dropMaterializedView, .truncate, .savepoint, .rollbackTo, .release, .setConstraints, .createSequence, .alterSequence, .dropSequence: return false
         }
     }
 }

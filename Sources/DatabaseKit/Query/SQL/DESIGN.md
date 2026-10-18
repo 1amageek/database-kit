@@ -3,7 +3,8 @@
 ## Purpose and Scope
 
 This component is the semantic authority for the accepted PostgreSQL 18 basic
-SQL compatibility profile. Parent: [Query](../DESIGN.md). Children: none.
+SQL compatibility profile. Parent: [Query](../DESIGN.md). Child:
+[DDL declarations](DDL/DESIGN.md).
 The feature inventory below is the complete implementation target, including
 analysis queries, mutations, basic DDL, and one-request SQL blocks. A limited
 SELECT implementation does not satisfy this profile.
@@ -41,6 +42,7 @@ the SQL dialect or bypass Framework SQL execution.
 | Design | Relationship | Contract Used | Summary | Cautions |
 |---|---|---|---|---|
 | [Query](../DESIGN.md) | parent | QueryIR, language separation, retained query values | Composes SQL with shared query contracts. | SQL changes do not redefine SPARQL. |
+| [DDL](DDL/DESIGN.md) | child | Name-based schema, table, index, view and sequence declarations | Owns the S15 statement algebra and intrinsic admission. | Framework allocates stable IDs and executes effects. |
 | [Model](../../Model/DESIGN.md) | coordinates with | declared field metadata and static wrapper conversion | Propagates rich SQL values through existing generic model adaptation. | Model owns public traversal/conformance changes. |
 | [Schema](../../Schema/DESIGN.md) | coordinates with | descriptor admission, defaults, fingerprint and evolution | Keeps explicit SQL meaning attached to admitted fields. | Schema owns FieldSchema changes; matching object storage is insufficient. |
 | [DatabaseWire](../../../DatabaseWire/DESIGN.md) | used by | deterministic bounded semantic encoding | Carries the profile's types, statements, diagnostics and results. | No generic DTO collection, eager page decode, or runtime version negotiation. |
@@ -571,7 +573,7 @@ where the PostgreSQL function permits them; invalid combinations must fail.
 | ID | Required capability | Distinguishing acceptance |
 |---|---|---|
 | D01 | CREATE/ALTER/DROP logical SQL SCHEMA, search_path | Name resolution, namespace rename/drop and authority remains separate from Directory/Partition. |
-| D02 | CREATE TABLE, IF NOT EXISTS, AS, block-scoped temporary tables | Catalog/data/type creation, duplicate-name mismatch, zero-row CTAS types and temporary lifetime. |
+| D02 | CREATE TABLE, IF NOT EXISTS, AS, block-scoped temporary tables | Catalog/data/type creation, duplicate-name error without IF NOT EXISTS; mismatched existing definition is skipped with IF NOT EXISTS; zero-row CTAS types and temporary lifetime. |
 | D03 | ALTER TABLE add/drop/rename column, TYPE USING, DEFAULT, NULL/other constraints and table rename | Existing data validation/backfill, expression errors, stable IDs/Directory and atomic rollback. |
 | D04 | DROP TABLE IF EXISTS/RESTRICT/CASCADE | Dependency checks and removal of exact catalog/data/index state, static-model protection. |
 | D05 | Arbitrary/composite primary keys, no-PK tables, UNIQUE NULLS DISTINCT/NOT DISTINCT | Logical key versus row identity, composite conflicts and correct null uniqueness. |

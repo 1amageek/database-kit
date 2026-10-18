@@ -159,7 +159,7 @@ SQLSequence(ownedBy?) ──────┘                  ↓
 | `SQLConstraint` | `attributes: SQLConstraintAttributes`, `kind: SQLConstraintKind`; throwing initializer; computed `id`, `name`, `timing` |
 | `SQLRelation` | Retains canonical `primaryKeyColumnIDs`; adds `primaryKeyConstraint: SQLConstraintAttributes?` and `constraints: [SQLConstraint]`, both initializer arguments default nil/empty. With PK and nil attributes, derive ID `id + ":primary-key"` and name `name + "_pkey"`; attributes without PK fail. No second primary-key column declaration. |
 | `SQLSequenceOwner` | `relationID: String`, `columnID: String`; throwing initializer |
-| `SQLSequence` | `id`, `namespaceID`, `name`: String; `start`, `increment`, `minimum`, `maximum`: Int64; `cycle: Bool`; `ownedBy: SQLSequenceOwner?`; throwing initializer with explicit numeric bounds/start/increment and false/nil defaults |
+| `SQLSequence` | `id`, `namespaceID`, `name`: String; `start`, `increment`, `minimum`, `maximum`: Int64; `cycle: Bool`; `ownedBy: SQLSequenceOwner?`; `declaredType: DataType`; throwing initializer with explicit numeric bounds/start/increment, false/nil defaults and final `declaredType: DataType = .bigint` argument |
 | `SQLCatalog` | Adds immutable `sequences: [SQLSequence]`, default empty |
 
 Physical generated columns are STORED; virtual backing is allowed only with a
@@ -174,8 +174,10 @@ equality and hashing. Constraint names and IDs are unique per relation; a named
 primary key participates in that name set. Unique/key lists must be nonempty,
 unique, and local. NOT NULL and CHECK are nondeferrable. FK sides have equal
 nonzero arity and distinct valid IDs; relation-local construction validates the
-source and catalog construction validates referenced relation/columns and requires
-a primary or immediate UNIQUE target covering the same distinct exact-byte column set, independent of index order. FK source-to-target pairing retains declaration order. Nil FK target columns select its PK. An action subset is nonempty, unique, local, and valid only for DELETE SET NULL/SET DEFAULT. MATCH SIMPLE/FULL and action
+source and catalog construction validates referenced relation/columns. Without the
+[S15 standalone-index binding](#s15-ddl-catalog-metadata), it requires a primary
+or immediate UNIQUE target covering the same distinct exact-byte column set,
+independent of index order. FK source-to-target pairing retains declaration order. Nil FK target columns select its PK. An action subset is nonempty, unique, local, and valid only for DELETE SET NULL/SET DEFAULT. MATCH SIMPLE/FULL and action
 choice are declarations; actual data checks are runtime-owned. Generated PK attributes have immediate timing; explicit attributes may declare deferral.
 
 Catalog sequence IDs are unique; relation and sequence names share each namespace's
@@ -192,3 +194,86 @@ Direct tests own valid construction, each malformed boundary, composite ordered
 keys/FKs, virtual-policy rejection, timing restrictions, sequence extrema and
 byte-distinct identifiers. Framework owns rollback/deferred/cascade/concurrency,
 restart, storage persistence and independently committed sequence consumption.
+
+S15 sequence syntax preserves declared smallint/integer/bigint type as durable
+metadata. Other types fail intrinsic construction. Minimum, maximum and start
+remain within that declared type's signed range; the increment retains its
+existing Int64 contract. An omitted ALTER AS preserves the previous declared
+type, including when NO MINVALUE or NO MAXVALUE recomputes dialect defaults.
+Renames, candidate reconstruction, block carriage and persisted codecs preserve
+this field. Default bigint retains the existing S13 constructor contract.
+
+## S15 DDL Catalog Metadata
+
+The task owner froze this S15 declaration contract before implementation. The
+[DDL](../../Query/SQL/DDL/DESIGN.md) child owns unresolved name-based input;
+SQLCatalog owns the resulting resolved declarations. SQLRelation continues to
+mean one physical entity binding. An ordinary view never fabricates an entity. MV backing relations use distinct internal logical names in the shared namespace; public SQL name lookup excludes their stable IDs, and population resolves them internally by stable ID.
+
+```text
+SQLView -> SQLViewDefinition -> SelectQuery + frozen output/source bindings
+SQLMaterializedView -> SQLViewDefinition + backingRelationID -> SQLRelation
+SQLIndex -> stable relationID + expression keys/predicate
+SQLColumn -> stable sequence bindings
+SQLRelation -> durable field-number high-water mark
+```
+
+| Declaration | Immutable public shape |
+|---|---|
+| `SQLViewColumn` | `id: String`, `name: String`, `type: QueryColumnType`, `isNullable: Bool`. |
+| `SQLViewColumnBinding` | `id: String`, `name: String`, `type: QueryColumnType`; original name, admitted input type and stable source-column identity. |
+| `SQLViewSourceBinding` | `schema: String?`, `table: String`, `relationID: String`, `columns: [SQLViewColumnBinding]`; original source name and the frozen referenced columns. |
+| `SQLViewDefinition` | `query: SelectQuery`, `columns: [SQLViewColumn]`, `bindings: [SQLViewSourceBinding]`; original query, stable output identity and resolved dependencies. |
+| `SQLView` | `id: String`, `namespaceID: String`, `name: String`, `definition: SQLViewDefinition`. |
+| `SQLMaterializedView` | `id: String`, `namespaceID: String`, `name: String`, `definition: SQLViewDefinition`, `backingRelationID: String`, `isPopulated: Bool`. |
+| `SQLIndex` | `id: String`, `namespaceID: String`, `name: String`, `relationID: String`, `keys: [SortKey]`, `predicate: Expression?`, `unique: Bool`, `nulls: SQLNullUniqueness`, `bindings: [SQLViewColumnBinding]`; source expressions retain original column names through stable bindings. |
+| `SQLSequenceBinding` | `originalName: String`, `sequenceID: String`; a constant sequence-function target and its resolved identity. |
+| `SQLColumn` | Adds `sequenceBindings: [SQLSequenceBinding]`, default empty. |
+| `SQLRelation` | Adds `fieldNumberHighWaterMark: Int`; initializer accepts optional value, defaulting to the greatest existing physical field number or zero. Explicit values must be nonnegative and at least that maximum. |
+| `SQLCatalog` | Adds `views: [SQLView]`, `materializedViews: [SQLMaterializedView]`, `indexes: [SQLIndex]`, all default empty. |
+| `SQLForeignKey` | Adds `referencedUniqueIndexID: String?`, default nil, to preserve a selected standalone unique index dependency. Nil retains the primary/immediate-UNIQUE constraint contract. |
+| `SQLIndex.directColumnIDs` | Optional ordered stable column IDs when every key is a direct column with a declared original-name binding; nil for expression or unbound keys. It does not itself assert uniqueness, absence of a predicate or FK eligibility. |
+
+IDs and names use the existing exact UTF-8 identity and typed intrinsic
+construction failures. Catalog construction validates unique IDs, namespace
+references and shared namespace name scopes. View outputs and frozen source
+columns have unique IDs and names. Source binding keys are exact original
+schema/table pairs; repeated physical source references share one binding.
+Relation dependencies may name physical relations or logical views, while an
+MV backing reference must name a physical relation. Framework validates cycles,
+source shape/type compatibility, physical index registration and admission
+budgets before retaining a generation. A materialized view is read-only and
+querying an unpopulated view fails explicitly; these are runtime guarantees.
+
+An FK carrying referencedUniqueIndexID must reference an existing index on its
+target relation. That index is unique, has no partial predicate, and has direct
+column keys whose distinct stable-ID set and key count equal the FK target.
+Pairing retains the FK's declared order; the index's key order may differ.
+Binding selects an eligible primary/immediate-UNIQUE constraint first and uses
+a standalone index only when no such constraint matches, recording that exact
+index ID. Expression, partial, nonunique and wrong-relation indexes cannot prove
+referential uniqueness. Runtime uses the stable dependency for DROP INDEX:
+RESTRICT rejects dependents and CASCADE removes their FK constraints while
+preserving referencing tables and rows. This introduces no generic dependency
+graph or change to ordinary constraint enforcement.
+
+Stored-query binding applies lexical CTE and derived-source resolution before
+physical overrides. Each view definition has its own isolated original-name to
+stable-ID map. Bound original column names are projected from current physical
+columns by stable IDs; wildcard expansion sees the frozen creation-time column
+set. Subsequent rename and restart preserve query meaning, and later ADD COLUMN
+does not change an existing wildcard view's output. This contract requires no
+persisted request-local QueryOccurrenceID.
+
+Runtime preserves the high-water mark across DROP COLUMN, restart and rollback;
+new physical field allocation advances it using checked arithmetic. Snapshot
+replacement rejects a decreased mark. Dropped field numbers are never reused.
+Sequence defaults similarly preserve their original literal-to-stable-sequence
+binding across sequence/namespace renames and restart, rather than resolving a
+stored literal anew against changed names. Runtime validates that each binding
+corresponds to an admitted constant sequence call and known sequence.
+
+Kit construction tests own identity, valid/malformed metadata, missing/colliding
+references and high-water boundaries. Framework owns codec persistence,
+transactional publication, restart, lexical binding, wildcard stability, actual
+index maintenance, read-only rejection and MV population behavior.

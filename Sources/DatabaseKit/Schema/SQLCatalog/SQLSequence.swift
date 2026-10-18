@@ -12,15 +12,25 @@ public struct SQLSequence: Sendable, Hashable {
     public let maximum: Int64
     public let cycle: Bool
     public let ownedBy: SQLSequenceOwner?
+    public let declaredType: DataType
 
     public init(id: String, namespaceID: String, name: String, start: Int64,
                 increment: Int64, minimum: Int64, maximum: Int64,
-                cycle: Bool = false, ownedBy: SQLSequenceOwner? = nil) throws(SQLCatalogError) {
+                cycle: Bool = false, ownedBy: SQLSequenceOwner? = nil,
+                declaredType: DataType = .bigint) throws(SQLCatalogError) {
         try SQLIdentifier.validate(id)
         try SQLIdentifier.validate(namespaceID)
         try SQLIdentifier.validate(name)
+        let typeMinimum: Int64
+        let typeMaximum: Int64
+        switch declaredType {
+        case .smallint: typeMinimum = Int64(Int16.min); typeMaximum = Int64(Int16.max)
+        case .integer: typeMinimum = Int64(Int32.min); typeMaximum = Int64(Int32.max)
+        case .bigint: typeMinimum = .min; typeMaximum = .max
+        default: throw .invalidSequenceType
+        }
         guard increment != 0 else { throw .invalidSequenceIncrement }
-        guard minimum < maximum else { throw .invalidSequenceBounds }
+        guard minimum < maximum, minimum >= typeMinimum, maximum <= typeMaximum else { throw .invalidSequenceBounds }
         guard start >= minimum, start <= maximum else { throw .invalidSequenceStart }
         self.identity = SQLIdentifier(value: id)
         self.namespace = SQLIdentifier(value: namespaceID)
@@ -31,5 +41,6 @@ public struct SQLSequence: Sendable, Hashable {
         self.maximum = maximum
         self.cycle = cycle
         self.ownedBy = ownedBy
+        self.declaredType = declaredType
     }
 }

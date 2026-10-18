@@ -3,8 +3,12 @@ public struct SQLCatalog: Sendable, Hashable {
     public let namespaces: [SQLNamespace]
     public let relations: [SQLRelation]
     public let sequences: [SQLSequence]
+    public let views: [SQLView]
+    public let materializedViews: [SQLMaterializedView]
+    public let indexes: [SQLIndex]
 
-    public init(namespaces: [SQLNamespace], relations: [SQLRelation], sequences: [SQLSequence] = []) throws(SQLCatalogError) {
+    public init(namespaces: [SQLNamespace], relations: [SQLRelation], sequences: [SQLSequence] = [],
+        views: [SQLView] = [], materializedViews: [SQLMaterializedView] = [], indexes: [SQLIndex] = []) throws(SQLCatalogError) {
         var namespaceIDs: Set<SQLIdentifier> = []
         var namespaceNames: Set<SQLIdentifier> = []
         for namespace in namespaces {
@@ -57,7 +61,20 @@ public struct SQLCatalog: Sendable, Hashable {
                           case .unique(let columns, _) = candidate.kind else { return false }
                     return Set(columns.map { SQLIdentifier(value: $0) }) == targetSet
                 }
-                guard primaryMatches || uniqueMatches else { throw .invalidForeignKeyTarget(target.id) }
+                if let indexID = key.referencedUniqueIndexID {
+                    guard let index = indexes.first(where: { SQLIdentifier(value: $0.id) == SQLIdentifier(value: indexID) }) else {
+                        throw .unknownCatalogObjectID(indexID)
+                    }
+                    guard index.unique, index.predicate == nil,
+                        SQLIdentifier(value: index.relationID) == SQLIdentifier(value: target.id),
+                        let columns = index.directColumnIDs,
+                        columns.count == targetIDs.count,
+                        Set(columns.map { SQLIdentifier(value: $0) }) == targetSet else {
+                        throw .invalidForeignKeyTarget(target.id)
+                    }
+                } else {
+                    guard primaryMatches || uniqueMatches else { throw .invalidForeignKeyTarget(target.id) }
+                }
             }
         }
         var sequenceIDs: Set<SQLIdentifier> = []
@@ -94,6 +111,71 @@ public struct SQLCatalog: Sendable, Hashable {
                 }
             }
         }
+        var objectIDs = relationIDs.union(sequenceIDs)
+        for view in views {
+            guard objectIDs.insert(SQLIdentifier(value: view.id)).inserted else { throw .duplicateCatalogObjectID(view.id) }
+            guard namespaceIDs.contains(SQLIdentifier(value: view.namespaceID)) else { throw .unknownNamespaceID(view.namespaceID) }
+            guard namesByNamespace[SQLIdentifier(value: view.namespaceID), default: []].insert(SQLIdentifier(value: view.name)).inserted else {
+                throw .duplicateRelationName(namespaceID: view.namespaceID, name: view.name)
+            }
+        }
+        var backingIDs: Set<SQLIdentifier> = []
+        for view in materializedViews {
+            guard objectIDs.insert(SQLIdentifier(value: view.id)).inserted else { throw .duplicateCatalogObjectID(view.id) }
+            guard namespaceIDs.contains(SQLIdentifier(value: view.namespaceID)) else { throw .unknownNamespaceID(view.namespaceID) }
+            guard namesByNamespace[SQLIdentifier(value: view.namespaceID), default: []].insert(SQLIdentifier(value: view.name)).inserted else {
+                throw .duplicateRelationName(namespaceID: view.namespaceID, name: view.name)
+            }
+            guard let backing = relationsByID[SQLIdentifier(value: view.backingRelationID)],
+                backingIDs.insert(SQLIdentifier(value: view.backingRelationID)).inserted,
+                SQLIdentifier(value: backing.namespaceID) == SQLIdentifier(value: view.namespaceID) else {
+                throw .invalidMaterializedViewBacking(view.backingRelationID)
+            }
+        }
+        let readableIDs = relationIDs.union(Set(views.map { SQLIdentifier(value: $0.id) }))
+            .union(Set(materializedViews.map { SQLIdentifier(value: $0.id) }))
+        for definition in views.map({ $0.definition }) + materializedViews.map({ $0.definition }) {
+            for binding in definition.bindings {
+                let identity = SQLIdentifier(value: binding.relationID)
+                guard readableIDs.contains(identity) else { throw .unknownCatalogObjectID(binding.relationID) }
+                let columnIDs: Set<SQLIdentifier>
+                if let relation = relationsByID[identity] {
+                    columnIDs = Set(relation.columns.map { SQLIdentifier(value: $0.id) })
+                } else if let view = views.first(where: { SQLIdentifier(value: $0.id) == identity }) {
+                    columnIDs = Set(view.definition.columns.map { SQLIdentifier(value: $0.id) })
+                } else if let view = materializedViews.first(where: { SQLIdentifier(value: $0.id) == identity }) {
+                    columnIDs = Set(view.definition.columns.map { SQLIdentifier(value: $0.id) })
+                } else { throw .unknownCatalogObjectID(binding.relationID) }
+                for column in binding.columns where !columnIDs.contains(SQLIdentifier(value: column.id)) {
+                    throw .unknownConstraintColumnID(column.id)
+                }
+            }
+        }
+        for index in indexes {
+            guard objectIDs.insert(SQLIdentifier(value: index.id)).inserted else { throw .duplicateCatalogObjectID(index.id) }
+            guard namespaceIDs.contains(SQLIdentifier(value: index.namespaceID)) else { throw .unknownNamespaceID(index.namespaceID) }
+            guard namesByNamespace[SQLIdentifier(value: index.namespaceID), default: []].insert(SQLIdentifier(value: index.name)).inserted else {
+                throw .duplicateRelationName(namespaceID: index.namespaceID, name: index.name)
+            }
+            guard let relation = relationsByID[SQLIdentifier(value: index.relationID)] else { throw .unknownCatalogObjectID(index.relationID) }
+            guard SQLIdentifier(value: relation.namespaceID) == SQLIdentifier(value: index.namespaceID) else {
+                throw .invalidIndexDefinition
+            }
+            let ids = Set(relation.columns.map { SQLIdentifier(value: $0.id) })
+            for binding in index.bindings where !ids.contains(SQLIdentifier(value: binding.id)) {
+                throw .unknownConstraintColumnID(binding.id)
+            }
+        }
+        for relation in relations {
+            for column in relation.columns {
+                for binding in column.sequenceBindings where !sequenceIDs.contains(SQLIdentifier(value: binding.sequenceID)) {
+                    throw .unknownSequenceID(binding.sequenceID)
+                }
+            }
+        }
+        self.views = views
+        self.materializedViews = materializedViews
+        self.indexes = indexes
         self.sequences = sequences
         self.namespaces = namespaces
         self.relations = relations

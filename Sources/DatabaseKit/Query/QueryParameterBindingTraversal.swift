@@ -6,6 +6,7 @@ import DatabaseTypes
 /// process-stack recursion so an admitted query cannot exhaust the stack.
 /// Unchanged subtrees retain their original copy-on-write storage.
 struct QueryParameterBindingTraversal {
+    private let columnRenaming: (from: ColumnRef, to: ColumnRef)?
     private let positions: [UInt32: QueryParameter]
     private let names: [String: QueryParameter]
     private var bindingSteps: [BindingStep] = []
@@ -13,8 +14,10 @@ struct QueryParameterBindingTraversal {
 
     init(
         positions: [UInt32: QueryParameter],
-        names: [String: QueryParameter]
+        names: [String: QueryParameter],
+        columnRenaming: (from: ColumnRef, to: ColumnRef)? = nil
     ) {
+        self.columnRenaming = columnRenaming
         self.positions = positions
         self.names = names
     }
@@ -32,6 +35,14 @@ struct QueryParameterBindingTraversal {
         }
         return try popStatement().value
     }
+    mutating func bindExpression(_ expression: Expression) throws(QueryParameterBindingError) -> (value: Expression, changed: Bool) {
+        bindingSteps.append(.expression(expression))
+        while let step = bindingSteps.popLast() { try apply(step) }
+        guard results.count == 1 else { throw .invalidTraversalState }
+        let result = try popExpression()
+        return (result.value, result.changed)
+    }
+
 }
 private extension QueryParameterBindingTraversal {
     struct Bound<Value> {
@@ -458,7 +469,7 @@ private extension QueryParameterBindingTraversal {
             results.append(.mergeClause(Bound(value: changed ? SQLMergeClause(match: clause.match,
                 condition: condition.value, action: action) : clause, changed: changed)))
         case .statement(let statement):
-            enqueueBindings(statement)
+            try enqueueBindings(statement)
         case .assembleStatement(let statement):
             try assemble(statement)
         case .select(let query):
@@ -514,8 +525,12 @@ private extension QueryParameterBindingTraversal {
 private extension QueryParameterBindingTraversal {
     mutating func enqueueBindings(
         _ statement: QueryStatement
-    ) {
+    ) throws(QueryParameterBindingError) {
         switch statement {
+        case .ddl(let declaration):
+            var binding = SQLDDLParameterBinding(positions: positions, names: names)
+            let replacement = try binding.bind(declaration)
+            results.append(.statement(Bound(value: binding.changed ? .ddl(replacement) : statement, changed: binding.changed)))
         case .createGraph, .dropGraph, .truncate:
             results.append(.statement(Bound(value: statement, changed: false)))
         case .select(let query):
@@ -604,6 +619,10 @@ private extension QueryParameterBindingTraversal {
     mutating func enqueueBindings(
         _ query: SelectQuery
     ) {
+        if columnRenaming != nil {
+            results.append(.select(Bound(value: query, changed: false)))
+            return
+        }
         bindingSteps.append(.assembleSelect(query))
         if case .count(.expression(let value), _) = query.pagination.limit { bindingSteps.append(.expression(value)) }
         if case .expression(let value) = query.pagination.offset { bindingSteps.append(.expression(value)) }
@@ -757,9 +776,19 @@ private extension QueryParameterBindingTraversal {
             bindingSteps.append(.assembleExpression(expression)); enqueueExpressionBindings(arguments)
         case .window(let call):
             bindingSteps.append(.assembleExpression(expression)); bindingSteps.append(.window(call))
-        case .defaultValue, .literal, .currentValue, .column, .variable, .bound, .wholeRow:
+        case .column(let column):
+            if let renaming = columnRenaming,
+                ExpressionIdentity.nameEqual(column.table, renaming.from.table),
+                column.column.utf8.elementsEqual(renaming.from.column.utf8) {
+                results.append(.expression(Bound(value: .column(renaming.to), changed: true)))
+            } else { results.append(.expression(Bound(value: expression, changed: false))) }
+        case .defaultValue, .literal, .currentValue, .variable, .bound, .wholeRow:
             results.append(.expression(Bound(value: expression, changed: false)))
         case .parameter(let reference):
+            if columnRenaming != nil {
+                results.append(.expression(Bound(value: expression, changed: false)))
+                return
+            }
             results.append(
                 .expression(
                     Bound(
@@ -976,6 +1005,7 @@ private extension QueryParameterBindingTraversal {
     ) throws(QueryParameterBindingError) {
         let bound: Bound<QueryStatement>
         switch statement {
+        case .ddl: throw .invalidTraversalState
         case .select:
             let query = try popSelect()
             bound = Bound(

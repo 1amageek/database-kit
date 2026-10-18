@@ -1,5 +1,16 @@
 /// Source-independent semantic child roles within QueryIR.
 public enum QueryOccurrenceField: Sendable, Equatable, Hashable {
+    case ddlTarget
+    case ddlColumn
+    case ddlDefault
+    case ddlGenerated
+    case ddlConstraint
+    case ddlCheck
+    case ddlAction
+    case ddlUsing
+    case ddlIndexKey
+    case ddlIndexPredicate
+    case ddlQuery
     case statement
     case mutationTarget
     case assignment

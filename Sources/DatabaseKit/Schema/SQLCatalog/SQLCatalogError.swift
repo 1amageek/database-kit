@@ -1,5 +1,11 @@
 /// An intrinsic logical SQL catalog declaration failure.
 public enum SQLCatalogError: Error, Sendable, Equatable {
+    case invalidViewDefinition
+    case invalidIndexDefinition
+    case duplicateCatalogObjectID(String)
+    case invalidMaterializedViewBacking(String)
+    case invalidFieldNumberHighWaterMark(Int)
+    case unknownCatalogObjectID(String)
     case emptyIdentifier
     case nulInIdentifier
     case invalidFieldNumber(Int)
@@ -31,6 +37,7 @@ public enum SQLCatalogError: Error, Sendable, Equatable {
     case invalidColumnType(String)
     case duplicateSequenceID(String)
     case duplicateSequenceName(namespaceID: String, name: String)
+    case invalidSequenceType
     case invalidSequenceIncrement
     case invalidSequenceBounds
     case invalidSequenceStart

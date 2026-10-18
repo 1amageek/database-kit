@@ -991,3 +991,48 @@ streaming must agree. Failed admission publishes no sink bytes.
 
 These witnesses establish carriage, never mutation execution, arbiter
 selection, eager CTE completion or authoritative publication.
+
+## S15 DDL Carriage
+
+Statement tag13 carries `SQLDDLStatement`; tags0–12 retain their meanings.
+DDL tags0–15 follow the declaration order in
+[DDL](../DatabaseKit/Query/SQL/DDL/DESIGN.md): create/rename/drop schema,
+create/alter/drop table, create/drop index, create/drop view,
+create/refresh/drop materialized view, create/alter/drop sequence.
+Each record emits fields in declaration order. Drop records emit names,
+ifExists, then behavior. Table definition tags0 columns /1 query carry their
+associated values in declaration order. Column-policy tags0 input /1 generated
+/2 identity /3 serial, constraint-kind tags0 primaryKey /1 unique /2 notNull
+/3 check /4 foreignKey, and ALTER-action tags0–10 follow their declaration order.
+Immediate timing is tag0; deferrable timing is tag1 then a strict deferred Bool.
+Drop behavior, null uniqueness, FK match and identity generation each use tag0
+for their first declared case and tag1 for their second. Referential actions
+use tags0–4 in declaration order. Sequence bound tags0 value /1 none,
+ownership tags0 none /1 column, and restart tags0 start /1 value retain explicit
+presence separately from optional absence. Integers use signed Int64.
+
+```text
+statement13 -> DDL metadata -> existing iterative Expression / SELECT codecs
+    -> same reader/writer name, count, node, depth and frame ledger
+    -> Kit intrinsic validation -> complete input consumption
+```
+
+All strings, arrays, optional presence and Booleans use existing strict bounded
+productions. TableRef, SortKey and DataType retain their existing productions.
+DDL metadata has bounded, nonrecursive call depth; every unbounded query or
+expression child enters the existing iterative SCC. No child creates a reader,
+writer or fresh quota. Collection loops retain only the active child, not a
+preflattened expression list. DDL decoding admits each declared count on the
+shared ledger, then appends completed children without reserving absent input
+from that count. Names enter the same retained-frame and materialized-UTF8
+ledger used by nested query values. Invalid intrinsic DDL is mapped to
+`invalidQueryStructure`; malformed tags, Booleans and bytes keep existing typed
+Wire errors. Measurement rejects before sink emission. There is no compatibility
+layout, protocol-version change or new remote operation.
+
+Framework owns complete SQLCatalog persistence. Stored view SELECT bodies can
+use existing statement SELECT encoding, expression and column-type adapters;
+Wire does not introduce a duplicate catalog representation or semantic validator.
+Direct S15 Wire tests own deterministic bytes, every declaration alternative,
+child preservation, truncation/trailing/unknown/Bool/shape failures and shared
+budget/deep/wide witnesses. Runtime DDL effects remain Framework evidence.
