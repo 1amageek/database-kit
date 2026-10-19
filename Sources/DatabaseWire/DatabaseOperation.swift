@@ -155,7 +155,8 @@ public struct DatabaseOperation<
                 actual: envelope.operation
             )
         }
-        return try decodeRequestPayload(envelope.payload, limits: limits)
+        return try EnvelopeWireFormat.decodeValue(from: envelope.payload, limits: limits,
+            admission: envelope.payloadAdmission, decode: decodeRequestBody)
     }
 
     func encodeResponse(
@@ -198,7 +199,8 @@ public struct DatabaseOperation<
         switch envelope.payload {
         case .success(let payload):
             return .success(
-                try decodeResponsePayload(payload, limits: limits)
+                try EnvelopeWireFormat.decodeValue(from: payload, limits: limits,
+                    admission: envelope.payloadAdmission, decode: decodeResponseBody)
             )
         case .failure(let error):
             return .failure(error)

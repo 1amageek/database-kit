@@ -1833,6 +1833,11 @@ Directory, resource and lifecycle evidence; neither substitutes for the other.
 
 ## S16 Block Operations and Diagnostics
 
+The S17 remote operation and typed diagnostic accessor are owned by the
+[DatabaseWire S17 contract](../../../DatabaseWire/DESIGN.md#s17-sql-operation-contract).
+It carries the semantic block, command kinds and SQLDiagnostic defined here;
+execution outcomes and native failure causes remain Framework-owned.
+
 S16 completes O01-O08 within the accepted single-request profile. S17 owns
 remote operation dispatch and CLI presentation; S18 owns final URL and integrated
 backend/platform evidence. These are designed contracts until their behavioral

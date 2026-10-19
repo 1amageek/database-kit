@@ -29,7 +29,7 @@ public struct QueryRow: Sendable, Hashable {
         }
     }
 
-    private static func validate(_ value: QueryValue, column: QueryColumn) throws(DatabaseWireError) {
+    static func validate(_ value: QueryValue, column: QueryColumn) throws(DatabaseWireError) {
         guard (column.isNullable || !value.isNull),
               QueryValueValidator.accepts(value, type: column.type) else {
             throw .invalidQueryValue(.incompatibleType)

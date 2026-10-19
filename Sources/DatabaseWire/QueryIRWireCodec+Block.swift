@@ -5,7 +5,6 @@ extension QueryIRWireFormat {
     /// Encodes an operational request without changing ordinary statement tags.
     public static func encode(_ block: SQLBlock, limits: DatabaseWireLimits = .default)
     throws(DatabaseWireError) -> ByteString {
-        try validateBlock(block, limits: limits)
         return try DatabaseWireWriter.encode(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             try encodeBlock(block, into: &writer)
@@ -17,8 +16,6 @@ extension QueryIRWireFormat {
         prepare: (Int) throws(DestinationFailure) -> Void,
         consume: (UnsafeRawBufferPointer) -> Void
     ) throws(DatabaseWireEmissionError<DestinationFailure>) {
-        do { try validateBlock(block, limits: limits) }
-        catch { throw .encoding(error) }
         try DatabaseWireWriter.emit(limits: limits, prepare: prepare, consume: consume) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
             try encodeBlock(block, into: &writer)
@@ -28,6 +25,13 @@ extension QueryIRWireFormat {
     public static func decodeBlock(_ bytes: ByteString, limits: DatabaseWireLimits = .default)
     throws(DatabaseWireError) -> SQLBlock {
         var reader = DatabaseWireReader(bytes, limits: limits)
+        let block = try decodeBlock(from: &reader)
+        try reader.ensureFullyRead()
+        return block
+    }
+
+    static func decodeBlock(from reader: inout DatabaseWireReader)
+    throws(DatabaseWireError) -> SQLBlock {
         guard try reader.readUInt8() == 0x42 else { throw .invalidMagic }
         try reader.beginNestedValue()
         let count = try reader.readCount()
@@ -35,8 +39,7 @@ extension QueryIRWireFormat {
         steps.reserveCapacity(count)
         for _ in 0..<count { steps.append(try decodeBlockStep(from: &reader)) }
         try reader.endNestedValue()
-        try reader.ensureFullyRead()
-        do { return try SQLBlock(steps: steps, limits: blockLimits(limits)) }
+        do { return try SQLBlock(steps: steps, limits: blockLimits(reader.limits)) }
         catch { throw .invalidQueryStructure(error) }
     }
 
@@ -52,8 +55,9 @@ extension QueryIRWireFormat {
         catch { throw .invalidQueryStructure(error) }
     }
 
-    private static func encodeBlock(_ block: SQLBlock, into writer: inout DatabaseWireWriter)
+    static func encodeBlock(_ block: SQLBlock, into writer: inout DatabaseWireWriter)
     throws(DatabaseWireError) {
+        try validateBlock(block, limits: writer.limits)
         writer.writeUInt8(0x42)
         try writer.beginNestedValue()
         defer { writer.abandonNestedValues(1) }

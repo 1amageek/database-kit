@@ -1050,3 +1050,168 @@ admission uses Kit's cumulative ledger after decode and before encode.
 `S16SQLBlockWireTests` verifies deterministic mixed-block round trips, independent
 PREPARE parameter scope, malformed prefixes/tags/trailing bytes and exact/one-past
 resource limits. Block carriage adds no operation dispatch or transport.
+
+## S17 SQL Operation Contract
+
+This section fixes the closed remote contract for S17. The
+semantic authority remains the [SQL profile](../DatabaseKit/Query/SQL/DESIGN.md).
+Wire v3/v5, envelopes, existing query/mutation operations, and generic failure
+field order remain unchanged.
+
+```text
+SQLExecuteOperation request
+    -> Server admission and Framework statement/block execution
+    -> authoritative commit or rollback, cleanup, cancellation check
+    -> ordered outcomes or typed remote diagnostic
+    -> DatabaseClient generic call and caller presentation
+```
+
+### Ownership and Public API
+
+`DatabaseOperationIdentifier.sqlExecute = 0x0202` and
+`DatabaseOperationCatalog.sqlExecute` identify `SQLExecuteOperation`.
+DatabaseWire owns the descriptor and carriers; Server owns dispatch and mapping.
+Client and platform hosts carry bytes without interpreting SQL. DatabaseTypes
+continues to own only primitive representations.
+
+| Declaration | Public contract |
+|---|---|
+| `SQLExecuteOperation.Input` | `.text(String)`, `.statement(QueryStatement)`, `.block(SQLBlock)` |
+| `SQLExecuteOperation.Request` | `init(input: Input, parameters: [QueryParameter] = [], budget: ExecutionBudget = ExecutionBudget())` |
+| `SQLExecuteOperation.Rows` | `init(columns: [QueryColumn], rows: [QueryRow], affectedRows: UInt64? = nil) throws(DatabaseWireError)`; `columns`, `rowCount`, `affectedRows`, `makeRowIterator()` |
+| `SQLExecuteOperation.Outcome` | `.rows(Rows)`, `.copy(bytes: ByteString, affectedRows: UInt64)`, `.command(SQLCommandKind, affectedRows: UInt64?)` |
+| `SQLExecuteOperation.Response` | `init(results: [Outcome])`; ordered `results` with one result per input step on complete success |
+| `RemoteOperationError` SQL initializer | `init(category: OperationErrorCategory, code: String, message: String, retryability: OperationRetryability, details: FieldObject = FieldObject(), sqlDiagnostic: SQLDiagnostic) throws(DatabaseWireError)` |
+| `RemoteOperationError.sqlDiagnostic()` | `throws(DatabaseWireError) -> SQLDiagnostic?`; nil only when reserved metadata is absent |
+| `DatabaseWireEncoder.measureSuccessResponse` | `(_ operation: DatabaseOperation<Request, Response>, requestID: UInt64, response: Response) throws(DatabaseWireError) -> Int`; exact complete success frame size without output allocation |
+
+Text is unchanged, including comments, whitespace, Unicode and inline COPY input.
+Framework owns parsing and source positions. Requests contain no continuation.
+The dedicated rows carrier has no continuation; no response advertises paging or replay.
+The SQL operation is not an admitted JobOperationIdentifier family; construction,
+encoding and decoding reject it rather than enabling durable re-execution.
+DDL is `.command(kind, affectedRows: nil)`, matching Framework rather than
+inventing a schema-completion payload. Rows preserve affectedRows independently
+of their typed positional page; it is not inferred from row count.
+
+Rows make no read-point, provenance or consistency assertion in either graph.
+Framework `QueryResponse` provides no dedicated transactional read point, so
+QueryRowPage's mandatory MultiBase consistency cannot be reused truthfully.
+The dedicated carrier shares QueryColumn, QueryRow, QueryValue, their bounded
+codecs and QueryRowIterator, preserving one retained encoded response owner.
+
+### Bounded Grammar and Diagnostics
+
+Input tags 0/1/2 are text/statement/block. Text is a bounded string; statement
+uses its existing production; block uses the existing 0x42 production inline on
+the same reader/writer. Parameters and ExecutionBudget follow input. A response
+is a bounded result count followed by outcome tags 0/1/2 for rows/copy/command.
+Rows carry ordered columns, row count, QueryRow values and optional UInt64
+affected count. COPY carries bounded
+bytes and UInt64 count. Commands carry fixed UInt8 SQLCommandKind tags and
+optional UInt64 counts. Command and diagnostic category tags are explicit and
+closed; declaration order and raw strings do not select wire identity.
+
+The generic failure envelope retains category, code, message, retryability and
+FieldObject details. The exact details key `sqlDiagnostic` is reserved for one
+FieldObject with required keys `sqlState`, `category`, `message` and optional
+`position`, `schema`, `table`, `column`, `constraint`. Strings use
+FieldValue.string; category uses a fixed FieldValue.uint8 tag; position uses
+positive FieldValue.uint64. Optional keys are absent rather than null. Unknown
+keys, missing required keys, wrong scalar types, invalid SQLSTATE/position and
+unknown category tags fail as `DatabaseWireError.invalidSQLDiagnostic`.
+The typed initializer preserves other details, rejects an existing reserved key,
+and creates this object; the typed accessor and generic
+failure encode/decode boundaries validate it. Other details keys retain their
+meaning. Failures without the reserved key retain identical bytes. Native
+underlying causes remain Framework-owned and are not serialized.
+
+All productions share enclosing frame, nesting, collection, object and retained
+query ledgers. Block integration must not create an independent frame budget.
+Decoded rows retain their response frame and materialize cells through the
+existing iterator.
+
+SQL full-frame decoding preserves an internal immutable admission snapshot when
+the envelope separates its payload. The snapshot captures the existing reader's
+nesting depth, object count, root-retention admission, query payload depth,
+view bytes, materialized UTF-8 bytes, JSONB retained bytes and collection retained
+bytes after the length-prefixed boundary is admitted. Typed request/response
+decoding resumes that exact context; Server routing through a decoded raw
+request envelope preserves it as well. This includes metadata and MultiBase
+target charges rather than reconstructing a fixed depth or empty budget.
+Applying a snapshot under different decoder limits rechecks every carried
+charge and the retained frame owner before decoding the body. Admission context
+does not affect envelope value identity or encoded bytes. The standalone
+request/response payload APIs have no enclosing frame and start their own
+explicit payload admission. Other operation families retain their current
+decoding paths in this change.
+SQL envelope admission checks the existing root-retention contract immediately
+after reading the operation identifier, before target/metadata materialization;
+SQL standalone request/response bodies check it at their own entry. A payload
+slice retains the original full-frame owner, so re-admitting that physical
+capacity under stricter limits also bounds the original header and payload.
+
+Complete success-frame measurement uses the same header and length-prefixed
+payload writer as success encoding. Callers do not calculate envelope overhead.
+Server measures and encodes only within Framework's synchronous provisional
+result borrow, reserves the complete frame against the Framework claim before
+allocation, and publishes it only after authoritative close. Wire owns byte
+measurement, not provisional result lifetime or transaction publication.
+
+The SQL-only execution SPI provides scoped noncopyable `SQLResponseWriter` and
+`SQLRowWriter` values for complete-frame measurement and encoding into a
+caller-owned destination. The Server projects the Framework's borrowed
+provisional outputs synchronously rather than allocating all result rows.
+The response writer accepts only the closed SQL rows/COPY/command outcomes;
+the row writer checks declared columns, row/cell counts, nullability and types.
+No source pointer or callback is retained, and no arbitrary operation/wire
+conformance or generic source protocol is exposed.
+
+| Execution SPI | Frozen synchronous signature |
+|---|---|
+| Measure SQL frame | `DatabaseWireEncoder.measureSQLResponse(requestID: UInt64, resultCount: Int, body: (inout SQLResponseWriter) throws -> Void) throws -> Int` |
+| Initialize SQL frame | `DatabaseWireEncoder.encodeSQLResponse(requestID: UInt64, resultCount: Int, into: UnsafeMutableRawBufferPointer, body: (inout SQLResponseWriter) throws -> Void) throws` |
+| Command result | `SQLResponseWriter.writeCommand(_ kind: SQLCommandKind, affectedRows: UInt64?) throws(DatabaseWireError)` |
+| COPY result | `SQLResponseWriter.writeCopy(bytes: ByteString, affectedRows: UInt64) throws(DatabaseWireError)` |
+| Rows result | `SQLResponseWriter.writeRows(columnCount: Int, rowCount: Int, affectedRows: UInt64?, body: (inout SQLRowWriter) throws -> Void) throws` |
+| Rows declarations | `SQLRowWriter.writeColumn(_ column: QueryColumn) throws(DatabaseWireError)` |
+| Row start/cells | `SQLRowWriter.beginRow() throws(DatabaseWireError)` and `writeValue(_ value: QueryValue) throws(DatabaseWireError)` |
+| Row end | `SQLRowWriter.endRow(annotations: FieldObject = FieldObject(), version: ByteString? = nil) throws(DatabaseWireError)` |
+
+The caller must supply exactly resultCount outcomes, all columns before the
+first row, exactly rowCount rows and exactly columnCount cells per row. Invalid
+phases, unfinished rows and count mismatches fail as
+`DatabaseWireError.invalidSQLResponse`; cell/type violations retain the existing
+query validation errors. Metadata projection reuses the application/server's
+existing annotation and version adapters. The existing canonical FieldObject
+conversion and version digest adaptation are bounded per-row temporaries on
+both measuring and encoding passes; they do not materialize the complete rows
+or results. The Framework provisional borrow accounts temporary metadata
+storage before allocation using its existing retained-footprint machinery.
+No zero-allocation claim is made and no async callback is accepted.
+Projection callback failures, including Framework reservation errors, propagate
+unchanged through the untyped throwing execution SPI. Individual closed value
+writer operations retain typed DatabaseWireError failures.
+
+The destination owner is the caller's final ByteString construction. Wire
+initializes exactly the measured byte count, uses byte alignment, checks the
+destination size, and does not retain or escape its synchronous borrowed raw
+pointer. The same row source is revisited only synchronously for measurement
+and encoding; the Framework claim retains authority over temporary and final
+storage until publication or failure cleanup.
+
+| Mutable state owner | Native | WASM | Embedded | Access and release |
+|---|---|---|---|---|
+| SQLResponseWriter / SQLRowWriter | scoped noncopyable writer values | same | same | synchronous inout callback; no Sendable conformance or conditional storage; callback completion releases schema scratch |
+| SQL decoding/encoding ledgers | existing reader/writer value | same | same | one enclosing frame ledger; no global registration or shared mutable owner |
+
+### Verification and Change Impact
+
+S17 tests cover unchanged existing golden bytes, standard/MultiBase operation
+vectors, all input/outcome/command/category variants, duplicate and zero-row
+column metadata, affected counts and COPY bytes, exact/one-past limits,
+invalid/truncated/trailing payloads, diagnostic validation and owner lifetime.
+Multiple row outcomes consume one shared decode budget. Server and Client map
+this contract. Cloudflare remains opaque: the application-owned session must
+encode diagnostic bytes before host application-failure conversion. No host ABI
+change is required.

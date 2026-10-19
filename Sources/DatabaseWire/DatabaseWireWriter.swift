@@ -102,6 +102,32 @@ public struct DatabaseWireWriter {
         return byteCount
     }
 
+    // Projection callbacks can fail with their owning runtime's admission error.
+    static func measureProjection(
+        limits: DatabaseWireLimits,
+        _ encode: (inout DatabaseWireWriter) throws -> Void
+    ) throws -> Int {
+        var writer = DatabaseWireWriter(measuring: limits)
+        try encode(&writer)
+        try writer.ensureNoDeferredError()
+        let count = writer.writtenByteCount
+        guard count <= limits.maximumFrameBytes else {
+            throw DatabaseWireError.frameTooLarge(actual: count, maximum: limits.maximumFrameBytes)
+        }
+        return count
+    }
+
+    static func initializeProjection(
+        into output: UnsafeMutableRawBufferPointer,
+        limits: DatabaseWireLimits,
+        _ encode: (inout DatabaseWireWriter) throws -> Void
+    ) throws {
+        var writer = DatabaseWireWriter(fixedOutput: output, limits: limits)
+        try encode(&writer)
+        try writer.ensureNoDeferredError()
+        guard writer.writtenByteCount == output.count else { throw DatabaseWireError.byteCountOverflow }
+    }
+
     public static func encode(
         limits: DatabaseWireLimits = .default,
         _ encode: (inout DatabaseWireWriter) throws(DatabaseWireError) -> Void
@@ -475,6 +501,27 @@ public struct DatabaseWireWriter {
             throw .invalidQueryIRWireState
         }
         try writeBackpatchedLengthPrefixed(encode)
+    }
+
+    mutating func writeProjectedLengthPrefixed(
+        _ encode: (inout DatabaseWireWriter) throws -> Void
+    ) throws {
+        guard case .borrowed = destination else {
+            let lengthOffset = writtenByteCount
+            writeUInt32(0)
+            let payloadOffset = writtenByteCount
+            try beginNestedValue()
+            try encode(&self)
+            try endNestedValue()
+            let count = writtenByteCount - payloadOffset
+            guard count <= limits.maximumByteStringBytes else {
+                throw DatabaseWireError.byteStringTooLarge(actual: count, maximum: limits.maximumByteStringBytes)
+            }
+            guard let length = UInt32(exactly: count) else { throw DatabaseWireError.byteCountOverflow }
+            if !isMeasuring { replaceUInt32(length, at: lengthOffset) }
+            return
+        }
+        throw DatabaseWireError.invalidSQLResponse
     }
 
     private mutating func writeBackpatchedLengthPrefixed(

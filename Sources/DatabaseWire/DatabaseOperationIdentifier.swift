@@ -9,6 +9,7 @@ public enum DatabaseOperationIdentifier: UInt16, Sendable, Hashable, CaseIterabl
     case grantExecute = 0x0106
     #endif
     case queryExecute = 0x0201
+    case sqlExecute = 0x0202
     case mutationExecute = 0x0301
     case graphAlgorithm = 0x0401
     case ontologyExecute = 0x0501

@@ -95,20 +95,37 @@ enum EnvelopeWireFormat {
         try validateHeader(kind: .request, reader: &reader)
         let requestID = try reader.readUInt64()
         let operation = try DatabaseOperationIdentifier(from: &reader)
+        if operation == .sqlExecute { try reader.admitQueryRootRetention() }
+        #if DATABASE_KIT_MULTI_BASE
+        let target = try DatabaseOperationTarget(from: &reader)
+        #endif
+        let metadata = try OperationRequestMetadata(from: &reader)
+        let payload: ByteString
+        let admission: DatabaseWireReader.AdmissionContext?
+        if operation == .sqlExecute {
+            let admitted = try reader.readAdmittedPayload()
+            payload = admitted.bytes
+            admission = admitted.admission
+        } else {
+            payload = try reader.readBytes()
+            admission = nil
+        }
         #if DATABASE_KIT_MULTI_BASE
         let envelope = DatabaseWireRequestEnvelope(
             requestID: requestID,
             operation: operation,
-            target: try DatabaseOperationTarget(from: &reader),
-            metadata: try OperationRequestMetadata(from: &reader),
-            payload: try reader.readBytes()
+            target: target,
+            metadata: metadata,
+            payload: payload,
+            payloadAdmission: admission
         )
         #else
         let envelope = DatabaseWireRequestEnvelope(
             requestID: requestID,
             operation: operation,
-            metadata: try OperationRequestMetadata(from: &reader),
-            payload: try reader.readBytes()
+            metadata: metadata,
+            payload: payload,
+            payloadAdmission: admission
         )
         #endif
         try reader.ensureFullyRead()
@@ -158,10 +175,7 @@ enum EnvelopeWireFormat {
     ) throws(DatabaseWireError) -> DatabaseWireEncodedResponse {
         let frame = try encodeMeasured(limits: limits) {
             (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
-            writeHeader(kind: .response, into: &writer)
-            writer.writeUInt64(requestID)
-            operation.encode(into: &writer)
-            writer.writeUInt8(1)
+            writeSuccessResponsePrefix(requestID: requestID, operation: operation, into: &writer)
             try writer.writeLengthPrefixed(encodePayload)
         }
         guard frame.count >= successResponseFixedByteCount else {
@@ -223,16 +237,61 @@ enum EnvelopeWireFormat {
         }
     }
 
+    static func writeSuccessResponsePrefix(
+        requestID: UInt64,
+        operation: DatabaseOperationIdentifier,
+        into writer: inout DatabaseWireWriter
+    ) {
+        writeHeader(kind: .response, into: &writer)
+        writer.writeUInt64(requestID)
+        operation.encode(into: &writer)
+        writer.writeUInt8(1)
+    }
+
+    static func measureSuccessResponse(
+        requestID: UInt64,
+        operation: DatabaseOperationIdentifier,
+        limits: DatabaseWireLimits,
+        encodePayload: (inout DatabaseWireWriter) throws(DatabaseWireError) -> Void
+    ) throws(DatabaseWireError) -> Int {
+        try DatabaseWireWriter.encodedByteCount(limits: limits) {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            writeSuccessResponsePrefix(requestID: requestID, operation: operation, into: &writer)
+            try writer.writeLengthPrefixed(encodePayload)
+        }
+    }
+
     static func decodeResponse(
         _ bytes: ByteString,
         limits: DatabaseWireLimits = .default
     ) throws(DatabaseWireError) -> DatabaseWireResponseEnvelope {
         var reader = DatabaseWireReader(bytes, limits: limits)
         try validateHeader(kind: .response, reader: &reader)
+        let requestID = try reader.readUInt64()
+        let operation = try DatabaseOperationIdentifier(from: &reader)
+        let payload: DatabaseWireResponsePayload
+        let admission: DatabaseWireReader.AdmissionContext?
+        if operation == .sqlExecute {
+            try reader.admitQueryRootRetention()
+            switch try reader.readUInt8() {
+            case 1:
+                let admitted = try reader.readAdmittedPayload()
+                payload = .success(admitted.bytes)
+                admission = admitted.admission
+            case 2:
+                payload = .failure(try RemoteOperationError(from: &reader))
+                admission = nil
+            case let tag: throw .invalidResultPayload(tag)
+            }
+        } else {
+            payload = try DatabaseWireResponsePayload(from: &reader)
+            admission = nil
+        }
         let envelope = DatabaseWireResponseEnvelope(
-            requestID: try reader.readUInt64(),
-            operation: try DatabaseOperationIdentifier(from: &reader),
-            payload: try DatabaseWireResponsePayload(from: &reader)
+            requestID: requestID,
+            operation: operation,
+            payload: payload,
+            payloadAdmission: admission
         )
         try reader.ensureFullyRead()
         return envelope
@@ -297,12 +356,17 @@ enum EnvelopeWireFormat {
     static func decodeValue<Value>(
         from bytes: ByteString,
         limits: DatabaseWireLimits,
+        admission: DatabaseWireReader.AdmissionContext? = nil,
         decode:
             (inout DatabaseWireReader)
                 throws(DatabaseWireError) -> Value
     ) throws(DatabaseWireError) -> Value {
-        var reader = DatabaseWireReader(bytes, limits: limits)
+        var reader = try DatabaseWireReader(bytes, limits: limits, admission: admission)
         let value = try decode(&reader)
+        if let admission {
+            guard reader.currentNestingDepth == admission.nestingDepth else { throw .invalidNestingState }
+            try reader.endNestedValue()
+        }
         try reader.ensureFullyRead()
         return value
     }

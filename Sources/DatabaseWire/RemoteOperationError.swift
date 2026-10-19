@@ -22,6 +22,7 @@ public struct RemoteOperationError: Error, Sendable, Hashable {
     }
 
     func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
+        _ = try sqlDiagnostic()
         category.encode(into: &writer)
         try writer.writeString(code)
         try writer.writeString(message)
@@ -41,5 +42,6 @@ public struct RemoteOperationError: Error, Sendable, Hashable {
             retryability: retryability,
             details: try FieldObject(from: &reader)
         )
+        _ = try sqlDiagnostic()
     }
 }

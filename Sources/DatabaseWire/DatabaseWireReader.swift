@@ -4,6 +4,17 @@ import DatabaseKit
 /// Little-endian reader used by database-kit wire DTOs.
 @_spi(DatabaseExecution)
 public struct DatabaseWireReader: Sendable {
+    struct AdmissionContext: Sendable, Hashable {
+        let nestingDepth: Int
+        let decodedObjectCount: Int
+        let queryRootRetentionAdmitted: Bool
+        let queryPayloadDepth: Int
+        let queryViewBytes: UInt64
+        let queryMaterializedUTF8Bytes: UInt64
+        let queryMaterializedJSONBBytes: UInt64
+        let queryMaterializedCollectionBytes: UInt64
+    }
+
     private let bytes: ByteString
     private var offset: Int
     private var nestingDepth: Int
@@ -51,6 +62,44 @@ public struct DatabaseWireReader: Sendable {
 
     var consumedByteCount: Int {
         offset
+    }
+
+    var admissionContext: AdmissionContext {
+        AdmissionContext(nestingDepth: nestingDepth, decodedObjectCount: decodedObjectCount,
+            queryRootRetentionAdmitted: queryRootRetentionAdmitted, queryPayloadDepth: queryPayloadDepth,
+            queryViewBytes: queryViewBytes, queryMaterializedUTF8Bytes: queryMaterializedUTF8Bytes,
+            queryMaterializedJSONBBytes: queryMaterializedJSONBBytes,
+            queryMaterializedCollectionBytes: queryMaterializedCollectionBytes)
+    }
+
+    init(_ bytes: ByteString, limits: DatabaseWireLimits, admission: AdmissionContext?)
+    throws(DatabaseWireError) {
+        self.init(bytes, limits: limits)
+        guard let admission else { return }
+        guard admission.nestingDepth <= limits.maximumNestingDepth else {
+            throw .nestingTooDeep(actual: admission.nestingDepth, maximum: limits.maximumNestingDepth)
+        }
+        nestingDepth = admission.nestingDepth
+        try registerObjects(admission.decodedObjectCount)
+        queryPayloadDepth = admission.queryPayloadDepth
+        try Self.addQueryBytes(admission.queryViewBytes, to: &queryViewBytes,
+            maximum: UInt64(limits.maximumFrameBytes), resource: "viewBytes")
+        try Self.addQueryBytes(admission.queryMaterializedUTF8Bytes, to: &queryMaterializedUTF8Bytes,
+            maximum: UInt64(limits.maximumFrameBytes), resource: "materializedUTF8Bytes")
+        try Self.addQueryBytes(admission.queryMaterializedJSONBBytes, to: &queryMaterializedJSONBBytes,
+            maximum: UInt64(limits.maximumFrameBytes), resource: "jsonbRetainedBytes")
+        try Self.addQueryBytes(admission.queryMaterializedCollectionBytes, to: &queryMaterializedCollectionBytes,
+            maximum: UInt64(limits.maximumFrameBytes), resource: "collectionRetainedBytes")
+        if admission.queryRootRetentionAdmitted { try admitQueryRootRetention() }
+    }
+
+    mutating func readAdmittedPayload()
+    throws(DatabaseWireError) -> (bytes: ByteString, admission: AdmissionContext) {
+        let payload = try readBytes()
+        try beginNestedValue()
+        let context = admissionContext
+        try endNestedValue()
+        return (payload, context)
     }
 
     mutating func beginSubtreeValidation(

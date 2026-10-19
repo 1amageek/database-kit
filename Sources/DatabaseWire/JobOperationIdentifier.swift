@@ -83,6 +83,7 @@ public struct JobOperationIdentifier:
         #endif
         case .capabilitiesDescribe,
              .schemaDescribe,
+             .sqlExecute,
              .jobStart,
              .jobStatus,
              .jobResult,

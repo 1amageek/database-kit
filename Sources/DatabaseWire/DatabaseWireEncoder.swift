@@ -68,6 +68,19 @@ public struct DatabaseWireEncoder: Sendable {
         )
     }
 
+    /// Measures the complete canonical success envelope without allocating it.
+    public func measureSuccessResponse<Request, Response>(
+        _ operation: DatabaseOperation<Request, Response>,
+        requestID: UInt64,
+        response: Response
+    ) throws(DatabaseWireError) -> Int {
+        try EnvelopeWireFormat.measureSuccessResponse(requestID: requestID,
+            operation: operation.identifier, limits: limits) {
+            (writer: inout DatabaseWireWriter) throws(DatabaseWireError) in
+            try operation.encodeResponseBody(response, into: &writer)
+        }
+    }
+
     public func encodeFailure(
         requestID: UInt64,
         operation: DatabaseOperationIdentifier,

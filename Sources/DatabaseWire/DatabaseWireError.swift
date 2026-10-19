@@ -86,6 +86,8 @@ public enum DatabaseWireError: Error, Sendable, Equatable {
     case invalidQueryLanguage(UInt8)
     case invalidQueryInput(UInt8)
     case invalidResultPayload(UInt8)
+    case invalidSQLResponse
+    case invalidSQLDiagnostic
     case invalidRowValueCount(expected: Int, actual: Int)
     case invalidDigestLength(actual: Int, expected: Int)
     case unsupportedSchemaManifestVersion(UInt16)
