@@ -114,15 +114,15 @@ enum SQLDDLStructuralValidation {
             }
             return []
         case .options(let options):
-            guard options.increment != 0 else { throw .invalidSQLDDL }
+            guard options.increment != 0 else { throw .invalidSQLSequenceOptions }
             if case .value(let minimum) = options.minimum, case .value(let maximum) = options.maximum,
-               minimum >= maximum { throw .invalidSQLDDL }
+               minimum >= maximum { throw .invalidSQLSequenceOptions }
             if let start = options.start {
-                if case .value(let minimum) = options.minimum, start < minimum { throw .invalidSQLDDL }
-                if case .value(let maximum) = options.maximum, start > maximum { throw .invalidSQLDDL }
+                if case .value(let minimum) = options.minimum, start < minimum { throw .invalidSQLSequenceOptions }
+                if case .value(let maximum) = options.maximum, start > maximum { throw .invalidSQLSequenceOptions }
             }
             if let type = options.type {
-                guard integral(type) else { throw .invalidSQLDDL }
+                guard integral(type) else { throw .invalidSQLSequenceOptions }
                 return [.type(type)]
             }
             return []

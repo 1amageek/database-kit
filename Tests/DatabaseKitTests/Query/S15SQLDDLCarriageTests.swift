@@ -91,12 +91,20 @@ struct S15SQLDDLCarriageTests {
             .createTable(SQLCreateTable(name: target, source: .columns([SQLColumnDefinition(name: "a", type: .integer,
                 constraints: [SQLTableConstraint(kind: .notNull(column: "b"))])], constraints: []))),
             .createTable(SQLCreateTable(name: target, source: .columns([], constraints: [SQLTableConstraint(timing: .deferrable(initiallyDeferred: true), kind: .check(.bool(true)))]))),
-            .createSequence(SQLCreateSequence(name: target, options: SQLSequenceOptions(increment: 0))),
-            .createSequence(SQLCreateSequence(name: target, options: SQLSequenceOptions(type: .text))),
-            .createSequence(SQLCreateSequence(name: target, options: SQLSequenceOptions(minimum: .value(5), maximum: .value(4)))),
         ]
         for declaration in invalid {
             #expect(throws: QueryStructuralValidationError.invalidSQLDDL) { try QueryStructuralValidator.validate(.ddl(declaration)) }
+        }
+        let invalidSequences: [SQLDDLStatement] = [
+            .createSequence(SQLCreateSequence(name: target, options: SQLSequenceOptions(increment: 0))),
+            .createSequence(SQLCreateSequence(name: target, options: SQLSequenceOptions(type: .text))),
+            .createSequence(SQLCreateSequence(name: target, options: SQLSequenceOptions(minimum: .value(5), maximum: .value(4)))),
+            .createSequence(SQLCreateSequence(name: target, options: SQLSequenceOptions(start: 4, minimum: .value(5)))),
+        ]
+        for declaration in invalidSequences {
+            #expect(throws: QueryStructuralValidationError.invalidSQLSequenceOptions) {
+                try QueryStructuralValidator.validate(.ddl(declaration))
+            }
         }
     }
 

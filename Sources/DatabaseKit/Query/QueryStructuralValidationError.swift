@@ -3,6 +3,8 @@ import DatabaseTypes
 /// A deterministic QueryIR structural resource-limit violation.
 public enum QueryStructuralValidationError: Error, Sendable, Equatable {
     case invalidSQLDDL
+    /// A sequence increment, bound, start or type value is invalid.
+    case invalidSQLSequenceOptions
 
     public enum Resource: String, Sendable, Equatable {
         case nestingDepth
@@ -47,6 +49,7 @@ extension QueryStructuralValidationError: CustomStringConvertible {
     public var description: String {
         switch self {
         case .invalidSQLDDL: return "Invalid SQL DDL declaration"
+        case .invalidSQLSequenceOptions: return "Invalid SQL sequence options"
         case .resourceLimitExceeded(let resource, let actual, let maximum):
             return "Query \(resource.rawValue) limit exceeded: \(actual) > \(maximum)"
         case .invalidValuesRowArity(let row, let expected, let actual):

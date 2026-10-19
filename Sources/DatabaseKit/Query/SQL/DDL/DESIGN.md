@@ -99,8 +99,9 @@ child without resetting limits or recursively walking statement/query cycles.
 Distinct occurrence roles identify DDL target, column definition, default,
 generated expression, constraint/check, ALTER action/USING, index key/predicate
 and stored SELECT body. Equal repeated children retain distinct source paths.
-Shape failures are typed `invalidSQLDDL`; resource errors retain their existing
-categories. No unsupported declaration becomes synthetic successful execution.
+Shape failures are typed `invalidSQLDDL`; invalid sequence increment, bound,
+start or type values are typed `invalidSQLSequenceOptions`; resource errors
+retain their existing categories. No unsupported declaration becomes synthetic successful execution.
 
 ## Verification and Change Impact
 
