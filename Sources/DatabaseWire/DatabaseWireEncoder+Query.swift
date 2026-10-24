@@ -2,21 +2,21 @@ import DatabaseTypes
 
 @_spi(DatabaseExecution)
 public extension DatabaseWireEncoder {
-    /// Measures the full SQL success frame, preserving native projection failures.
-    func measureSQLResponse(
+    /// Measures the canonical query success frame, preserving native projection failures.
+    func measureQueryResponse(
         requestID: UInt64, resultCount: Int,
-        body: (inout SQLResponseWriter) throws -> Void
+        body: (inout QueryResponseWriter) throws -> Void
     ) throws -> Int {
         try DatabaseWireWriter.measureProjection(limits: limits) { writer in
-            try projectSQLResponse(requestID: requestID, resultCount: resultCount,
+            try projectQueryResponse(requestID: requestID, resultCount: resultCount,
                 into: &writer, body: body)
         }
     }
 
     /// Initializes a caller-owned destination during its synchronous byte borrow.
-    func encodeSQLResponse(
+    func encodeQueryResponse(
         requestID: UInt64, resultCount: Int, into output: UnsafeMutableRawBufferPointer,
-        body: (inout SQLResponseWriter) throws -> Void
+        body: (inout QueryResponseWriter) throws -> Void
     ) throws {
         // The caller owns and releases the final allocation. Byte alignment is
         // sufficient; exactly output.count bytes are initialized, never retained.
@@ -25,19 +25,19 @@ public extension DatabaseWireEncoder {
             throw DatabaseWireError.frameTooLarge(actual: output.count, maximum: limits.maximumFrameBytes)
         }
         try DatabaseWireWriter.initializeProjection(into: output, limits: limits) { writer in
-            try projectSQLResponse(requestID: requestID, resultCount: resultCount,
+            try projectQueryResponse(requestID: requestID, resultCount: resultCount,
                 into: &writer, body: body)
         }
     }
 
-    private func projectSQLResponse(
+    private func projectQueryResponse(
         requestID: UInt64, resultCount: Int, into writer: inout DatabaseWireWriter,
-        body: (inout SQLResponseWriter) throws -> Void
+        body: (inout QueryResponseWriter) throws -> Void
     ) throws {
         EnvelopeWireFormat.writeSuccessResponsePrefix(requestID: requestID,
-            operation: .sqlExecute, into: &writer)
+            operation: .queryExecute, into: &writer)
         try writer.writeProjectedLengthPrefixed { payload in
-            var response = try SQLResponseWriter(writer: payload, resultCount: resultCount)
+            var response = try QueryResponseWriter(writer: payload, resultCount: resultCount)
             try body(&response)
             payload = try response.finish()
         }

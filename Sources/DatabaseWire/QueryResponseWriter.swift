@@ -1,9 +1,9 @@
 import DatabaseKit
 import DatabaseTypes
 
-/// Synchronous closed SQL projection; it cannot escape by copying its destination.
+/// Synchronous closed query projection; its destination cannot escape by copying.
 @_spi(DatabaseExecution)
-public struct SQLResponseWriter: ~Copyable {
+public struct QueryResponseWriter: ~Copyable {
     private var writer: DatabaseWireWriter
     private var remainingResults: Int
     private let isBlock: Bool
@@ -35,6 +35,46 @@ public struct SQLResponseWriter: ~Copyable {
         writer.writeUInt64(affectedRows)
         if isBlock { try writer.endNestedValue() }
     }
+
+    #if DATABASE_KIT_MULTI_BASE
+    public mutating func writeBoolean(_ value: QueryBooleanResult) throws(DatabaseWireError) {
+        try beginResult()
+        writer.writeUInt8(2)
+        try value.encode(into: &writer)
+        if isBlock { try writer.endNestedValue() }
+    }
+
+    public mutating func writeRDFGraph(quadCount: Int,
+        provenance: CompositionPageProvenance? = nil, consistency: DatabaseReadConsistency,
+        body: (inout RDFQuadWriter) throws -> Void) throws {
+        try beginResult()
+        writer.writeUInt8(3)
+        var quads = try RDFQuadWriter(writer: writer, count: quadCount)
+        try body(&quads)
+        writer = try quads.finish()
+        try RDFGraphPage.encodeFooter(quadCount: quadCount, provenance: provenance,
+            consistency: consistency, continuation: nil, into: &writer)
+        if isBlock { try writer.endNestedValue() }
+    }
+    #else
+    public mutating func writeBoolean(_ value: Bool) throws(DatabaseWireError) {
+        try beginResult()
+        writer.writeUInt8(2)
+        writer.writeBool(value)
+        if isBlock { try writer.endNestedValue() }
+    }
+
+    public mutating func writeRDFGraph(quadCount: Int, snapshotVersion: Int64? = nil,
+        body: (inout RDFQuadWriter) throws -> Void) throws {
+        try beginResult()
+        writer.writeUInt8(3)
+        var quads = try RDFQuadWriter(writer: writer, count: quadCount)
+        try body(&quads)
+        writer = try quads.finish()
+        try RDFGraphPage.encodeFooter(snapshotVersion: snapshotVersion, continuation: nil, into: &writer)
+        if isBlock { try writer.endNestedValue() }
+    }
+    #endif
 
     public mutating func writeRows(
         columnCount: Int, rowCount: Int, affectedRows: UInt64?,

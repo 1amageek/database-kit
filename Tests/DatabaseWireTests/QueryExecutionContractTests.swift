@@ -7,6 +7,10 @@ import Testing
 struct QueryExecutionContractTests {
     @Test("Text, statement and block inputs retain their semantic owner")
     func inputRoundTrips() throws {
+        #expect(throws: QueryExecutionOptionsError.pageSizeMustBePositive) {
+            try QueryExecutionOptions(pageSize: 0).validate()
+        }
+        try QueryExecutionOptions(pageSize: 1).validate()
         let hostile = "Robert'); DROP TABLE items; --"
         let sql: SQL = try "SELECT \(hostile), \(Int32(42)), \(nil as String?)"
         #expect(sql.text == "SELECT $1, $2, $3")

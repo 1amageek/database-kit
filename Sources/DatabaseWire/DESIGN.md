@@ -1123,22 +1123,22 @@ result borrow, reserves the complete frame against the Framework claim before
 allocation, and publishes it only after authoritative close. Wire owns byte
 measurement, not provisional result lifetime or transaction publication.
 
-The SQL-only execution SPI provides scoped noncopyable `SQLResponseWriter` and
-`SQLRowWriter` values for complete-frame measurement and encoding into a
-caller-owned destination. The Server projects the Framework's borrowed
-provisional outputs synchronously rather than allocating all result rows.
-The response writer accepts only the closed SQL rows/COPY/command outcomes;
+The canonical query execution SPI provides scoped noncopyable
+`QueryResponseWriter`, `SQLRowWriter` and `RDFQuadWriter` values for complete-frame measurement and encoding into a
+caller-owned destination. Framework projects borrowed provisional SQL and read outputs synchronously
+rather than allocating duplicate row or quad arrays.
+The response writer accepts only the closed rows/COPY/command/boolean/RDF outcomes;
 the row writer checks declared columns, row/cell counts, nullability and types.
 No source pointer or callback is retained, and no arbitrary operation/wire
 conformance or generic source protocol is exposed.
 
 | Execution SPI | Frozen synchronous signature |
 |---|---|
-| Measure SQL frame | `DatabaseWireEncoder.measureSQLResponse(requestID: UInt64, resultCount: Int, body: (inout SQLResponseWriter) throws -> Void) throws -> Int` |
-| Initialize SQL frame | `DatabaseWireEncoder.encodeSQLResponse(requestID: UInt64, resultCount: Int, into: UnsafeMutableRawBufferPointer, body: (inout SQLResponseWriter) throws -> Void) throws` |
-| Command result | `SQLResponseWriter.writeCommand(_ kind: SQLCommandKind, affectedRows: UInt64?) throws(DatabaseWireError)` |
-| COPY result | `SQLResponseWriter.writeCopy(bytes: ByteString, affectedRows: UInt64) throws(DatabaseWireError)` |
-| Rows result | `SQLResponseWriter.writeRows(columnCount: Int, rowCount: Int, affectedRows: UInt64?, body: (inout SQLRowWriter) throws -> Void) throws` |
+| Measure SQL frame | `DatabaseWireEncoder.measureQueryResponse(requestID: UInt64, resultCount: Int, body: (inout QueryResponseWriter) throws -> Void) throws -> Int` |
+| Initialize SQL frame | `DatabaseWireEncoder.encodeQueryResponse(requestID: UInt64, resultCount: Int, into: UnsafeMutableRawBufferPointer, body: (inout QueryResponseWriter) throws -> Void) throws` |
+| Command result | `QueryResponseWriter.writeCommand(_ kind: SQLCommandKind, affectedRows: UInt64?) throws(DatabaseWireError)` |
+| COPY result | `QueryResponseWriter.writeCopy(bytes: ByteString, affectedRows: UInt64) throws(DatabaseWireError)` |
+| Rows result | `QueryResponseWriter.writeRows(columnCount: Int, rowCount: Int, affectedRows: UInt64?, body: (inout SQLRowWriter) throws -> Void) throws` |
 | Rows declarations | `SQLRowWriter.writeColumn(_ column: QueryColumn) throws(DatabaseWireError)` |
 | Row start/cells | `SQLRowWriter.beginRow() throws(DatabaseWireError)` and `writeValue(_ value: QueryValue) throws(DatabaseWireError)` |
 | Row end | `SQLRowWriter.endRow(annotations: FieldObject = FieldObject(), version: ByteString? = nil) throws(DatabaseWireError)` |
@@ -1167,7 +1167,7 @@ storage until publication or failure cleanup.
 
 | Mutable state owner | Native | WASM | Embedded | Access and release |
 |---|---|---|---|---|
-| SQLResponseWriter / SQLRowWriter | scoped noncopyable writer values | same | same | synchronous inout callback; no Sendable conformance or conditional storage; callback completion releases schema scratch |
+| QueryResponseWriter / SQLRowWriter | scoped noncopyable writer values | same | same | synchronous inout callback; no Sendable conformance or conditional storage; callback completion releases schema scratch |
 | SQL decoding/encoding ledgers | existing reader/writer value | same | same | one enclosing frame ledger; no global registration or shared mutable owner |
 
 ### Verification and Change Impact
@@ -1212,3 +1212,9 @@ The existing SQL-only operation is transitional during EIR24 consumer migration
 and will be removed with its active callers; it already returns the same result
 algebra rather than maintaining a second row/result model. No compatibility tag,
 version negotiation or implicit fallback is introduced.
+
+The scoped query writer uses the same canonical operation identifier, result tags
+and RDF/row footers as materialized response encoding. RDFQuadWriter enforces its
+exact declared quad count; no callback, span or source pointer escapes. Boolean
+and graph provenance/consistency come from the producing read snapshot rather
+than an invented shared SQL transaction read point.

@@ -88,3 +88,9 @@ Client and Framework specialize it with connection-owned retrieval sequences.
 No transport, meter, cursor or executor implementation enters this component.
 The final QueryRow stores QueryValue, FieldObject annotations and opaque version
 bytes. Wire supplies only codec extensions, not a second final row declaration.
+
+QueryExecutionOptions carries the requested budget, graph partitions and optional
+transport page size. Nil page size requests the complete result. A page size
+selects the existing read-only query delivery capability; it neither adds write
+permission nor changes SQL LIMIT. Runtime owners reject unsupported delivery
+before effects. The scoped Wire projection emits the canonical query operation.

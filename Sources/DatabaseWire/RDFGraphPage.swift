@@ -124,6 +124,17 @@ public struct RDFGraphPage: Sendable {
             writer.writeUnframedBytes(bytes)
         }
         #if DATABASE_KIT_MULTI_BASE
+        try Self.encodeFooter(quadCount: quadCount, provenance: provenance,
+            consistency: consistency, continuation: continuation, into: &writer)
+        #else
+        try Self.encodeFooter(snapshotVersion: snapshotVersion, continuation: continuation, into: &writer)
+        #endif
+    }
+
+    #if DATABASE_KIT_MULTI_BASE
+    static func encodeFooter(quadCount: Int, provenance: CompositionPageProvenance?,
+        consistency: DatabaseReadConsistency, continuation: ByteString?,
+        into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
         writer.writeBool(provenance != nil)
         if let provenance {
             guard provenance.originCount == quadCount else {
@@ -133,14 +144,17 @@ public struct RDFGraphPage: Sendable {
         }
         try consistency.encode(into: &writer)
         try writer.writeOptionalBytes(continuation)
-        #else
+    }
+    #else
+    static func encodeFooter(snapshotVersion: Int64?, continuation: ByteString?,
+        into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
         try writer.writeOptionalBytes(continuation)
         writer.writeBool(snapshotVersion != nil)
         if let snapshotVersion {
             writer.writeInt64(snapshotVersion)
         }
-        #endif
     }
+    #endif
 
     init(
         from reader: inout DatabaseWireReader

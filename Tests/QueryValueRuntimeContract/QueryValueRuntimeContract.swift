@@ -1,6 +1,6 @@
 import DatabaseKit
 import DatabaseTypes
-import DatabaseWire
+@_spi(DatabaseExecution) import DatabaseWire
 #if canImport(WASILibc)
 import WASILibc
 #elseif canImport(Darwin)
@@ -90,6 +90,45 @@ struct QueryValueRuntimeContract {
         try require(first == expected, code: 152)
         try require(second == nil, code: 153)
         try require(page.columns == [column] && page.affectedRows == 1, code: 155)
+        // Exercise the same scoped projection used before execution commits.
+        do {
+            let quad = RDFQuad(subject: .iri(try RDFIRI("urn:s")),
+                predicate: RDFPredicateIRI(try RDFIRI("urn:p")), object: .iri(try RDFIRI("urn:o")))
+            func project(_ writer: inout QueryResponseWriter) throws {
+                #if DATABASE_KIT_MULTI_BASE
+                let consistency = DatabaseReadConsistency.transactional(
+                    try DomainReadPoint(domainID: "fixture", position: .version(1)))
+                try writer.writeRDFGraph(quadCount: 1, consistency: consistency) { quads in try quads.write(quad) }
+                try writer.writeBoolean(QueryBooleanResult(value: true, provenance: nil, consistency: consistency))
+                #else
+                try writer.writeRDFGraph(quadCount: 1) { quads in try quads.write(quad) }
+                try writer.writeBoolean(true)
+                #endif
+                try writer.writeRows(columnCount: 1, rowCount: 1, affectedRows: 1) { rows in
+                    try rows.writeColumn(column)
+                    try rows.beginRow()
+                    try rows.writeValue(.primitive(.int32(42)))
+                    try rows.endRow()
+                }
+            }
+            let encoder = DatabaseWireEncoder()
+            let count = try encoder.measureQueryResponse(requestID: 20, resultCount: 3, body: project)
+            var bytes = [UInt8](repeating: 0, count: count)
+            try bytes.withUnsafeMutableBytes { destination in
+                try encoder.encodeQueryResponse(requestID: 20, resultCount: 3, into: destination, body: project)
+            }
+            let projected = try DatabaseWireDecoder().decodeResponse(DatabaseOperationCatalog.queryExecute,
+                from: ByteString(bytes), matching: 20)
+            guard case .success(.block(let outcomes)) = projected, outcomes.count == 3,
+                  case .rdfGraph(let graph) = outcomes[0],
+                  case .boolean(let truth) = outcomes[1], truth.value, case .rows(let rows) = outcomes[2] else {
+                throw Failure.assertion(156)
+            }
+            try require(try graph.materializedQuads(maximumCount: 1) == [quad], code: 159)
+            try require(rows.columns == [column] && rows.affectedRows == 1, code: 157)
+        } catch let error as Failure { throw error }
+        catch let error as DatabaseWireError { throw .wire(error) }
+        catch { throw .assertion(158) }
     }
 
     private static func run() throws(Failure) {
