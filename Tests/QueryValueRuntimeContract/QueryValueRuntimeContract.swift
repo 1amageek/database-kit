@@ -35,9 +35,11 @@ struct QueryValueRuntimeContract {
             try run()
             try fluentSelection()
             pass("fluent-selection")
+            try fluentClauses()
+            pass("fluent-clauses")
             try await unifiedExecution()
             pass("unified-query-execution")
-            print("QUERY_VALUE_RUNTIME_PASS cases=19")
+            print("QUERY_VALUE_RUNTIME_PASS cases=20")
         } catch {
             switch error {
             case .assertion(let code): print("QUERY_VALUE_RUNTIME_FAIL assertion=\(code)")
@@ -86,6 +88,31 @@ struct QueryValueRuntimeContract {
         catch { throw .assertion(236) }
         let query = TableRef(schema: "public", table: "items.name", alias: "i", partitions: partitions).select("name")
         try require(query.source == .aliased(.table(TableRef(schema: "public", table: "items.name", partitions: partitions)), name: "i"), code: 237)
+    }
+
+    private static func fluentClauses() throws(Failure) {
+        let window = NamedWindow(name: "w", specification: WindowSpecification(partitionBy: [.col("name")]))
+        let cte = NamedSubquery(name: "input", query: TableRef("items").select("name", "age"),
+            materialized: .notMaterialized)
+        let query: SelectQuery
+        do {
+            query = try TableRef(schema: "Exact", table: "input", alias: "i").selectAll().selectDistinct("name", "age")
+                .where("age", .greaterThan, Int16(18)).whereBetween("age", Int16(19), Int16(65))
+                .groupBy("name", "age").having(.isNotNull(.col("name"))).window(window)
+                .with(cte).withRecursive().orderByDesc("age").paginate(pageIndex: 2, pageSize: 3)
+            try QueryStructuralValidator.validate(query)
+        } catch { throw .assertion(240) }
+        try require(query.subqueries == [cte] && query.withRecursive && query.windows == [window], code: 241)
+        try require(query.source == .aliased(.table(TableRef(schema: "Exact", table: "input")), name: "i"), code: 242)
+        try require(query.pagination.offset == .fixed(6) && query.quantifier == .distinct, code: 243)
+        try require(query.filter == .and(.greaterThan(.col("age"), .int(18)),
+            .between(.col("age"), low: .int(19), high: .int(65))), code: 244)
+        try require(query.count().projection == [ProjectionItem(.aggregate(.sql(SQLAggregateCall(
+            function: .count, arguments: []))), alias: "count")], code: 245)
+        var rejected = false
+        do { _ = try query.where("payload", equals: FieldValue.object(FieldObject())) }
+        catch { rejected = true }
+        try require(rejected, code: 246)
     }
 
     private static func unifiedExecution() async throws(Failure) {

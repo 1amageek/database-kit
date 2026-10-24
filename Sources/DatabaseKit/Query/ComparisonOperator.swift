@@ -1,4 +1,4 @@
-/// A scalar comparison selected by a quantified SQL predicate.
+/// A canonical scalar comparison used by SQL and SPARQL predicates.
 public enum ComparisonOperator: Sendable, Equatable, Hashable {
     case equal
     case notEqual

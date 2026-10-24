@@ -2,14 +2,15 @@
 
 ## Purpose and Scope
 
-Status: N00 implemented and behaviorally verified; N04 Builder migration remains planned. Parent:
+Status: implemented and behaviorally verified in N00-N04. Parent:
 [Query](../DESIGN.md). Children: none. Owns pure construction of existing query
-IR from named sources and compiled model fields. Runtime references stay in SDK.
+IR from named sources and compiled model fields. Runtime references stay in
+Client-owned DatabaseAccess.
 
 ## Responsibilities and Boundaries
 
 QuerySource supplies DataSource. SelectQuery is the canonical selection IR.
-Proposed Selection<Model> is an immutable phantom-model view over one
+Selection<Model> is an immutable phantom-model view over one
 SelectQuery, not a second AST. TableRef.select produces SelectQuery;
 Persistable static select produces Selection<Model>. Neither stores a
 connection, model instance, metatype, KeyPath, schema lease or policy result.
@@ -51,12 +52,10 @@ in execution. Structural validation and typed literal failures remain bounded.
 
 ### Predicate declaration split
 
-Current Field operators return Framework Predicate<Model>. Its declaration,
-FieldComparison and evaluation are mixed in DatabaseQuery.swift. N00 moves only
-pure Predicate/FieldComparison identity-value declarations and field comparison
-vocabulary
-and Field operators/factories to Kit. Model/string/sort evaluation, meters and
-fetch execution remain Framework-owned. Canonical FieldComparison initialization preserves identity without granting
+Field operators return Kit-owned Predicate<Model>. Its pure declaration,
+FieldComparison, field comparison vocabulary and factories belong here.
+Model/string/sort evaluation, meters and fetch execution remain Framework-owned.
+Canonical FieldComparison initialization preserves identity without granting
 schema authority. Selection checks model field numbers and names; execution
 rebinds current schema and policy. Runtime internals do not move into Kit.
 
@@ -81,11 +80,42 @@ particular, model negation of a false NULL comparison does not prove SQL
 NOT UNKNOWN semantics. New canonical selections are tested against SQL/IR,
 while existing model evaluation gets its own regression evidence.
 
-### SQLQueryBuilder migration
+### Canonical SQL construction
+
+N04 replaces the mutable SQLQueryBuilder envelope with fluent operations on
+SelectQuery itself. No second state, buildAST step or compatibility alias is
+retained. Existing connection/execution APIs and SPARQL/pattern construction
+remain unchanged. QueryAST's SelectQuery.toSQL convenience delegates to its
+existing canonical serializer; Kit never generates SQL text.
+
+| Construction responsibility | Canonical operation and retained behavior |
+|---|---|
+| Initial source | TableRef/QuerySource.selectAll/select; an explicit DataSource remains a pure source. Table aliases and partitions survive normalization. |
+| Projection | SelectQuery.selectAll/select/selectDistinct and column aliases; ordered/duplicate projection entries are retained. Explicit empty projection arrays follow the existing select-all contract. |
+| Conditions | Expression AND/OR, six canonical comparisons, NULL, LIKE, homogeneous IN/NOT IN and BETWEEN; QueryLiteralConvertible retains its exact supported mappings and typed failures. |
+| Relations | Table name/reference INNER/LEFT/RIGHT and USING; source aliases/partitions are retained. Bound cross-access joins remain Client-owned. GRAPH_TABLE replaces only the source and preserves its pattern/column metadata. |
+| Grouping and windows | Expression/column grouping, explicit grouping elements (including an empty set), HAVING and ordered named windows; no runtime expansion occurs. |
+| Ordering/pagination | Ordered sort keys, descending convenience and existing checked UInt64 pagination; overflow remains SelectionConstructionError.paginationOverflow. |
+| WITH | Complete NamedSubquery values, append order and recursive visibility; SEARCH/CYCLE/materialization metadata is never reconstructed or dropped. |
+| Aggregates | COUNT/SUM/AVG/MAX/MIN project canonical SQLAggregateCall values with the existing aliases. |
+
+Every operation uses the canonical replacing contract and modifies only its
+named clause. Untouched accessPath, reduced, dataset, CTE, window, ordering and
+pagination fields survive even when a later language adapter must explicitly
+reject them. Construction does not clear incompatible metadata, authorize,
+bind, execute or convert it into SQL. There is no mutable shared state or
+target-specific implementation.
+
+Kit tests own immutable branching, complete-clause/source metadata and typed
+literal/overflow failures. QueryAST tests own canonical SQL and parse agreement;
+SQLite tests own equivalent IR/text results. Portable clause construction must
+execute on ordinary WASM and Embedded, independently of Native success.
+
+### Migration boundary
 
 N04 migrates all active pure construction callers/tests, preserving joins,
 aliases, grouping, windows, pagination, CTEs and recursive/search/cycle metadata.
-Remove the superseded Builder only after replacement success/failure behavior
+Remove the superseded SQL Builder only after replacement success/failure behavior
 and caller migration in the same implementation sprint. SQLSerializer stays
 QueryAST-owned. Unrelated graph execution builders/model fetch capabilities
 remain with their semantic owners; no compatibility alias replaces the migration.
