@@ -19,7 +19,7 @@ struct S17SQLProjectionWireTests {
         let row = QueryRow(values: [.primitive(.string("value"))], annotations: annotations, version: version)
         let quad = RDFQuad(subject: .iri(try RDFIRI("urn:s")),
             predicate: RDFPredicateIRI(try RDFIRI("urn:p")), object: .iri(try RDFIRI("urn:o")))
-        let response = try SQLExecuteOperation.Response(results: [
+        let response = try QueryExecuteOperation.Response(results: [
             .rows(try .init(columns: [column], rows: [row], affectedRows: 7)),
             .rows(try .init(columns: [column], rows: [])),
             .copy(bytes: ByteString([0, 255]), affectedRows: 8),

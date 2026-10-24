@@ -95,22 +95,27 @@ struct QueryExecutionContractTests {
             try Result(results: [.block([.command(.commit, affectedRows: nil)])])
         }
     }
-    @Test("SQL and IR use the same encoded result payload")
+    @Test("Text and IR retain their representations with one canonical response contract")
     func unifiedRowPayload() throws {
         let columns = [try QueryColumn(number: 1, name: "x", type: .sql(.integer), isNullable: true)]
-        let rows = [QueryRow(values: [.primitive(.int32(42))])]
-        let query = QueryExecuteOperation.Response.rows(try QueryRowPage(columns: columns, rows: rows))
-        let sql = try SQLExecuteOperation.Response(results: [.rows(try .init(columns: columns, rows: rows))])
-        let queryFrame = try DatabaseWireEncoder().encodeResponse(DatabaseOperationCatalog.queryExecute,
-            requestID: 77, response: query)
-        let sqlFrame = try DatabaseWireEncoder().encodeResponse(DatabaseOperationCatalog.sqlExecute,
-            requestID: 77, response: sql)
-        guard case .success(let queryPayload) = try EnvelopeWireFormat.decodeResponse(queryFrame).payload,
-              case .success(let sqlPayload) = try EnvelopeWireFormat.decodeResponse(sqlFrame).payload else {
-            Issue.record("Expected successful result payloads")
-            return
+        let row = QueryRow(values: [.primitive(.int32(42))])
+        let response = QueryExecuteOperation.Response.rows(try QueryRowPage(columns: columns, rows: [row]))
+        let inputs: [QueryInput] = [.sql("SELECT 42 AS x"), .statement(.select(SelectQuery(
+            projection: [.expression(.literal(.queryValue(.primitive(.int32(42)), type: .sql(.integer))), alias: "x")],
+            source: .values([[]]))))]
+        for input in inputs {
+            let request = QueryExecuteOperation.Request(input: input)
+            let frame = try DatabaseWireEncoder().encodeTestDatabaseRequest(DatabaseOperationCatalog.queryExecute,
+                requestID: 77, request: request)
+            #expect(try DatabaseWireDecoder().decodeRequest(DatabaseOperationCatalog.queryExecute, from: frame).request == request)
+            let encoded = try DatabaseWireEncoder().encodeResponse(DatabaseOperationCatalog.queryExecute,
+                requestID: 77, response: response)
+            guard case .rows(let decoded) = try DatabaseWireDecoder().decodeResponse(DatabaseOperationCatalog.queryExecute,
+                from: encoded, matching: 77).get() else { Issue.record("Expected canonical rows"); return }
+            var iterator = decoded.makeRowIterator()
+            #expect(decoded.columns == columns)
+            #expect(try iterator.next() == row)
         }
-        #expect(queryPayload == sqlPayload)
     }
 
 }

@@ -19,9 +19,9 @@ struct S17SQLDiagnosticWireTests {
             #expect(error.details["cleanup"] == .bool(true))
             guard case .object(let object) = error.details["sqlDiagnostic"] else { Issue.record("Missing reserved object"); return }
             #expect(object["category"] == .uint8(UInt8(tag)))
-            let frame = try DatabaseWireEncoder().encodeFailure(requestID: 2, operation: .sqlExecute, error: error)
+            let frame = try DatabaseWireEncoder().encodeFailure(requestID: 2, operation: .queryExecute, error: error)
             guard case .failure(let decoded) = try DatabaseWireDecoder().decodeResponse(
-                DatabaseOperationCatalog.sqlExecute, from: frame, matching: 2) else {
+                DatabaseOperationCatalog.queryExecute, from: frame, matching: 2) else {
                 Issue.record("Expected typed remote failure"); return
             }
             #expect(decoded == error)
@@ -61,20 +61,20 @@ struct S17SQLDiagnosticWireTests {
                 retryability: .never, details: details)
             #expect(throws: DatabaseWireError.invalidSQLDiagnostic) { try error.sqlDiagnostic() }
             #expect(throws: DatabaseWireError.invalidSQLDiagnostic) {
-                try DatabaseWireEncoder().encodeFailure(requestID: 1, operation: .sqlExecute, error: error)
+                try DatabaseWireEncoder().encodeFailure(requestID: 1, operation: .queryExecute, error: error)
             }
             // Bypass the validating failure encoder to represent hostile peer bytes.
             let hostile = try DatabaseWireWriter.encode { writer throws(DatabaseWireError) in
                 for byte: UInt8 in [0x44, 0x42, 0x57, 0x52] { writer.writeUInt8(byte) }
                 writer.writeUInt16(DatabaseWireEncoder.protocolVersion); writer.writeUInt8(2)
-                writer.writeUInt64(1); writer.writeUInt16(0x0202); writer.writeUInt8(2)
+                writer.writeUInt64(1); writer.writeUInt16(0x0201); writer.writeUInt8(2)
                 OperationErrorCategory.invalidRequest.encode(into: &writer)
                 try writer.writeString("sql"); try writer.writeString("invalid")
                 OperationRetryability.never.encode(into: &writer)
                 try details.encode(into: &writer)
             }
             #expect(throws: DatabaseWireError.invalidSQLDiagnostic) {
-                try DatabaseWireDecoder().decodeResponse(DatabaseOperationCatalog.sqlExecute, from: hostile, matching: 1)
+                try DatabaseWireDecoder().decodeResponse(DatabaseOperationCatalog.queryExecute, from: hostile, matching: 1)
             }
         }
     }
@@ -89,13 +89,13 @@ struct S17SQLDiagnosticWireTests {
         }
         let error = try RemoteOperationError(category: .invalidRequest, code: "x", message: "x",
             retryability: .never, sqlDiagnostic: diagnostic)
-        let frame = try DatabaseWireEncoder().encodeFailure(requestID: 1, operation: .sqlExecute, error: error)
+        let frame = try DatabaseWireEncoder().encodeFailure(requestID: 1, operation: .queryExecute, error: error)
         for limits in [try sqlLimits(string: 4), try sqlLimits(objects: 2), try sqlLimits(depth: 1)] {
             #expect(throws: DatabaseWireError.self) {
-                try DatabaseWireEncoder(limits: limits).encodeFailure(requestID: 1, operation: .sqlExecute, error: error)
+                try DatabaseWireEncoder(limits: limits).encodeFailure(requestID: 1, operation: .queryExecute, error: error)
             }
             #expect(throws: DatabaseWireError.self) {
-                try DatabaseWireDecoder(limits: limits).decodeResponse(DatabaseOperationCatalog.sqlExecute, from: frame, matching: 1)
+                try DatabaseWireDecoder(limits: limits).decodeResponse(DatabaseOperationCatalog.queryExecute, from: frame, matching: 1)
             }
         }
     }

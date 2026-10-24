@@ -25,7 +25,6 @@ public enum DatabaseOperationCatalog {
     public static let queryExecute = operation(
         QueryExecuteOperation.self
     )
-    public static let sqlExecute = operation(SQLExecuteOperation.self)
     public static let mutationExecute = operation(
         MutationExecuteOperation.self
     )

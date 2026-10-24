@@ -1208,10 +1208,10 @@ The scoped response writer uses the same tags and row footer; a single outcome
 is encoded directly, while multiple outcomes use a block. Final row ownership
 is Kit's QueryRow and row decoding remains lazy.
 
-The existing SQL-only operation is transitional during EIR24 consumer migration
-and will be removed with its active callers; it already returns the same result
-algebra rather than maintaining a second row/result model. No compatibility tag,
-version negotiation or implicit fallback is introduced.
+Only `query.execute` is registered. The SQL-only descriptor and identifier are
+removed; text, statements and blocks use QueryInput and one QueryResult codec.
+Unknown old identifiers fail explicitly. No compatibility alias, negotiation or
+implicit fallback is introduced.
 
 The scoped query writer uses the same canonical operation identifier, result tags
 and RDF/row footers as materialized response encoding. RDFQuadWriter enforces its
