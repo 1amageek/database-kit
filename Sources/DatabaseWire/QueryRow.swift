@@ -1,25 +1,7 @@
 import DatabaseTypes
 import DatabaseKit
 
-/// One materialized query row.
-///
-/// Byte-valued fields retain slices of the response frame when the row comes
-/// from a `QueryRowIterator`.
-public struct QueryRow: Sendable, Hashable {
-    public let values: [QueryValue]
-    public let annotations: FieldObject
-    public let version: ByteString?
-
-    public init(
-        values: [QueryValue],
-        annotations: FieldObject = FieldObject(),
-        version: ByteString? = nil
-    ) {
-        self.values = values
-        self.annotations = annotations
-        self.version = version
-    }
-
+extension DatabaseKit.QueryRow {
     func validate(columns: [QueryColumn]) throws(DatabaseWireError) {
         guard values.count == columns.count else {
             throw .invalidRowValueCount(expected: columns.count, actual: values.count)

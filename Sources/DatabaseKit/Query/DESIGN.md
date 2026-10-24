@@ -1084,3 +1084,12 @@ SQLBlock -> one structural ledger -> bounded ordinary child traversal
 
 Verification: S16SQLOperationTests owns identity, invalid payloads, cumulative
 boundaries and independent parameter scopes. Wire tests establish carriage only.
+
+## IR-centered Execution
+
+[Execution](Execution/DESIGN.md) owns the common input/final-result declarations
+built on the existing QueryStatement and SQLBlock. Runtime transaction-bound rows
+remain Framework-owned; canonical final QueryRow values and result interfaces
+are semantic declarations. Wire consumes these declarations with retained-page
+codecs. This replaces the historical split of public SQL-only versus Query IR
+execution after the dependent runtime/consumer migration is complete.

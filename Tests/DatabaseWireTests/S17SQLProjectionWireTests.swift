@@ -17,7 +17,7 @@ struct S17SQLProjectionWireTests {
         let annotations = try FieldObject([("a", .string("metadata"))])
         let version = ByteString([1, 2, 3])
         let row = QueryRow(values: [.primitive(.string("value"))], annotations: annotations, version: version)
-        let response = SQLExecuteOperation.Response(results: [
+        let response = try SQLExecuteOperation.Response(results: [
             .rows(try .init(columns: [column], rows: [row], affectedRows: 7)),
             .rows(try .init(columns: [column], rows: [])),
             .copy(bytes: ByteString([0, 255]), affectedRows: 8),
@@ -156,9 +156,17 @@ struct S17SQLProjectionWireTests {
         func project(_ writer: inout SQLResponseWriter) throws { try writer.writeCopy(bytes: ByteString([1, 2, 3]), affectedRows: 1) }
         let count = try DatabaseWireEncoder().measureSQLResponse(requestID: 1, resultCount: 1, body: project)
         #expect(try DatabaseWireEncoder(limits: sqlLimits(frame: count)).measureSQLResponse(requestID: 1, resultCount: 1, body: project) == count)
-        for limits in [try sqlLimits(frame: count - 1), try sqlLimits(bytes: 2), try sqlLimits(collection: 0), try sqlLimits(depth: 1)] {
+        for limits in [try sqlLimits(frame: count - 1), try sqlLimits(bytes: 2)] {
             #expect(throws: DatabaseWireError.self) {
                 try DatabaseWireEncoder(limits: limits).measureSQLResponse(requestID: 1, resultCount: 1, body: project)
+            }
+        }
+        for limits in [try sqlLimits(collection: 1), try sqlLimits(depth: 1)] {
+            #expect(throws: DatabaseWireError.self) {
+                try DatabaseWireEncoder(limits: limits).measureSQLResponse(requestID: 1, resultCount: 2) { writer in
+                    try project(&writer)
+                    try project(&writer)
+                }
             }
         }
         #expect(throws: DatabaseWireError.self) {

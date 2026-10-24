@@ -9,7 +9,7 @@ import Darwin
 import Glibc
 #endif
 
-/// A bounded synchronous executable fixture, without a testing runtime dependency.
+/// A bounded executable fixture, without a testing runtime dependency.
 @main
 struct QueryValueRuntimeContract {
     private enum Failure: Error {
@@ -21,6 +21,7 @@ struct QueryValueRuntimeContract {
         case structure(QueryStructuralValidationError)
         case binding(QueryParameterBindingError)
         case catalog(SQLCatalogError)
+        case interpolation(SQLInterpolationError)
     }
 
     private static let limits = QueryValueLimits(
@@ -28,11 +29,13 @@ struct QueryValueRuntimeContract {
         maximumNestingDepth: 5_000, maximumCollectionElements: 20_000
     )
 
-    static func main() {
+    static func main() async {
         print("QUERY_VALUE_RUNTIME_BEGIN")
         do {
             try run()
-            print("QUERY_VALUE_RUNTIME_PASS cases=17")
+            try await unifiedExecution()
+            pass("unified-query-execution")
+            print("QUERY_VALUE_RUNTIME_PASS cases=18")
         } catch {
             switch error {
             case .assertion(let code): print("QUERY_VALUE_RUNTIME_FAIL assertion=\(code)")
@@ -43,9 +46,50 @@ struct QueryValueRuntimeContract {
             case .structure: print("QUERY_VALUE_RUNTIME_FAIL structure")
             case .binding: print("QUERY_VALUE_RUNTIME_FAIL binding")
             case .catalog: print("QUERY_VALUE_RUNTIME_FAIL catalog")
+            case .interpolation: print("QUERY_VALUE_RUNTIME_FAIL interpolation")
             }
             exit(1)
         }
+    }
+
+    private static func unifiedExecution() async throws(Failure) {
+        let bound: SQL
+        do { bound = try "SELECT \(Int32(42)), \("x'); DROP TABLE items; --")" }
+        catch { throw .interpolation(error) }
+        try require(bound.text == "SELECT $1, $2" && bound.parameters.count == 2, code: 149)
+        let statement = select(.literal(.int(42)))
+        let block: SQLBlock
+        do { block = try SQLBlock(steps: [.statement(statement)]) }
+        catch { throw .structure(error) }
+        for input in [QueryInput.sql("SELECT 42"), .statement(statement), .block(block)] {
+            let request = QueryExecuteOperation.Request(input: input)
+            let decoded = try wire { () throws(DatabaseWireError) in
+                let bytes = try DatabaseWireEncoder().encodeRequestPayload(DatabaseOperationCatalog.queryExecute, request: request)
+                return try DatabaseWireDecoder().decodeRequestPayload(DatabaseOperationCatalog.queryExecute, from: bytes)
+            }
+            try require(decoded.input == input && decoded.page == nil, code: 150)
+        }
+        let column = try query { () throws(QueryValueError) in
+            try QueryColumn(number: 1, name: "value", type: .sql(.integer), isNullable: false)
+        }
+        let expected = QueryRow(values: [.primitive(.int32(42))])
+        let rows = try wire { () throws(DatabaseWireError) in
+            let response = QueryExecuteOperation.Response.rows(try QueryRowPage(columns: [column], rows: [expected], affectedRows: 1))
+            let frame = try DatabaseWireEncoder().encodeResponse(DatabaseOperationCatalog.queryExecute, requestID: 19, response: response)
+            return try DatabaseWireDecoder().decodeResponse(DatabaseOperationCatalog.queryExecute, from: frame, matching: 19)
+        }
+        guard case .success(.rows(let page)) = rows else { throw .assertion(151) }
+        let result = QueryResult<QueryRowPage, RDFGraphPage, Bool>.rows(page)
+        var iterator = result.rows.makeAsyncIterator()
+        let first: QueryRow?
+        let second: QueryRow?
+        do {
+            first = try await iterator.next()
+            second = try await iterator.next()
+        } catch { throw .wire(error) }
+        try require(first == expected, code: 152)
+        try require(second == nil, code: 153)
+        try require(page.columns == [column] && page.affectedRows == 1, code: 155)
     }
 
     private static func run() throws(Failure) {
@@ -639,7 +683,7 @@ struct QueryValueRuntimeContract {
     private static func patternRequestRoundTrip(_ statement: QueryStatement) throws(Failure) {
         let bytes = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(statement) }
         try require(try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(bytes) } == statement, code: 78)
-        let request = QueryExecuteOperation.Request(input: .ir(statement))
+        let request = QueryExecuteOperation.Request(input: .statement(statement))
         let frame = try wire { () throws(DatabaseWireError) in
             #if DATABASE_KIT_MULTI_BASE
             try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 52, target: .database, request: request)
@@ -689,7 +733,7 @@ struct QueryValueRuntimeContract {
         for original in [statement, bound] {
             let bytes = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.encode(original) }
             try require(try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(bytes) } == original, code: 51)
-            let request = QueryExecuteOperation.Request(input: .ir(original))
+            let request = QueryExecuteOperation.Request(input: .statement(original))
             let frame = try wire { () throws(DatabaseWireError) in
                 #if DATABASE_KIT_MULTI_BASE
                 try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 51, target: .database, request: request)
@@ -1025,7 +1069,7 @@ struct QueryValueRuntimeContract {
                         let decoded = try wire { () throws(DatabaseWireError) in try QueryIRWireFormat.decode(bytes) }
                         try require(decoded == original && decoded.hashValue == original.hashValue, code: 35)
                     }
-                    let request = QueryExecuteOperation.Request(input: .ir(statement), parameters: [parameter])
+                    let request = QueryExecuteOperation.Request(input: .statement(statement), parameters: [parameter])
                     let frame = try wire { () throws(DatabaseWireError) in
                         #if DATABASE_KIT_MULTI_BASE
                         try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 20,

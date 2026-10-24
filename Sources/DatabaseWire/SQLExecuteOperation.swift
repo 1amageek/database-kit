@@ -60,66 +60,6 @@ public enum SQLExecuteOperation: DatabaseOperationDeclaration {
         }
     }
 
-    public enum Outcome: Sendable {
-        case rows(Rows)
-        case copy(bytes: ByteString, affectedRows: UInt64)
-        case command(SQLCommandKind, affectedRows: UInt64?)
-
-        func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
-            switch self {
-            case .rows(let rows): writer.writeUInt8(0); try rows.encode(into: &writer)
-            case .copy(let bytes, let count):
-                writer.writeUInt8(1); try writer.writeBytes(bytes); writer.writeUInt64(count)
-            case .command(let kind, let count):
-                writer.writeUInt8(2); writer.writeUInt8(SQLCommandWireCodec.tag(kind))
-                try QueryIRWireFormat.writeOptional(count, into: &writer) { count, writer in writer.writeUInt64(count) }
-            }
-        }
-
-        init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-            switch try reader.readUInt8() {
-            case 0: self = .rows(try Rows(from: &reader))
-            case 1:
-                let bytes = try reader.readBytes()
-                self = .copy(bytes: bytes, affectedRows: try reader.readUInt64())
-            case 2:
-                let kind = try SQLCommandWireCodec.kind(try reader.readUInt8())
-                let count: UInt64? = try QueryIRWireFormat.readOptional(from: &reader) {
-                    (reader: inout DatabaseWireReader) throws(DatabaseWireError) -> UInt64 in try reader.readUInt64()
-                }
-                self = .command(kind, affectedRows: count)
-            case let tag: throw .invalidResultPayload(tag)
-            }
-        }
-    }
-
-    public struct Response: WireValue {
-        public let results: [Outcome]
-
-        public init(results: [Outcome]) { self.results = results }
-
-        func encode(into writer: inout DatabaseWireWriter) throws(DatabaseWireError) {
-            guard !results.isEmpty else { throw .invalidSQLResponse }
-            try writer.writeCount(results.count)
-            for result in results {
-                try writer.beginNestedValue()
-                try result.encode(into: &writer)
-                try writer.endNestedValue()
-            }
-        }
-
-        init(from reader: inout DatabaseWireReader) throws(DatabaseWireError) {
-            try reader.admitQueryRootRetention()
-            let count = try reader.readCount()
-            guard count > 0 else { throw .invalidSQLResponse }
-            var results: [Outcome] = []
-            results.reserveCapacity(count)
-            for _ in 0..<count {
-                try reader.beginNestedValue()
-                results.append(try Outcome(from: &reader))
-                try reader.endNestedValue()
-            }
-            self.init(results: results)
-        }
-    }
+    // Deprecated during EIR24 migration; the unified query operation replaces this descriptor.
+    public typealias Response = QueryExecuteOperation.Response
 }

@@ -38,7 +38,7 @@ struct SQLCollectionWireTests {
             #expect(try decode(encode(value)) == value)
             let statement = QueryStatement.select(SelectQuery(projection: [ProjectionItem(value)], source: .values([])))
             #expect(try QueryIRWireFormat.decode(QueryIRWireFormat.encode(statement)) == statement)
-            let request = QueryExecuteOperation.Request(input: .ir(statement))
+            let request = QueryExecuteOperation.Request(input: .statement(statement))
             #if DATABASE_KIT_MULTI_BASE
             let frame = try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 53, target: .database, request: request)
             #else

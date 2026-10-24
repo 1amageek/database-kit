@@ -1,3 +1,5 @@
+import DatabaseKit
+
 /// The complete operation catalog for the selected runtime feature set.
 public enum DatabaseOperationCatalog {
     public static let capabilitiesDescribe = operation(

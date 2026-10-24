@@ -29,7 +29,7 @@ struct SQLPatternWireTests {
             let statement = QueryStatement.select(query)
             let bytes = try QueryIRWireFormat.encode(statement)
             #expect(try QueryIRWireFormat.decode(bytes) == statement)
-            let request = QueryExecuteOperation.Request(input: .ir(statement))
+            let request = QueryExecuteOperation.Request(input: .statement(statement))
             #if DATABASE_KIT_MULTI_BASE
             let frame = try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 50, target: .database, request: request)
             #else

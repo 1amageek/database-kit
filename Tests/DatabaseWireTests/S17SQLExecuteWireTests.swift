@@ -29,7 +29,7 @@ struct S17SQLExecuteWireTests {
 
     @Test("SQL success has an independent fixed operation vector in each selected protocol")
     func successGolden() throws {
-        let response = SQLExecuteOperation.Response(results: [.command(.commit, affectedRows: nil)])
+        let response = try SQLExecuteOperation.Response(results: [.command(.commit, affectedRows: nil)])
         let frame = try DatabaseWireEncoder().encodeResponse(operation, requestID: 7, response: response)
         #if DATABASE_KIT_MULTI_BASE
         let version: UInt8 = 5
@@ -37,7 +37,7 @@ struct S17SQLExecuteWireTests {
         let version: UInt8 = 3
         #endif
         let golden: [UInt8] = [0x44, 0x42, 0x57, 0x52, version, 0, 2,
-            7, 0, 0, 0, 0, 0, 0, 0, 2, 2, 1, 7, 0, 0, 0, 1, 0, 0, 0, 2, 1, 0]
+            7, 0, 0, 0, 0, 0, 0, 0, 2, 2, 1, 3, 0, 0, 0, 4, 1, 0]
         #expect(frame == ByteString(golden))
         #expect(try DatabaseWireEncoder().measureSuccessResponse(operation, requestID: 7, response: response) == golden.count)
         guard case .success(let decoded) = try DatabaseWireDecoder().decodeResponse(operation, from: frame, matching: 7),
@@ -72,9 +72,9 @@ struct S17SQLExecuteWireTests {
         let json = try QueryJSONValue(bytes: ByteString(utf8: "{\"é\":null}"), limits: DatabaseWireLimits.default.queryValueLimits)
         let row = QueryRow(values: [.primitive(.int32(8)), .json(json)],
             annotations: try FieldObject([("source", .string("t"))]), version: ByteString([1, 2]))
-        let retained: SQLExecuteOperation.Rows
+        let retained: QueryRowPage
         do {
-            let response = SQLExecuteOperation.Response(results: [
+            let response = try SQLExecuteOperation.Response(results: [
                 .command(.savepoint, affectedRows: nil),
                 .rows(try .init(columns: columns, rows: [row], affectedRows: 42)),
                 .copy(bytes: ByteString([0, 10, 255]), affectedRows: 6),
@@ -108,7 +108,7 @@ struct S17SQLExecuteWireTests {
         #expect(try iterator.next() == row)
         #expect(try iterator.next() == nil)
         // Re-encoding the lazy retained rows must validate the same bounded cells.
-        let response = SQLExecuteOperation.Response(results: [.rows(retained)])
+        let response = try SQLExecuteOperation.Response(results: [.rows(retained)])
         let frame = try DatabaseWireEncoder().encodeResponse(operation, requestID: 9, response: response)
         #expect(try DatabaseWireEncoder().measureSuccessResponse(operation, requestID: 9, response: response) == frame.count)
     }
@@ -117,7 +117,7 @@ struct S17SQLExecuteWireTests {
     func emptyRowsAndInvalidCells() throws {
         let columns = [try QueryColumn(number: 1, name: "", type: .sql(.integer), isNullable: false),
                        try QueryColumn(number: 2, name: "", type: .sql(.text), isNullable: true)]
-        let response = SQLExecuteOperation.Response(results: [.rows(try .init(columns: columns, rows: []))])
+        let response = try SQLExecuteOperation.Response(results: [.rows(try .init(columns: columns, rows: []))])
         let frame = try DatabaseWireEncoder().encodeResponse(operation, requestID: 1, response: response)
         guard case .success(let decoded) = try DatabaseWireDecoder().decodeResponse(operation, from: frame, matching: 1),
               case .rows(let rows) = decoded.results[0] else { Issue.record("Expected empty typed rows"); return }
@@ -126,10 +126,10 @@ struct S17SQLExecuteWireTests {
         var iterator = rows.makeRowIterator()
         #expect(try iterator.next() == nil)
         #expect(throws: DatabaseWireError.invalidRowValueCount(expected: 2, actual: 0)) {
-            try SQLExecuteOperation.Rows(columns: columns, rows: [QueryRow(values: [])])
+            try QueryRowPage(columns: columns, rows: [QueryRow(values: [])])
         }
         #expect(throws: DatabaseWireError.invalidQueryValue(.incompatibleType)) {
-            try SQLExecuteOperation.Rows(columns: columns, rows: [QueryRow(values: [.primitive(.null), .primitive(.null)])])
+            try QueryRowPage(columns: columns, rows: [QueryRow(values: [.primitive(.null), .primitive(.null)])])
         }
     }
 
@@ -152,7 +152,7 @@ struct S17SQLExecuteWireTests {
 
     @Test("Truncation, trailing bytes, unknown tags and empty results never decode successfully")
     func malformedPayloads() throws {
-        let response = SQLExecuteOperation.Response(results: [.copy(bytes: ByteString([1, 2]), affectedRows: UInt64.max)])
+        let response = try SQLExecuteOperation.Response(results: [.copy(bytes: ByteString([1, 2]), affectedRows: UInt64.max)])
         let payload = try DatabaseWireWriter.encode { writer throws(DatabaseWireError) in try response.encode(into: &writer) }
         let bytes = Array(payload)
         for count in 0..<bytes.count {
@@ -186,13 +186,13 @@ struct S17SQLExecuteWireTests {
 
     @Test("Full-frame, COPY, collection and shared outcome object ledgers enforce exact boundaries")
     func resourceBoundaries() throws {
-        let copy = SQLExecuteOperation.Outcome.copy(bytes: ByteString([1, 2, 3]), affectedRows: 1)
+        let copy = SQLExecuteOperation.Response.copy(bytes: ByteString([1, 2, 3]), affectedRows: 1)
         let exactCopy = try sqlLimits(bytes: 3)
         let copyBytes = try DatabaseWireWriter.encode(limits: exactCopy) { writer throws(DatabaseWireError) in
             try copy.encode(into: &writer)
         }
         var copyReader = DatabaseWireReader(copyBytes, limits: exactCopy)
-        guard case .copy(let retained, 1) = try SQLExecuteOperation.Outcome(from: &copyReader) else {
+        guard case .copy(let retained, 1) = try SQLExecuteOperation.Response(from: &copyReader) else {
             Issue.record("Expected exact COPY byte boundary"); return
         }
         #expect(retained == ByteString([1, 2, 3]))
@@ -206,11 +206,11 @@ struct S17SQLExecuteWireTests {
         #expect(throws: DatabaseWireError.self) {
             try DatabaseWireDecoder(limits: sqlLimits(string: 1)).decodeRequestPayload(operation, from: requestBytes)
         }
-        let response = SQLExecuteOperation.Response(results: [.copy(bytes: ByteString([1, 2, 3]), affectedRows: 1)])
+        let response = try SQLExecuteOperation.Response(results: [.copy(bytes: ByteString([1, 2, 3]), affectedRows: 1)])
         let frame = try DatabaseWireEncoder().encodeResponse(operation, requestID: 1, response: response)
         let exact = try sqlLimits(frame: frame.count)
         #expect(try DatabaseWireEncoder(limits: exact).measureSuccessResponse(operation, requestID: 1, response: response) == frame.count)
-        for restrictive in [try sqlLimits(frame: frame.count - 1), try sqlLimits(bytes: 2), try sqlLimits(collection: 0), try sqlLimits(depth: 1)] {
+        for restrictive in [try sqlLimits(frame: frame.count - 1), try sqlLimits(bytes: 2)] {
             #expect(throws: DatabaseWireError.self) {
                 try DatabaseWireEncoder(limits: restrictive).encodeResponse(operation, requestID: 1, response: response)
             }
@@ -218,21 +218,31 @@ struct S17SQLExecuteWireTests {
                 try DatabaseWireDecoder(limits: restrictive).decodeResponse(operation, from: frame, matching: 1)
             }
         }
-        let fullExact = try sqlLimits(depth: 2, objects: 3)
+        let fullExact = try sqlLimits(collection: 0, depth: 1, objects: 1)
         #expect(try DatabaseWireEncoder(limits: fullExact).encodeResponse(operation, requestID: 1, response: response) == frame)
         guard case .success = try DatabaseWireDecoder(limits: fullExact).decodeResponse(operation, from: frame, matching: 1)
         else { Issue.record("Expected exact enclosing response admission"); return }
-        #expect(throws: DatabaseWireError.objectBudgetExceeded(actual: 3, maximum: 2)) {
-            try DatabaseWireDecoder(limits: sqlLimits(depth: 2, objects: 2)).decodeResponse(operation, from: frame, matching: 1)
+        #expect(throws: DatabaseWireError.objectBudgetExceeded(actual: 1, maximum: 0)) {
+            try DatabaseWireDecoder(limits: sqlLimits(depth: 1, objects: 0)).decodeResponse(operation, from: frame, matching: 1)
         }
         let body = try DatabaseWireWriter.encode { writer throws(DatabaseWireError) in try response.encode(into: &writer) }
-        #expect(try DatabaseWireDecoder(limits: sqlLimits(depth: 1, objects: 2)).decodeResponsePayload(operation, from: body).results.count == 1)
+        #expect(try DatabaseWireDecoder(limits: sqlLimits(depth: 1, objects: 1)).decodeResponsePayload(operation, from: body).results.count == 1)
+        let block = try SQLExecuteOperation.Response(results: [response, response])
+        let blockFrame = try DatabaseWireEncoder().encodeResponse(operation, requestID: 1, response: block)
+        for restrictive in [try sqlLimits(collection: 1), try sqlLimits(depth: 1), try sqlLimits(objects: 3)] {
+            #expect(throws: DatabaseWireError.self) {
+                try DatabaseWireEncoder(limits: restrictive).encodeResponse(operation, requestID: 1, response: block)
+            }
+            #expect(throws: DatabaseWireError.self) {
+                try DatabaseWireDecoder(limits: restrictive).decodeResponse(operation, from: blockFrame, matching: 1)
+            }
+        }
         try requestEnvelopeAdmission()
         try rootRetentionAdmission(responseFrame: frame)
-        let rows = try SQLExecuteOperation.Rows(columns: [QueryColumn(number: 1, name: "x", type: .sql(.integer), isNullable: false)],
+        let rows = try QueryRowPage(columns: [QueryColumn(number: 1, name: "x", type: .sql(.integer), isNullable: false)],
             rows: [QueryRow(values: [.primitive(.int32(1))])])
-        let one = SQLExecuteOperation.Response(results: [.rows(rows)])
-        let two = SQLExecuteOperation.Response(results: [.rows(rows), .rows(rows)])
+        let one = try SQLExecuteOperation.Response(results: [.rows(rows)])
+        let two = try SQLExecuteOperation.Response(results: [.rows(rows), .rows(rows)])
         let oneBytes = try DatabaseWireWriter.encode { writer throws(DatabaseWireError) in try one.encode(into: &writer) }
         var calibration = DatabaseWireReader(oneBytes)
         _ = try SQLExecuteOperation.Response(from: &calibration)

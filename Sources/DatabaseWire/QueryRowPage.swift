@@ -13,16 +13,37 @@ public struct QueryRowPage: Sendable {
 
     public let columns: [QueryColumn]
     public let rowCount: Int
+    public let affectedRows: UInt64?
+    public let metadata: FieldObject
     public let continuation: ByteString?
     #if DATABASE_KIT_MULTI_BASE
     public let provenance: CompositionPageProvenance?
-    public let consistency: DatabaseReadConsistency
+    public let consistency: DatabaseReadConsistency?
     #else
     public let snapshotVersion: UInt64?
     #endif
 
     private let storage: Storage
     private let limits: DatabaseWireLimits
+
+    /// The known-valid zero-column, zero-row value for non-row outcomes.
+    public static var empty: Self { Self() }
+
+    private init() {
+        columns = []
+        rowCount = 0
+        affectedRows = nil
+        metadata = FieldObject()
+        continuation = nil
+        #if DATABASE_KIT_MULTI_BASE
+        provenance = nil
+        consistency = nil
+        #else
+        snapshotVersion = nil
+        #endif
+        storage = .materialized([])
+        limits = .default
+    }
 
     var retainedEncodedRows: ByteString? {
         guard case .encoded(let bytes) = storage else {
@@ -36,8 +57,10 @@ public struct QueryRowPage: Sendable {
         columns: [QueryColumn],
         rows: [QueryRow],
         continuation: ByteString? = nil,
-        provenance: CompositionPageProvenance?,
-        consistency: DatabaseReadConsistency
+        provenance: CompositionPageProvenance? = nil,
+        consistency: DatabaseReadConsistency? = nil,
+        affectedRows: UInt64? = nil,
+        metadata: FieldObject = FieldObject()
     ) throws(DatabaseWireError) {
         do { try QueryColumn.validate(columns) }
         catch let error { throw .invalidQueryValue(error) }
@@ -47,6 +70,8 @@ public struct QueryRowPage: Sendable {
         }
         self.columns = columns
         self.rowCount = rows.count
+        self.affectedRows = affectedRows
+        self.metadata = metadata
         self.continuation = continuation
         self.provenance = provenance
         self.consistency = consistency
@@ -58,13 +83,17 @@ public struct QueryRowPage: Sendable {
         columns: [QueryColumn],
         rows: [QueryRow],
         continuation: ByteString? = nil,
-        snapshotVersion: UInt64? = nil
+        snapshotVersion: UInt64? = nil,
+        affectedRows: UInt64? = nil,
+        metadata: FieldObject = FieldObject()
     ) throws(DatabaseWireError) {
         do { try QueryColumn.validate(columns) }
         catch let error { throw .invalidQueryValue(error) }
         for row in rows { try row.validate(columns: columns) }
         self.columns = columns
         self.rowCount = rows.count
+        self.affectedRows = affectedRows
+        self.metadata = metadata
         self.continuation = continuation
         self.snapshotVersion = snapshotVersion
         self.storage = .materialized(rows)
@@ -146,21 +175,11 @@ public struct QueryRowPage: Sendable {
             writer.writeUnframedBytes(bytes)
         }
         #if DATABASE_KIT_MULTI_BASE
-        writer.writeBool(provenance != nil)
-        if let provenance {
-            guard provenance.originCount == rowCount else {
-                throw .invalidCompositionProvenance
-            }
-            try provenance.encode(into: &writer)
-        }
-        try consistency.encode(into: &writer)
-        try writer.writeOptionalBytes(continuation)
+        try Self.encodeFooter(provenance: provenance, consistency: consistency,
+            continuation: continuation, affectedRows: affectedRows, metadata: metadata, into: &writer)
         #else
-        try writer.writeOptionalBytes(continuation)
-        writer.writeBool(snapshotVersion != nil)
-        if let snapshotVersion {
-            writer.writeUInt64(snapshotVersion)
-        }
+        try Self.encodeFooter(snapshotVersion: snapshotVersion,
+            continuation: continuation, affectedRows: affectedRows, metadata: metadata, into: &writer)
         #endif
     }
 
@@ -199,14 +218,50 @@ public struct QueryRowPage: Sendable {
         guard provenance == nil || provenance?.originCount == rowCount else {
             throw .invalidCompositionProvenance
         }
-        self.consistency = try DatabaseReadConsistency(from: &reader)
+        self.consistency = try reader.readBool() ? DatabaseReadConsistency(from: &reader) : nil
         self.continuation = try reader.readOptionalBytes()
         #else
         self.continuation = try reader.readOptionalBytes()
         self.snapshotVersion =
             try reader.readBool() ? try reader.readUInt64() : nil
         #endif
+        self.affectedRows = try QueryIRWireFormat.readOptional(from: &reader) {
+            (reader: inout DatabaseWireReader) throws(DatabaseWireError) in try reader.readUInt64()
+        }
+        self.metadata = try FieldObject(from: &reader)
         self.storage = .encoded(encodedRows)
         self.limits = reader.limits
     }
+    #if DATABASE_KIT_MULTI_BASE
+    static func encodeFooter(provenance: CompositionPageProvenance?,
+        consistency: DatabaseReadConsistency?, continuation: ByteString?,
+        affectedRows: UInt64?, metadata: FieldObject, into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        writer.writeBool(provenance != nil)
+        if let provenance { try provenance.encode(into: &writer) }
+        writer.writeBool(consistency != nil)
+        if let consistency { try consistency.encode(into: &writer) }
+        try writer.writeOptionalBytes(continuation)
+        try encodeOutcomeMetadata(affectedRows: affectedRows, metadata: metadata, into: &writer)
+    }
+    #else
+    static func encodeFooter(snapshotVersion: UInt64?, continuation: ByteString?,
+        affectedRows: UInt64?, metadata: FieldObject, into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        try writer.writeOptionalBytes(continuation)
+        writer.writeBool(snapshotVersion != nil)
+        if let snapshotVersion { writer.writeUInt64(snapshotVersion) }
+        try encodeOutcomeMetadata(affectedRows: affectedRows, metadata: metadata, into: &writer)
+    }
+    #endif
+
+    private static func encodeOutcomeMetadata(affectedRows: UInt64?, metadata: FieldObject,
+        into writer: inout DatabaseWireWriter
+    ) throws(DatabaseWireError) {
+        try QueryIRWireFormat.writeOptional(affectedRows, into: &writer) { count, writer in
+            writer.writeUInt64(count)
+        }
+        try metadata.encode(into: &writer)
+    }
+
 }

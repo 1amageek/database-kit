@@ -87,7 +87,7 @@ struct SQLConditionalWireTests {
         var emitted: [UInt8] = []
         try QueryIRWireFormat.emitCanonicalEncoding(statement, prepare: { (_: Int) throws(DatabaseWireError) in }, consume: { emitted.append(contentsOf: $0) })
         #expect(ByteString(emitted) == bytes)
-        let request = QueryExecuteOperation.Request(input: .ir(statement))
+        let request = QueryExecuteOperation.Request(input: .statement(statement))
         #if DATABASE_KIT_MULTI_BASE
         let frame = try DatabaseWireEncoder().encodeRequest(DatabaseOperationCatalog.queryExecute, requestID: 51, target: .database, request: request)
         #else

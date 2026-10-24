@@ -641,7 +641,7 @@ struct QueryIRWireFormatTests {
     func queryOperationEmbedsTypedIR() throws {
         let statement = QueryStatement.ask(AskQuery(pattern: .basic([])))
         let request = QueryExecuteOperation.Request(
-            input: .ir(statement),
+            input: .statement(statement),
             graphPartitions: try FieldObject([
                 (
                     key: "runID",

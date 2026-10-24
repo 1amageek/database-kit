@@ -95,14 +95,14 @@ enum EnvelopeWireFormat {
         try validateHeader(kind: .request, reader: &reader)
         let requestID = try reader.readUInt64()
         let operation = try DatabaseOperationIdentifier(from: &reader)
-        if operation == .sqlExecute { try reader.admitQueryRootRetention() }
+        if operation == .sqlExecute || operation == .queryExecute { try reader.admitQueryRootRetention() }
         #if DATABASE_KIT_MULTI_BASE
         let target = try DatabaseOperationTarget(from: &reader)
         #endif
         let metadata = try OperationRequestMetadata(from: &reader)
         let payload: ByteString
         let admission: DatabaseWireReader.AdmissionContext?
-        if operation == .sqlExecute {
+        if operation == .sqlExecute || operation == .queryExecute {
             let admitted = try reader.readAdmittedPayload()
             payload = admitted.bytes
             admission = admitted.admission
@@ -271,7 +271,7 @@ enum EnvelopeWireFormat {
         let operation = try DatabaseOperationIdentifier(from: &reader)
         let payload: DatabaseWireResponsePayload
         let admission: DatabaseWireReader.AdmissionContext?
-        if operation == .sqlExecute {
+        if operation == .sqlExecute || operation == .queryExecute {
             try reader.admitQueryRootRetention()
             switch try reader.readUInt8() {
             case 1:

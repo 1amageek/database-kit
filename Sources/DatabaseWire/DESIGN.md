@@ -1051,66 +1051,31 @@ admission uses Kit's cumulative ledger after decode and before encode.
 PREPARE parameter scope, malformed prefixes/tags/trailing bytes and exact/one-past
 resource limits. Block carriage adds no operation dispatch or transport.
 
-## S17 SQL Operation Contract
+## SQL Projection and Diagnostics
 
-This section fixes the closed remote contract for S17. The
-semantic authority remains the [SQL profile](../DatabaseKit/Query/SQL/DESIGN.md).
-Wire v3/v5, envelopes, existing query/mutation operations, and generic failure
-field order remain unchanged.
+The semantic authority remains the [SQL profile](../DatabaseKit/Query/SQL/DESIGN.md).
+The canonical execution input and final result grammar are defined by
+[IR-centered Execution Integration](#ir-centered-execution-integration).
+This section owns the diagnostic codec and bounded provisional SQL projection.
 
 ```text
-SQLExecuteOperation request
-    -> Server admission and Framework statement/block execution
-    -> authoritative commit or rollback, cleanup, cancellation check
-    -> ordered outcomes or typed remote diagnostic
-    -> DatabaseClient generic call and caller presentation
+QueryStatement / SQLBlock / execution-side parsed SQL
+    -> Framework admission, execution and authoritative closure
+    -> common result projection or typed remote diagnostic
 ```
 
-### Ownership and Public API
-
-`DatabaseOperationIdentifier.sqlExecute = 0x0202` and
-`DatabaseOperationCatalog.sqlExecute` identify `SQLExecuteOperation`.
-DatabaseWire owns the descriptor and carriers; Server owns dispatch and mapping.
-Client and platform hosts carry bytes without interpreting SQL. DatabaseTypes
-continues to own only primitive representations.
-
-| Declaration | Public contract |
-|---|---|
-| `SQLExecuteOperation.Input` | `.text(String)`, `.statement(QueryStatement)`, `.block(SQLBlock)` |
-| `SQLExecuteOperation.Request` | `init(input: Input, parameters: [QueryParameter] = [], budget: ExecutionBudget = ExecutionBudget())` |
-| `SQLExecuteOperation.Rows` | `init(columns: [QueryColumn], rows: [QueryRow], affectedRows: UInt64? = nil) throws(DatabaseWireError)`; `columns`, `rowCount`, `affectedRows`, `makeRowIterator()` |
-| `SQLExecuteOperation.Outcome` | `.rows(Rows)`, `.copy(bytes: ByteString, affectedRows: UInt64)`, `.command(SQLCommandKind, affectedRows: UInt64?)` |
-| `SQLExecuteOperation.Response` | `init(results: [Outcome])`; ordered `results` with one result per input step on complete success |
-| `RemoteOperationError` SQL initializer | `init(category: OperationErrorCategory, code: String, message: String, retryability: OperationRetryability, details: FieldObject = FieldObject(), sqlDiagnostic: SQLDiagnostic) throws(DatabaseWireError)` |
-| `RemoteOperationError.sqlDiagnostic()` | `throws(DatabaseWireError) -> SQLDiagnostic?`; nil only when reserved metadata is absent |
-| `DatabaseWireEncoder.measureSuccessResponse` | `(_ operation: DatabaseOperation<Request, Response>, requestID: UInt64, response: Response) throws(DatabaseWireError) -> Int`; exact complete success frame size without output allocation |
-
-Text is unchanged, including comments, whitespace, Unicode and inline COPY input.
-Framework owns parsing and source positions. Requests contain no continuation.
-The dedicated rows carrier has no continuation; no response advertises paging or replay.
-The SQL operation is not an admitted JobOperationIdentifier family; construction,
-encoding and decoding reject it rather than enabling durable re-execution.
-DDL is `.command(kind, affectedRows: nil)`, matching Framework rather than
-inventing a schema-completion payload. Rows preserve affectedRows independently
-of their typed positional page; it is not inferred from row count.
-
-Rows make no read-point, provenance or consistency assertion in either graph.
-Framework `QueryResponse` provides no dedicated transactional read point, so
-QueryRowPage's mandatory MultiBase consistency cannot be reused truthfully.
-The dedicated carrier shares QueryColumn, QueryRow, QueryValue, their bounded
-codecs and QueryRowIterator, preserving one retained encoded response owner.
+The canonical query operation and its temporary SQL-only migration descriptor
+are not admitted JobOperationIdentifier families: no durable execution replay is
+introduced. Complete SQL rows assert no invented common read point. They reuse
+QueryRowPage with absent read metadata, preserving columns, affectedRows and
+metadata independently of row count. DDL retains SQLCommandKind and a nil count.
 
 ### Bounded Grammar and Diagnostics
 
-Input tags 0/1/2 are text/statement/block. Text is a bounded string; statement
-uses its existing production; block uses the existing 0x42 production inline on
-the same reader/writer. Parameters and ExecutionBudget follow input. A response
-is a bounded result count followed by outcome tags 0/1/2 for rows/copy/command.
-Rows carry ordered columns, row count, QueryRow values and optional UInt64
-affected count. COPY carries bounded
-bytes and UInt64 count. Commands carry fixed UInt8 SQLCommandKind tags and
-optional UInt64 counts. Command and diagnostic category tags are explicit and
-closed; declaration order and raw strings do not select wire identity.
+Input/result tags, block structure and row footers have one authority in
+[Unified Query Result Carriage](#unified-query-result-carriage); SQL projection
+uses those exact productions. SQLCommandKind and diagnostic category tags are
+explicit and closed; declaration order and raw strings do not select identity.
 
 The generic failure envelope retains category, code, message, retryability and
 FieldObject details. The exact details key `sqlDiagnostic` is reserved for one
@@ -1143,8 +1108,8 @@ Applying a snapshot under different decoder limits rechecks every carried
 charge and the retained frame owner before decoding the body. Admission context
 does not affect envelope value identity or encoded bytes. The standalone
 request/response payload APIs have no enclosing frame and start their own
-explicit payload admission. Other operation families retain their current
-decoding paths in this change.
+explicit payload admission. Families outside canonical query execution and the temporary SQL migration
+descriptor retain their existing decoding paths.
 SQL envelope admission checks the existing root-retention contract immediately
 after reading the operation identifier, before target/metadata materialization;
 SQL standalone request/response bodies check it at their own entry. A payload
@@ -1207,11 +1172,43 @@ storage until publication or failure cleanup.
 
 ### Verification and Change Impact
 
-S17 tests cover unchanged existing golden bytes, standard/MultiBase operation
-vectors, all input/outcome/command/category variants, duplicate and zero-row
+Tests cover the current closed standard/MultiBase golden operation vectors, all input/outcome/command/category variants, duplicate and zero-row
 column metadata, affected counts and COPY bytes, exact/one-past limits,
 invalid/truncated/trailing payloads, diagnostic validation and owner lifetime.
 Multiple row outcomes consume one shared decode budget. Server and Client map
 this contract. Cloudflare remains opaque: the application-owned session must
 encode diagnostic bytes before host application-failure conversion. No host ABI
 change is required.
+
+## IR-centered Execution Integration
+
+[Query Execution](../DatabaseKit/Query/Execution/DESIGN.md) owns the directly consumed contract for the accepted QueryStatement/SQLBlock unification. Existing authorization, exact work budgets, first-error rollback, retained ownership and authoritative shutdown remain required. Runtime state and publication do not move into Kit declarations.
+
+### Unified Query Result Carriage
+
+`QueryExecuteOperation.Request.page == nil` requests a complete result, including
+mutating statements and transactional blocks. An explicit page requests bounded
+read publication; effectful SQL is never inferred to be safe for continuation
+from its outer SELECT syntax. Continuations retrieve an admitted result rather
+than replaying effects. The high-level execute surface defaults to complete.
+
+`QueryExecuteOperation.Response` specializes Kit's common QueryResult with
+QueryRowPage, RDFGraphPage and Bool (or the existing MultiBase Boolean carrier).
+Result tags are rows=1, boolean=2, RDF graph=3, command=4, COPY=5 and block=6.
+Blocks are nonempty, ordered and contain only statement outcomes; nested blocks
+are rejected before recursive decoding. Command payloads retain SQLCommandKind
+and optional UInt64 affected count. COPY retains owned bytes and UInt64 count.
+
+QueryRowPage appends optional affectedRows and FieldObject metadata after its
+existing continuation/read-context fields. The MultiBase consistency field has
+an explicit presence flag: complete statement outcomes do not invent a common
+read point, while paged reads retain their actual consistency and provenance.
+Both complete statement and paged rows use this single retained row carrier.
+The scoped response writer uses the same tags and row footer; a single outcome
+is encoded directly, while multiple outcomes use a block. Final row ownership
+is Kit's QueryRow and row decoding remains lazy.
+
+The existing SQL-only operation is transitional during EIR24 consumer migration
+and will be removed with its active callers; it already returns the same result
+algebra rather than maintaining a second row/result model. No compatibility tag,
+version negotiation or implicit fallback is introduced.

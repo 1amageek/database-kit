@@ -7,7 +7,7 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
     public enum Input: Sendable, Hashable {
         case entities([EntityMutationChange])
         case statement(
-            QueryExecuteOperation.Input,
+            QueryInput,
             parameters: [QueryParameter]
         )
 
@@ -36,7 +36,7 @@ public enum MutationExecuteOperation: DatabaseOperationDeclaration {
                 }
                 self = .entities(changes)
             case 2:
-                let input = try QueryExecuteOperation.Input(from: &reader)
+                let input = try QueryInput(from: &reader)
                 let count = try reader.readCount()
                 var parameters: [QueryParameter] = []
                 parameters.reserveCapacity(count)

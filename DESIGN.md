@@ -404,3 +404,7 @@ model reconstruction or Embedded query-value behavior.
 The frozen layer contract is not changed by this procedure. A change that
 reinterprets one of its nine statements is a new architecture version and
 requires the system authority in root `SPEC.md` to change first.
+
+## IR-centered Execution Integration
+
+[Query Execution](Sources/DatabaseKit/Query/Execution/DESIGN.md) owns the directly consumed contract for the accepted QueryStatement/SQLBlock unification. Existing authorization, exact work budgets, first-error rollback, retained ownership and authoritative shutdown remain required. Runtime state and publication do not move into Kit declarations.
