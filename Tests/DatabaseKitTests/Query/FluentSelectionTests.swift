@@ -4,6 +4,18 @@ import Testing
 
 @Suite("Canonical fluent selection")
 struct FluentSelectionTests {
+    @Test("Adapter metadata projection uses canonical validation and source construction")
+    func adapterProjection() throws {
+        let base = try FluentPerson.select()
+        let identities = [FluentPerson.fields.name.identity, FluentPerson.fields.age.identity, FluentPerson.fields.name.identity]
+        #expect(try base.select(fields: identities).definition == FluentPerson.select(FluentPerson.fields.name, FluentPerson.fields.age, FluentPerson.fields.name).definition)
+        #expect(try base.select(fields: []).definition == base.definition)
+        let forged = FieldIdentity(name: "name", number: 9999)
+        #expect(throws: SelectionConstructionError.invalidFieldIdentity(forged)) { try base.select(fields: [forged]) }
+        let table = TableRef(schema: "Exact", table: "items", alias: "i")
+        #expect(table.select(columns: ["name", "name"]) == table.select("name", "name"))
+        #expect(table.select(columns: []) == table.selectAll())
+    }
     @Test("Heterogeneous typed projections preserve order and duplicates")
     func projections() throws {
         let query = try FluentPerson.select(#field(\FluentPerson.name), #field(\FluentPerson.age), #field(\FluentPerson.name))

@@ -144,3 +144,8 @@ Native, standard WASM and Embedded without unsafe conversion or target branches.
 The runtime fixture verifies heterogeneous projections, exact Int32 filtering,
 immutable branches, unsupported operators, depth rejection, 128 conditions and
 qualified/partitioned sources. Its exact marker count belongs to the harness.
+
+N03 exposes Selection.select(fields:) for source adapters that already expanded
+their typed Field parameter pack into FieldIdentity values. It uses the same
+model-owned identity checks and canonical projection construction, avoiding
+cross-module pack forwarding on the fixed Embedded compiler.

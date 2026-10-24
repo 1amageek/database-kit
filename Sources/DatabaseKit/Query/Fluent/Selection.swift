@@ -14,6 +14,13 @@ public struct Selection<Model: Persistable>: Sendable {
         return Self(definition: definition.replacing(projection: projection.isEmpty ? [.wildcard()] : projection))
     }
 
+    public func select(fields: [FieldIdentity]) throws -> Self {
+        var projection: [ProjectionItem] = []
+        projection.reserveCapacity(fields.count)
+        for field in fields { projection.append(try projectionItem(field)) }
+        return Self(definition: definition.replacing(projection: projection.isEmpty ? [.wildcard()] : projection))
+    }
+
     public func `where`(_ predicate: Predicate<Model>) throws -> Self {
         let expression = try PredicateExpression.lower(predicate)
         let query = definition.where(expression)

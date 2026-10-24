@@ -20,11 +20,18 @@ public extension QuerySource {
     }
 
     func select(_ column: String, _ columns: String...) -> SelectQuery {
-        SelectQuery(projection: ([column] + columns).map { ProjectionItem(.column(ColumnRef($0))) },
-            source: querySource)
+        select(columns: [column] + columns)
     }
 
     func select(_ item: ProjectionItem, _ items: ProjectionItem...) -> SelectQuery {
-        SelectQuery(projection: [item] + items, source: querySource)
+        select(projection: [item] + items)
+    }
+
+    func select(columns: [String]) -> SelectQuery {
+        select(projection: columns.map { ProjectionItem(.column(ColumnRef($0))) })
+    }
+
+    func select(projection: [ProjectionItem]) -> SelectQuery {
+        SelectQuery(projection: projection.isEmpty ? [.wildcard()] : projection, source: querySource)
     }
 }
