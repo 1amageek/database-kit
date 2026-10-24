@@ -1,5 +1,9 @@
 # Model
 
+NDB24's proposed [Fluent contract](../Query/Fluent/DESIGN.md) consumes compiled
+Field identity and owns the pure predicate declaration migration. Model
+adaptation and runtime evaluation ownership are unchanged.
+
 ## Purpose and Scope
 
 Model owns static application-model adaptation and persisted field identity

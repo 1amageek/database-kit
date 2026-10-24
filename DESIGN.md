@@ -1,5 +1,10 @@
 # database-kit
 
+The proposed [Fluent query contract](Sources/DatabaseKit/Query/Fluent/DESIGN.md)
+owns NDB24's pure source/selection construction. The planned
+[application SDK](../database-client/Sources/DatabaseAccess/DESIGN.md) consumes it without introducing
+runtime access, named handles or a registry into this package.
+
 ## Purpose and Scope
 
 `database-kit` is the package-level authority for the Foundation-independent

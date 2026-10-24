@@ -33,9 +33,11 @@ struct QueryValueRuntimeContract {
         print("QUERY_VALUE_RUNTIME_BEGIN")
         do {
             try run()
+            try fluentSelection()
+            pass("fluent-selection")
             try await unifiedExecution()
             pass("unified-query-execution")
-            print("QUERY_VALUE_RUNTIME_PASS cases=18")
+            print("QUERY_VALUE_RUNTIME_PASS cases=19")
         } catch {
             switch error {
             case .assertion(let code): print("QUERY_VALUE_RUNTIME_FAIL assertion=\(code)")
@@ -50,6 +52,40 @@ struct QueryValueRuntimeContract {
             }
             exit(1)
         }
+    }
+
+    private static func fluentSelection() throws(Failure) {
+        let selection: Selection<FluentRuntimePerson>
+        do {
+            selection = try FluentRuntimePerson.select(
+                FluentRuntimePerson.fields.name, FluentRuntimePerson.fields.age
+            ).where(FluentRuntimePerson.fields.age > Int32(18))
+                .orderBy(FluentRuntimePerson.fields.name).limit(20)
+        } catch { throw .assertion(230) }
+        try require(selection.definition.projection == [ProjectionItem(.col("name")), ProjectionItem(.col("age"))], code: 231)
+        try require(selection.definition.filter == .greaterThan(.col("age"), .literal(.queryValue(.primitive(.int32(18))))), code: 232)
+        try require(selection.definition.pagination.limit == .count(.fixed(20), withTies: false), code: 233)
+        let branch = selection.limit(2)
+        try require(branch.definition.pagination.limit == .count(.fixed(2), withTies: false)
+            && selection.definition.pagination.limit == .count(.fixed(20), withTies: false), code: 234)
+        var rejected = false
+        do {
+            _ = try selection.where(.contains("x", in: FluentRuntimePerson.fields.name))
+        } catch { rejected = true }
+        try require(rejected, code: 235)
+        var nested = Predicate<FluentRuntimePerson>.true
+        for _ in 0..<65 { nested = .not(nested) }
+        var depthRejected = false
+        do { _ = try selection.where(nested) }
+        catch { depthRejected = true }
+        try require(depthRejected, code: 238)
+        do { _ = try selection.where(.and(Array(repeating: .true, count: 128))) }
+        catch { throw .assertion(239) }
+        let partitions: FieldObject
+        do { partitions = try FieldObject([("region", .string("east"))]) }
+        catch { throw .assertion(236) }
+        let query = TableRef(schema: "public", table: "items.name", alias: "i", partitions: partitions).select("name")
+        try require(query.source == .aliased(.table(TableRef(schema: "public", table: "items.name", partitions: partitions)), name: "i"), code: 237)
     }
 
     private static func unifiedExecution() async throws(Failure) {

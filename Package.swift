@@ -58,6 +58,7 @@ let package = Package(
                 "DESIGN.md",
                 "Model/DESIGN.md",
                 "Query/DESIGN.md",
+                "Query/Fluent/DESIGN.md",
                 "Query/Execution/DESIGN.md",
                 "Query/SQL/DESIGN.md",
                 "Query/SQL/DDL/DESIGN.md",

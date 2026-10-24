@@ -316,15 +316,16 @@ run_runtime() {
     'QUERY_VALUE_RUNTIME_CASE sql-recursive-function-carriage PASS' \
     'QUERY_VALUE_RUNTIME_CASE sql-catalog-declarations PASS' \
     'QUERY_VALUE_RUNTIME_CASE unified-query-execution PASS' \
-    'QUERY_VALUE_RUNTIME_PASS cases=18' \
+    'QUERY_VALUE_RUNTIME_CASE fluent-selection PASS' \
+    'QUERY_VALUE_RUNTIME_PASS cases=19' \
     'QUERY_VALUE_WASI_EXIT code=0'; do
     if [[ "$(rg -F -x -c -- "$marker" "$log_path" || true)" != 1 ]]; then
       echo "error: expected exactly one runtime marker: $marker" >&2
       return 1
     fi
   done
-  if [[ "$(rg -c '^QUERY_VALUE_RUNTIME_CASE ' "$log_path" || true)" != 18 \
-      || "$(rg -c '^QUERY_VALUE_RUNTIME_' "$log_path" || true)" != 20 ]]; then
+  if [[ "$(rg -c '^QUERY_VALUE_RUNTIME_CASE ' "$log_path" || true)" != 19 \
+      || "$(rg -c '^QUERY_VALUE_RUNTIME_' "$log_path" || true)" != 21 ]]; then
     echo "error: unexpected runtime case or completion marker count" >&2
     return 1
   fi

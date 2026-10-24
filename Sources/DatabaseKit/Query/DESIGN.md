@@ -1,5 +1,9 @@
 # Query
 
+The proposed [Fluent construction child](Fluent/DESIGN.md) owns NDB24 source/
+selection construction and the declaration-only predicate split. This is a
+future construction contract; current execution and SQL semantics are unchanged.
+
 ## Purpose and Scope
 
 Query owns the Foundation-independent query-language values, their pure
